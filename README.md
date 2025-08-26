@@ -33,6 +33,11 @@ Point your browser at localhost:4173
 ![A screenshot of the default OurSchool Admin Dashboard](/utils/OS_Login.png?raw=true "OurSchool Admin Dashboard")
 
 
+## Buy me a coffee
+I really, really like coffee :) 
+
+[![BuyMeACoffee](https://raw.githubusercontent.com/pachadotdev/buymeacoffee-badges/main/bmc-yellow.svg)](https://buymeacoffee.com/cyzfcykbd)
+
 ## Not-so-quick-start
 
 ### Prerequisites
