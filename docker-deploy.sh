@@ -5,10 +5,9 @@ echo "🚀 Deploying OurSchool with Docker..."
 
 # Check if .env file exists
 if [ ! -f .env ]; then
-    echo "⚠️  No .env file found. Creating from .env.example..."
-    cp .env.example .env
-    echo "📝 Please edit .env file with your configuration before running again."
-    echo "   Especially change the SECRET_KEY and database password!"
+    echo "⚠️  No .env file found...."
+    echo "📝 Please copy env.EXAMPLE to .env file with your configuration before running again."
+    echo "   Especially change the SECRET_KEY!"
     exit 1
 fi
 
