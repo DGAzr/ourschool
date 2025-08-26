@@ -1,0 +1,5 @@
+DATABASE_URL=postgresql+psycopg://ourschool:YMIUtwtP2T6Fp8zTOf0V@postgres.in.ashley.io/ourschool-dev
+SECRET_KEY=YMIUtwtP2T6Fp8zTOf0V
+ALGORITHM=HS256
+ACCESS_TOKEN_EXPIRE_MINUTES=30
+VITE_API_BASE_URL=http://localhost:8001

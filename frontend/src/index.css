@@ -1,0 +1,12 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Ensure body has proper dark mode background to prevent white flashes */
+body {
+  @apply bg-gray-50 dark:bg-gray-900 transition-colors;
+}
+
+html {
+  @apply bg-gray-50 dark:bg-gray-900;
+}

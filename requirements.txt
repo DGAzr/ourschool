@@ -1,0 +1,28 @@
+# Core FastAPI and web framework dependencies
+fastapi==0.104.1
+uvicorn[standard]==0.24.0
+starlette>=0.27.0  # Required by FastAPI (explicit for clarity)
+
+# Database and ORM
+sqlalchemy==2.0.35
+alembic==1.14.0
+psycopg==3.2.9  # PostgreSQL adapter (psycopg3)
+
+# Request handling and multipart forms
+python-multipart==0.0.6
+
+# Authentication and security
+python-jose[cryptography]==3.3.0
+passlib[bcrypt]==1.7.4
+bcrypt==4.0.1
+
+# Data validation and settings
+pydantic[email]==2.11.7
+pydantic-settings==2.10.1
+
+# Environment and configuration
+python-dotenv==1.0.0
+
+# Development and code quality tools
+ruff==0.5.5
+black==24.4.2
