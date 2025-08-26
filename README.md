@@ -23,6 +23,8 @@ Once I've completed our first academic term I plan to release a more stable beta
 ```
 git clone git@github.com:DGAzr/ourschool.git
 cd ourschool
+cp env.EXAMPLE .env
+(!!!EDIT YOUR .env FILE TO SUIT YOUR ENVIRONMENT!!!)
 bash docker-deploy.sh
 ```
 Point your browser at localhost:4173
