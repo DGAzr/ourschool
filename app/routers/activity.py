@@ -69,8 +69,35 @@ class ActivityItem:
     
     def _get_time_ago(self):
         """Generate human-readable time difference."""
-        now = datetime.utcnow()
-        diff = now - self.timestamp
+        # For activities that only have date information (like attendance),
+        # compare dates directly to avoid timezone confusion
+        if (hasattr(self.timestamp, 'time') and 
+            self.timestamp.time() == datetime.min.time()):
+            # This is a date-only event created with datetime.combine(date, datetime.min.time())
+            from datetime import date as Date
+            
+            # Use UTC date to be consistent, but adjust for the fact that 
+            # database dates are stored as local dates
+            now_utc = datetime.utcnow()
+            # Adjust UTC to approximate local time (assuming EDT = UTC-4)
+            local_now = now_utc - timedelta(hours=4)  
+            today = local_now.date()
+            event_date = self.timestamp.date()
+            
+            day_diff = (today - event_date).days
+            if day_diff == 0:
+                return "Today"
+            elif day_diff == 1:
+                return "Yesterday" 
+            elif day_diff > 1:
+                return f"{day_diff} days ago"
+            else:
+                # Future date (shouldn't happen for most activities)
+                return "Today"
+        
+        # For regular datetime comparisons, use UTC
+        now_utc = datetime.utcnow()
+        diff = now_utc - self.timestamp
         
         if diff.days > 0:
             return f"{diff.days} day{'s' if diff.days != 1 else ''} ago"
