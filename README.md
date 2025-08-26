@@ -125,17 +125,6 @@ The application will be available at:
 - API: http://localhost:8000
 - API Documentation: http://localhost:8000/docs
 
-## Database Schema
-
-The application includes the following main entities:
-
-- **Users**: Parent and student accounts with role-based access
-- **Students**: Student profiles linked to parent accounts
-- **Attendance Records**: Daily attendance tracking with status and notes
-- **Subjects**: Course subjects with customizable colors
-- **Lessons**: Scheduled lessons with materials and objectives
-- **Assignments**: Various assignment types with due dates and status tracking
-- **Grades**: Assessment results with points and feedback
 
 ## API Integration
 
@@ -189,14 +178,14 @@ curl -X GET "http://localhost:8000/api/points/admin/overview" \
       "total_earned": 500,
       "total_spent": 0,
       "student_id": 4,
-      "student_name": "William Ashley"
+      "student_name": "Student One"
     },
     {
       "current_balance": 300,
       "total_earned": 300,
       "total_spent": 0,
       "student_id": 5,
-      "student_name": "Evelyn Ashley"
+      "student_name": "Student Two"
     }
   ]
 }
