@@ -25,21 +25,17 @@ import {
   AssignmentAssignmentRequest,
   AssignmentAssignmentResponse,
   StudentAssignmentProgressSummary,
-  Subject,
-  Lesson,
   User
 } from '../types'
 
 export const assignmentsApi = {
   // Assignment Template Management
   async getAll(params?: {
-    lesson_id?: number
     subject_id?: number
     skip?: number
     limit?: number
   }): Promise<AssignmentTemplate[]> {
     const searchParams = new URLSearchParams()
-    if (params?.lesson_id) searchParams.append('lesson_id', params.lesson_id.toString())
     if (params?.subject_id) searchParams.append('subject_id', params.subject_id.toString())
     if (params?.skip) searchParams.append('skip', params.skip.toString())
     if (params?.limit) searchParams.append('limit', params.limit.toString())
@@ -174,18 +170,6 @@ export const assignmentsApi = {
   },
 
   // Helper APIs for dropdowns and forms
-  async getSubjects(): Promise<Subject[]> {
-    const response = await api.get('/lessons/subjects/')
-    return response
-  },
-
-  async getLessons(): Promise<Lesson[]> {
-    const url = `/lessons/`
-    
-    const response = await api.get(url)
-    return response
-  },
-
   async getStudents(): Promise<User[]> {
     const response = await api.get('/attendance/students')
     return response
@@ -236,7 +220,6 @@ export const assignmentsApi = {
 
   async importTemplate(data: {
     assignment_data: any
-    target_lesson_id?: number
     target_subject_id?: number
   }): Promise<any> {
     const response = await api.post('/assignments/templates/import', data)

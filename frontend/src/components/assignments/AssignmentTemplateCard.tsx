@@ -18,14 +18,13 @@
 
 import React, { useState, useEffect, useRef } from 'react'
 import { Edit, Trash2, Users, Clock, Target, Archive, Download, MoreVertical } from 'lucide-react'
-import { AssignmentTemplate, Subject, Lesson } from '../../types'
+import { AssignmentTemplate, Subject } from '../../types'
 import { assignmentUtils } from '../../services/assignments'
 import MarkdownRenderer from '../common/MarkdownRenderer'
 
 interface AssignmentTemplateCardProps {
   template: AssignmentTemplate
   subject?: Subject
-  lesson?: Lesson
   onEdit: (template: AssignmentTemplate) => void
   onDelete: (template: AssignmentTemplate) => void
   onAssign: (template: AssignmentTemplate) => void
@@ -38,7 +37,6 @@ interface AssignmentTemplateCardProps {
 const AssignmentTemplateCard: React.FC<AssignmentTemplateCardProps> = ({
   template,
   subject,
-  lesson,
   onEdit,
   onDelete,
   onAssign,
@@ -93,12 +91,6 @@ const AssignmentTemplateCard: React.FC<AssignmentTemplateCardProps> = ({
             </div>
             <div className="flex items-center space-x-2 text-sm text-gray-600 dark:text-gray-400">
               <span className="font-medium">{subject?.name}</span>
-              {lesson && (
-                <>
-                  <span>•</span>
-                  <span>{lesson.title}</span>
-                </>
-              )}
             </div>
           </div>
           

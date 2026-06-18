@@ -27,7 +27,6 @@ from app.core.logging import get_logger, log_business_event
 from app.models.user import User, UserRole
 from app.models.assignment import StudentAssignment, AssignmentTemplate
 from app.models.attendance import AttendanceRecord
-from app.models.lesson import Lesson, LessonAssignment
 from app.enums import AssignmentStatus
 from app.routers.auth import get_current_active_user
 
@@ -137,7 +136,6 @@ def get_recent_activity(
             # Admin sees all activity
             activities.extend(_get_assignment_activities(db, start_date, end_date))
             activities.extend(_get_attendance_activities(db, start_date, end_date))
-            activities.extend(_get_lesson_activities(db, start_date, end_date))
         else:
             # Students see only their own activity
             activities.extend(_get_student_assignment_activities(db, current_user.id, start_date, end_date))
@@ -254,43 +252,6 @@ def _get_attendance_activities(db: Session, start_date: datetime, end_date: date
                 "status": record.status.value if hasattr(record.status, 'value') else record.status,
                 "date": record.date.isoformat(),
                 "notes": record.notes
-            }
-        ))
-    
-    return activities
-
-
-def _get_lesson_activities(db: Session, start_date: datetime, end_date: datetime) -> List[ActivityItem]:
-    """Get lesson-related activities for admin."""
-    activities = []
-    
-    # Recent lessons
-    lessons = (
-        db.query(Lesson)
-        .options(
-            joinedload(Lesson.lesson_assignments).joinedload(LessonAssignment.assignment_template).joinedload(AssignmentTemplate.subject)
-        )
-        .filter(
-            and_(
-                Lesson.updated_at >= start_date,
-                Lesson.updated_at <= end_date
-            )
-        )
-        .order_by(desc(Lesson.updated_at))
-        .limit(20)
-        .all()
-    )
-    
-    for lesson in lessons:
-        activities.append(ActivityItem(
-            activity_type="lesson_updated",
-            description=f"Lesson '{lesson.title}' updated",
-            timestamp=lesson.updated_at,
-            details={
-                "lesson_id": lesson.id,
-                "title": lesson.title,
-                "subject": lesson.primary_subject.name if lesson.primary_subject else None,
-                "date": lesson.scheduled_date.isoformat() if lesson.scheduled_date else None
             }
         ))
     

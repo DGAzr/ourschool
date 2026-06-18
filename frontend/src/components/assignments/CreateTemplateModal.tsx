@@ -18,7 +18,7 @@
 
 import React from 'react'
 import { assignmentsApi } from '../../services/assignments'
-import { Subject, Lesson, AssignmentTemplateCreate } from '../../types'
+import { Subject, AssignmentTemplateCreate } from '../../types'
 import { 
   AssignmentModalBase, 
   AssignmentFormFields, 
@@ -29,30 +29,26 @@ import {
 
 interface CreateTemplateModalProps {
   subjects: Subject[]
-  lessons: Lesson[]
   onClose: () => void
   onSuccess: () => void
 }
 
-const CreateTemplateModal: React.FC<CreateTemplateModalProps> = ({ 
-  subjects, 
-  lessons, 
-  onClose, 
-  onSuccess 
+const CreateTemplateModal: React.FC<CreateTemplateModalProps> = ({
+  subjects,
+  onClose,
+  onSuccess
 }) => {
   const initialData: AssignmentTemplateCreate = {
     name: '',
     description: '',
     instructions: '',
     assignment_type: 'homework',
-    lesson_id: undefined,
     subject_id: 0,
     max_points: 100,
     estimated_duration_minutes: undefined,
     prerequisites: '',
     materials_needed: '',
     is_exportable: true,
-    order_in_lesson: 0
   }
 
   const validateForm = (data: AssignmentTemplateCreate): string | null => {
@@ -74,7 +70,6 @@ const CreateTemplateModal: React.FC<CreateTemplateModalProps> = ({
   const handleSubmit = async (data: AssignmentTemplateCreate) => {
     const templateData = {
       ...data,
-      lesson_id: data.lesson_id || undefined,
       description: data.description || undefined,
       instructions: data.instructions || undefined,
       prerequisites: data.prerequisites || undefined,
@@ -135,7 +130,6 @@ const CreateTemplateModal: React.FC<CreateTemplateModalProps> = ({
           <AssignmentFormFields
             formData={formData}
             subjects={subjects}
-            lessons={lessons}
             onUpdate={(field, value) => updateField(field as keyof AssignmentTemplateCreate, value)}
             showAllFields={true}
             disabled={loading}

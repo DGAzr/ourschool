@@ -1,6 +1,7 @@
 services:
   db:
     image: postgres:15-alpine
+    restart: unless-stopped
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-ourschool}
       POSTGRES_USER: ${POSTGRES_USER:-postgres}
@@ -19,31 +20,28 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.backend
+    restart: unless-stopped
     environment:
-      # Database configuration (using individual settings for Docker)
+      # Database configuration
       DATABASE_HOST: db
       DATABASE_PORT: 5432
       DATABASE_NAME: ${POSTGRES_DB:-ourschool}
       DATABASE_USER: ${POSTGRES_USER:-postgres}
       DATABASE_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
-      
+
       # Security configuration
       SECRET_KEY: ${SECRET_KEY:-your-secret-key-change-this-in-production}
       ALGORITHM: ${ALGORITHM:-HS256}
       ACCESS_TOKEN_EXPIRE_MINUTES: ${ACCESS_TOKEN_EXPIRE_MINUTES:-30}
-      
+
       # Backend server configuration
       BACKEND_HOST: ${BACKEND_HOST:-0.0.0.0}
       BACKEND_PORT: ${BACKEND_PORT:-8000}
-      
-      # Frontend server configuration (for reference)
-      FRONTEND_HOST: ${FRONTEND_HOST:-0.0.0.0}
-      FRONTEND_PORT: ${FRONTEND_PORT:-4173}
-      
+
       # Logging configuration
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
       LOG_FORMAT: ${LOG_FORMAT:-json}
-      
+
       # CORS configuration
       ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-http://localhost:4173,http://frontend:4173}
     depends_on:
@@ -58,25 +56,30 @@ services:
     command: ["./start.sh"]
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
-      interval: 30s
+      interval: 15s
       timeout: 10s
-      retries: 3
+      retries: 5
+      start_period: 30s
 
   frontend:
     build:
       context: .
       dockerfile: Dockerfile.frontend
+    restart: unless-stopped
     ports:
       - "${FRONTEND_PORT:-4173}:4173"
     depends_on:
-      - backend
+      backend:
+        condition: service_healthy
     environment:
+      # Used by vite preview proxy to reach the backend service internally
       VITE_API_BASE_URL: http://backend:8000
     healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:4173"]
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:4173', r => process.exit(r.statusCode === 200 ? 0 : 1)).on('error', () => process.exit(1))"]
       interval: 30s
       timeout: 10s
       retries: 3
+      start_period: 10s
 
 volumes:
   postgres_data:

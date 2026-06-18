@@ -16,7 +16,7 @@
 
 """Backup schemas for system-wide backup and restore functionality."""
 
-from datetime import date, datetime, time
+from datetime import date, datetime
 from typing import Dict, List, Optional, Any, Union
 from pydantic import BaseModel, Field, field_validator
 
@@ -52,7 +52,6 @@ class AssignmentTemplateBackup(BaseModel):
     instructions: Optional[str] = None
     assignment_type: str
     subject_name: str  # Will be resolved during import
-    lesson_id: Optional[int] = None  # Will be resolved during import
     max_points: int = 100
     estimated_duration_minutes: Optional[int] = None
     prerequisites: Optional[str] = None
@@ -61,44 +60,6 @@ class AssignmentTemplateBackup(BaseModel):
     created_by_email: str  # User email for resolution
     created_at: datetime
     updated_at: datetime
-
-
-class LessonBackup(BaseModel):
-    """Schema for backing up lesson data."""
-    title: str
-    description: Optional[str] = None
-    scheduled_date: date
-    start_time: Optional[str] = None
-    end_time: Optional[str] = None
-    
-    @field_validator('start_time', 'end_time', mode='before')
-    @classmethod
-    def convert_time_to_string(cls, v):
-        if v is None:
-            return None
-        if isinstance(v, time):
-            return v.strftime('%H:%M:%S')
-        return v
-    estimated_duration_minutes: Optional[int] = None
-    materials_needed: Optional[str] = None
-    objectives: Optional[str] = None
-    prerequisites: Optional[str] = None
-    resources: Optional[str] = None
-    lesson_order: int = 0
-    subject_names: List[str] = []
-    created_at: datetime
-    updated_at: datetime
-
-
-class LessonAssignmentBackup(BaseModel):
-    """Schema for backing up lesson-assignment relationships."""
-    lesson_title: str  # For resolution
-    assignment_template_name: str  # For resolution
-    order_in_lesson: int = 0
-    planned_duration_minutes: Optional[int] = None
-    custom_instructions: Optional[str] = None
-    is_required: bool = True
-    custom_max_points: Optional[int] = None
 
 
 class StudentAssignmentBackup(BaseModel):
@@ -203,9 +164,7 @@ class SystemBackup(BaseModel):
     users: List[UserBackup] = []
     subjects: List[SubjectBackup] = []
     terms: List[TermBackup] = []
-    lessons: List[LessonBackup] = []
     assignment_templates: List[AssignmentTemplateBackup] = []
-    lesson_assignments: List[LessonAssignmentBackup] = []
     term_subjects: List[TermSubjectBackup] = []
     
     # Dependent data

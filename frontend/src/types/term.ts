@@ -16,39 +16,6 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-/**
- * Lesson and subject related types
- */
-
-export interface Subject {
-  id: number
-  name: string
-  description?: string
-  color: string
-  created_at: string
-}
-
-export interface Lesson {
-  id: number
-  title: string
-  description?: string
-  scheduled_date: string
-  start_time?: string
-  end_time?: string
-  estimated_duration_minutes?: number
-  materials_needed?: string
-  objectives?: string
-  prerequisites?: string
-  resources?: string
-  lesson_order: number
-  created_at: string
-  updated_at: string
-  subjects: Subject[]
-  subject_names: string[]
-  subject_colors: string[]
-  primary_subject?: Subject
-}
-
 export interface Term {
   id: number
   name: string

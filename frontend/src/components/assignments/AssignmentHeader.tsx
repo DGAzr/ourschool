@@ -23,9 +23,11 @@ interface AssignmentHeaderProps {
   adminViewMode: 'templates' | 'grading'
   setAdminViewMode: (mode: 'templates' | 'grading') => void
   onCreateTemplate: () => void
+  onQuickAssign: () => void
   onImportTemplate: () => void
   onBulkExport: () => void
   selectedTemplates: Set<number>
+  pendingGradesCount?: number
 }
 
 const AssignmentHeader: React.FC<AssignmentHeaderProps> = ({
@@ -33,9 +35,11 @@ const AssignmentHeader: React.FC<AssignmentHeaderProps> = ({
   adminViewMode,
   setAdminViewMode,
   onCreateTemplate,
+  onQuickAssign,
   onImportTemplate,
   onBulkExport,
-  selectedTemplates
+  selectedTemplates,
+  pendingGradesCount = 0,
 }) => {
   return (
     <div className="bg-gradient-to-r from-blue-600 via-blue-700 to-blue-800 rounded-xl shadow-lg">
@@ -75,19 +79,33 @@ const AssignmentHeader: React.FC<AssignmentHeaderProps> = ({
                 </button>
                 <button
                   onClick={() => setAdminViewMode('grading')}
-                  className={`px-4 py-2 text-sm font-semibold rounded-md transition-all duration-200 ${
+                  className={`relative px-4 py-2 text-sm font-semibold rounded-md transition-all duration-200 ${
                     adminViewMode === 'grading'
                       ? 'bg-white text-blue-700 shadow-sm'
                       : 'text-white hover:bg-white hover:bg-opacity-20'
                   }`}
                 >
                   Grading
+                  {pendingGradesCount > 0 && (
+                    <span className="absolute -top-1.5 -right-1.5 h-5 min-w-5 px-1 bg-red-500 text-white text-xs font-bold rounded-full flex items-center justify-center">
+                      {pendingGradesCount}
+                    </span>
+                  )}
                 </button>
               </div>
 
               {adminViewMode === 'templates' && (
                 <div className="flex space-x-3">
-                  <button 
+                  <button
+                    onClick={onQuickAssign}
+                    className="inline-flex items-center px-4 py-3 border border-white border-opacity-30 text-sm font-semibold rounded-lg text-white bg-white bg-opacity-10 hover:bg-opacity-20 transition-all duration-200 shadow-sm hover:shadow-md"
+                  >
+                    <svg className="h-4 w-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                    </svg>
+                    Quick Assign
+                  </button>
+                  <button
                     onClick={onImportTemplate}
                     className="inline-flex items-center px-4 py-3 border border-white border-opacity-30 text-sm font-semibold rounded-lg text-white bg-white bg-opacity-10 hover:bg-opacity-20 transition-all duration-200 shadow-sm hover:shadow-md"
                   >

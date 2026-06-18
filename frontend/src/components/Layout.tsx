@@ -22,10 +22,9 @@ import { useAuth } from '../contexts/AuthContext'
 import ThemeToggle from './ThemeToggle'
 import PointsDisplay from './PointsDisplay'
 import { 
-  Home, 
-  Calendar, 
-  BookOpen, 
-  ClipboardList, 
+  Home,
+  Calendar,
+  ClipboardList,
   LogOut,
   GraduationCap,
   Menu,
@@ -57,7 +56,6 @@ const Layout: React.FC = () => {
     ...(isAdmin ? [
       { name: 'Admin Center', href: '/admin', icon: Shield },
       { name: 'Attendance', href: '/attendance', icon: Calendar },
-      { name: 'Lessons', href: '/lessons', icon: BookOpen },
       { name: 'Assignments', href: '/assignments', icon: ClipboardList },
       { name: 'Journal', href: '/journal', icon: PenTool },
       { name: 'Reports', href: '/reports', icon: BarChart3 },

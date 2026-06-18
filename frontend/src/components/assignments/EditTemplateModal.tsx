@@ -18,36 +18,32 @@
 
 import React, { useState } from 'react'
 import { assignmentsApi } from '../../services/assignments'
-import { Subject, Lesson, AssignmentTemplate, AssignmentTemplateUpdate } from '../../types'
+import { Subject, AssignmentTemplate, AssignmentTemplateUpdate } from '../../types'
 
 interface EditTemplateModalProps {
   template: AssignmentTemplate
   subjects: Subject[]
-  lessons: Lesson[]
   onClose: () => void
   onSuccess: () => void
 }
 
-const EditTemplateModal: React.FC<EditTemplateModalProps> = ({ 
+const EditTemplateModal: React.FC<EditTemplateModalProps> = ({
   template,
-  subjects, 
-  lessons, 
-  onClose, 
-  onSuccess 
+  subjects,
+  onClose,
+  onSuccess
 }) => {
   const [formData, setFormData] = useState<AssignmentTemplateUpdate>({
     name: template.name,
     description: template.description || '',
     instructions: template.instructions || '',
     assignment_type: template.assignment_type,
-    lesson_id: template.lesson_id || undefined,
     subject_id: template.subject_id,
     max_points: template.max_points,
     estimated_duration_minutes: template.estimated_duration_minutes || undefined,
     prerequisites: template.prerequisites || '',
     materials_needed: template.materials_needed || '',
     is_exportable: template.is_exportable,
-    order_in_lesson: template.order_in_lesson
   })
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -71,7 +67,6 @@ const EditTemplateModal: React.FC<EditTemplateModalProps> = ({
       
       const templateData = {
         ...formData,
-        lesson_id: formData.lesson_id || undefined,
         description: formData.description || undefined,
         instructions: formData.instructions || undefined,
         prerequisites: formData.prerequisites || undefined,
@@ -150,24 +145,6 @@ const EditTemplateModal: React.FC<EditTemplateModalProps> = ({
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                  Lesson (Optional)
-                </label>
-                <select
-                  value={formData.lesson_id || ''}
-                  onChange={(e) => updateFormData('lesson_id', e.target.value ? parseInt(e.target.value) : undefined)}
-                  className="w-full border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 rounded-md px-3 py-2 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-                >
-                  <option value="">Standalone (no lesson)</option>
-                  {lessons.map(lesson => (
-                    <option key={lesson.id} value={lesson.id}>
-                      {lesson.title}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                   Assignment Type
                 </label>
                 <select
@@ -190,7 +167,7 @@ const EditTemplateModal: React.FC<EditTemplateModalProps> = ({
             </div>
 
             {/* Grading and Time */}
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                   Maximum Points
@@ -216,19 +193,6 @@ const EditTemplateModal: React.FC<EditTemplateModalProps> = ({
                   onChange={(e) => updateFormData('estimated_duration_minutes', e.target.value ? parseInt(e.target.value) : undefined)}
                   className="w-full border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 rounded-md px-3 py-2 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
                   placeholder="e.g., 30"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                  Order in Lesson
-                </label>
-                <input
-                  type="number"
-                  min="0"
-                  value={formData.order_in_lesson || 0}
-                  onChange={(e) => updateFormData('order_in_lesson', parseInt(e.target.value))}
-                  className="w-full border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 rounded-md px-3 py-2 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
                 />
               </div>
             </div>

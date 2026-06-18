@@ -19,14 +19,14 @@
 import React, { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
-import { Users, Calendar, BookOpen, ClipboardList, TrendingUp, Eye, Activity, Clock, Award, X } from 'lucide-react'
+import { Users, Calendar, ClipboardList, TrendingUp, Eye, Activity, Clock, Award, X } from 'lucide-react'
 import { reportsApi } from '../services/reports'
-import { lessonsApi } from '../services/lessons'
+import { subjectsApi } from '../services/subjects'
 import { pointsApi, type StudentPoints } from '../services/points'
 import { activityApi, type ActivityItem } from '../services/activity'
 import { termsApi } from '../services/terms'
-import { AdminReport, StudentReport, Lesson, Term } from '../types'
-import { Subject } from '../types/lesson'
+import { AdminReport, StudentReport, Term } from '../types'
+import { Subject } from '../types/subject'
 import { DashboardLayout, usePageLayout } from '../components/layouts'
 import BulkAttendanceModal from '../components/BulkAttendanceModal'
 import QuickCreateTemplateModal from '../components/QuickCreateTemplateModal'
@@ -213,7 +213,6 @@ const Dashboard: React.FC = () => {
   const [adminReport, setAdminReport] = useState<AdminReport | null>(null)
   const [studentReport, setStudentReport] = useState<StudentReport | null>(null)
   const [activeTerm, setActiveTerm] = useState<Term | null>(null)
-  const [, setUpcomingLessons] = useState<Lesson[]>([])
   const [recentActivity, setRecentActivity] = useState<ActivityItem[]>([])
   const [subjects, setSubjects] = useState<Subject[]>([])
   const [showRecentActivity, setShowRecentActivity] = useState(false)
@@ -261,17 +260,6 @@ const Dashboard: React.FC = () => {
     return subject?.color || '#6B7280' // Default to gray-500 if not found
   }
 
-  // Helper function to get local date in YYYY-MM-DD format
-  const getLocalDateString = (daysOffset = 0) => {
-    const date = new Date()
-    // Use setUTCDate for proper date arithmetic that handles month boundaries correctly
-    date.setUTCDate(date.getUTCDate() + daysOffset)
-    const year = date.getUTCFullYear()
-    const month = String(date.getUTCMonth() + 1).padStart(2, '0')
-    const day = String(date.getUTCDate()).padStart(2, '0')
-    return `${year}-${month}-${day}`
-  }
-
   // Calculate days remaining in active term
   const calculateDaysRemaining = (term: Term | null) => {
     if (!term) return null
@@ -298,25 +286,20 @@ const Dashboard: React.FC = () => {
         
         if (isAdmin) {
           // Load admin data
-          const [adminData, lessonsData, subjectsData, termData] = await Promise.all([
+          const [adminData, subjectsData, termData] = await Promise.all([
             reportsApi.getAdminReport(),
-            lessonsApi.getAll({
-              start_date: getLocalDateString(),
-              end_date: getLocalDateString(7)
-            }),
-            lessonsApi.getSubjects(),
+            subjectsApi.getAll(),
             termsApi.getActive()
           ])
-          
+
           setAdminReport(adminData)
-          setUpcomingLessons(lessonsData || [])
           setSubjects(subjectsData || [])
           setActiveTerm(termData)
         } else {
           // Load student data
           const [studentData, subjectsData, termData] = await Promise.all([
             reportsApi.getStudentReport(),
-            lessonsApi.getSubjects(),
+            subjectsApi.getAll(),
             termsApi.getActive()
           ])
           setStudentReport(studentData)
@@ -371,7 +354,7 @@ const Dashboard: React.FC = () => {
     {
       name: 'Pending Grades',
       value: adminReport.pending_grades.toString(),
-      icon: BookOpen,
+      icon: ClipboardList,
       color: 'bg-purple-500',
       link: '/assignments?view=grading',
     },
@@ -399,7 +382,7 @@ const Dashboard: React.FC = () => {
     {
       name: 'Completed',
       value: studentReport.completed_assignments.toString(),
-      icon: BookOpen,
+      icon: TrendingUp,
       color: 'bg-green-500',
       link: '/assignments',
     },
@@ -567,16 +550,7 @@ const Dashboard: React.FC = () => {
                     </div>
                     Mark Today's Attendance
                   </button>
-                  <button 
-                    onClick={() => navigate('/lessons')}
-                    className="w-full flex items-center px-4 py-4 text-left text-sm font-semibold text-gray-800 dark:text-gray-200 hover:bg-purple-50 dark:hover:bg-purple-900/20 hover:text-purple-700 dark:hover:text-purple-400 rounded-lg border border-gray-200 dark:border-gray-600 hover:border-purple-200 dark:hover:border-purple-500 transition-all duration-200 shadow-sm hover:shadow-md"
-                  >
-                    <div className="w-8 h-8 bg-purple-100 rounded-lg flex items-center justify-center mr-3">
-                      <BookOpen className="h-4 w-4 text-purple-600" />
-                    </div>
-                    Create New Lesson
-                  </button>
-                  <button 
+                  <button
                     onClick={() => setShowCreateTemplateModal(true)}
                     className="w-full flex items-center px-4 py-4 text-left text-sm font-semibold text-gray-800 dark:text-gray-200 hover:bg-green-50 dark:hover:bg-green-900/20 hover:text-green-700 dark:hover:text-green-400 rounded-lg border border-gray-200 dark:border-gray-600 hover:border-green-200 dark:hover:border-green-500 transition-all duration-200 shadow-sm hover:shadow-md"
                   >
@@ -606,16 +580,7 @@ const Dashboard: React.FC = () => {
                     </div>
                     View My Assignments
                   </button>
-                  <button 
-                    onClick={() => navigate('/lessons')}
-                    className="w-full flex items-center px-4 py-4 text-left text-sm font-semibold text-gray-800 dark:text-gray-200 hover:bg-purple-50 dark:hover:bg-purple-900/20 hover:text-purple-700 dark:hover:text-purple-400 rounded-lg border border-gray-200 dark:border-gray-600 hover:border-purple-200 dark:hover:border-purple-500 transition-all duration-200 shadow-sm hover:shadow-md"
-                  >
-                    <div className="w-8 h-8 bg-purple-100 rounded-lg flex items-center justify-center mr-3">
-                      <BookOpen className="h-4 w-4 text-purple-600" />
-                    </div>
-                    View Lessons
-                  </button>
-                  <button 
+                  <button
                     onClick={() => navigate('/reports')}
                     className="w-full flex items-center px-4 py-4 text-left text-sm font-semibold text-gray-800 dark:text-gray-200 hover:bg-green-50 dark:hover:bg-green-900/20 hover:text-green-700 dark:hover:text-green-400 rounded-lg border border-gray-200 dark:border-gray-600 hover:border-green-200 dark:hover:border-green-500 transition-all duration-200 shadow-sm hover:shadow-md"
                   >

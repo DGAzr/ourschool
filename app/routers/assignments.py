@@ -26,7 +26,7 @@ from sqlalchemy.orm import Session, joinedload
 
 from app.core.database import get_db
 from app.models.assignment import AssignmentStatus, AssignmentTemplate, StudentAssignment
-from app.models.lesson import Lesson, Subject
+from app.models.subject import Subject
 from app.models.term import Term
 from app.models.user import User, UserRole
 from app.routers.auth import get_current_active_user
@@ -37,6 +37,8 @@ from app.schemas.assignment import (
     AssignmentTemplateCreate,
     AssignmentTemplateResponse,
     AssignmentTemplateUpdate,
+    BulkGradeItem,
+    BulkGradeResult,
     StudentAssignmentGrade,
     StudentAssignmentResponse,
     StudentAssignmentUpdate,
@@ -70,12 +72,6 @@ def create_assignment_template(
     if not subject:
         raise HTTPException(status_code=404, detail="Subject not found")
 
-    # Verify lesson exists if provided
-    if template.lesson_id:
-        lesson = db.query(Lesson).filter(Lesson.id == template.lesson_id).first()
-        if not lesson:
-            raise HTTPException(status_code=404, detail="Lesson not found")
-
     db_template = AssignmentTemplate(**template.dict(), created_by=current_user.id)
     db.add(db_template)
     db.commit()
@@ -91,8 +87,8 @@ def create_assignment_template(
 def get_assignment_templates(
     db: Annotated[Session, Depends(get_db)],
     current_user: Annotated[User, Depends(get_current_active_user)],
-    lesson_id: Optional[int] = Query(None),
     subject_id: Optional[int] = Query(None),
+    search: Optional[str] = Query(None),
     include_archived: bool = Query(False),
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=1000),
@@ -100,10 +96,9 @@ def get_assignment_templates(
     """Get assignment templates with optional filtering."""
     query = db.query(AssignmentTemplate).options(
         joinedload(AssignmentTemplate.subject),
-        joinedload(AssignmentTemplate.lesson),
         joinedload(AssignmentTemplate.creator)
     )
-    
+
     # Apply access control
     if current_user.role != UserRole.ADMIN:
         query = query.filter(AssignmentTemplate.created_by == current_user.id)
@@ -113,10 +108,13 @@ def get_assignment_templates(
         query = query.filter(AssignmentTemplate.is_archived.is_(False))
 
     # Apply optional filters
-    if lesson_id:
-        query = query.filter(AssignmentTemplate.lesson_id == lesson_id)
     if subject_id:
         query = query.filter(AssignmentTemplate.subject_id == subject_id)
+    if search:
+        query = query.filter(
+            AssignmentTemplate.name.ilike(f"%{search}%")
+            | AssignmentTemplate.description.ilike(f"%{search}%")
+        )
 
     templates = query.offset(skip).limit(limit).all()
 
@@ -157,7 +155,6 @@ def get_assignment_template(
     """Get a specific assignment template."""
     query = db.query(AssignmentTemplate).options(
         joinedload(AssignmentTemplate.subject),
-        joinedload(AssignmentTemplate.lesson),
         joinedload(AssignmentTemplate.creator)
     ).filter(AssignmentTemplate.id == template_id)
     if current_user.role != UserRole.ADMIN:
@@ -201,12 +198,6 @@ def update_assignment_template(
         )
         if not subject:
             raise HTTPException(status_code=404, detail="Subject not found")
-
-    # Verify new lesson exists if provided
-    if template_update.lesson_id:
-        lesson = db.query(Lesson).filter(Lesson.id == template_update.lesson_id).first()
-        if not lesson:
-            raise HTTPException(status_code=404, detail="Lesson not found")
 
     update_data = template_update.dict(exclude_unset=True)
     for field, value in update_data.items():
@@ -690,6 +681,59 @@ def grade_student_assignment(
     return assignment
 
 
+@router.post("/bulk-grade", response_model=list[BulkGradeResult])
+def bulk_grade_assignments(
+    items: list[BulkGradeItem],
+    db: Annotated[Session, Depends(get_db)],
+    current_user: Annotated[User, Depends(get_current_active_user)],
+):
+    """Grade multiple student assignments in one request. Each item is graded independently; one failure does not roll back others."""
+    if current_user.role != UserRole.ADMIN:
+        raise HTTPException(status_code=403, detail="Only administrators can grade assignments")
+
+    results: list[BulkGradeResult] = []
+    for item in items:
+        try:
+            assignment = db.query(StudentAssignment).filter(StudentAssignment.id == item.assignment_id).first()
+            if not assignment:
+                results.append(BulkGradeResult(assignment_id=item.assignment_id, success=False, error="Assignment not found"))
+                continue
+
+            max_points = assignment.max_points
+            if item.points_earned > max_points:
+                results.append(BulkGradeResult(assignment_id=item.assignment_id, success=False, error=f"Points {item.points_earned} exceed maximum {max_points}"))
+                continue
+
+            assignment.points_earned = item.points_earned
+            assignment.teacher_feedback = item.teacher_feedback
+            assignment.is_graded = True
+            assignment.graded_date = date.today()
+            assignment.graded_by = current_user.id
+
+            percentage = assignment.calculate_percentage_grade()
+            if percentage is not None:
+                from app.crud.reports import calculate_letter_grade
+                assignment.letter_grade = calculate_letter_grade(percentage)
+
+            assignment.update_status()
+            assignment.update_term_grade(db)
+            db.flush()
+
+            try:
+                if points_crud.is_points_system_enabled(db):
+                    title = assignment.template.name if assignment.template else f"Assignment {assignment.id}"
+                    points_crud.award_assignment_points(db=db, student_id=assignment.student_id, assignment_id=assignment.id, points_earned=item.points_earned, assignment_title=title)
+            except Exception:
+                pass
+
+            results.append(BulkGradeResult(assignment_id=item.assignment_id, success=True))
+        except Exception as e:
+            results.append(BulkGradeResult(assignment_id=item.assignment_id, success=False, error=str(e)))
+
+    db.commit()
+    return results
+
+
 # Progress and Analytics
 
 
@@ -1163,7 +1207,7 @@ def get_student_term_grades(
     """Get term grades for a specific student."""
     from sqlalchemy import func
 
-    from app.models.lesson import Subject
+    from app.models.subject import Subject
     from app.models.term import Term, TermSubject
 
     # Verify access - admin must manage the student, or student can see their own
@@ -1484,7 +1528,6 @@ def import_assignment_template(
             "description": assignment_data.description,
             "instructions": assignment_data.instructions,
             "assignment_type": AssignmentType(assignment_data.assignment_type),
-            "lesson_id": import_request.target_lesson_id,
             "subject_id": subject_id,
             "max_points": assignment_data.max_points,
             "estimated_duration_minutes": assignment_data.estimated_duration_minutes,
@@ -1530,7 +1573,6 @@ def bulk_export_assignment_templates(
         db.query(AssignmentTemplate)
         .options(
             joinedload(AssignmentTemplate.subject),
-            joinedload(AssignmentTemplate.lesson),
             joinedload(AssignmentTemplate.creator)
         )
         .filter(AssignmentTemplate.id.in_(template_ids))

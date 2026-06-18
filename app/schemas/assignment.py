@@ -35,14 +35,12 @@ class AssignmentTemplateBase(BaseModel):
     description: Optional[str] = None
     instructions: Optional[str] = None
     assignment_type: AssignmentType = AssignmentType.HOMEWORK
-    lesson_id: Optional[int] = None  # Can be standalone
     subject_id: int
     max_points: int = Field(default=100, ge=1, le=1000)
     estimated_duration_minutes: Optional[int] = Field(None, ge=1)
     prerequisites: Optional[str] = None
     materials_needed: Optional[str] = None
     is_exportable: bool = True
-    order_in_lesson: int = 0
 
 
 class AssignmentTemplateCreate(AssignmentTemplateBase):
@@ -56,14 +54,12 @@ class AssignmentTemplateUpdate(BaseModel):
     description: Optional[str] = None
     instructions: Optional[str] = None
     assignment_type: Optional[AssignmentType] = None
-    lesson_id: Optional[int] = None
     subject_id: Optional[int] = None
     max_points: Optional[int] = Field(None, ge=1, le=1000)
     estimated_duration_minutes: Optional[int] = Field(None, ge=1)
     prerequisites: Optional[str] = None
     materials_needed: Optional[str] = None
     is_exportable: Optional[bool] = None
-    order_in_lesson: Optional[int] = None
     is_archived: Optional[bool] = None
 
 
@@ -157,6 +153,22 @@ class StudentAssignmentGrade(BaseModel):
     letter_grade: Optional[str] = None
 
 
+class BulkGradeItem(BaseModel):
+    """Single item in a bulk grade request."""
+
+    assignment_id: int
+    points_earned: float = Field(..., ge=0)
+    teacher_feedback: Optional[str] = None
+
+
+class BulkGradeResult(BaseModel):
+    """Result of a single item in a bulk grade operation."""
+
+    assignment_id: int
+    success: bool
+    error: Optional[str] = None
+
+
 class StudentAssignmentResponse(StudentAssignmentBase):
     """Schema for responding with student assignments."""
 
@@ -215,8 +227,6 @@ class AssignmentDetailResponse(BaseModel):
     # Subject information
     subject_name: str
     subject_color: str
-    # Lesson context (if part of a lesson)
-    lesson_name: Optional[str] = None
 
 
 # Assignment Assignment (when assigning templates to students)
@@ -282,5 +292,4 @@ class AssignmentTemplateImport(BaseModel):
     """Schema for importing assignment templates."""
 
     assignment_data: AssignmentTemplateExport
-    target_lesson_id: Optional[int] = None  # Where to import it
     target_subject_id: Optional[int] = None  # Override subject

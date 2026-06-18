@@ -14,25 +14,25 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-"""Shared utilities for lessons module."""
-from .permissions import check_admin_access, require_admin
-from .serializers import serialize_assignment_template, serialize_lesson_assignment_response
-from .validators import (
-    get_assignment_template_or_404,
-    get_lesson_assignment_or_404,
-    get_lesson_or_404,
-    get_or_404,
-    get_subject_or_404,
-)
+"""Subject model."""
+from datetime import datetime
 
-__all__ = [
-    "check_admin_access",
-    "require_admin", 
-    "get_assignment_template_or_404",
-    "get_lesson_assignment_or_404", 
-    "get_lesson_or_404",
-    "get_or_404",
-    "get_subject_or_404",
-    "serialize_assignment_template",
-    "serialize_lesson_assignment_response",
-]
+from sqlalchemy import Column, DateTime, Integer, String, Text
+from sqlalchemy.orm import relationship
+
+from app.core.database import Base
+
+
+class Subject(Base):
+    """Subject model."""
+
+    __tablename__ = "subjects"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String, nullable=False)
+    description = Column(Text)
+    color = Column(String, default="#3B82F6")
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    assignment_templates = relationship("AssignmentTemplate", back_populates="subject")
+    term_subjects = relationship("TermSubject", back_populates="subject")

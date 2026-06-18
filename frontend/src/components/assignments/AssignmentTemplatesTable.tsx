@@ -30,12 +30,11 @@ import {
   BookOpen,
   Calendar
 } from 'lucide-react'
-import { AssignmentTemplate, Subject, Lesson } from '../../types'
+import { AssignmentTemplate, Subject } from '../../types'
 
 interface AssignmentTemplatesTableProps {
   templates: AssignmentTemplate[]
   subjects: Subject[]
-  lessons: Lesson[]
   selectedTemplates: Set<number>
   onTemplateSelectionToggle: (templateId: number) => void
   onEditTemplate: (template: AssignmentTemplate) => void
@@ -50,7 +49,6 @@ interface AssignmentTemplatesTableProps {
 const AssignmentTemplatesTable: React.FC<AssignmentTemplatesTableProps> = ({
   templates,
   subjects,
-  lessons,
   selectedTemplates,
   onTemplateSelectionToggle,
   onEditTemplate,
@@ -83,7 +81,6 @@ const AssignmentTemplatesTable: React.FC<AssignmentTemplatesTableProps> = ({
   }, [openDropdownId])
 
   const getSubjectById = (id: number) => subjects.find(s => s.id === id)
-  const getLessonById = (id: number) => lessons.find(l => l.id === id)
 
   const getAssignmentTypeIcon = (type: string) => {
     const iconMap: { [key: string]: string } = {
@@ -141,9 +138,6 @@ const AssignmentTemplatesTable: React.FC<AssignmentTemplatesTableProps> = ({
                 Subject
               </th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                Lesson
-              </th>
-              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
                 Type
               </th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
@@ -163,7 +157,6 @@ const AssignmentTemplatesTable: React.FC<AssignmentTemplatesTableProps> = ({
           <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
             {templates.map((template) => {
               const subject = getSubjectById(template.subject_id)
-              const lesson = template.lesson_id ? getLessonById(template.lesson_id) : undefined
               
               return (
                 <tr 
@@ -218,17 +211,6 @@ const AssignmentTemplatesTable: React.FC<AssignmentTemplatesTableProps> = ({
                         {subject?.name || 'Unknown'}
                       </div>
                     </div>
-                  </td>
-                  
-                  {/* Lesson */}
-                  <td className="px-6 py-4 whitespace-nowrap">
-                    {lesson ? (
-                      <div className="text-sm text-gray-900 dark:text-gray-100 max-w-32 truncate">
-                        {lesson.title}
-                      </div>
-                    ) : (
-                      <span className="text-sm text-gray-500 dark:text-gray-400">—</span>
-                    )}
                   </td>
                   
                   {/* Type */}

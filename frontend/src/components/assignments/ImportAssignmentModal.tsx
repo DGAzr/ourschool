@@ -24,24 +24,20 @@ interface ImportAssignmentModalProps {
   onClose: () => void
   onImport: (data: {
     assignment_data: any
-    target_lesson_id?: number
     target_subject_id?: number
   }) => Promise<any>
   subjects: Array<{ id: number; name: string }>
-  lessons: Array<{ id: number; title: string }>
 }
 
-export function ImportAssignmentModal({ 
-  isOpen, 
-  onClose, 
-  onImport, 
+export function ImportAssignmentModal({
+  isOpen,
+  onClose,
+  onImport,
   subjects,
-  lessons 
 }: ImportAssignmentModalProps) {
   const [step, setStep] = useState<'upload' | 'configure' | 'result'>('upload')
   const [isLoading, setIsLoading] = useState(false)
   const [assignmentData, setAssignmentData] = useState<any>(null)
-  const [targetLessonId, setTargetLessonId] = useState<number | undefined>()
   const [targetSubjectId, setTargetSubjectId] = useState<number | undefined>()
   const [importResult, setImportResult] = useState<any>(null)
   const [error, setError] = useState<string | null>(null)
@@ -140,7 +136,6 @@ export function ImportAssignmentModal({
     try {
       const result = await onImport({
         assignment_data: assignmentData,
-        target_lesson_id: targetLessonId,
         target_subject_id: targetSubjectId
       })
       
@@ -156,7 +151,6 @@ export function ImportAssignmentModal({
   const handleClose = () => {
     setStep('upload')
     setAssignmentData(null)
-    setTargetLessonId(undefined)
     setTargetSubjectId(undefined)
     setImportResult(null)
     setError(null)
@@ -263,23 +257,6 @@ export function ImportAssignmentModal({
                 </p>
               </div>
 
-              <div>
-                <label className="block text-sm font-medium mb-2">
-                  Add to lesson (optional):
-                </label>
-                <select
-                  value={targetLessonId || ''}
-                  onChange={(e) => setTargetLessonId(e.target.value ? Number(e.target.value) : undefined)}
-                  className="w-full p-2 border border-gray-300 rounded"
-                >
-                  <option value="">Create as standalone template</option>
-                  {lessons.map(lesson => (
-                    <option key={lesson.id} value={lesson.id}>
-                      {lesson.title}
-                    </option>
-                  ))}
-                </select>
-              </div>
             </div>
 
             <div className="flex justify-end space-x-2 mt-6">

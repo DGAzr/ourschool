@@ -44,6 +44,7 @@ const Users: React.FC = () => {
     date_of_birth: '',
     grade_level: 1
   })
+  const [newUserErrors, setNewUserErrors] = useState<Record<string, string>>({})
   const [editUser, setEditUser] = useState({
     first_name: '',
     last_name: '',
@@ -53,6 +54,7 @@ const Users: React.FC = () => {
     date_of_birth: '',
     grade_level: 1
   })
+  const [editUserErrors, setEditUserErrors] = useState<Record<string, string>>({})
   const [users, setUsers] = useState<User[]>([])
   const { loading, error, setLoading, setError, handleAsyncAction } = usePageLayout({ initialLoading: true })
 
@@ -70,7 +72,43 @@ const Users: React.FC = () => {
   }
 
 
+  const validateNewUser = () => {
+    const errors: Record<string, string> = {}
+    if (!newUser.first_name.trim()) errors.first_name = 'First name is required'
+    if (!newUser.last_name.trim()) errors.last_name = 'Last name is required'
+    if (!newUser.email.trim()) {
+      errors.email = 'Email is required'
+    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(newUser.email)) {
+      errors.email = 'Enter a valid email address'
+    }
+    if (!newUser.username.trim()) errors.username = 'Username is required'
+    if (!newUser.password) {
+      errors.password = 'Password is required'
+    } else if (newUser.password.length < 6) {
+      errors.password = 'Password must be at least 6 characters'
+    }
+    return errors
+  }
+
+  const validateEditUser = () => {
+    const errors: Record<string, string> = {}
+    if (!editUser.first_name.trim()) errors.first_name = 'First name is required'
+    if (!editUser.last_name.trim()) errors.last_name = 'Last name is required'
+    if (!editUser.email.trim()) {
+      errors.email = 'Email is required'
+    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(editUser.email)) {
+      errors.email = 'Enter a valid email address'
+    }
+    if (!editUser.username.trim()) errors.username = 'Username is required'
+    return errors
+  }
+
   const handleAddUser = async () => {
+    const errors = validateNewUser()
+    if (Object.keys(errors).length > 0) {
+      setNewUserErrors(errors)
+      return
+    }
     try {
       // Only include student-specific fields if creating a student user
       const userData = {
@@ -97,8 +135,9 @@ const Users: React.FC = () => {
         date_of_birth: '',
         grade_level: 1
       })
+      setNewUserErrors({})
       setShowAddUser(false)
-      fetchUsers() // Refresh the list
+      fetchUsers()
     } catch (error) {
       setError('Failed to create user')
     }
@@ -129,12 +168,17 @@ const Users: React.FC = () => {
 
   const handleEditUser = async () => {
     if (!editingUser) return
-
+    const errors = validateEditUser()
+    if (Object.keys(errors).length > 0) {
+      setEditUserErrors(errors)
+      return
+    }
     try {
       await usersApi.update(editingUser.id, editUser)
       setShowEditUser(false)
       setEditingUser(null)
-      fetchUsers() // Refresh the list
+      setEditUserErrors({})
+      fetchUsers()
       setError(null)
     } catch (error) {
       setError('Failed to update user')
@@ -143,6 +187,7 @@ const Users: React.FC = () => {
 
   const openEditModal = (userToEdit: User) => {
     setEditingUser(userToEdit)
+    setEditUserErrors({})
     setEditUser({
       first_name: userToEdit.first_name,
       last_name: userToEdit.last_name,
@@ -301,50 +346,55 @@ const Users: React.FC = () => {
             <div className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">First Name</label>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">First Name <span className="text-red-500">*</span></label>
                   <input
                     type="text"
                     value={newUser.first_name}
-                    onChange={(e) => setNewUser({ ...newUser, first_name: e.target.value })}
-                    className="mt-1 block w-full border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 rounded-md px-3 py-2 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                    onChange={(e) => { setNewUser({ ...newUser, first_name: e.target.value }); setNewUserErrors(prev => ({ ...prev, first_name: '' })) }}
+                    className={`mt-1 block w-full border rounded-md px-3 py-2 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-blue-500 focus:border-blue-500 ${newUserErrors.first_name ? 'border-red-500' : 'border-gray-300 dark:border-gray-600'}`}
                   />
+                  {newUserErrors.first_name && <p className="mt-1 text-xs text-red-500">{newUserErrors.first_name}</p>}
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Last Name</label>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Last Name <span className="text-red-500">*</span></label>
                   <input
                     type="text"
                     value={newUser.last_name}
-                    onChange={(e) => setNewUser({ ...newUser, last_name: e.target.value })}
-                    className="mt-1 block w-full border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 rounded-md px-3 py-2 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                    onChange={(e) => { setNewUser({ ...newUser, last_name: e.target.value }); setNewUserErrors(prev => ({ ...prev, last_name: '' })) }}
+                    className={`mt-1 block w-full border rounded-md px-3 py-2 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-blue-500 focus:border-blue-500 ${newUserErrors.last_name ? 'border-red-500' : 'border-gray-300 dark:border-gray-600'}`}
                   />
+                  {newUserErrors.last_name && <p className="mt-1 text-xs text-red-500">{newUserErrors.last_name}</p>}
                 </div>
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Email</label>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Email <span className="text-red-500">*</span></label>
                 <input
                   type="email"
                   value={newUser.email}
-                  onChange={(e) => setNewUser({ ...newUser, email: e.target.value })}
-                  className="mt-1 block w-full border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 rounded-md px-3 py-2 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                  onChange={(e) => { setNewUser({ ...newUser, email: e.target.value }); setNewUserErrors(prev => ({ ...prev, email: '' })) }}
+                  className={`mt-1 block w-full border rounded-md px-3 py-2 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-blue-500 focus:border-blue-500 ${newUserErrors.email ? 'border-red-500' : 'border-gray-300 dark:border-gray-600'}`}
                 />
+                {newUserErrors.email && <p className="mt-1 text-xs text-red-500">{newUserErrors.email}</p>}
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Username</label>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Username <span className="text-red-500">*</span></label>
                 <input
                   type="text"
                   value={newUser.username}
-                  onChange={(e) => setNewUser({ ...newUser, username: e.target.value })}
-                  className="mt-1 block w-full border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 rounded-md px-3 py-2 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                  onChange={(e) => { setNewUser({ ...newUser, username: e.target.value }); setNewUserErrors(prev => ({ ...prev, username: '' })) }}
+                  className={`mt-1 block w-full border rounded-md px-3 py-2 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-blue-500 focus:border-blue-500 ${newUserErrors.username ? 'border-red-500' : 'border-gray-300 dark:border-gray-600'}`}
                 />
+                {newUserErrors.username && <p className="mt-1 text-xs text-red-500">{newUserErrors.username}</p>}
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Password</label>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Password <span className="text-red-500">*</span></label>
                 <input
                   type="password"
                   value={newUser.password}
-                  onChange={(e) => setNewUser({ ...newUser, password: e.target.value })}
-                  className="mt-1 block w-full border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 rounded-md px-3 py-2 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                  onChange={(e) => { setNewUser({ ...newUser, password: e.target.value }); setNewUserErrors(prev => ({ ...prev, password: '' })) }}
+                  className={`mt-1 block w-full border rounded-md px-3 py-2 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-blue-500 focus:border-blue-500 ${newUserErrors.password ? 'border-red-500' : 'border-gray-300 dark:border-gray-600'}`}
                 />
+                {newUserErrors.password && <p className="mt-1 text-xs text-red-500">{newUserErrors.password}</p>}
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Role</label>
@@ -385,7 +435,7 @@ const Users: React.FC = () => {
             </div>
             <div className="flex justify-end space-x-3 mt-6">
               <button
-                onClick={() => setShowAddUser(false)}
+                onClick={() => { setShowAddUser(false); setNewUserErrors({}) }}
                 className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 rounded-md hover:bg-gray-200 dark:hover:bg-gray-600"
               >
                 Cancel
@@ -409,41 +459,45 @@ const Users: React.FC = () => {
             <div className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">First Name</label>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">First Name <span className="text-red-500">*</span></label>
                   <input
                     type="text"
                     value={editUser.first_name}
-                    onChange={(e) => setEditUser({ ...editUser, first_name: e.target.value })}
-                    className="mt-1 block w-full border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 rounded-md px-3 py-2 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                    onChange={(e) => { setEditUser({ ...editUser, first_name: e.target.value }); setEditUserErrors(prev => ({ ...prev, first_name: '' })) }}
+                    className={`mt-1 block w-full border rounded-md px-3 py-2 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-blue-500 focus:border-blue-500 ${editUserErrors.first_name ? 'border-red-500' : 'border-gray-300 dark:border-gray-600'}`}
                   />
+                  {editUserErrors.first_name && <p className="mt-1 text-xs text-red-500">{editUserErrors.first_name}</p>}
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Last Name</label>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Last Name <span className="text-red-500">*</span></label>
                   <input
                     type="text"
                     value={editUser.last_name}
-                    onChange={(e) => setEditUser({ ...editUser, last_name: e.target.value })}
-                    className="mt-1 block w-full border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 rounded-md px-3 py-2 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                    onChange={(e) => { setEditUser({ ...editUser, last_name: e.target.value }); setEditUserErrors(prev => ({ ...prev, last_name: '' })) }}
+                    className={`mt-1 block w-full border rounded-md px-3 py-2 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-blue-500 focus:border-blue-500 ${editUserErrors.last_name ? 'border-red-500' : 'border-gray-300 dark:border-gray-600'}`}
                   />
+                  {editUserErrors.last_name && <p className="mt-1 text-xs text-red-500">{editUserErrors.last_name}</p>}
                 </div>
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Email</label>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Email <span className="text-red-500">*</span></label>
                 <input
                   type="email"
                   value={editUser.email}
-                  onChange={(e) => setEditUser({ ...editUser, email: e.target.value })}
-                  className="mt-1 block w-full border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 rounded-md px-3 py-2 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                  onChange={(e) => { setEditUser({ ...editUser, email: e.target.value }); setEditUserErrors(prev => ({ ...prev, email: '' })) }}
+                  className={`mt-1 block w-full border rounded-md px-3 py-2 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-blue-500 focus:border-blue-500 ${editUserErrors.email ? 'border-red-500' : 'border-gray-300 dark:border-gray-600'}`}
                 />
+                {editUserErrors.email && <p className="mt-1 text-xs text-red-500">{editUserErrors.email}</p>}
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Username</label>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Username <span className="text-red-500">*</span></label>
                 <input
                   type="text"
                   value={editUser.username}
-                  onChange={(e) => setEditUser({ ...editUser, username: e.target.value })}
-                  className="mt-1 block w-full border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 rounded-md px-3 py-2 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                  onChange={(e) => { setEditUser({ ...editUser, username: e.target.value }); setEditUserErrors(prev => ({ ...prev, username: '' })) }}
+                  className={`mt-1 block w-full border rounded-md px-3 py-2 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-blue-500 focus:border-blue-500 ${editUserErrors.username ? 'border-red-500' : 'border-gray-300 dark:border-gray-600'}`}
                 />
+                {editUserErrors.username && <p className="mt-1 text-xs text-red-500">{editUserErrors.username}</p>}
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Status</label>
@@ -487,6 +541,7 @@ const Users: React.FC = () => {
                 onClick={() => {
                   setShowEditUser(false)
                   setEditingUser(null)
+                  setEditUserErrors({})
                 }}
                 className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 rounded-md hover:bg-gray-200 dark:hover:bg-gray-600"
               >

@@ -31,8 +31,6 @@ from .exporters import (
     export_attendance_records,
     export_grade_history,
     export_journal_entries,
-    export_lesson_assignments,
-    export_lessons,
     export_student_assignments,
     export_student_term_grades,
     export_subjects,
@@ -61,9 +59,7 @@ def export_system_backup(
         users_data = export_users(db)
         subjects_data = export_subjects(db)
         terms_data = export_terms(db)
-        lessons_data = export_lessons(db)
         templates_data = export_assignment_templates(db)
-        lesson_assignments_data = export_lesson_assignments(db)
         term_subjects_data = export_term_subjects(db)
         student_assignments_data = export_student_assignments(db)
         term_grades_data = export_student_term_grades(db)
@@ -79,7 +75,6 @@ def export_system_backup(
             system_info={
                 "total_users": len(users_data),
                 "total_subjects": len(subjects_data),
-                "total_lessons": len(lessons_data),
                 "total_assignment_templates": len(templates_data),
                 "total_student_assignments": len(student_assignments_data),
                 "total_terms": len(terms_data),
@@ -89,9 +84,7 @@ def export_system_backup(
             users=users_data,
             subjects=subjects_data,
             terms=terms_data,
-            lessons=lessons_data,
             assignment_templates=templates_data,
-            lesson_assignments=lesson_assignments_data,
             term_subjects=term_subjects_data,
             student_assignments=student_assignments_data,
             student_term_grades=term_grades_data,

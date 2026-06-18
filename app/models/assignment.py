@@ -57,10 +57,6 @@ class AssignmentTemplate(Base):
         default=AssignmentType.HOMEWORK,
     )
 
-    # Relationships
-    lesson_id = Column(
-        Integer, ForeignKey("lessons.id"), nullable=True
-    )  # Can be standalone
     subject_id = Column(Integer, ForeignKey("subjects.id"), nullable=False)
 
     # Grading information
@@ -75,9 +71,6 @@ class AssignmentTemplate(Base):
     is_exportable = Column(Boolean, default=True)
     export_data = Column(Text)  # JSON string for export/import
 
-    # Ordering and organization
-    order_in_lesson = Column(Integer, default=0)
-
     # Audit fields
     created_by = Column(Integer, ForeignKey("users.id"), nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow)
@@ -85,18 +78,10 @@ class AssignmentTemplate(Base):
     is_archived = Column(Boolean, default=False, nullable=False)
 
     # Relationships
-    lesson = relationship("Lesson", back_populates="assignment_templates")
     subject = relationship("Subject", back_populates="assignment_templates")
     creator = relationship("User", foreign_keys=[created_by])
     student_assignments = relationship(
         "StudentAssignment", back_populates="template", cascade="all, delete-orphan"
-    )
-
-    # New: Many-to-many with lessons
-    lesson_assignments = relationship(
-        "LessonAssignment",
-        back_populates="assignment_template",
-        cascade="all, delete-orphan",
     )
 
 

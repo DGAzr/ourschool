@@ -18,23 +18,21 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { assignmentsApi } from '../services/assignments'
-import { lessonsApi } from '../services/lessons'
-import { AssignmentTemplate, Subject, Lesson, User, StudentAssignment } from '../types'
+import { subjectsApi } from '../services/subjects'
+import { AssignmentTemplate, Subject, User, StudentAssignment } from '../types'
 
 interface UseAssignmentsProps {
   isAdmin: boolean
   adminViewMode: 'templates' | 'grading'
   selectedSubject: number | null
-  selectedLesson: number | null
 }
 
-export const useAssignments = ({ isAdmin, adminViewMode, selectedSubject, selectedLesson }: UseAssignmentsProps) => {
+export const useAssignments = ({ isAdmin, adminViewMode, selectedSubject }: UseAssignmentsProps) => {
   const [templates, setTemplates] = useState<AssignmentTemplate[]>([])
   const [studentAssignments, setStudentAssignments] = useState<StudentAssignment[]>([])
   const [submittedAssignments, setSubmittedAssignments] = useState<StudentAssignment[]>([])
   const [allAssignments, setAllAssignments] = useState<StudentAssignment[]>([])
   const [subjects, setSubjects] = useState<Subject[]>([])
-  const [lessons, setLessons] = useState<Lesson[]>([])
   const [students, setStudents] = useState<User[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -45,21 +43,16 @@ export const useAssignments = ({ isAdmin, adminViewMode, selectedSubject, select
       
       if (isAdmin) {
         // Admin sees assignment templates and submitted assignments
-        const [templatesData, subjectsData, lessonsData, studentsData] = await Promise.all([
+        const [templatesData, subjectsData, studentsData] = await Promise.all([
           assignmentsApi.getAll({
             subject_id: selectedSubject || undefined,
-            lesson_id: selectedLesson || undefined
           }),
-          lessonsApi.getSubjects(),
-          lessonsApi.getAll({
-            subject_id: selectedSubject || undefined
-          }),
+          subjectsApi.getAll(),
           assignmentsApi.getStudents()
         ])
-        
+
         setTemplates(templatesData || [])
         setSubjects(subjectsData || [])
-        setLessons(lessonsData || [])
         setStudents(studentsData || [])
 
         // If we're in grading mode, fetch all assignments for admin control
@@ -94,7 +87,7 @@ export const useAssignments = ({ isAdmin, adminViewMode, selectedSubject, select
         }
         
         try {
-          const subjectsData = await lessonsApi.getSubjects()
+          const subjectsData = await subjectsApi.getAll()
           setSubjects(subjectsData || [])
         } catch (err) {
           throw err
@@ -110,11 +103,10 @@ export const useAssignments = ({ isAdmin, adminViewMode, selectedSubject, select
       setStudentAssignments([])
       setAllAssignments([])
       setSubjects([])
-      setLessons([])
     } finally {
       setLoading(false)
     }
-  }, [isAdmin, selectedLesson, selectedSubject, adminViewMode])
+  }, [isAdmin, selectedSubject, adminViewMode])
 
   useEffect(() => {
     fetchData()
@@ -126,7 +118,6 @@ export const useAssignments = ({ isAdmin, adminViewMode, selectedSubject, select
     submittedAssignments,
     allAssignments,
     subjects,
-    lessons,
     students,
     loading,
     error,

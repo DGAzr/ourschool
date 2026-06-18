@@ -226,7 +226,7 @@ export function SystemBackupModal({ isOpen, onClose, onExport, onImport }: Syste
                     </div>
                   </div>
                   <p className="text-gray-600 mb-4 text-sm">
-                    Creates a complete backup of all users, lessons, assignments, grades, attendance, and system data.
+                    Creates a complete backup of all users, subjects, assignments, grades, attendance, and system data.
                   </p>
                   <button
                     onClick={handleExport}
@@ -342,7 +342,7 @@ export function SystemBackupModal({ isOpen, onClose, onExport, onImport }: Syste
                   </div>
                   <div className="flex items-center space-x-2">
                     <FileText size={16} className="text-green-600" />
-                    <span>{importData.system_info?.total_lessons || 0} Lessons</span>
+                    <span>{importData.system_info?.total_subjects || 0} Subjects</span>
                   </div>
                   <div className="flex items-center space-x-2">
                     <Database size={16} className="text-purple-600" />

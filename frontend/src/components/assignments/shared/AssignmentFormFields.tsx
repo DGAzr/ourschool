@@ -17,7 +17,7 @@
  */
 
 import { Select, Input, TextArea } from '../../ui'
-import { Subject, Lesson } from '../../../types'
+import { Subject } from '../../../types'
 
 interface AssignmentFormFieldsProps {
   formData: {
@@ -25,18 +25,14 @@ interface AssignmentFormFieldsProps {
     description?: string
     instructions?: string
     assignment_type?: string
-    lesson_id?: number
     subject_id?: number
     max_points?: number
     estimated_duration_minutes?: number
-    difficulty_level?: string
     prerequisites?: string
     materials_needed?: string
     is_exportable?: boolean
-    order_in_lesson?: number
   }
   subjects: Subject[]
-  lessons: Lesson[]
   onUpdate: (field: string, value: any) => void
   showAllFields?: boolean
   disabled?: boolean
@@ -45,7 +41,6 @@ interface AssignmentFormFieldsProps {
 const AssignmentFormFields: React.FC<AssignmentFormFieldsProps> = ({
   formData,
   subjects,
-  lessons,
   onUpdate,
   showAllFields = true,
   disabled = false
@@ -81,20 +76,6 @@ const AssignmentFormFields: React.FC<AssignmentFormFieldsProps> = ({
         />
 
         <Select
-          label="Lesson (Optional)"
-          value={formData.lesson_id || ''}
-          onChange={(e) => onUpdate('lesson_id', e.target.value ? parseInt(e.target.value) : undefined)}
-          disabled={disabled}
-          options={[
-            { value: '', label: 'Standalone (no lesson)' },
-            ...lessons.map(lesson => ({
-              value: lesson.id,
-              label: lesson.title
-            }))
-          ]}
-        />
-
-        <Select
           label="Assignment Type"
           value={formData.assignment_type || 'homework'}
           onChange={(e) => onUpdate('assignment_type', e.target.value)}
@@ -116,7 +97,7 @@ const AssignmentFormFields: React.FC<AssignmentFormFieldsProps> = ({
 
       {/* Grading and Time */}
       {showAllFields && (
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           <Input
             type="number"
             label="Maximum Points"
@@ -134,15 +115,6 @@ const AssignmentFormFields: React.FC<AssignmentFormFieldsProps> = ({
             onChange={(e) => onUpdate('estimated_duration_minutes', e.target.value ? parseInt(e.target.value) : undefined)}
             min={1}
             placeholder="e.g., 30"
-            disabled={disabled}
-          />
-
-          <Input
-            type="number"
-            label="Order in Lesson"
-            value={formData.order_in_lesson || 0}
-            onChange={(e) => onUpdate('order_in_lesson', parseInt(e.target.value))}
-            min={0}
             disabled={disabled}
           />
         </div>

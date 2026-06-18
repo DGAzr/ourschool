@@ -26,14 +26,12 @@ export interface AssignmentTemplate {
   description?: string
   instructions?: string
   assignment_type: 'homework' | 'project' | 'test' | 'quiz' | 'essay' | 'presentation' | 'worksheet' | 'reading' | 'practice'
-  lesson_id?: number
   subject_id: number
   max_points: number
   estimated_duration_minutes?: number
   prerequisites?: string
   materials_needed?: string
   is_exportable: boolean
-  order_in_lesson: number
   created_by: number
   created_at: string
   updated_at: string
@@ -76,14 +74,12 @@ export interface AssignmentTemplateCreate {
   description?: string
   instructions?: string
   assignment_type: 'homework' | 'project' | 'test' | 'quiz' | 'essay' | 'presentation' | 'worksheet' | 'reading' | 'practice'
-  lesson_id?: number
   subject_id: number
   max_points: number
   estimated_duration_minutes?: number
   prerequisites?: string
   materials_needed?: string
   is_exportable: boolean
-  order_in_lesson: number
 }
 
 export interface AssignmentTemplateUpdate {
@@ -91,14 +87,12 @@ export interface AssignmentTemplateUpdate {
   description?: string
   instructions?: string
   assignment_type?: 'homework' | 'project' | 'test' | 'quiz' | 'essay' | 'presentation' | 'worksheet' | 'reading' | 'practice'
-  lesson_id?: number
   subject_id?: number
   max_points?: number
   estimated_duration_minutes?: number
   prerequisites?: string
   materials_needed?: string
   is_exportable?: boolean
-  order_in_lesson?: number
 }
 
 export interface AssignmentAssignmentRequest {

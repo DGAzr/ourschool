@@ -19,8 +19,8 @@
 import React, { useState, useEffect } from 'react'
 import { BookOpen, Plus, Edit, Trash2, Palette } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
-import { lessonsApi } from '../services/lessons'
-import { Subject } from '../types'
+import { subjectsApi } from '../services/subjects'
+import { Subject } from '../types/subject'
 import { createCrudErrorHandlers } from '../utils/errorHandling'
 import { PageLayout, usePageLayout } from '../components/layouts'
 
@@ -47,7 +47,7 @@ const Subjects: React.FC = () => {
   const fetchSubjects = async () => {
     try {
       setLoading(true)
-      const data = await lessonsApi.getSubjects()
+      const data = await subjectsApi.getAll()
       setSubjects(data)
       setError(null)
     } catch (err) {
@@ -59,7 +59,7 @@ const Subjects: React.FC = () => {
 
   const handleCreateSubject = async () => {
     try {
-      await lessonsApi.createSubject(subjectForm)
+      await subjectsApi.create(subjectForm)
       resetForm()
       setShowCreateModal(false)
       fetchSubjects()
@@ -82,7 +82,7 @@ const Subjects: React.FC = () => {
     if (!editingSubject) return
     
     try {
-      await lessonsApi.updateSubject(editingSubject.id, subjectForm)
+      await subjectsApi.update(editingSubject.id, subjectForm)
       resetForm()
       setEditingSubject(null)
       setShowEditModal(false)
@@ -95,7 +95,7 @@ const Subjects: React.FC = () => {
   const handleDeleteSubject = async (id: number) => {
     if (window.confirm('Are you sure you want to delete this subject? This action cannot be undone.')) {
       try {
-        await lessonsApi.deleteSubject(id)
+        await subjectsApi.delete(id)
         fetchSubjects()
       } catch (err) {
         setError(errorHandlers.delete(err))

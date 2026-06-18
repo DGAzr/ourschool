@@ -19,8 +19,8 @@
 import React, { useState, useEffect } from 'react'
 import { X, ClipboardList } from 'lucide-react'
 import { assignmentsApi } from '../services/assignments'
-import { lessonsApi } from '../services/lessons'
-import { Subject, Lesson, AssignmentTemplateCreate } from '../types'
+import { subjectsApi } from '../services/subjects'
+import { Subject, AssignmentTemplateCreate } from '../types'
 
 interface QuickCreateTemplateModalProps {
   isOpen: boolean
@@ -34,7 +34,6 @@ const QuickCreateTemplateModal: React.FC<QuickCreateTemplateModalProps> = ({
   onSuccess
 }) => {
   const [subjects, setSubjects] = useState<Subject[]>([])
-  const [lessons, setLessons] = useState<Lesson[]>([])
   const [loading, setLoading] = useState(false)
   const [dataLoading, setDataLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -44,14 +43,12 @@ const QuickCreateTemplateModal: React.FC<QuickCreateTemplateModalProps> = ({
     description: '',
     instructions: '',
     assignment_type: 'homework',
-    lesson_id: undefined,
     subject_id: 0,
     max_points: 100,
     estimated_duration_minutes: 30,
     prerequisites: '',
     materials_needed: '',
     is_exportable: true,
-    order_in_lesson: 0
   })
 
   useEffect(() => {
@@ -63,14 +60,12 @@ const QuickCreateTemplateModal: React.FC<QuickCreateTemplateModalProps> = ({
         description: '',
         instructions: '',
         assignment_type: 'homework',
-        lesson_id: undefined,
         subject_id: 0,
         max_points: 100,
         estimated_duration_minutes: 30,
         prerequisites: '',
         materials_needed: '',
         is_exportable: true,
-        order_in_lesson: 0
       })
       setError(null)
     }
@@ -93,14 +88,10 @@ const QuickCreateTemplateModal: React.FC<QuickCreateTemplateModalProps> = ({
   const loadData = async () => {
     try {
       setDataLoading(true)
-      const [subjectsData, lessonsData] = await Promise.all([
-        lessonsApi.getSubjects(),
-        lessonsApi.getAll()
-      ])
+      const subjectsData = await subjectsApi.getAll()
       setSubjects(subjectsData)
-      setLessons(lessonsData || [])
     } catch (err) {
-      setError('Failed to load subjects and lessons')
+      setError('Failed to load subjects')
     } finally {
       setDataLoading(false)
     }
@@ -142,7 +133,6 @@ const QuickCreateTemplateModal: React.FC<QuickCreateTemplateModalProps> = ({
       
       const templateData = {
         ...formData,
-        lesson_id: formData.lesson_id || undefined,
         description: formData.description || undefined,
         instructions: formData.instructions || undefined,
         prerequisites: formData.prerequisites || undefined,
@@ -257,25 +247,6 @@ const QuickCreateTemplateModal: React.FC<QuickCreateTemplateModalProps> = ({
                       <option value="worksheet">Worksheet</option>
                       <option value="reading">Reading</option>
                       <option value="practice">Practice</option>
-                    </select>
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                      Lesson (Optional)
-                    </label>
-                    <select
-                      value={formData.lesson_id || ''}
-                      onChange={(e) => updateField('lesson_id', e.target.value ? parseInt(e.target.value) : undefined)}
-                      className="w-full border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 rounded-md px-3 py-2 focus:outline-none focus:ring-green-500 focus:border-green-500"
-                      disabled={loading}
-                    >
-                      <option value="">No lesson association</option>
-                      {lessons.map((lesson) => (
-                        <option key={lesson.id} value={lesson.id}>
-                          {lesson.title}
-                        </option>
-                      ))}
                     </select>
                   </div>
 

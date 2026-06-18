@@ -22,7 +22,6 @@ import { AssignmentTemplate, StudentAssignment } from '../types'
 export const useAssignmentFilters = () => {
   const [searchTerm, setSearchTerm] = useState('')
   const [selectedSubject, setSelectedSubject] = useState<number | null>(null)
-  const [selectedLesson, setSelectedLesson] = useState<number | null>(null)
   const [selectedType, setSelectedType] = useState<string | null>(null)
   const [selectedDifficulty, setSelectedDifficulty] = useState<string | null>(null)
   const [selectedStatuses, setSelectedStatuses] = useState<string[]>(['not_started', 'in_progress', 'submitted'])
@@ -34,13 +33,12 @@ export const useAssignmentFilters = () => {
         const matchesSearch = template.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
                              template.description?.toLowerCase().includes(searchTerm.toLowerCase())
         const matchesSubject = !selectedSubject || template.subject_id === selectedSubject
-        const matchesLesson = !selectedLesson || template.lesson_id === selectedLesson
         const matchesType = !selectedType || template.assignment_type === selectedType
-        
-        return matchesSearch && matchesSubject && matchesLesson && matchesType
+
+        return matchesSearch && matchesSubject && matchesType
       })
     }
-  }, [searchTerm, selectedSubject, selectedLesson, selectedType])
+  }, [searchTerm, selectedSubject, selectedType])
 
   const filterStudentAssignments = useMemo(() => {
     return (assignments: StudentAssignment[]) => {
@@ -78,8 +76,6 @@ export const useAssignmentFilters = () => {
     setSearchTerm,
     selectedSubject,
     setSelectedSubject,
-    selectedLesson,
-    setSelectedLesson,
     selectedType,
     setSelectedType,
     selectedDifficulty,

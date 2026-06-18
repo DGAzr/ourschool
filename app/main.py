@@ -25,7 +25,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.core.logging import setup_logging, log_request_start, log_request_end, get_logger
 from app.core.error_tracking import ErrorHandler
 from app.core.config import settings
-from app.routers import activity, api_keys, assignments, attendance, auth, backup, integrations, journal, lessons, performance, points, reports, terms, users
+from app.routers import activity, api_keys, assignments, attendance, auth, backup, integrations, journal, meta, performance, points, reports, subjects, terms, users
 from app.routers import settings as settings_router
 
 # Temporarily disabled students router - functionality moved to users router
@@ -114,7 +114,8 @@ app.include_router(users.router, prefix="/api/users", tags=["users"])
 # )  # Disabled - unified with users
 app.include_router(activity.router, prefix="/api/activity", tags=["activity"])
 app.include_router(attendance.router, prefix="/api/attendance", tags=["attendance"])
-app.include_router(lessons.router, prefix="/api/lessons", tags=["lessons"])
+app.include_router(subjects.router, prefix="/api/subjects", tags=["subjects"])
+app.include_router(meta.router, prefix="/api", tags=["meta"])
 app.include_router(assignments.router, prefix="/api/assignments", tags=["assignments"])
 app.include_router(terms.router, prefix="/api/terms", tags=["terms"])
 app.include_router(reports.router, prefix="/api/reports", tags=["reports"])

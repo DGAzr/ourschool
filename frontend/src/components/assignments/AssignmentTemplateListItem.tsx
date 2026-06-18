@@ -27,15 +27,13 @@ import {
   CheckSquare,
   Square,
   Clock,
-  BookOpen
 } from 'lucide-react'
-import { AssignmentTemplate, Subject, Lesson } from '../../types'
+import { AssignmentTemplate, Subject } from '../../types'
 import { ViewDensity } from '../layouts/CompactListLayout'
 
 interface AssignmentTemplateListItemProps {
   template: AssignmentTemplate
   subject?: Subject
-  lesson?: Lesson
   isSelected?: boolean
   onSelectionToggle?: () => void
   onEdit: () => void
@@ -49,7 +47,6 @@ interface AssignmentTemplateListItemProps {
 const AssignmentTemplateListItem: React.FC<AssignmentTemplateListItemProps> = ({
   template,
   subject,
-  lesson,
   isSelected = false,
   onSelectionToggle,
   onEdit,
@@ -154,17 +151,6 @@ const AssignmentTemplateListItem: React.FC<AssignmentTemplateListItemProps> = ({
             <span className="font-medium">
               {subject?.name}
             </span>
-            
-            {/* Lesson */}
-            {lesson && (
-              <>
-                <span>•</span>
-                <div className="flex items-center">
-                  <BookOpen className="h-3 w-3 mr-1" />
-                  <span className="truncate max-w-32">{lesson.title}</span>
-                </div>
-              </>
-            )}
             
             {/* Points */}
             <span>•</span>

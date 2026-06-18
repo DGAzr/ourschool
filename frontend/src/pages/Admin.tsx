@@ -24,8 +24,7 @@ import LicenseNotice from '../components/LicenseNotice'
 import { 
   Users, 
   Calendar, 
-  BookOpen, 
-  ClipboardList, 
+  ClipboardList,
   Palette,
   CalendarDays,
   BarChart3,
@@ -96,14 +95,6 @@ const Admin: React.FC = () => {
       icon: Calendar,
       path: '/attendance',
       color: 'bg-purple-500'
-    },
-    {
-      id: 'lessons',
-      name: 'Lesson Management',
-      description: 'Create and organize lesson plans',
-      icon: BookOpen,
-      path: '/lessons',
-      color: 'bg-orange-500'
     },
     {
       id: 'subjects',

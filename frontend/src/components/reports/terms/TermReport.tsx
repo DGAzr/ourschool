@@ -134,7 +134,7 @@ const TermReport: React.FC<TermReportProps> = ({ termGrades, loading }) => {
                     <div className="grid grid-cols-3 gap-4 text-xs text-gray-600 dark:text-gray-400">
                       <div>
                         <span className="font-medium">Total Points:</span>
-                        <div>{grade.total_points_earned} / {grade.total_points_possible}</div>
+                        <div>{grade.earned_points} / {grade.total_points}</div>
                       </div>
                       <div>
                         <span className="font-medium">Assignments:</span>

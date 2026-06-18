@@ -18,12 +18,11 @@
 
 import React from 'react'
 import AssignmentTemplateCard from './AssignmentTemplateCard'
-import { AssignmentTemplate, Subject, Lesson } from '../../types'
+import { AssignmentTemplate, Subject } from '../../types'
 
 interface AssignmentTemplatesListProps {
   templates: AssignmentTemplate[]
   subjects: Subject[]
-  lessons: Lesson[]
   selectedTemplates: Set<number>
   onTemplateSelectionToggle: (templateId: number) => void
   onEditTemplate: (template: AssignmentTemplate) => void
@@ -36,7 +35,6 @@ interface AssignmentTemplatesListProps {
 const AssignmentTemplatesList: React.FC<AssignmentTemplatesListProps> = ({
   templates,
   subjects,
-  lessons,
   selectedTemplates,
   onTemplateSelectionToggle,
   onEditTemplate,
@@ -46,7 +44,6 @@ const AssignmentTemplatesList: React.FC<AssignmentTemplatesListProps> = ({
   onExportTemplate
 }) => {
   const getSubjectById = (id: number) => subjects.find(s => s.id === id)
-  const getLessonById = (id: number) => lessons.find(l => l.id === id)
 
   if (templates.length === 0) {
     return (
@@ -70,7 +67,6 @@ const AssignmentTemplatesList: React.FC<AssignmentTemplatesListProps> = ({
           key={template.id}
           template={template}
           subject={getSubjectById(template.subject_id)}
-          lesson={template.lesson_id ? getLessonById(template.lesson_id) : undefined}
           isSelected={selectedTemplates.has(template.id)}
           onSelectionToggle={() => onTemplateSelectionToggle(template.id)}
           onEdit={() => onEditTemplate(template)}

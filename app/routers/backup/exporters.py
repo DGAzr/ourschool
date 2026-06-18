@@ -22,7 +22,7 @@ from sqlalchemy.orm import Session
 from app.models.assignment import AssignmentTemplate, StudentAssignment
 from app.models.attendance import AttendanceRecord
 from app.models.journal import JournalEntry
-from app.models.lesson import Lesson, LessonAssignment, Subject
+from app.models.subject import Subject
 from app.models.term import GradeHistory, StudentTermGrade, Term, TermSubject
 from app.models.user import User
 from app.schemas.backup import (
@@ -30,8 +30,6 @@ from app.schemas.backup import (
     AttendanceRecordBackup,
     GradeHistoryBackup,
     JournalEntryBackup,
-    LessonAssignmentBackup,
-    LessonBackup,
     StudentAssignmentBackup,
     StudentTermGradeBackup,
     SubjectBackup,
@@ -92,30 +90,6 @@ def export_terms(db: Session) -> List[TermBackup]:
     return terms_data
 
 
-def export_lessons(db: Session) -> List[LessonBackup]:
-    """Export all lessons."""
-    lessons_data = []
-    lessons = db.query(Lesson).all()
-    for lesson in lessons:
-        lessons_data.append(LessonBackup(
-            title=lesson.title,
-            description=lesson.description,
-            scheduled_date=lesson.scheduled_date,
-            start_time=lesson.start_time,
-            end_time=lesson.end_time,
-            estimated_duration_minutes=lesson.estimated_duration_minutes,
-            materials_needed=lesson.materials_needed,
-            objectives=lesson.objectives,
-            prerequisites=lesson.prerequisites,
-            resources=lesson.resources,
-            lesson_order=lesson.lesson_order,
-            subject_names=lesson.subject_names,
-            created_at=lesson.created_at,
-            updated_at=lesson.updated_at
-        ))
-    return lessons_data
-
-
 def export_assignment_templates(db: Session) -> List[AssignmentTemplateBackup]:
     """Export all assignment templates."""
     templates_data = []
@@ -131,7 +105,6 @@ def export_assignment_templates(db: Session) -> List[AssignmentTemplateBackup]:
             instructions=template.instructions,
             assignment_type=template.assignment_type.value,
             subject_name=template.subject.name if template.subject else "Unknown",
-            lesson_id=template.lesson_id,
             max_points=template.max_points,
             estimated_duration_minutes=template.estimated_duration_minutes,
             prerequisites=template.prerequisites,
@@ -142,24 +115,6 @@ def export_assignment_templates(db: Session) -> List[AssignmentTemplateBackup]:
             updated_at=template.updated_at
         ))
     return templates_data
-
-
-def export_lesson_assignments(db: Session) -> List[LessonAssignmentBackup]:
-    """Export all lesson assignments."""
-    lesson_assignments_data = []
-    lesson_assignments = db.query(LessonAssignment).all()
-    for la in lesson_assignments:
-        lesson_assignments_data.append(LessonAssignmentBackup(
-            lesson_title=la.lesson.title,
-            assignment_template_name=la.assignment_template.name,
-            order_in_lesson=la.order_in_lesson,
-            planned_duration_minutes=la.planned_duration_minutes,
-            custom_instructions=la.custom_instructions,
-            is_required=la.is_required,
-            custom_max_points=la.custom_max_points,
-            created_at=la.created_at
-        ))
-    return lesson_assignments_data
 
 
 def export_term_subjects(db: Session) -> List[TermSubjectBackup]:

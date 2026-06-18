@@ -16,18 +16,22 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-// Main container
-export { default as LessonsContainer } from './LessonsContainer'
+export interface Subject {
+  id: number
+  name: string
+  description?: string
+  color: string
+  created_at: string
+}
 
-// Shared components
-export { default as LessonsHeader } from './shared/LessonsHeader'
-export { default as LessonsFilters } from './shared/LessonsFilters'
-export { default as LessonCard } from './shared/LessonCard'
+export interface SubjectCreate {
+  name: string
+  description?: string
+  color?: string
+}
 
-// Hooks
-export { useLessonData } from './hooks/useLessonData'
-export { useLessonOperations } from './hooks/useLessonOperations'
-
-// Re-export existing modals (these were already in the codebase)
-export { ExportLessonModal } from './ExportLessonModal'
-export { ImportLessonModal } from './ImportLessonModal'
+export interface SubjectUpdate {
+  name?: string
+  description?: string
+  color?: string
+}

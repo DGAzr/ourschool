@@ -29,7 +29,7 @@ import {
   BulkAttendanceReport,
   AssignmentReport
 } from '../../../types'
-import { Term } from '../../../types/lesson'
+import { Term } from '../../../types/term'
 
 export type ReportView = 'overview' | 'terms' | 'subjects' | 'students' | 'attendance' | 'assignments' | 'reportcard'
 

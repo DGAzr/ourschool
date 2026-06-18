@@ -23,7 +23,7 @@ from sqlalchemy.orm import Session
 
 from app.enums import UserRole as UserRoleEnum
 from app.models.assignment import AssignmentTemplate
-from app.models.lesson import Lesson, LessonAssignment, Subject
+from app.models.subject import Subject
 from app.models.term import Term
 from app.models.user import User
 from app.schemas.backup import SystemBackup, SystemBackupImportResult
@@ -89,9 +89,7 @@ def import_system_data(
         _import_users(db, backup_data.users, result, import_options, dry_run)
         _import_subjects(db, backup_data.subjects, result, dry_run)
         _import_terms(db, backup_data.terms, result, dry_run)
-        _import_lessons(db, backup_data.lessons, result, dry_run)
         _import_assignment_templates(db, backup_data.assignment_templates, result, dry_run)
-        _import_lesson_assignments(db, backup_data.lesson_assignments, result, dry_run)
         
         # Note: Additional imports would continue here:
         # _import_student_assignments(db, backup_data.student_assignments, result, dry_run)
@@ -246,47 +244,6 @@ def _import_terms(db: Session, terms_data, result, dry_run):
     result.id_mappings["terms"] = term_mapping
 
 
-def _import_lessons(db: Session, lessons_data, result, dry_run):
-    """Import lessons with conflict handling."""
-    lesson_mapping = {}
-    imported_lessons = 0
-    skipped_lessons = 0
-    
-    for lesson_data in lessons_data:
-        existing_lesson = db.query(Lesson).filter(Lesson.title == lesson_data.title).first()
-        
-        if existing_lesson:
-            lesson_mapping[lesson_data.title] = existing_lesson.id
-            skipped_lessons += 1
-            result.import_log.append(f"Skipped existing lesson: {lesson_data.title}")
-            continue
-        
-        if not dry_run:
-            new_lesson = Lesson(
-                title=lesson_data.title,
-                description=lesson_data.description,
-                scheduled_date=lesson_data.scheduled_date,
-                start_time=lesson_data.start_time,
-                end_time=lesson_data.end_time,
-                estimated_duration_minutes=lesson_data.estimated_duration_minutes,
-                materials_needed=lesson_data.materials_needed,
-                objectives=lesson_data.objectives,
-                prerequisites=lesson_data.prerequisites,
-                resources=lesson_data.resources,
-                lesson_order=lesson_data.lesson_order
-            )
-            db.add(new_lesson)
-            db.flush()
-            lesson_mapping[lesson_data.title] = new_lesson.id
-            result.import_log.append(f"Created new lesson: {lesson_data.title}")
-        
-        imported_lessons += 1
-    
-    result.imported_counts["lessons"] = imported_lessons
-    result.skipped_counts["lessons"] = skipped_lessons
-    result.id_mappings["lessons"] = lesson_mapping
-
-
 def _import_assignment_templates(db: Session, templates_data, result, dry_run):
     """Import assignment templates with conflict handling."""
     template_mapping = {}
@@ -345,43 +302,3 @@ def _import_assignment_templates(db: Session, templates_data, result, dry_run):
     result.id_mappings["assignment_templates"] = template_mapping
 
 
-def _import_lesson_assignments(db: Session, lesson_assignments_data, result, dry_run):
-    """Import lesson assignments with conflict handling."""
-    imported_lesson_assignments = 0
-    
-    lesson_mapping = result.id_mappings.get("lessons", {})
-    template_mapping = result.id_mappings.get("assignment_templates", {})
-    
-    for la_data in lesson_assignments_data:
-        lesson_id = lesson_mapping.get(la_data.lesson_title)
-        template_id = template_mapping.get(la_data.assignment_template_name)
-        
-        if not lesson_id or not template_id:
-            result.warnings.append(
-                f"Skipping lesson assignment: lesson '{la_data.lesson_title}' or template '{la_data.assignment_template_name}' not found"
-            )
-            continue
-        
-        existing = db.query(LessonAssignment).filter(
-            LessonAssignment.lesson_id == lesson_id,
-            LessonAssignment.assignment_template_id == template_id
-        ).first()
-        
-        if existing:
-            continue
-        
-        if not dry_run:
-            new_la = LessonAssignment(
-                lesson_id=lesson_id,
-                assignment_template_id=template_id,
-                order_in_lesson=la_data.order_in_lesson,
-                planned_duration_minutes=la_data.planned_duration_minutes,
-                custom_instructions=la_data.custom_instructions,
-                is_required=la_data.is_required,
-                custom_max_points=la_data.custom_max_points
-            )
-            db.add(new_la)
-        
-        imported_lesson_assignments += 1
-    
-    result.imported_counts["lesson_assignments"] = imported_lesson_assignments

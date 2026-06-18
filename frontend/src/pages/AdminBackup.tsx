@@ -110,7 +110,7 @@ const AdminBackup: React.FC = () => {
             <div className="space-y-3 mb-6">
               <div className="flex items-center text-sm text-gray-600 dark:text-gray-400">
                 <Info className="h-4 w-4 mr-2" />
-                Includes all users, students, lessons, and assignments
+                Includes all users, students, subjects, terms, and assignments
               </div>
               <div className="flex items-center text-sm text-gray-600 dark:text-gray-400">
                 <Info className="h-4 w-4 mr-2" />

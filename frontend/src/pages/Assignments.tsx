@@ -51,6 +51,7 @@ import EditAssignmentModal from '../components/assignments/EditAssignmentModal'
 import { ExportAssignmentModal } from '../components/assignments/ExportAssignmentModal'
 import { ImportAssignmentModal } from '../components/assignments/ImportAssignmentModal'
 import SubmissionDialog from '../components/assignments/SubmissionDialog'
+import QuickAssignModal from '../components/assignments/QuickAssignModal'
 
 // Types
 import { AssignmentTemplate, StudentAssignment } from '../types'
@@ -66,6 +67,7 @@ const Assignments: React.FC = () => {
   
   // Modal states
   const [showCreateModal, setShowCreateModal] = useState(false)
+  const [showQuickAssignModal, setShowQuickAssignModal] = useState(false)
   const [showEditModal, setShowEditModal] = useState(false)
   const [showAssignModal, setShowAssignModal] = useState(false)
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
@@ -102,8 +104,6 @@ const Assignments: React.FC = () => {
     setSearchTerm,
     selectedSubject,
     setSelectedSubject,
-    selectedLesson,
-    setSelectedLesson,
     selectedType,
     setSelectedType,
     selectedStatuses,
@@ -119,26 +119,23 @@ const Assignments: React.FC = () => {
   const {
     templates,
     studentAssignments,
-    // submittedAssignments, // TODO: will use when implementing status filtering
+    submittedAssignments,
     allAssignments,
     subjects,
-    lessons,
     students,
     loading,
     error,
     refetch,
     setTemplates,
     setError
-  } = useAssignments({ 
-    isAdmin, 
-    adminViewMode, 
-    selectedSubject, 
-    selectedLesson
+  } = useAssignments({
+    isAdmin,
+    adminViewMode,
+    selectedSubject,
   })
 
   // Utility functions
   const getSubjectById = (id: number) => subjects.find(s => s.id === id)
-  const getLessonById = (id: number) => lessons.find(l => l.id === id)
 
   // Event handlers
   const handleCreateTemplate = () => {
@@ -353,9 +350,11 @@ const Assignments: React.FC = () => {
         adminViewMode={adminViewMode}
         setAdminViewMode={setAdminViewMode}
         onCreateTemplate={handleCreateTemplate}
+        onQuickAssign={() => setShowQuickAssignModal(true)}
         onImportTemplate={handleImportTemplate}
         onBulkExport={handleBulkExport}
         selectedTemplates={selectedTemplates}
+        pendingGradesCount={submittedAssignments.length}
       />
 
       {/* Error Message */}
@@ -531,23 +530,6 @@ const Assignments: React.FC = () => {
               </select>
             </div>
             <div>
-              <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">Lesson</label>
-              <select
-                value={selectedLesson || ''}
-                onChange={(e) => setSelectedLesson(e.target.value ? parseInt(e.target.value) : null)}
-                className="w-full border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 rounded-lg px-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
-              >
-                <option value="">All Lessons</option>
-                {lessons
-                  .filter(lesson => !selectedSubject || lesson.subjects.some(subject => subject.id === selectedSubject))
-                  .map(lesson => (
-                    <option key={lesson.id} value={lesson.id}>
-                      {lesson.title}
-                    </option>
-                ))}
-              </select>
-            </div>
-            <div>
               <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">Type</label>
               <select
                 value={selectedType || ''}
@@ -601,8 +583,7 @@ const Assignments: React.FC = () => {
                         key="templates-table"
                         templates={filteredTemplates}
                         subjects={subjects}
-                        lessons={lessons}
-                        selectedTemplates={selectedTemplates}
+                                        selectedTemplates={selectedTemplates}
                         onTemplateSelectionToggle={toggleTemplateSelection}
                         onEditTemplate={handleEditTemplate}
                         onDeleteTemplate={handleDeleteTemplate}
@@ -627,7 +608,6 @@ const Assignments: React.FC = () => {
                         key={template.id}
                         template={template}
                         subject={getSubjectById(template.subject_id)}
-                        lesson={template.lesson_id ? getLessonById(template.lesson_id) : undefined}
                         onEdit={handleEditTemplate}
                         onDelete={handleDeleteTemplate}
                         onAssign={handleAssignTemplate}
@@ -642,7 +622,6 @@ const Assignments: React.FC = () => {
                         key={template.id}
                         template={template}
                         subject={getSubjectById(template.subject_id)}
-                        lesson={template.lesson_id ? getLessonById(template.lesson_id) : undefined}
                         onEdit={() => handleEditTemplate(template)}
                         onDelete={() => handleDeleteTemplate(template)}
                         onAssign={() => handleAssignTemplate(template)}
@@ -682,6 +661,7 @@ const Assignments: React.FC = () => {
                         onArchiveAssignment={handleArchiveStudentAssignment}
                         onDeleteAssignment={handleDeleteStudentAssignment}
                         onUpdateAssignmentStatus={handleUpdateAssignmentStatus}
+                        onRefresh={refetch}
                         emptyMessage="No assignments found"
                         emptyDescription={
                           searchTerm || selectedSubject
@@ -768,12 +748,20 @@ const Assignments: React.FC = () => {
         </>
       )}
 
+      {/* Quick Assign Modal */}
+      {showQuickAssignModal && (
+        <QuickAssignModal
+          isOpen={showQuickAssignModal}
+          onClose={() => setShowQuickAssignModal(false)}
+          onSuccess={() => { setShowQuickAssignModal(false); refetch() }}
+        />
+      )}
+
       {/* Create Template Modal */}
       {showCreateModal && (
         <CreateTemplateModal
           subjects={subjects}
-          lessons={lessons}
-          onClose={() => setShowCreateModal(false)}
+            onClose={() => setShowCreateModal(false)}
           onSuccess={() => {
             setShowCreateModal(false)
             refetch()
@@ -786,7 +774,6 @@ const Assignments: React.FC = () => {
         <EditTemplateModal
           template={editingTemplate}
           subjects={subjects}
-          lessons={lessons}
           onClose={() => {
             setShowEditModal(false)
             setEditingTemplate(null)
@@ -921,8 +908,7 @@ const Assignments: React.FC = () => {
           }}
           onImport={performTemplateImport}
           subjects={subjects}
-          lessons={lessons}
-        />
+          />
       )}
 
       {/* Grade Assignment Modal */}

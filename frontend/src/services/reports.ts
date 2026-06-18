@@ -29,7 +29,7 @@ import {
   AssignmentReport,
   ReportCard
 } from '../types'
-import { Term } from '../types/lesson'
+import { Term } from '../types/term'
 
 export const reportsApi = {
   getStudentReport: async (): Promise<StudentReport> => {

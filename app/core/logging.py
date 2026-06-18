@@ -235,14 +235,13 @@ def log_database_operation(operation: str, table: str, record_id: str = None,
 
 
 def log_business_event(event: str, user_id: str = None, student_id: str = None,
-                      lesson_id: str = None, assignment_id: str = None, **kwargs) -> None:
+                      assignment_id: str = None, **kwargs) -> None:
     """Log business logic events specific to homeschool operations."""
     logger = get_logger("business")
     logger.info(f"Business event: {event}", extra={
         "event": event,
         "user_id": user_id,
         "student_id": student_id,
-        "lesson_id": lesson_id,
         "assignment_id": assignment_id,
         **kwargs
     })

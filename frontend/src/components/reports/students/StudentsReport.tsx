@@ -19,7 +19,7 @@
 import React, { useState } from 'react'
 import { Users, ChevronDown, BookOpen, TrendingUp } from 'lucide-react'
 import { StudentProgress } from '../../../types'
-import { Term } from '../../../types/lesson'
+import { Term } from '../../../types/term'
 import { formatAttendanceRate } from '../../../utils/formatters'
 
 interface StudentsReportProps {

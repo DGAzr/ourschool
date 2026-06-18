@@ -28,7 +28,7 @@ from sqlalchemy import and_
 from sqlalchemy.orm import Session
 
 from app.models.assignment import AssignmentTemplate, StudentAssignment
-from app.models.lesson import Subject
+from app.models.subject import Subject
 from app.models.term import StudentTermGrade, Term, TermSubject
 from app.models.user import User, UserRole
 

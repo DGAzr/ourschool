@@ -19,7 +19,7 @@
 import React, { useState, useMemo, useEffect } from 'react'
 import { ClipboardList, TrendingUp, Target, BookOpen, CheckCircle, XCircle, AlertCircle, ChevronDown } from 'lucide-react'
 import { AssignmentReport as AssignmentReportType } from '../../../types'
-import { Term } from '../../../types/lesson'
+import { Term } from '../../../types/term'
 import { reportsApi } from '../../../services/reports'
 import AssignmentDetailModal from '../../assignments/AssignmentDetailModal'
 

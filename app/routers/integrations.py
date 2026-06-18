@@ -86,8 +86,7 @@ def grade_assignment_via_api(
     assignment.is_graded = True
     assignment.graded_date = date.today()
     
-    # For API grading, we'll set graded_by to None since it's not a user
-    # but we'll track it in the logs
+    # For API grading, graded_by stays None (no user); API key is logged separately
     assignment.graded_by = None
 
     # Calculate percentage

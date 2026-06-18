@@ -17,11 +17,11 @@
  */
 
 import React, { useState, useEffect, useRef } from 'react'
-import { 
-  MoreVertical, 
-  Edit3, 
-  Trash2, 
-  Archive, 
+import {
+  MoreVertical,
+  Edit3,
+  Trash2,
+  Archive,
   Award,
   Play,
   FileCheck,
@@ -34,6 +34,7 @@ import {
 } from 'lucide-react'
 import { StudentAssignment, Subject, User as UserType } from '../../types'
 import { assignmentUtils } from '../../services/assignments'
+import InlineGradeForm from './InlineGradeForm'
 
 interface GradingAssignmentsTableProps {
   assignments: StudentAssignment[]
@@ -44,6 +45,7 @@ interface GradingAssignmentsTableProps {
   onArchiveAssignment: (assignment: StudentAssignment) => void
   onDeleteAssignment: (assignment: StudentAssignment) => void
   onUpdateAssignmentStatus: (assignmentId: number, status: string) => void
+  onRefresh?: () => void
   emptyMessage?: string
   emptyDescription?: string
 }
@@ -57,10 +59,12 @@ const GradingAssignmentsTable: React.FC<GradingAssignmentsTableProps> = ({
   onArchiveAssignment,
   onDeleteAssignment,
   onUpdateAssignmentStatus,
+  onRefresh,
   emptyMessage = 'No assignments found',
   emptyDescription = 'No assignments have been created yet.'
 }) => {
   const [openDropdownId, setOpenDropdownId] = useState<number | null>(null)
+  const [inlineGradeId, setInlineGradeId] = useState<number | null>(null)
   const dropdownRefs = useRef<{ [key: number]: HTMLDivElement | null }>({})
 
   // Close dropdown when clicking outside
@@ -194,8 +198,8 @@ const GradingAssignmentsTable: React.FC<GradingAssignmentsTableProps> = ({
               const isOverdue = assignment.due_date && new Date(assignment.due_date) < new Date() && assignment.status !== 'graded'
               
               return (
-                <tr 
-                  key={assignment.id} 
+                <React.Fragment key={assignment.id}>
+                <tr
                   className="hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors"
                 >
                   {/* Assignment Name */}
@@ -294,37 +298,22 @@ const GradingAssignmentsTable: React.FC<GradingAssignmentsTableProps> = ({
                   {/* Actions */}
                   <td className="px-6 py-4 whitespace-nowrap text-right">
                     <div className="flex items-center justify-end space-x-2">
-                      {/* Primary Action */}
-                      {assignment.status === 'submitted' && !assignment.is_graded && (
+                      {/* Inline Grade Toggle */}
+                      {!assignment.is_graded && (
                         <button
-                          onClick={() => onGradeAssignment(assignment)}
-                          className="text-green-600 dark:text-green-400 hover:text-green-800 dark:hover:text-green-300 transition-colors p-1"
-                          title="Grade assignment"
+                          onClick={() => setInlineGradeId(inlineGradeId === assignment.id ? null : assignment.id)}
+                          className={`transition-colors p-1 ${inlineGradeId === assignment.id ? 'text-blue-600 dark:text-blue-400' : 'text-green-600 dark:text-green-400 hover:text-green-800 dark:hover:text-green-300'}`}
+                          title={inlineGradeId === assignment.id ? 'Close grade form' : 'Grade inline'}
                         >
                           <Award className="h-4 w-4" />
                         </button>
                       )}
-                      
-                      {assignment.status !== 'submitted' && !assignment.is_graded && (
-                        <button
-                          onClick={() => {
-                            onUpdateAssignmentStatus(assignment.id, 'submitted')
-                            setTimeout(() => {
-                              onGradeAssignment(assignment)
-                            }, 100)
-                          }}
-                          className="text-purple-600 dark:text-purple-400 hover:text-purple-800 dark:hover:text-purple-300 transition-colors p-1"
-                          title="Submit and grade"
-                        >
-                          <Award className="h-4 w-4" />
-                        </button>
-                      )}
-                      
+
                       {assignment.is_graded && (
                         <button
-                          onClick={() => onGradeAssignment(assignment)}
-                          className="text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 transition-colors p-1"
-                          title="Edit grade"
+                          onClick={() => setInlineGradeId(inlineGradeId === assignment.id ? null : assignment.id)}
+                          className={`transition-colors p-1 ${inlineGradeId === assignment.id ? 'text-blue-600 dark:text-blue-400' : 'text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300'}`}
+                          title="Edit grade inline"
                         >
                           <Edit3 className="h-4 w-4" />
                         </button>
@@ -426,6 +415,18 @@ const GradingAssignmentsTable: React.FC<GradingAssignmentsTableProps> = ({
                     </div>
                   </td>
                 </tr>
+                {inlineGradeId === assignment.id && (
+                  <tr>
+                    <td colSpan={8} className="px-6 pb-3 pt-0">
+                      <InlineGradeForm
+                        assignment={assignment}
+                        onSuccess={() => { setInlineGradeId(null); onRefresh?.() }}
+                        onCancel={() => setInlineGradeId(null)}
+                      />
+                    </td>
+                  </tr>
+                )}
+                </React.Fragment>
               )
             })}
           </tbody>

@@ -15,7 +15,7 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 """CRUD operations for reports."""
-from datetime import date, timedelta
+from datetime import date
 from typing import List, Optional
 
 from sqlalchemy import func
@@ -27,7 +27,7 @@ from app.models.assignment import (
     StudentAssignment,
 )
 from app.models.attendance import AttendanceRecord, AttendanceStatus
-from app.models.lesson import Subject
+from app.models.subject import Subject
 from app.models.term import Term
 from app.models.user import User, UserRole
 from app.crud import settings as crud_settings
@@ -42,6 +42,35 @@ from app.utils.attendance import (
     get_required_days_of_instruction,
 )
 from app.utils.performance import track_query_performance
+
+
+def calculate_letter_grade(percentage: float) -> str:
+    """Calculate letter grade from percentage (A+/A/A- scale)."""
+    if percentage >= 97:
+        return "A+"
+    if percentage >= 93:
+        return "A"
+    if percentage >= 90:
+        return "A-"
+    if percentage >= 87:
+        return "B+"
+    if percentage >= 83:
+        return "B"
+    if percentage >= 80:
+        return "B-"
+    if percentage >= 77:
+        return "C+"
+    if percentage >= 73:
+        return "C"
+    if percentage >= 70:
+        return "C-"
+    if percentage >= 67:
+        return "D+"
+    if percentage >= 63:
+        return "D"
+    if percentage >= 60:
+        return "D-"
+    return "F"
 
 
 def get_student_report(db: Session, student_id: int):
@@ -195,12 +224,16 @@ def get_student_term_grades(db: Session, student_id: int, term_id: Optional[int]
                 "completed_count": 0,
             }
 
-        max_points = assign.custom_max_points or assign.template.max_points
-        subject_grades[subject.id]["total_points"] += max_points
-        subject_grades[subject.id]["earned_points"] += assign.points_earned or 0
         subject_grades[subject.id]["assignments_count"] += 1
         if assign.status == AssignmentStatus.GRADED:
             subject_grades[subject.id]["completed_count"] += 1
+
+        # Only include graded assignments in point totals — ungraded count as 0 earned
+        # which would unfairly lower the grade percentage
+        if assign.is_graded and assign.points_earned is not None:
+            max_points = assign.custom_max_points or assign.template.max_points
+            subject_grades[subject.id]["total_points"] += max_points
+            subject_grades[subject.id]["earned_points"] += assign.points_earned
 
     result = []
     for _subject_id, data in subject_grades.items():
@@ -210,16 +243,7 @@ def get_student_term_grades(db: Session, student_id: int, term_id: Optional[int]
             else 0
         )
 
-        if percentage >= 90:
-            letter_grade = "A"
-        elif percentage >= 80:
-            letter_grade = "B"
-        elif percentage >= 70:
-            letter_grade = "C"
-        elif percentage >= 60:
-            letter_grade = "D"
-        else:
-            letter_grade = "F"
+        letter_grade = calculate_letter_grade(percentage)
 
         result.append(
             schemas.TermGrade(
@@ -436,23 +460,14 @@ def get_all_students_progress(db: Session, term_id: Optional[int] = None):
         # Calculate additional fields
         pending_assignments = total_assignments - completed_assignments
         overdue_assignments = sum(
-            1 for a in student.assigned_assignments 
-            if a.status in [AssignmentStatus.IN_PROGRESS, AssignmentStatus.NOT_STARTED] 
-            and a.due_date and a.due_date < date.today()
+            1 for a in student.assigned_assignments
+            if a.status in [AssignmentStatus.IN_PROGRESS, AssignmentStatus.NOT_STARTED]
+            and (a.extended_due_date or a.due_date)
+            and (a.extended_due_date or a.due_date) < date.today()
         )
         completion_rate = (completed_assignments / total_assignments * 100) if total_assignments > 0 else 0
         
-        # Get current term letter grade
-        if current_term_grade >= 90:
-            current_term_letter_grade = "A"
-        elif current_term_grade >= 80:
-            current_term_letter_grade = "B"
-        elif current_term_grade >= 70:
-            current_term_letter_grade = "C"
-        elif current_term_grade >= 60:
-            current_term_letter_grade = "D"
-        else:
-            current_term_letter_grade = "F"
+        current_term_letter_grade = calculate_letter_grade(current_term_grade)
 
         # Get last activity date
         last_activity_date = None
@@ -782,23 +797,23 @@ def get_assignment_report(
     # Execute query and get results
     assignment_data = query.order_by(StudentAssignment.assigned_date.desc()).all()
 
-    # Pre-fetch all terms to avoid N+1 queries
+    # Pre-fetch all terms once for efficient date-range lookup
     all_terms = db.query(Term).all()
-    term_lookup = {}
-    for term in all_terms:
-        for single_date in (term.start_date + timedelta(days=x) for x in range((term.end_date - term.start_date).days + 1)):
-            term_lookup[single_date] = (term.id, term.name)
+
+    def _find_term_for_date(d):
+        """Find term containing date d using linear scan over terms."""
+        if not d:
+            return None, None
+        for t in all_terms:
+            if t.start_date <= d <= t.end_date:
+                return t.id, t.name
+        return None, None
 
     # Build assignment list
     assignments = []
 
     for data in assignment_data:
-        # Determine term for this assignment using pre-built lookup
-        term_id_for_assignment = None
-        term_name_for_assignment = None
-
-        if data.assigned_date and data.assigned_date in term_lookup:
-            term_id_for_assignment, term_name_for_assignment = term_lookup[data.assigned_date]
+        term_id_for_assignment, term_name_for_assignment = _find_term_for_date(data.assigned_date)
 
         assignments.append(
             schemas.AssignmentReportItem(
@@ -834,7 +849,7 @@ def get_assignment_report(
     total_assignments = len(assignments)
     graded_assignments = sum(1 for a in assignments if a.is_graded)
     pending_assignments = sum(
-        1 for a in assignments if a.status in ["submitted", "completed"]
+        1 for a in assignments if a.status == AssignmentStatus.SUBMITTED.value
     )
     overdue_assignments = sum(1 for a in assignments if a.status == "overdue")
 
@@ -890,35 +905,6 @@ def get_assignment_report(
         available_students=available_students,
         available_terms=available_terms,
     )
-
-
-def calculate_letter_grade(percentage: float) -> str:
-    """Calculate letter grade from percentage."""
-    if percentage >= 97:
-        return "A+"
-    if percentage >= 93:
-        return "A"
-    if percentage >= 90:
-        return "A-"
-    if percentage >= 87:
-        return "B+"
-    if percentage >= 83:
-        return "B"
-    if percentage >= 80:
-        return "B-"
-    if percentage >= 77:
-        return "C+"
-    if percentage >= 73:
-        return "C"
-    if percentage >= 70:
-        return "C-"
-    if percentage >= 67:
-        return "D+"
-    if percentage >= 63:
-        return "D"
-    if percentage >= 60:
-        return "D-"
-    return "F"
 
 
 @track_query_performance("get_report_card")

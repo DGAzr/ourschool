@@ -14,18 +14,40 @@
 # You should have received a copy of the GNU Affero General Public License
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
-"""Models package."""
-# Import all models to ensure they are registered with SQLAlchemy
-from .api_key import APIKey
-from .assignment import (
-    AssignmentStatus,
-    AssignmentTemplate,
-    AssignmentType,
-    StudentAssignment,
-)
-from .attendance import AttendanceRecord, AttendanceStatus
-from .journal import JournalEntry
-from .subject import Subject
-from .term import GradeHistory, StudentTermGrade, Term, TermSubject, TermType
-from .user import User, UserRole
-from .points import StudentPoints, PointTransaction, SystemSettings
+"""Subject schemas."""
+from datetime import datetime
+from typing import Optional
+
+from pydantic import BaseModel
+
+
+class SubjectBase(BaseModel):
+    """Base schema for subjects."""
+
+    name: str
+    description: Optional[str] = None
+    color: str = "#3B82F6"
+
+
+class SubjectCreate(SubjectBase):
+    """Schema for creating subjects."""
+
+
+class SubjectUpdate(BaseModel):
+    """Schema for updating subjects."""
+
+    name: Optional[str] = None
+    description: Optional[str] = None
+    color: Optional[str] = None
+
+
+class Subject(SubjectBase):
+    """Schema for subjects."""
+
+    id: int
+    created_at: datetime
+
+    class Config:
+        """Pydantic configuration."""
+
+        from_attributes = True
