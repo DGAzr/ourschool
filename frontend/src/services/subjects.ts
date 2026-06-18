@@ -21,14 +21,14 @@ import { Subject, SubjectCreate, SubjectUpdate } from '../types/subject'
 
 export const subjectsApi = {
   getAll: (): Promise<Subject[]> =>
-    api.get('/api/subjects/').then((r: { data: Subject[] }) => r.data),
+    api.get('/subjects/'),
 
   create: (data: SubjectCreate): Promise<Subject> =>
-    api.post('/api/subjects/', data).then((r: { data: Subject }) => r.data),
+    api.post('/subjects/', data),
 
   update: (id: number, data: SubjectUpdate): Promise<Subject> =>
-    api.put(`/api/subjects/${id}`, data).then((r: { data: Subject }) => r.data),
+    api.put(`/subjects/${id}`, data),
 
   delete: (id: number): Promise<void> =>
-    api.delete(`/api/subjects/${id}`).then(() => undefined),
+    api.delete(`/subjects/${id}`).then(() => undefined),
 }

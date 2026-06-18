@@ -44,33 +44,7 @@ from app.utils.attendance import (
 from app.utils.performance import track_query_performance
 
 
-def calculate_letter_grade(percentage: float) -> str:
-    """Calculate letter grade from percentage (A+/A/A- scale)."""
-    if percentage >= 97:
-        return "A+"
-    if percentage >= 93:
-        return "A"
-    if percentage >= 90:
-        return "A-"
-    if percentage >= 87:
-        return "B+"
-    if percentage >= 83:
-        return "B"
-    if percentage >= 80:
-        return "B-"
-    if percentage >= 77:
-        return "C+"
-    if percentage >= 73:
-        return "C"
-    if percentage >= 70:
-        return "C-"
-    if percentage >= 67:
-        return "D+"
-    if percentage >= 63:
-        return "D"
-    if percentage >= 60:
-        return "D-"
-    return "F"
+from app.utils.grading import calculate_letter_grade  # noqa: F401 — re-exported for backward compatibility
 
 
 def get_student_report(db: Session, student_id: int):
@@ -964,13 +938,15 @@ def get_report_card(
         max_points = assignment.custom_max_points or template.max_points
 
         subject_data["assignments_total"] += 1
-        subject_data["points_possible"] += max_points
         overall_stats["total_assignments"] += 1
-        overall_stats["total_points_possible"] += max_points
 
+        # Only include graded assignments in points_possible — ungraded assignments
+        # should not count against the student's grade percentage
         if assignment.is_graded and assignment.points_earned is not None:
+            subject_data["points_possible"] += max_points
             subject_data["points_earned"] += assignment.points_earned
             subject_data["assignments_completed"] += 1
+            overall_stats["total_points_possible"] += max_points
             overall_stats["total_points_earned"] += assignment.points_earned
             overall_stats["completed_assignments"] += 1
 

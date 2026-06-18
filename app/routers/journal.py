@@ -15,7 +15,7 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 """Journal entry router."""
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import List
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -171,7 +171,7 @@ async def create_journal_entry(
         author_id=current_user.id,
         title=entry_data.title,
         content=entry_data.content,
-        entry_date=entry_data.entry_date or datetime.utcnow(),
+        entry_date=entry_data.entry_date or datetime.now(timezone.utc),
     )
     
     db.add(entry)

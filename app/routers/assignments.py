@@ -18,7 +18,7 @@
 
 import json
 import logging
-from datetime import date, datetime
+from datetime import date, datetime, timezone
 from typing import Annotated, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -430,7 +430,7 @@ def get_student_assignments(
     )
 
     if not include_archived:
-        query = query.filter(StudentAssignment.status != AssignmentStatus.ARCHIVED)
+        query = query.filter(StudentAssignment.status != AssignmentStatus.EXCUSED)
 
     if subject_id:
         query = query.join(AssignmentTemplate).filter(
@@ -610,31 +610,8 @@ def grade_student_assignment(
 
     # Assign letter grade if not provided
     if not grade_data.letter_grade and percentage is not None:
-        if percentage >= 97:
-            letter_grade = "A+"
-        elif percentage >= 93:
-            letter_grade = "A"
-        elif percentage >= 90:
-            letter_grade = "A-"
-        elif percentage >= 87:
-            letter_grade = "B+"
-        elif percentage >= 83:
-            letter_grade = "B"
-        elif percentage >= 80:
-            letter_grade = "B-"
-        elif percentage >= 77:
-            letter_grade = "C+"
-        elif percentage >= 73:
-            letter_grade = "C"
-        elif percentage >= 70:
-            letter_grade = "C-"
-        elif percentage >= 67:
-            letter_grade = "D+"
-        elif percentage >= 65:
-            letter_grade = "D"
-        else:
-            letter_grade = "F"
-        assignment.letter_grade = letter_grade
+        from app.crud.reports import calculate_letter_grade
+        assignment.letter_grade = calculate_letter_grade(percentage)
     else:
         assignment.letter_grade = grade_data.letter_grade
 
@@ -704,6 +681,8 @@ def bulk_grade_assignments(
                 results.append(BulkGradeResult(assignment_id=item.assignment_id, success=False, error=f"Points {item.points_earned} exceed maximum {max_points}"))
                 continue
 
+            was_already_graded = assignment.is_graded
+
             assignment.points_earned = item.points_earned
             assignment.teacher_feedback = item.teacher_feedback
             assignment.is_graded = True
@@ -722,9 +701,14 @@ def bulk_grade_assignments(
             try:
                 if points_crud.is_points_system_enabled(db):
                     title = assignment.template.name if assignment.template else f"Assignment {assignment.id}"
-                    points_crud.award_assignment_points(db=db, student_id=assignment.student_id, assignment_id=assignment.id, points_earned=item.points_earned, assignment_title=title)
-            except Exception:
-                pass
+                    if not was_already_graded:
+                        # First-time grading: award full points
+                        points_crud.award_assignment_points(db=db, student_id=assignment.student_id, assignment_id=assignment.id, points_earned=item.points_earned, assignment_title=title)
+                    else:
+                        # Re-grade: adjust points via delta (placeholder — implement delta handler)
+                        logger.warning(f"Re-grade of assignment {assignment.id}: points adjustment not yet implemented, skipping award")
+            except Exception as e:
+                logger.warning(f"Failed to award points for assignment {assignment.id}: {e}")
 
             results.append(BulkGradeResult(assignment_id=item.assignment_id, success=True))
         except Exception as e:
@@ -1021,7 +1005,7 @@ def get_assignment_dashboard(
             .filter(
                 User.role == UserRole.STUDENT,
                 StudentAssignment.status == AssignmentStatus.SUBMITTED,
-                not StudentAssignment.is_graded,
+                StudentAssignment.is_graded == False,
             )
             .count(),
             "students": [],
@@ -1478,7 +1462,7 @@ def export_assignment_template(
         export_metadata={
             "template_id": template_id,
             "exported_by": f"{current_user.first_name} {current_user.last_name}".strip() or current_user.email,
-            "export_timestamp": str(datetime.utcnow()),
+            "export_timestamp": str(datetime.now(timezone.utc)),
             "format_version": "1.0",
         }
     )
@@ -1618,7 +1602,7 @@ def bulk_export_assignment_templates(
     
     export_package = {
         "format_version": "1.0",
-        "export_timestamp": datetime.utcnow(),
+        "export_timestamp": datetime.now(timezone.utc),
         "exported_by": f"{current_user.first_name} {current_user.last_name}".strip() or current_user.email,
         "templates": exported_templates,
         "metadata": {

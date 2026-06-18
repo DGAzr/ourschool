@@ -15,7 +15,7 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 """APIs for activity tracking."""
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Annotated, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -77,7 +77,7 @@ class ActivityItem:
             
             # Use UTC date to be consistent, but adjust for the fact that 
             # database dates are stored as local dates
-            now_utc = datetime.utcnow()
+            now_utc = datetime.now(timezone.utc)
             # Adjust UTC to approximate local time (assuming EDT = UTC-4)
             local_now = now_utc - timedelta(hours=4)  
             today = local_now.date()
@@ -95,7 +95,7 @@ class ActivityItem:
                 return "Today"
         
         # For regular datetime comparisons, use UTC
-        now_utc = datetime.utcnow()
+        now_utc = datetime.now(timezone.utc)
         diff = now_utc - self.timestamp
         
         if diff.days > 0:
@@ -127,7 +127,7 @@ def get_recent_activity(
     
     try:
         # Calculate date range
-        end_date = datetime.utcnow()
+        end_date = datetime.now(timezone.utc)
         start_date = end_date - timedelta(days=days)
         
         activities = []

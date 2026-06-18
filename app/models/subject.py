@@ -15,7 +15,7 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 """Subject model."""
-from datetime import datetime
+from datetime import datetime, timezone
 
 from sqlalchemy import Column, DateTime, Integer, String, Text
 from sqlalchemy.orm import relationship
@@ -32,7 +32,7 @@ class Subject(Base):
     name = Column(String, nullable=False)
     description = Column(Text)
     color = Column(String, default="#3B82F6")
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
     assignment_templates = relationship("AssignmentTemplate", back_populates="subject")
     term_subjects = relationship("TermSubject", back_populates="subject")

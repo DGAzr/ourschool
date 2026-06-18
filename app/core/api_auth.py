@@ -15,7 +15,7 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 """API key authentication utilities."""
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import List, Optional, Union
 
 from fastapi import Depends, Header, HTTPException, status
@@ -97,7 +97,7 @@ async def get_api_key_auth(
         )
     
     # Update last used timestamp
-    api_key.last_used_at = datetime.utcnow()
+    api_key.last_used_at = datetime.now(timezone.utc)
     db.commit()
     
     return APIKeyUser(

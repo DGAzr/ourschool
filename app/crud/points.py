@@ -20,7 +20,7 @@ CRUD operations for the points system.
 
 from typing import List, Optional, Tuple
 from datetime import datetime, timezone
-from sqlalchemy.orm import Session, joinedload
+from sqlalchemy.orm import Session, joinedload, make_transient
 from sqlalchemy import and_, desc, func
 
 from app.models.points import StudentPoints, PointTransaction, SystemSettings
@@ -230,17 +230,14 @@ def get_all_students_with_points(db: Session) -> List[StudentPoints]:
             student_points.student_name = f"{student.first_name} {student.last_name}"
             result.append(student_points)
         else:
-            # Create a dummy StudentPoints object for display
-            now = datetime.now(timezone.utc)
             dummy_points = StudentPoints(
-                id=0,  # Dummy ID (will be ignored since this is not persisted)
                 student_id=student.id,
                 current_balance=0,
                 total_earned=0,
-                total_spent=0,
-                created_at=now,
-                updated_at=now
+                total_spent=0
             )
+            # Detach from SQLAlchemy's identity map so it can never be flushed to the DB
+            make_transient(dummy_points)
             dummy_points.student = student
             dummy_points.student_name = f"{student.first_name} {student.last_name}"
             result.append(dummy_points)

@@ -15,7 +15,7 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 """API key models for external integrations."""
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import List
 
 from sqlalchemy import (
@@ -46,8 +46,8 @@ class APIKey(Base):
     created_by = Column(Integer, ForeignKey("users.id"), nullable=False)
     last_used_at = Column(DateTime, nullable=True)
     expires_at = Column(DateTime, nullable=True)
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
 
     # Relationships
     creator = relationship("User", foreign_keys=[created_by])
@@ -57,7 +57,7 @@ class APIKey(Base):
         if not self.is_active:
             return False
         
-        if self.expires_at and self.expires_at < datetime.utcnow():
+        if self.expires_at and self.expires_at < datetime.now(timezone.utc):
             return False
             
         return permission in self.permissions
@@ -73,7 +73,7 @@ class APIKey(Base):
     @property
     def is_expired(self) -> bool:
         """Check if this API key is expired."""
-        return self.expires_at is not None and self.expires_at < datetime.utcnow()
+        return self.expires_at is not None and self.expires_at < datetime.now(timezone.utc)
 
     @property
     def is_valid(self) -> bool:

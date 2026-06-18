@@ -19,7 +19,7 @@ import logging
 import logging.config
 import logging.handlers
 import sys
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Dict
 
 from app.core.config import settings
@@ -33,7 +33,7 @@ class JSONFormatter(logging.Formatter):
         import json
         
         log_data = {
-            "timestamp": datetime.utcnow().isoformat() + "Z",
+            "timestamp": datetime.now(timezone.utc).isoformat() + "Z",
             "level": record.levelname,
             "logger": record.name,
             "message": record.getMessage(),

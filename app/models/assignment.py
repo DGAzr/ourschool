@@ -15,7 +15,7 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 """Assignment models."""
-from datetime import datetime
+from datetime import datetime, timezone
 
 from sqlalchemy import (
     Boolean,
@@ -73,8 +73,8 @@ class AssignmentTemplate(Base):
 
     # Audit fields
     created_by = Column(Integer, ForeignKey("users.id"), nullable=False)
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
     is_archived = Column(Boolean, default=False, nullable=False)
 
     # Relationships
@@ -102,7 +102,7 @@ class StudentAssignment(Base):
     student_id = Column(Integer, ForeignKey("users.id"), nullable=False)
 
     # Assignment details
-    assigned_date = Column(Date, nullable=False, default=datetime.utcnow().date)
+    assigned_date = Column(Date, nullable=False, default=lambda: datetime.now(timezone.utc).date())
     due_date = Column(Date)
     extended_due_date = Column(Date)  # If deadline is extended
 
@@ -138,8 +138,8 @@ class StudentAssignment(Base):
 
     # Audit fields
     assigned_by = Column(Integer, ForeignKey("users.id"), nullable=False)
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
 
     # Relationships
     template = relationship("AssignmentTemplate", back_populates="student_assignments")
@@ -151,9 +151,9 @@ class StudentAssignment(Base):
     grade_history = relationship("GradeHistory", back_populates="assignment")
 
     @property
-    def max_points(self):
+    def max_points(self) -> int:
         """Get the maximum points for this assignment (custom or from template)."""
-        return self.custom_max_points or self.template.max_points
+        return self.custom_max_points or (self.template.max_points if self.template else 100) or 100
 
     def calculate_percentage_grade(self):
         """Calculate and update the percentage grade."""
@@ -181,7 +181,7 @@ class StudentAssignment(Base):
 
     def update_term_grade(self, session):
         """Update the student's term grade when this assignment is graded."""
-        if not self.is_graded or not self.points_earned:
+        if not self.is_graded or self.points_earned is None:
             return
 
         # Find the active term
@@ -276,4 +276,6 @@ class StudentAssignment(Base):
             )
             student_term_grade.calculate_current_grade()
 
-        session.commit()
+        # NOTE: No session.commit() here — the caller (grading router)
+        # manages the transaction boundary and calls db.commit() after
+        # the full operation completes.

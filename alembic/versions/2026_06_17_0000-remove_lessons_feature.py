@@ -16,7 +16,13 @@ depends_on = None
 
 def upgrade() -> None:
     # Drop FK constraint before dropping the column
-    op.drop_constraint('assignment_templates_lesson_id_fkey', 'assignment_templates', type_='foreignkey')
+    # Use IF EXISTS via raw SQL to handle databases where the constraint
+    # may have a different name (explicitly named constraints)
+    from sqlalchemy import text
+    conn = op.get_bind()
+    conn.execute(text(
+        "ALTER TABLE assignment_templates DROP CONSTRAINT IF EXISTS assignment_templates_lesson_id_fkey"
+    ))
 
     # Drop lesson-related columns from assignment_templates
     op.drop_column('assignment_templates', 'lesson_id')
@@ -32,12 +38,13 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    # Recreate lessons table
+    # Recreate lessons table with original schema (including difficulty_level)
     op.create_table(
         'lessons',
         sa.Column('id', sa.Integer(), nullable=False),
         sa.Column('title', sa.String(), nullable=False),
         sa.Column('description', sa.Text(), nullable=True),
+        sa.Column('difficulty_level', sa.Enum('beginner', 'intermediate', 'advanced', name='difficultylevel'), nullable=True),
         sa.Column('scheduled_date', sa.Date(), nullable=False),
         sa.Column('start_time', sa.Time(), nullable=True),
         sa.Column('end_time', sa.Time(), nullable=True),

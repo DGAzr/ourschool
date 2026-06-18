@@ -21,15 +21,22 @@ docker-compose up --build -d
 
 echo "⏳ Waiting for all services to be healthy..."
 
-SERVICES=("ourschool-db-1" "ourschool-backend-1" "ourschool-frontend-1")
+# Derive container names dynamically from docker-compose
+# This works regardless of project name or COMPOSE_PROJECT_NAME
+COMPOSE_SERVICES=("db" "backend" "frontend")
 MAX_WAIT=120
 INTERVAL=5
 elapsed=0
 
 while [ $elapsed -lt $MAX_WAIT ]; do
     all_healthy=true
-    for service in "${SERVICES[@]}"; do
-        status=$(docker inspect --format '{{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}' "$service" 2>/dev/null || echo "missing")
+    for compose_service in "${COMPOSE_SERVICES[@]}"; do
+        container_id=$(docker-compose ps -q "$compose_service" 2>/dev/null || true)
+        if [ -z "$container_id" ]; then
+            all_healthy=false
+            break
+        fi
+        status=$(docker inspect --format '{{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}' "$container_id" 2>/dev/null || echo "missing")
         if [ "$status" != "healthy" ]; then
             all_healthy=false
             break

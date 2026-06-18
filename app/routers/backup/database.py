@@ -16,7 +16,7 @@
 
 """APIs for database backup and restore operations."""
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -70,7 +70,7 @@ def export_system_backup(
         # Create system backup
         backup = SystemBackup(
             format_version="1.0",
-            backup_timestamp=datetime.utcnow(),
+            backup_timestamp=datetime.now(timezone.utc),
             created_by=f"{current_user.first_name} {current_user.last_name}".strip() or current_user.email,
             system_info={
                 "total_users": len(users_data),

@@ -21,7 +21,7 @@ Handles automatic subject-term linking and grade calculations based on assignmen
 completion dates.
 """
 
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Dict, Optional
 
 from sqlalchemy import and_
@@ -209,7 +209,7 @@ class TermGradingService:
                 student_term_grade.assignments_total = (
                     total_assignments  # For now, same as completed
                 )
-                student_term_grade.last_calculated = datetime.utcnow()
+                student_term_grade.last_calculated = datetime.now(timezone.utc)
 
                 results["grades_calculated"] += 1
 
@@ -221,32 +221,8 @@ class TermGradingService:
         """Convert percentage to letter grade using standard scale."""
         if percentage is None:
             return None
-
-        if percentage >= 97:
-            return "A+"
-        if percentage >= 93:
-            return "A"
-        if percentage >= 90:
-            return "A-"
-        if percentage >= 87:
-            return "B+"
-        if percentage >= 83:
-            return "B"
-        if percentage >= 80:
-            return "B-"
-        if percentage >= 77:
-            return "C+"
-        if percentage >= 73:
-            return "C"
-        if percentage >= 70:
-            return "C-"
-        if percentage >= 67:
-            return "D+"
-        if percentage >= 63:
-            return "D"
-        if percentage >= 60:
-            return "D-"
-        return "F"
+        from app.utils.grading import calculate_letter_grade
+        return calculate_letter_grade(percentage)
 
     @staticmethod
     def get_term_grade_report(db: Session, term_id: int) -> Dict:

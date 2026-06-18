@@ -35,8 +35,8 @@ def validate_backup_data(backup_data: Dict[str, Any]) -> List[str]:
     
     # Check required fields
     required_fields = [
-        'export_timestamp', 'format_version', 'users', 'subjects', 
-        'terms', 'lessons', 'assignment_templates'
+        'backup_timestamp', 'format_version', 'users', 'subjects', 
+        'terms', 'assignment_templates'
     ]
     
     for field in required_fields:
@@ -50,11 +50,13 @@ def validate_backup_data(backup_data: Dict[str, Any]) -> List[str]:
             errors.append(f"Unsupported backup format version: {version}")
     
     # Validate timestamp
-    if 'export_timestamp' in backup_data:
+    if 'backup_timestamp' in backup_data:
         try:
-            datetime.fromisoformat(backup_data['export_timestamp'].replace('Z', '+00:00'))
+            ts = backup_data['backup_timestamp']
+            if not isinstance(ts, datetime):
+                datetime.fromisoformat(str(ts).replace('Z', '+00:00'))
         except (ValueError, AttributeError):
-            errors.append("Invalid export_timestamp format")
+            errors.append("Invalid backup_timestamp format")
     
     return errors
 

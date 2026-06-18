@@ -65,8 +65,8 @@ class Term(Base):
     term_order = Column(Integer, default=0)  # Order within academic year
 
     # Audit fields
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
     created_by = Column(Integer, ForeignKey("users.id"), nullable=False)
 
     # Relationships
@@ -121,7 +121,7 @@ class TermSubject(Base):
     teacher_notes = Column(Text)  # Teacher notes for this subject this term
 
     # Audit fields
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
     # Relationships
     term = relationship("Term", back_populates="term_subjects")
@@ -181,8 +181,8 @@ class StudentTermGrade(Base):
     strengths = Column(Text)
 
     # Audit fields
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
     last_calculated = Column(DateTime)  # When grades were last recalculated
 
     # Relationships
@@ -204,7 +204,7 @@ class StudentTermGrade(Base):
         else:
             self.current_percentage = None
 
-        self.last_calculated = datetime.utcnow()
+        self.last_calculated = datetime.now(timezone.utc)
         return self.current_percentage
 
     def finalize_grade(self, finalizer_id):
@@ -247,7 +247,7 @@ class GradeHistory(Base):
 
     # Who and when
     changed_by = Column(Integer, ForeignKey("users.id"), nullable=False)
-    changed_at = Column(DateTime, default=datetime.utcnow)
+    changed_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
     # Assignment context (if the change was due to a specific assignment)
     assignment_id = Column(Integer, ForeignKey("student_assignments.id"))

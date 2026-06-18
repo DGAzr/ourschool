@@ -244,33 +244,38 @@ def create_student_assignments(db: Session, admin_user: User, student_users: lis
     
     student_assignments = []
     
+    # Use a fixed seed date relative to today
+    seed_date = date.today() - timedelta(days=14)
+
     for student in student_users:
-        for template in assignment_templates:
-            # Assign recent assignments to students
-            if template.lesson and template.lesson.scheduled_date >= (date.today() - timedelta(days=10)):
-                assignment = StudentAssignment(
-                    template_id=template.id,
-                    student_id=student.id,
-                    assigned_date=template.lesson.scheduled_date,
-                    due_date=template.lesson.scheduled_date + timedelta(days=3),
-                    status=AssignmentStatus.NOT_STARTED.value,
-                    assigned_by=admin_user.id
-                )
-                
-                # Simulate some completed assignments
-                if template.lesson.scheduled_date < date.today() - timedelta(days=2):
-                    assignment.status = AssignmentStatus.COMPLETED.value
-                    assignment.completed_date = template.lesson.scheduled_date + timedelta(days=1)
-                    assignment.points_earned = template.max_points * 0.85  # 85% average
-                    assignment.is_graded = True
-                    assignment.graded_date = assignment.completed_date
-                    assignment.graded_by = admin_user.id
-                    assignment.calculate_percentage_grade()
-                    assignment.teacher_feedback = "Good work! Keep practicing."
-                
-                db.add(assignment)
-                student_assignments.append(assignment)
-                print(f"  ✅ Assigned '{template.name}' to {student.first_name}")
+        for i, template in enumerate(assignment_templates):
+            # Assign assignments spread across recent days
+            assigned_date = seed_date + timedelta(days=i % 14)
+            due_date = assigned_date + timedelta(days=3)
+
+            assignment = StudentAssignment(
+                template_id=template.id,
+                student_id=student.id,
+                assigned_date=assigned_date,
+                due_date=due_date,
+                status=AssignmentStatus.NOT_STARTED.value,
+                assigned_by=admin_user.id
+            )
+            
+            # Simulate some completed assignments (those older than 2 days from seed_date)
+            if assigned_date < date.today() - timedelta(days=2):
+                assignment.status = AssignmentStatus.COMPLETED.value
+                assignment.completed_date = assigned_date + timedelta(days=1)
+                assignment.points_earned = template.max_points * 0.85  # 85% average
+                assignment.is_graded = True
+                assignment.graded_date = assignment.completed_date
+                assignment.graded_by = admin_user.id
+                assignment.calculate_percentage_grade()
+                assignment.teacher_feedback = "Good work! Keep practicing."
+            
+            db.add(assignment)
+            student_assignments.append(assignment)
+            print(f"  ✅ Assigned '{template.name}' to {student.first_name}")
     
     db.commit()
     return student_assignments

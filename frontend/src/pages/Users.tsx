@@ -204,12 +204,6 @@ const Users: React.FC = () => {
     return await backupApi.exportSystemBackup()
   }
 
-  const handleBackupImport = async (data: any) => {
-    const result = await backupApi.importSystemBackup(data)
-    // Refresh users list after import in case new users were added
-    await fetchUsers()
-    return result
-  }
 
   // Filter users based on selected filter
   const filteredUsers = users.filter(u => {
@@ -565,7 +559,6 @@ const Users: React.FC = () => {
           isOpen={showBackupModal}
           onClose={() => setShowBackupModal(false)}
           onExport={handleBackupExport}
-          onImport={handleBackupImport}
         />
       )}
     </>

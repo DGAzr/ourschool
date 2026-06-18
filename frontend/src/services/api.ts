@@ -65,7 +65,15 @@ export const api = {
       body: JSON.stringify(data)
     })
     if (!response.ok) {
-      throw new Error(`API Error: ${response.statusText}`)
+      const errorText = await response.text()
+      let errorMessage = `API Error: ${response.status} ${response.statusText}`
+      try {
+        const errorData = JSON.parse(errorText)
+        if (errorData.detail) {
+          errorMessage = errorData.detail
+        }
+      } catch {}
+      throw new Error(errorMessage)
     }
     return response.json()
   },
@@ -91,7 +99,11 @@ export const api = {
       
       throw new Error(errorMessage)
     }
-    return response.ok
+    // Return null for 204 no-content, otherwise parse body
+    if (response.status === 204) {
+      return null
+    }
+    return response.json()
   },
 
   // Authentication-specific methods

@@ -16,7 +16,7 @@
 
 """Error tracking infrastructure for OurSchool."""
 import traceback
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Dict, Optional
 from uuid import uuid4
 
@@ -62,7 +62,7 @@ class ErrorTracker:
         # Create comprehensive error record
         error_record = {
             "error_id": error_id,
-            "timestamp": datetime.utcnow().isoformat() + "Z",
+            "timestamp": datetime.now(timezone.utc).isoformat() + "Z",
             "error_type": type(error).__name__,
             "error_message": str(error),
             "traceback": traceback.format_exception(type(error), error, error.__traceback__),
