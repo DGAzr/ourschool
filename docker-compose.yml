@@ -51,11 +51,9 @@ services:
       BACKEND_HOST: ${BACKEND_HOST:-0.0.0.0}
       BACKEND_PORT: ${BACKEND_PORT:-8000}
 
-      # Logging configuration
-      # BACKEND_LOG_LEVEL overrides LOG_LEVEL for this service only.
-      # Valid values: DEBUG, INFO, WARNING, ERROR, CRITICAL
-      LOG_LEVEL: ${BACKEND_LOG_LEVEL:-${LOG_LEVEL:-INFO}}
-      LOG_FORMAT: ${BACKEND_LOG_FORMAT:-${LOG_FORMAT:-json}}
+      # Logging — valid levels: DEBUG, INFO, WARNING, ERROR, CRITICAL
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      LOG_FORMAT: ${LOG_FORMAT:-json}
 
       # CORS configuration
       ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-http://localhost:4173,http://frontend:4173}

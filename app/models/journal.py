@@ -17,7 +17,7 @@
 """Journal models."""
 from datetime import datetime, timezone
 
-from sqlalchemy import Column, DateTime, ForeignKey, Integer, String, Text
+from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Integer, JSON, String, Text
 from sqlalchemy.orm import relationship
 
 from app.core.database import Base
@@ -37,6 +37,15 @@ class JournalEntry(Base):
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
     updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
 
+    # Rich fields
+    mood = Column(String(20), nullable=True)
+    tags = Column(JSON, nullable=True, default=list)
+    win = Column(Text, nullable=True)
+    goals = Column(JSON, nullable=True, default=list)
+    reactions = Column(JSON, nullable=True, default=list)
+    needs_response = Column(Boolean, nullable=False, default=True)
+    points_awarded = Column(Integer, nullable=True)
+
     # Relationships
     student = relationship(
         "User",
@@ -47,3 +56,24 @@ class JournalEntry(Base):
         "User",
         foreign_keys=[author_id],
     )
+    replies = relationship(
+        "JournalReply",
+        back_populates="entry",
+        cascade="all, delete-orphan",
+        order_by="JournalReply.created_at",
+    )
+
+
+class JournalReply(Base):
+    """Reply to a journal entry (admin → student feedback)."""
+
+    __tablename__ = "journal_replies"
+
+    id = Column(Integer, primary_key=True, index=True)
+    entry_id = Column(Integer, ForeignKey("journal_entries.id", ondelete="CASCADE"), nullable=False, index=True)
+    author_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    text = Column(Text, nullable=False)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+
+    entry = relationship("JournalEntry", back_populates="replies")
+    author = relationship("User", foreign_keys=[author_id])

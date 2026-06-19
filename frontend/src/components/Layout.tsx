@@ -25,6 +25,7 @@ import {
   Home,
   Calendar,
   ClipboardList,
+  GraduationCap,
   LogOut,
   Menu,
   X,
@@ -87,6 +88,7 @@ const Layout: React.FC = () => {
       ? [
           { name: 'Attendance', href: '/attendance', icon: Calendar },
           { name: 'Assignments', href: '/assignments', icon: ClipboardList },
+          { name: 'Grading', href: '/grading', icon: GraduationCap },
           { name: 'Journal', href: '/journal', icon: PenTool },
           { name: 'Reports', href: '/reports', icon: BarChart3 },
           { name: 'Settings', href: '/admin', icon: Settings },

@@ -28,6 +28,11 @@ interface QuickAssignModalProps {
   onSuccess: () => void
 }
 
+const today = () => new Date().toISOString().split('T')[0]
+
+const FIELD = 'bg-field-bg border border-field-border rounded-field px-3 py-2 text-[13.5px] text-ink focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent placeholder:text-faintest w-full'
+const LABEL = 'block text-[12px] font-semibold text-muted uppercase tracking-wide mb-1.5'
+
 const QuickAssignModal: React.FC<QuickAssignModalProps> = ({ isOpen, onClose, onSuccess }) => {
   const [subjects, setSubjects] = useState<Subject[]>([])
   const [students, setStudents] = useState<User[]>([])
@@ -42,13 +47,13 @@ const QuickAssignModal: React.FC<QuickAssignModalProps> = ({ isOpen, onClose, on
     assignment_type: 'homework',
     max_points: 100,
     due_date: '',
-    assigned_date: new Date().toISOString().split('T')[0],
+    assigned_date: today(),
   })
 
   useEffect(() => {
     if (isOpen) {
       loadData()
-      setForm({ name: '', subject_id: 0, assignment_type: 'homework', max_points: 100, due_date: '', assigned_date: new Date().toISOString().split('T')[0] })
+      setForm({ name: '', subject_id: 0, assignment_type: 'homework', max_points: 100, due_date: '', assigned_date: today() })
       setSelectedStudents([])
       setError(null)
     }
@@ -79,12 +84,17 @@ const QuickAssignModal: React.FC<QuickAssignModalProps> = ({ isOpen, onClose, on
     setSelectedStudents(prev => prev.includes(id) ? prev.filter(s => s !== id) : [...prev, id])
   }
 
+  const toggleAll = () => {
+    setSelectedStudents(prev => prev.length === students.length ? [] : students.map(s => s.id))
+  }
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!form.name.trim()) { setError('Assignment name is required'); return }
     if (!form.subject_id) { setError('Please select a subject'); return }
     if (selectedStudents.length === 0) { setError('Please select at least one student'); return }
 
+    let templateId: number | null = null
     try {
       setLoading(true)
       setError(null)
@@ -95,6 +105,7 @@ const QuickAssignModal: React.FC<QuickAssignModalProps> = ({ isOpen, onClose, on
         max_points: form.max_points,
         is_exportable: false,
       })
+      templateId = template.id
       await assignmentsApi.assignToStudents({
         template_id: template.id,
         student_ids: selectedStudents,
@@ -104,7 +115,11 @@ const QuickAssignModal: React.FC<QuickAssignModalProps> = ({ isOpen, onClose, on
       onSuccess()
       onClose()
     } catch (err: any) {
-      setError(err.response?.data?.detail || 'Failed to create and assign')
+      if (templateId !== null) {
+        assignmentsApi.delete(templateId).catch(() => {})
+      }
+      const msg: string = err.message || 'Failed to create and assign'
+      setError(msg.toLowerCase().includes('active term') ? 'NO_ACTIVE_TERM' : msg)
     } finally {
       setLoading(false)
     }
@@ -113,65 +128,79 @@ const QuickAssignModal: React.FC<QuickAssignModalProps> = ({ isOpen, onClose, on
   if (!isOpen) return null
 
   return (
-    <div className="fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center z-50">
-      <div className="bg-white dark:bg-gray-800 rounded-lg w-full max-w-lg max-h-[90vh] overflow-hidden flex flex-col">
+    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
+      <div className="bg-panel border border-line rounded-card-lg shadow-xl w-full max-w-lg max-h-[90vh] overflow-hidden flex flex-col">
+
         {/* Header */}
-        <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700 bg-gradient-to-r from-blue-50 to-blue-100 dark:from-blue-900 dark:to-blue-800 flex items-center justify-between">
+        <div className="flex items-center justify-between px-6 py-4 border-b border-line">
           <div>
-            <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Quick Assign</h3>
-            <p className="text-sm text-gray-600 dark:text-gray-300 mt-0.5">Create and assign in one step</p>
+            <h3 className="text-[15px] font-semibold text-ink">Quick Assign</h3>
+            <p className="text-[12px] text-muted mt-0.5">Create and assign in one step</p>
           </div>
-          <button onClick={onClose} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300">
-            <X className="h-5 w-5" />
+          <button onClick={onClose} className="w-7 h-7 flex items-center justify-center rounded-full text-faint hover:text-ink hover:bg-track transition-colors">
+            <X className="w-4 h-4" />
           </button>
         </div>
 
         <form onSubmit={handleSubmit} className="flex flex-col flex-1 overflow-hidden">
-          <div className="flex-1 overflow-y-auto p-6 space-y-4">
+          <div className="flex-1 overflow-y-auto px-6 py-5 space-y-5">
+
             {error && (
-              <div className="bg-red-50 dark:bg-red-900 border border-red-200 dark:border-red-700 text-red-700 dark:text-red-200 px-4 py-3 rounded text-sm">
-                {error}
+              <div className="bg-neg-bg text-neg-fg px-4 py-3 rounded-field text-[13px] leading-relaxed">
+                {error === 'NO_ACTIVE_TERM' ? (
+                  <>
+                    <span className="font-semibold">No active term.</span>{' '}
+                    Assignments require an active school term. Go to{' '}
+                    <a href="/settings" className="underline font-semibold hover:opacity-80" onClick={onClose}>
+                      Settings → Terms
+                    </a>{' '}
+                    to set one.
+                  </>
+                ) : error}
               </div>
             )}
 
             {dataLoading ? (
-              <div className="text-center py-8">
-                <div className="animate-spin h-8 w-8 border-b-2 border-blue-500 rounded-full mx-auto" />
-                <p className="text-sm text-gray-500 mt-2">Loading...</p>
+              <div className="flex flex-col items-center justify-center py-12 gap-3">
+                <div className="w-6 h-6 border-2 border-accent border-t-transparent rounded-full animate-spin" />
+                <p className="text-[13px] text-faint">Loading…</p>
               </div>
             ) : (
               <>
+                {/* Name */}
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Assignment Name <span className="text-red-500">*</span></label>
+                  <label className={LABEL}>Assignment Name <span className="text-neg-fg normal-case">*</span></label>
                   <input
                     type="text"
                     value={form.name}
                     onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
-                    className="w-full border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 rounded-md px-3 py-2 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                    className={FIELD}
                     placeholder="e.g., Chapter 5 Review"
                     disabled={loading}
+                    autoFocus
                   />
                 </div>
 
-                <div className="grid grid-cols-2 gap-4">
+                {/* Subject + Type */}
+                <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Subject <span className="text-red-500">*</span></label>
+                    <label className={LABEL}>Subject <span className="text-neg-fg normal-case">*</span></label>
                     <select
                       value={form.subject_id}
                       onChange={e => setForm(f => ({ ...f, subject_id: parseInt(e.target.value) }))}
-                      className="w-full border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 rounded-md px-3 py-2 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                      className={FIELD}
                       disabled={loading}
                     >
-                      <option value={0}>Select subject…</option>
+                      <option value={0}>Select…</option>
                       {subjects.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
                     </select>
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Type</label>
+                    <label className={LABEL}>Type</label>
                     <select
                       value={form.assignment_type}
                       onChange={e => setForm(f => ({ ...f, assignment_type: e.target.value }))}
-                      className="w-full border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 rounded-md px-3 py-2 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                      className={FIELD}
                       disabled={loading}
                     >
                       <option value="homework">Homework</option>
@@ -186,91 +215,107 @@ const QuickAssignModal: React.FC<QuickAssignModalProps> = ({ isOpen, onClose, on
                   </div>
                 </div>
 
-                <div className="grid grid-cols-2 gap-4">
+                {/* Points + Assignment Date + Due Date */}
+                <div className="grid grid-cols-3 gap-3">
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Max Points</label>
+                    <label className={LABEL}>Max Points</label>
                     <input
                       type="number"
                       min={1}
                       value={form.max_points}
                       onChange={e => setForm(f => ({ ...f, max_points: parseInt(e.target.value) || 100 }))}
-                      className="w-full border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 rounded-md px-3 py-2 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                      className={FIELD}
                       disabled={loading}
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Due Date</label>
+                    <label className={LABEL}>Assignment Date</label>
+                    <input
+                      type="date"
+                      value={form.assigned_date}
+                      onChange={e => setForm(f => ({ ...f, assigned_date: e.target.value }))}
+                      className={FIELD}
+                      disabled={loading}
+                    />
+                  </div>
+                  <div>
+                    <label className={LABEL}>Due Date</label>
                     <input
                       type="date"
                       value={form.due_date}
                       onChange={e => setForm(f => ({ ...f, due_date: e.target.value }))}
-                      className="w-full border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 rounded-md px-3 py-2 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                      className={FIELD}
                       disabled={loading}
                     />
                   </div>
                 </div>
 
+                {/* Students */}
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Assign Date</label>
-                  <input
-                    type="date"
-                    value={form.assigned_date}
-                    onChange={e => setForm(f => ({ ...f, assigned_date: e.target.value }))}
-                    className="w-full border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 rounded-md px-3 py-2 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-                    disabled={loading}
-                  />
-                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                    The date this assignment was given (defaults to today)
-                  </p>
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                    Students <span className="text-red-500">*</span>
-                    {selectedStudents.length > 0 && (
-                      <span className="ml-2 text-xs text-blue-600 dark:text-blue-400 font-normal">
-                        {selectedStudents.length} selected
-                      </span>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <label className={LABEL + ' mb-0'}>
+                      Students <span className="text-neg-fg normal-case">*</span>
+                    </label>
+                    {students.length > 1 && (
+                      <button
+                        type="button"
+                        onClick={toggleAll}
+                        className="text-[12px] font-medium text-accent hover:opacity-80 transition-opacity"
+                      >
+                        {selectedStudents.length === students.length ? 'Deselect all' : 'Select all'}
+                      </button>
                     )}
-                  </label>
-                  <div className="border border-gray-300 dark:border-gray-600 rounded-md divide-y divide-gray-200 dark:divide-gray-600 max-h-40 overflow-y-auto">
+                  </div>
+                  <div className="border border-field-border rounded-field overflow-hidden max-h-44 overflow-y-auto divide-y divide-line">
                     {students.length === 0 ? (
-                      <p className="px-3 py-2 text-sm text-gray-500">No students found</p>
+                      <p className="px-3 py-2.5 text-[13px] text-faint">No students found</p>
                     ) : students.map(student => (
-                      <label key={student.id} className="flex items-center px-3 py-2 cursor-pointer hover:bg-gray-50 dark:hover:bg-gray-700">
+                      <label
+                        key={student.id}
+                        className="flex items-center gap-3 px-3 py-2.5 cursor-pointer hover:bg-track transition-colors"
+                      >
                         <input
                           type="checkbox"
                           checked={selectedStudents.includes(student.id)}
                           onChange={() => toggleStudent(student.id)}
-                          className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded mr-3"
+                          className="w-4 h-4 rounded accent-[var(--accent)]"
                           disabled={loading}
                         />
-                        <span className="text-sm text-gray-900 dark:text-gray-100">
+                        <span className="text-[13.5px] text-ink">
                           {student.first_name} {student.last_name}
                         </span>
                       </label>
                     ))}
                   </div>
+                  {selectedStudents.length > 0 && (
+                    <p className="text-[11.5px] text-muted mt-1.5">{selectedStudents.length} student{selectedStudents.length !== 1 ? 's' : ''} selected</p>
+                  )}
                 </div>
               </>
             )}
           </div>
 
-          <div className="px-6 py-4 border-t border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-700 flex space-x-3">
+          {/* Footer */}
+          <div className="flex items-center justify-end gap-2 px-6 py-4 border-t border-line bg-panel-2">
             <button
               type="button"
               onClick={onClose}
               disabled={loading}
-              className="flex-1 px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-600 border border-gray-300 dark:border-gray-500 rounded-md hover:bg-gray-50 dark:hover:bg-gray-500 disabled:opacity-50"
+              className="h-[34px] px-4 text-[13px] font-semibold text-muted hover:text-ink transition-colors disabled:opacity-50"
             >
               Cancel
             </button>
             <button
               type="submit"
               disabled={loading || dataLoading}
-              className="flex-1 px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 disabled:opacity-50"
+              className="h-[34px] px-4 rounded-field bg-btn-primary-bg text-btn-primary-fg text-[13.5px] font-semibold hover:opacity-90 transition-opacity disabled:opacity-40 flex items-center gap-2"
             >
-              {loading ? 'Creating & Assigning…' : 'Create & Assign'}
+              {loading ? (
+                <>
+                  <span className="w-3.5 h-3.5 border-2 border-current border-t-transparent rounded-full animate-spin" />
+                  Creating…
+                </>
+              ) : 'Create & Assign'}
             </button>
           </div>
         </form>

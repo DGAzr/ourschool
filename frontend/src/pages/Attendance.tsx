@@ -50,11 +50,6 @@ function shiftDate(iso: string, days: number) {
   return toLocalIso(dt)
 }
 
-function isWeekend(iso: string) {
-  const [y, m, d] = iso.split('-').map(Number)
-  const dow = new Date(y, m - 1, d).getDay()
-  return dow === 0 || dow === 6
-}
 
 function isFuture(iso: string) { return iso > todayIso() }
 
@@ -75,7 +70,6 @@ function firstDowOfMonth(year: number, month: number) {
 
 // ── cell colors ───────────────────────────────────────────────────────────
 const cellStyle = (status: Status | undefined, iso: string): React.CSSProperties => {
-  if (isWeekend(iso)) return { background: 'var(--panel-2)', opacity: 0.5 }
   if (isFuture(iso)) return { background: 'var(--panel-2)', opacity: 0.4 }
   if (!status) return { background: 'var(--track)' }
   if (status === 'present') return { background: 'var(--pos-bg)', color: 'var(--pos-fg)' }
@@ -121,12 +115,12 @@ const Attendance: React.FC = () => {
 
   // ── compliance ────────────────────────────────────────────────────────────
   const completedDays = React.useMemo(() => {
-    // Days where all students have a status (non-weekend, non-future)
+    // Days where all students have a status (non-future)
     const today = todayIso()
     const uniqueDays = new Set(records.map(r => r.date))
     let count = 0
     for (const iso of uniqueDays) {
-      if (isWeekend(iso) || iso > today) continue
+      if (iso > today) continue
       const studentsOnDay = records.filter(r => r.date === iso)
       if (students.length > 0 && studentsOnDay.length >= students.length) count++
     }
@@ -142,7 +136,7 @@ const Attendance: React.FC = () => {
   }, [students, activeDate, attendanceMap])
 
   const allMarked = students.length > 0 && students.every(s => !!statusForStudent(s.id, activeDate))
-  const dayComplete = allMarked && !isFuture(activeDate) && !isWeekend(activeDate)
+  const dayComplete = allMarked && !isFuture(activeDate)
 
   // ── load data ─────────────────────────────────────────────────────────────
   const load = useCallback(async () => {
@@ -198,7 +192,7 @@ const Attendance: React.FC = () => {
 
   // ── mark all present ──────────────────────────────────────────────────────
   const markAllPresent = async () => {
-    if (isWeekend(activeDate) || isFuture(activeDate)) return
+    if (isFuture(activeDate)) return
     const unmarked = students.filter(s => !statusForStudent(s.id, activeDate))
     await Promise.all(unmarked.map(s => markStudent(s.id, activeDate, 'present')))
     if (unmarked.length) toast(`${unmarked.length} student${unmarked.length > 1 ? 's' : ''} marked present`)
@@ -252,7 +246,7 @@ const Attendance: React.FC = () => {
           <div className="flex items-center justify-between mb-4">
             <div>
               <p className="text-[11px] font-semibold text-faint uppercase tracking-[.06em]">
-                {isWeekend(activeDate) ? 'Weekend' : isFuture(activeDate) ? 'Future date' : 'Today'}
+                {isFuture(activeDate) ? 'Future date' : 'Today'}
               </p>
               <h2 className="text-[18px] font-semibold text-ink mt-0.5">{formatDateLong(activeDate)}</h2>
             </div>
@@ -293,12 +287,7 @@ const Attendance: React.FC = () => {
           </div>
 
           {/* Roster */}
-          {isWeekend(activeDate) ? (
-            <div className="bg-panel border border-line rounded-card p-8 text-center text-muted text-[13px]">
-              No attendance on weekends.
-            </div>
-          ) : (
-            <div className="bg-panel border border-line rounded-card overflow-hidden mb-4">
+          <div className="bg-panel border border-line rounded-card overflow-hidden mb-4">
               {/* Roster header */}
               <div className="flex items-center justify-between px-5 py-3 border-b border-line bg-panel-2">
                 <div className="flex items-center gap-3">
@@ -358,20 +347,17 @@ const Attendance: React.FC = () => {
                 )
               })}
             </div>
-          )}
 
           {/* Day note */}
-          {!isWeekend(activeDate) && (
-            <div className="mb-4">
-              <textarea
-                placeholder="Note for the day (optional)"
-                value={dayNote}
-                onChange={e => setDayNote(e.target.value)}
-                rows={2}
-                className="w-full bg-field-bg border border-field-border text-ink text-[13.5px] rounded-card px-4 py-3 resize-none focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent placeholder:text-faintest transition-colors"
-              />
-            </div>
-          )}
+          <div className="mb-4">
+            <textarea
+              placeholder="Note for the day (optional)"
+              value={dayNote}
+              onChange={e => setDayNote(e.target.value)}
+              rows={2}
+              className="w-full bg-field-bg border border-field-border text-ink text-[13.5px] rounded-card px-4 py-3 resize-none focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent placeholder:text-faintest transition-colors"
+            />
+          </div>
 
           {/* Day complete affirmation */}
           {dayComplete && (
@@ -426,7 +412,6 @@ const Attendance: React.FC = () => {
               {Array.from({ length: firstDow }).map((_, i) => <div key={`empty-${i}`} />)}
               {days.map(({ iso, day }) => {
                 const isToday = iso === today
-                const weekend = isWeekend(iso)
                 const future = isFuture(iso)
                 // For calendar: show aggregate (if any student is absent, show absent)
                 const dayStatuses = students.map(s => statusForStudent(s.id, iso)).filter(Boolean)
@@ -437,7 +422,7 @@ const Attendance: React.FC = () => {
                     key={iso}
                     onClick={() => { setTab('take'); setActiveDate(iso) }}
                     title={`${formatDateShort(iso)}${agg ? ` — ${agg}` : ''}`}
-                    className={`relative aspect-square flex items-center justify-center rounded-[6px] text-[11.5px] font-mono font-medium cursor-pointer transition-all hover:opacity-80 ${weekend || future ? 'cursor-default' : ''}`}
+                    className={`relative aspect-square flex items-center justify-center rounded-[6px] text-[11.5px] font-mono font-medium cursor-pointer transition-all hover:opacity-80 ${future ? 'cursor-default' : ''}`}
                     style={{ ...cs, outline: isToday ? '2px solid var(--accent)' : undefined, outlineOffset: '-1px' }}
                   >
                     {day}

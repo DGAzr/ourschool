@@ -17,23 +17,19 @@
  */
 
 import React, { useState } from 'react'
-import { useSearchParams } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { assignmentsApi } from '../services/assignments'
 
 // Hooks
 import { useAssignments } from '../hooks/useAssignments'
 import { useAssignmentFilters } from '../hooks/useAssignmentFilters'
-import { useViewDensity } from '../hooks/useViewDensity'
 
 // Components
-import { SegmentedControl, StatTile, Pill, SubjectDot, statusToPillVariant, useToast } from '../components/ui'
+import { SegmentedControl, Pill, SubjectDot, statusToPillVariant } from '../components/ui'
 import StudentAssignmentCard from '../components/assignments/StudentAssignmentCard'
 import CreateTemplateModal from '../components/assignments/CreateTemplateModal'
 import EditTemplateModal from '../components/assignments/EditTemplateModal'
 import AssignTemplateModal from '../components/assignments/AssignTemplateModal'
-import GradeAssignmentModal from '../components/assignments/GradeAssignmentModal'
-import EditAssignmentModal from '../components/assignments/EditAssignmentModal'
 import { ExportAssignmentModal } from '../components/assignments/ExportAssignmentModal'
 import { ImportAssignmentModal } from '../components/assignments/ImportAssignmentModal'
 import SubmissionDialog from '../components/assignments/SubmissionDialog'
@@ -45,12 +41,7 @@ import { AssignmentTemplate, StudentAssignment } from '../types'
 const Assignments: React.FC = () => {
   const { user } = useAuth()
   const isAdmin = user?.role === 'admin'
-  const [searchParams] = useSearchParams()
-  
-  // View mode state - check URL parameter
-  const initialViewMode = searchParams.get('view') === 'grading' ? 'grading' : 'templates'
-  const [adminViewMode, setAdminViewMode] = useState<'templates' | 'grading'>(initialViewMode)
-  
+
   // Modal states
   const [showCreateModal, setShowCreateModal] = useState(false)
   const [showQuickAssignModal, setShowQuickAssignModal] = useState(false)
@@ -60,36 +51,16 @@ const Assignments: React.FC = () => {
   const [showArchiveConfirm, setShowArchiveConfirm] = useState(false)
   const [showExportModal, setShowExportModal] = useState(false)
   const [showImportModal, setShowImportModal] = useState(false)
-  const [showGradeModal, setShowGradeModal] = useState(false)
-  const [showEditAssignmentModal, setShowEditAssignmentModal] = useState(false)
   const [showSubmissionDialog, setShowSubmissionDialog] = useState(false)
   const [editingTemplate, setEditingTemplate] = useState<AssignmentTemplate | null>(null)
   const [assigningTemplate, setAssigningTemplate] = useState<AssignmentTemplate | null>(null)
   const [deletingTemplate, setDeletingTemplate] = useState<AssignmentTemplate | null>(null)
   const [archivingTemplate, setArchivingTemplate] = useState<AssignmentTemplate | null>(null)
   const [exportingTemplate, setExportingTemplate] = useState<AssignmentTemplate | null>(null)
-  const [gradingAssignment, setGradingAssignment] = useState<StudentAssignment | null>(null)
-  const [editingAssignment, setEditingAssignment] = useState<StudentAssignment | null>(null)
   const [submittingAssignment, setSubmittingAssignment] = useState<StudentAssignment | null>(null)
   const [selectedTemplates, setSelectedTemplates] = useState<Set<number>>(new Set())
   const [templateView, setTemplateView] = useState<'shelves' | 'table' | 'cards'>('shelves')
-  const [queueFilter, setQueueFilter] = useState<'needs' | 'overdue' | 'all'>('needs')
-  const [selectedQueueId, setSelectedQueueId] = useState<number | null>(null)
   const [menuOpenId, setMenuOpenId] = useState<number | null>(null)
-  const [gradeInput, setGradeInput] = useState('')
-  const [feedbackInput, setFeedbackInput] = useState('')
-
-  // View density (kept for backward compat with useViewDensity hook but unused in new UI)
-  const { viewDensity: templatesViewDensity, setViewDensity: setTemplatesViewDensity } = useViewDensity({
-    storageKey: 'assignments-templates-view-density',
-    defaultDensity: 'table'
-  })
-  const { viewDensity: gradingViewDensity, setViewDensity: setGradingViewDensity } = useViewDensity({
-    storageKey: 'assignments-grading-view-density',
-    defaultDensity: 'table'
-  })
-  // suppress unused warnings (view density stored for compat with hook, not used in new UI)
-  void templatesViewDensity; void setTemplatesViewDensity; void gradingViewDensity; void setGradingViewDensity
 
   // Filters
   const {
@@ -99,8 +70,6 @@ const Assignments: React.FC = () => {
     setSelectedSubject,
     selectedType,
     setSelectedType,
-    selectedStudent,
-    setSelectedStudent,
     filterTemplates,
     filterStudentAssignments,
     filterGradingAssignments
@@ -111,7 +80,6 @@ const Assignments: React.FC = () => {
     templates,
     studentAssignments,
     submittedAssignments,
-    allAssignments,
     subjects,
     students,
     loading,
@@ -121,11 +89,9 @@ const Assignments: React.FC = () => {
     setError
   } = useAssignments({
     isAdmin,
-    adminViewMode,
+    adminViewMode: 'templates',
     selectedSubject,
   })
-
-  const { toast } = useToast()
 
   // Utility functions
   const getSubjectById = (id: number) => subjects.find(s => s.id === id)
@@ -282,15 +248,11 @@ const Assignments: React.FC = () => {
     }
   }
 
-  const handleGradeAssignment = (assignment: StudentAssignment) => {
-    setGradingAssignment(assignment)
-    setShowGradeModal(true)
-  }
-
   // Apply filters
   const filteredTemplates = filterTemplates(templates)
   const filteredStudentAssignments = filterStudentAssignments(studentAssignments)
-  const filteredAllAssignments = filterGradingAssignments(allAssignments)
+
+  void filterGradingAssignments
 
   if (!user) {
     return (
@@ -304,7 +266,7 @@ const Assignments: React.FC = () => {
   }
 
   /* ── derived data ── */
-  // Group filtered templates by subject for Shelves view
+  // Group templates by subject for Shelves view
   const templateGroups = (() => {
     const groups: { subjectId: number | null; name: string; color: string; templates: typeof filteredTemplates }[] = []
     const seen = new Map<string, typeof groups[0]>()
@@ -321,37 +283,9 @@ const Assignments: React.FC = () => {
     return groups
   })()
 
-  const needsGrading = allAssignments.filter(a => a.status === 'submitted' && !a.is_graded)
-  const overdueAssignments = allAssignments.filter(a => a.status !== 'graded' && a.due_date && new Date(a.due_date) < new Date())
-  const gradedCount = allAssignments.filter(a => a.is_graded).length
-  const inProgressCount = allAssignments.filter(a => a.status === 'in_progress').length
-
-  const queueItems = queueFilter === 'needs' ? needsGrading
-    : queueFilter === 'overdue' ? overdueAssignments
-    : filteredAllAssignments
-
-  const selectedAssignment = selectedQueueId ? queueItems.find(a => a.id === selectedQueueId) ?? queueItems[0] : queueItems[0]
-
   const TYPE_LABELS: Record<string, string> = {
     homework: 'Homework', quiz: 'Quiz', test: 'Test', project: 'Project',
     essay: 'Essay', lab: 'Lab', presentation: 'Presentation', other: 'Other',
-  }
-
-  const handleSaveGrade = async () => {
-    if (!selectedAssignment) return
-    const pts = parseFloat(gradeInput)
-    if (isNaN(pts)) return
-    try {
-      await assignmentsApi.gradeStudentAssignment(selectedAssignment.id, { points_earned: pts, teacher_feedback: feedbackInput })
-      toast('Grade saved')
-      setGradeInput('')
-      setFeedbackInput('')
-      refetch()
-      const next = queueItems.find(a => a.id !== selectedAssignment.id)
-      setSelectedQueueId(next?.id ?? null)
-    } catch {
-      toast('Failed to save grade', 'danger')
-    }
   }
 
   return (
@@ -372,44 +306,30 @@ const Assignments: React.FC = () => {
             </p>
           )}
         </div>
-        <div className="flex items-center gap-2 mt-1">
-          {isAdmin && (
-            <>
-              {adminViewMode === 'templates' && (
-                <>
-                  {selectedTemplates.size > 0 && (
-                    <button
-                      onClick={handleBulkExport}
-                      className="h-[34px] px-3 text-[13px] font-semibold rounded-field border border-btn-border bg-panel text-ink hover:bg-track transition-colors"
-                    >
-                      Export {selectedTemplates.size}
-                    </button>
-                  )}
-                  <button
-                    onClick={handleImportTemplate}
-                    className="h-[34px] px-3 text-[13px] font-semibold rounded-field border border-btn-border bg-panel text-ink hover:bg-track transition-colors"
-                  >
-                    Import
-                  </button>
-                  <button
-                    onClick={handleCreateTemplate}
-                    className="h-[34px] px-4 text-[13px] font-semibold rounded-field bg-btn-primary-bg text-btn-primary-fg hover:opacity-90 transition-opacity"
-                  >
-                    + New template
-                  </button>
-                </>
-              )}
-              <SegmentedControl
-                segments={[
-                  { value: 'templates', label: 'Library' },
-                  { value: 'grading', label: 'Grading', count: submittedAssignments.length || undefined },
-                ]}
-                value={adminViewMode}
-                onChange={setAdminViewMode}
-              />
-            </>
-          )}
-        </div>
+        {isAdmin && (
+          <div className="flex items-center gap-2 mt-1">
+            {selectedTemplates.size > 0 && (
+              <button
+                onClick={handleBulkExport}
+                className="h-[34px] px-3 text-[13px] font-semibold rounded-field border border-btn-border bg-panel text-ink hover:bg-track transition-colors"
+              >
+                Export {selectedTemplates.size}
+              </button>
+            )}
+            <button
+              onClick={handleImportTemplate}
+              className="h-[34px] px-3 text-[13px] font-semibold rounded-field border border-btn-border bg-panel text-ink hover:bg-track transition-colors"
+            >
+              Import
+            </button>
+            <button
+              onClick={handleCreateTemplate}
+              className="h-[34px] px-4 text-[13px] font-semibold rounded-field bg-btn-primary-bg text-btn-primary-fg hover:opacity-90 transition-opacity flex items-center gap-1.5"
+            >
+              <span className="text-[17px] leading-none" style={{ marginTop: -1 }}>+</span> New template
+            </button>
+          </div>
+        )}
       </div>
 
       {/* ── Error ── */}
@@ -430,12 +350,12 @@ const Assignments: React.FC = () => {
       )}
 
       {/* ════════════════════════════════════════
-          ADMIN — LIBRARY (templates) TAB
+          ADMIN — LIBRARY (templates)
       ════════════════════════════════════════ */}
-      {!loading && isAdmin && adminViewMode === 'templates' && (
+      {!loading && isAdmin && (
         <>
           {/* Toolbar */}
-          <div className="flex items-center gap-3 mb-4">
+          <div className="flex items-center gap-3 mb-6">
             <div className="relative flex-1 max-w-[280px]">
               <svg className="absolute left-3 top-1/2 -translate-y-1/2 text-faint" width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
                 <circle cx="11" cy="11" r="8" /><path d="m21 21-4.35-4.35" />
@@ -707,218 +627,6 @@ const Assignments: React.FC = () => {
       )}
 
       {/* ════════════════════════════════════════
-          ADMIN — GRADING DESK TAB
-      ════════════════════════════════════════ */}
-      {!loading && isAdmin && adminViewMode === 'grading' && (
-        <div className="flex flex-col gap-0" style={{ height: 'calc(100vh - 11rem)', minHeight: 520 }}>
-          {/* Stat tiles */}
-          <div className="grid grid-cols-4 gap-3 mb-4 flex-none">
-            <StatTile label="Awaiting grade" value={String(needsGrading.length)} accent={needsGrading.length > 0} />
-            <StatTile label="Overdue" value={String(overdueAssignments.length)} />
-            <StatTile label="In progress" value={String(inProgressCount)} />
-            <StatTile label="Graded" value={String(gradedCount)} />
-          </div>
-
-          {/* Search + filter bar */}
-          <div className="flex items-center gap-3 mb-4 flex-none">
-            <div className="relative flex-1 max-w-[260px]">
-              <svg className="absolute left-3 top-1/2 -translate-y-1/2 text-faint" width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
-                <circle cx="11" cy="11" r="8" /><path d="m21 21-4.35-4.35" />
-              </svg>
-              <input
-                type="text"
-                placeholder="Search…"
-                value={searchTerm}
-                onChange={e => setSearchTerm(e.target.value)}
-                className="w-full pl-8 pr-3 py-2 bg-field-bg border border-field-border rounded-field text-[13px] text-ink placeholder:text-faintest focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent"
-              />
-            </div>
-            <select
-              value={selectedSubject ?? ''}
-              onChange={e => setSelectedSubject(e.target.value ? parseInt(e.target.value) : null)}
-              className="h-[34px] px-3 bg-field-bg border border-field-border rounded-field text-[13px] text-ink focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent"
-            >
-              <option value="">All Subjects</option>
-              {subjects.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-            </select>
-            <select
-              value={selectedStudent ?? ''}
-              onChange={e => setSelectedStudent(e.target.value ? parseInt(e.target.value) : null)}
-              className="h-[34px] px-3 bg-field-bg border border-field-border rounded-field text-[13px] text-ink focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent"
-            >
-              <option value="">All Students</option>
-              {students.map(s => <option key={s.id} value={s.id}>{s.first_name} {s.last_name}</option>)}
-            </select>
-          </div>
-
-          {/* Split layout: Queue + Detail */}
-          <div className="flex gap-4 flex-1 min-h-0">
-            {/* Queue (360px) */}
-            <div className="flex-none w-[360px] bg-panel border border-line rounded-card flex flex-col min-h-0">
-              <div className="flex-none p-3 border-b border-line-3">
-                <SegmentedControl
-                  segments={[
-                    { value: 'needs', label: 'To grade', count: needsGrading.length },
-                    { value: 'overdue', label: 'Overdue', count: overdueAssignments.length },
-                    { value: 'all', label: 'All' },
-                  ]}
-                  value={queueFilter}
-                  onChange={setQueueFilter}
-                  className="w-full"
-                />
-              </div>
-              <div className="flex-1 overflow-y-auto p-2 space-y-1">
-                {queueItems.length === 0 ? (
-                  <div className="py-10 text-center text-[13px] text-faint">Nothing here</div>
-                ) : queueItems.map(a => {
-                  const stu = students.find(s => s.id === a.student_id)
-                  const sub = a.template?.subject_id ? getSubjectById(a.template.subject_id) : undefined
-                  const isSelected = a.id === (selectedAssignment?.id)
-                  return (
-                    <button
-                      key={a.id}
-                      onClick={() => setSelectedQueueId(a.id)}
-                      className={`w-full text-left p-3 rounded-[10px] transition-colors ${
-                        isSelected ? 'bg-accent-soft' : 'hover:bg-track'
-                      }`}
-                    >
-                      <div className="flex items-center justify-between gap-2">
-                        <span className="flex items-center gap-2 min-w-0">
-                          <SubjectDot color={(sub as any)?.color ?? '#8B7355'} size={8} />
-                          <span className="font-semibold text-[13.5px] text-ink truncate">
-                            {stu ? `${stu.first_name} ${stu.last_name}` : 'Student'}
-                          </span>
-                        </span>
-                        <Pill variant={statusToPillVariant(a.status)}>
-                          {a.status.replace('_', ' ')}
-                        </Pill>
-                      </div>
-                      <div className="text-[13px] text-ink-2 mt-1.5 truncate">{a.template?.name ?? '—'}</div>
-                      <div className="flex items-center justify-between mt-1.5 text-[11.5px] text-faint">
-                        <span>{sub?.name ?? '—'}</span>
-                        {a.due_date && <span className="font-mono">{new Date(a.due_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</span>}
-                      </div>
-                    </button>
-                  )
-                })}
-              </div>
-            </div>
-
-            {/* Detail panel */}
-            <div className="flex-1 bg-panel border border-line rounded-card flex flex-col min-h-0 overflow-y-auto">
-              {!selectedAssignment ? (
-                <div className="flex-1 flex items-center justify-center text-[13px] text-faint">
-                  Select an assignment from the queue
-                </div>
-              ) : (() => {
-                const stu = students.find(s => s.id === selectedAssignment.student_id)
-                const sub = selectedAssignment.template?.subject_id ? getSubjectById(selectedAssignment.template.subject_id) : undefined
-                const maxPts = selectedAssignment.template?.max_points ?? 100
-                return (
-                  <div className="p-6 space-y-5">
-                    {/* Header */}
-                    <div className="flex items-start justify-between gap-4">
-                      <div>
-                        <p className="text-[11px] font-semibold text-faint uppercase tracking-[.06em] mb-1">
-                          {sub?.name ?? 'Assignment'} · {stu ? `${stu.first_name} ${stu.last_name}` : ''}
-                        </p>
-                        <h2 className="text-[18px] font-bold text-ink tracking-[-0.015em] leading-snug">
-                          {selectedAssignment.template?.name ?? 'Assignment'}
-                        </h2>
-                      </div>
-                      <Pill variant={statusToPillVariant(selectedAssignment.status)}>
-                        {selectedAssignment.status.replace('_', ' ')}
-                      </Pill>
-                    </div>
-
-                    {/* Submission notes */}
-                    {selectedAssignment.submission_notes && (
-                      <div className="bg-panel-2 border border-line-2 rounded-card p-4">
-                        <p className="text-[11px] font-semibold text-faint uppercase tracking-[.05em] mb-2">Student notes</p>
-                        <p className="text-[13.5px] text-ink-2 leading-relaxed">{selectedAssignment.submission_notes}</p>
-                      </div>
-                    )}
-
-                    {/* Grade entry */}
-                    {!selectedAssignment.is_graded && (
-                      <div className="space-y-3">
-                        <div>
-                          <label className="block text-[11px] font-semibold text-faint uppercase tracking-[.06em] mb-1.5">Points earned</label>
-                          <div className="flex items-center gap-2">
-                            <input
-                              type="number"
-                              min={0}
-                              max={maxPts}
-                              value={gradeInput}
-                              onChange={e => setGradeInput(e.target.value)}
-                              placeholder="0"
-                              className="w-24 bg-field-bg border border-field-border rounded-field px-3 py-2 text-[14px] font-mono text-ink focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent"
-                            />
-                            <span className="text-[13px] text-muted">/ {maxPts}</span>
-                          </div>
-                          {/* Quick-score buttons */}
-                          <div className="flex gap-1.5 mt-2">
-                            {[100, 90, 80, 70].map(pct => (
-                              <button
-                                key={pct}
-                                onClick={() => setGradeInput(String(Math.round(maxPts * pct / 100)))}
-                                className="px-2.5 py-1 rounded-pill border border-btn-border bg-panel text-[11.5px] font-semibold text-ink-2 hover:bg-track transition-colors"
-                              >
-                                {pct}%
-                              </button>
-                            ))}
-                          </div>
-                        </div>
-                        <div>
-                          <label className="block text-[11px] font-semibold text-faint uppercase tracking-[.06em] mb-1.5">Feedback (optional)</label>
-                          <textarea
-                            value={feedbackInput}
-                            onChange={e => setFeedbackInput(e.target.value)}
-                            rows={3}
-                            placeholder="Leave feedback for the student…"
-                            className="w-full bg-field-bg border border-field-border rounded-field px-3 py-2 text-[13.5px] text-ink resize-none focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent placeholder:text-faintest"
-                          />
-                        </div>
-                        <button
-                          onClick={handleSaveGrade}
-                          disabled={!gradeInput}
-                          className="h-[36px] px-5 rounded-field bg-btn-primary-bg text-btn-primary-fg text-[13.5px] font-semibold disabled:opacity-40 hover:opacity-90 transition-opacity"
-                        >
-                          Save & next
-                        </button>
-                      </div>
-                    )}
-
-                    {/* Already graded */}
-                    {selectedAssignment.is_graded && (
-                      <div className="bg-pos-bg border border-pos-fg/20 rounded-card p-4">
-                        <p className="text-[11px] font-semibold text-faint uppercase tracking-[.05em] mb-1">Grade recorded</p>
-                        <p className="font-mono text-[22px] font-semibold text-pos-fg">
-                          {selectedAssignment.points_earned} / {maxPts}
-                          {selectedAssignment.letter_grade && (
-                            <span className="ml-2 text-[16px]">({selectedAssignment.letter_grade})</span>
-                          )}
-                        </p>
-                        {selectedAssignment.teacher_feedback && (
-                          <p className="text-[13px] text-ink-2 mt-2 leading-relaxed">{selectedAssignment.teacher_feedback}</p>
-                        )}
-                        <button
-                          onClick={() => handleGradeAssignment(selectedAssignment)}
-                          className="mt-3 h-[30px] px-3 border border-btn-border bg-panel rounded-[7px] text-[12.5px] font-semibold text-ink hover:bg-track transition-colors"
-                        >
-                          Edit grade
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                )
-              })()}
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ════════════════════════════════════════
           STUDENT VIEW
       ════════════════════════════════════════ */}
       {!loading && !isAdmin && (
@@ -1136,40 +844,6 @@ const Assignments: React.FC = () => {
           onImport={performTemplateImport}
           subjects={subjects}
           />
-      )}
-
-      {/* Grade Assignment Modal */}
-      {showGradeModal && gradingAssignment && (
-        <GradeAssignmentModal
-          assignment={gradingAssignment}
-          student={students.find(s => s.id === gradingAssignment.student_id)}
-          onClose={() => {
-            setShowGradeModal(false)
-            setGradingAssignment(null)
-          }}
-          onSuccess={() => {
-            setShowGradeModal(false)
-            setGradingAssignment(null)
-            refetch()
-          }}
-        />
-      )}
-
-      {/* Edit Assignment Modal */}
-      {showEditAssignmentModal && editingAssignment && (
-        <EditAssignmentModal
-          assignment={editingAssignment}
-          student={students.find(s => s.id === editingAssignment.student_id)}
-          onClose={() => {
-            setShowEditAssignmentModal(false)
-            setEditingAssignment(null)
-          }}
-          onSuccess={() => {
-            setShowEditAssignmentModal(false)
-            setEditingAssignment(null)
-            refetch()
-          }}
-        />
       )}
 
       {/* Submission Dialog */}

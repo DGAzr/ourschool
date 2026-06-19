@@ -24,7 +24,7 @@ from .assignment import (
     StudentAssignment,
 )
 from .attendance import AttendanceRecord, AttendanceStatus
-from .journal import JournalEntry
+from .journal import JournalEntry, JournalReply
 from .subject import Subject
 from .term import GradeHistory, StudentTermGrade, Term, TermSubject, TermType
 from .user import User, UserRole

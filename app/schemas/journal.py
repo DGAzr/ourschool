@@ -16,49 +16,81 @@
 
 """Journal schemas."""
 from datetime import datetime
-from typing import Optional
+from typing import Any, Dict, List, Optional
 
 from pydantic import BaseModel
 
 
+class JournalReplyResponse(BaseModel):
+    id: int
+    author_name: str
+    author_role: str
+    text: str
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
 class JournalEntryBase(BaseModel):
     """Base journal entry schema."""
-    
+
     title: str
     content: str
     entry_date: Optional[datetime] = None
+    mood: Optional[str] = None
+    tags: Optional[List[str]] = None
+    win: Optional[str] = None
+    goals: Optional[List[Dict[str, Any]]] = None
 
 
 class JournalEntryCreate(JournalEntryBase):
     """Schema for creating a journal entry."""
-    
-    student_id: Optional[int] = None  # Optional for students creating their own entries
+
+    student_id: Optional[int] = None
 
 
 class JournalEntryUpdate(BaseModel):
     """Schema for updating a journal entry."""
-    
+
     title: Optional[str] = None
     content: Optional[str] = None
     entry_date: Optional[datetime] = None
+    mood: Optional[str] = None
+    tags: Optional[List[str]] = None
+    win: Optional[str] = None
+    goals: Optional[List[Dict[str, Any]]] = None
 
 
 class JournalEntryResponse(JournalEntryBase):
     """Schema for journal entry response."""
-    
+
     id: int
     student_id: int
     author_id: int
+    reactions: Optional[List[str]] = []
+    needs_response: bool = True
+    points_awarded: Optional[int] = None
     created_at: datetime
     updated_at: datetime
-    
+
     class Config:
         from_attributes = True
 
 
 class JournalEntryWithAuthor(JournalEntryResponse):
     """Schema for journal entry response with author information."""
-    
+
     author_name: str
     student_name: str
-    is_own_entry: bool  # True if the requesting user is the author
+    is_own_entry: bool
+    replies: List[JournalReplyResponse] = []
+    streak: int = 0
+
+
+class ReactionsUpdate(BaseModel):
+    reactions: List[str]
+
+
+class ReplyCreate(BaseModel):
+    text: str

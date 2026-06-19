@@ -31,6 +31,7 @@ const Dashboard = lazy(() => import('./pages/Dashboard'))
 const Users = lazy(() => import('./pages/Users'))
 const Attendance = lazy(() => import('./pages/Attendance'))
 const Assignments = lazy(() => import('./pages/Assignments'))
+const Grading = lazy(() => import('./pages/Grading'))
 const Subjects = lazy(() => import('./pages/Subjects'))
 const Terms = lazy(() => import('./pages/Terms'))
 const Profile = lazy(() => import('./pages/Profile'))
@@ -84,6 +85,7 @@ function AppContent() {
             <Route path="attendance" element={<Attendance />} />
             <Route path="subjects" element={<Subjects />} />
             <Route path="assignments" element={<Assignments />} />
+            <Route path="grading" element={<Grading />} />
             <Route path="terms" element={<Terms />} />
             <Route path="reports" element={<Reports />} />
             <Route path="journal" element={<Journal />} />

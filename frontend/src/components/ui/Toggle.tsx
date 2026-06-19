@@ -41,8 +41,8 @@ const Toggle: React.FC<ToggleProps> = ({ checked, onChange, label, disabled = fa
     >
       <span
         className={[
-          'absolute top-[3px] w-[17px] h-[17px] rounded-full bg-white shadow transition-transform duration-150',
-          checked ? 'translate-x-[20px]' : 'translate-x-[3px]',
+          'absolute top-[3px] left-[3px] w-[17px] h-[17px] rounded-full bg-white shadow transition-transform duration-150',
+          checked ? 'translate-x-[17px]' : 'translate-x-0',
         ].join(' ')}
       />
     </button>

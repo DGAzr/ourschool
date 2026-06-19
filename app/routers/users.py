@@ -85,11 +85,6 @@ async def create_user(
 
     # Validate student-specific fields if creating a student
     if user.role == UserRole.STUDENT:
-        if not user.date_of_birth or not user.grade_level:
-            raise HTTPException(
-                status_code=400,
-                detail="Student users require date_of_birth and grade_level",
-            )
         if current_user and not user.parent_id:
             # If creating as admin, set current admin as parent
             user.parent_id = current_user.id

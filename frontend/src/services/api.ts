@@ -53,7 +53,13 @@ export const api = {
       body: JSON.stringify(data)
     })
     if (!response.ok) {
-      throw new Error(`API Error: ${response.status} ${response.statusText}`)
+      const errorText = await response.text()
+      let errorMessage = `API Error: ${response.status} ${response.statusText}`
+      try {
+        const errorData = JSON.parse(errorText)
+        if (errorData.detail) errorMessage = errorData.detail
+      } catch {}
+      throw new Error(errorMessage)
     }
     return response.json()
   },
