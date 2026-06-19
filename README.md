@@ -1,21 +1,24 @@
 # OurSchool - Homeschool Management System
 
-A comprehensive web application for managing homeschool programs, supporting multiple students with attendance tracking, lesson planning, assignments, and grading. Designed to help ease the administrative burden of your homeschool program and improve the accuracy of mandatory reporting. 
+A comprehensive web application for managing homeschool programs, supporting multiple students with attendance tracking, subject configuration, assignments, and grading. Designed to help ease the administrative burden of your homeschool program and improve the accuracy of mandatory reporting. 
 
 # Current Status
-Just in time for the Fall Semester I'm releasing this as an alpha for those who want to test and use it. I find that it already works great for the needs of our program. We use it daily to record and review our progress, but I am sure there will need to be changes as we proceed through the year. I will do my best to keep the database schema as stable as possible, but I can't guarantee there won't be breaking changes yet. (Use the built in system export to take regular backups!)
+Now available as a beta release! The lessons feature has been removed in favor of a streamlined subject-and-assignment workflow. Report accuracy has been significantly improved, and the backup system now supports cross-version import with stable external IDs. The API is MCP-ready for AI integration, with a meta endpoint for enum/permission discovery.
 
-Once I've completed our first academic term I plan to release a more stable beta in January 2026. Then by summer 2026 I will feel confident enough for a stable release in time for the 2026-2027 school year.
+This is still pre-stable software; the database schema may have breaking changes until the 2026-2027 stable release. Use the built-in system backup/restore (now with dry-run preview) to safeguard your data.
 
 ## Features
 
 - **Multi-user Authentication**: Separate logins for parents (administrators) and students
 - **Attendance Tracking**: Record daily attendance with notes and status. Flexibile academic terms to support reporting needs of your jurisdiction.
-- **Lesson Planning**: Organize lessons by subject with scheduling and materials
-- **Assignment Management**: Create, track, and grade various types of assignments
+- **Subject Management**: Configure subject areas with names, descriptions, and colors
+- **Assignment Management**: Create, track, grade, and bulk-assign various types of assignments with inline grading
 - **Optional Gamification**: As assignments are graded, student points accumulate to be used as an incentive system (Points system can be disabled in Admin Center)
-- **Import/Export System**: Assignments and Lesson Plans can be exported to simple JSON files for import by other OurSchool installations. Help your fellow homeschool families by sharing.
-- **Integration API**: API can be accessed by external systems for Integration and Automation
+- **System Backup/Restore**: Full system export/import with dry-run preview, cross-version compatibility, and stable external IDs for entity resolution
+- **Integration API**: API can be accessed by external systems for integration and automation; MCP-ready with enum/permission discovery endpoint
+- **Academic Terms**: Flexible term types (semester, quarter, trimester, custom) with per-subject grading configuration
+- **Reports**: Performance reports, attendance summaries, assignment completion rates, grade trends
+- **Journal**: Teacher/student entries with date tracking
 
 
 ## Quick Start
@@ -253,7 +256,9 @@ if response.status_code == 200:
 
 #### Other Endpoints
 - `POST /api/attendance/` - Record attendance
-- `GET /api/lessons/` - List lessons with filtering
+- `GET /api/subjects/` - List subjects
+- `POST /api/subjects/` - Create subject (admin only)
+- `GET /api/meta` - Discover enum values and permissions (MCP clients)
 - `POST /api/assignments/` - Create assignments (session auth)
 
 ### Required Permissions

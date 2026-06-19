@@ -10,9 +10,9 @@ This document explains how to run OurSchool using Docker and Docker Compose.
 
 ## Quick Start
 
-1. **Copy the Docker environment file:**
+1. **Copy the environment file:**
    ```bash
-   cp .env.docker .env
+   cp env.EXAMPLE .env
    ```
 
 2. **Build and start all services:**
@@ -44,8 +44,7 @@ ACCESS_TOKEN_EXPIRE_MINUTES=30          # Token expiration time
 
 BACKEND_HOST=0.0.0.0                    # Backend bind address
 BACKEND_PORT=8000                       # Backend port
-FRONTEND_HOST=0.0.0.0                   # Frontend bind address  
-FRONTEND_PORT=4173                      # Frontend port
+FRONTEND_PORT=4173                      # Frontend port (default: 4173)
 
 LOG_LEVEL=INFO                          # Log level (DEBUG, INFO, WARNING, ERROR, CRITICAL)
 LOG_FORMAT=json                         # Log format (json or text)
@@ -65,19 +64,22 @@ ALLOWED_ORIGINS=http://localhost:4173,http://frontend:4173
 ### Backend (FastAPI)
 - **Build**: `Dockerfile.backend`
 - **Port**: 8000 (customizable with `BACKEND_PORT`)
+- **Restart**: `unless-stopped` (auto-restart on failure)
 - **Features**:
   - Automatic database migrations on startup
   - Initial admin user creation if no users exist
-  - Health checks on `/health` endpoint
+  - Health checks on `/health` endpoint (15s interval, 5 retries, 30s start period)
   - Hot-reload for development (when volumes are mounted)
 
 ### Frontend (React/Vite)
 - **Build**: `Dockerfile.frontend`
 - **Port**: 4173 (customizable with `FRONTEND_PORT`)
+- **Restart**: `unless-stopped` (auto-restart on failure)
+- **Depends on**: Backend with `condition: service_healthy` (waits for backend to be healthy, not just running)
 - **Features**:
   - Production build served by Vite preview server
   - Proxy configuration for API calls
-  - Health checks
+  - Health checks (node HTTP check)
 
 ## Docker Commands
 

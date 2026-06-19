@@ -112,6 +112,28 @@ The migration system is configured to:
 
 This baseline includes all tables created by previous manual migration scripts.
 
+## Beta-Release Migrations
+
+### Revision: `remove_lessons_feature`
+**Date:** 2026-06-17
+**Down Revision:** `1287465beeb7`
+**Purpose:** Removes the Lessons feature entirely.
+**Changes:**
+- Drops `lesson_assignments` junction table
+- Drops `lessons` table
+- Removes `lesson_id` and `order_in_lesson` columns from `assignment_templates`
+
+### Revision: `add_external_id_backup`
+**Date:** 2026-06-19
+**Down Revision:** `remove_lessons_feature`
+**Purpose:** Adds stable cross-version identity for backup resolution.
+**Changes:**
+- Adds `external_id` (UUID) column to `users`, `subjects`, `terms`, `assignment_templates`
+- Backfills existing rows with `gen_random_uuid()`
+- Enforces NOT NULL and unique constraint on `external_id`
+
+**Current head revision:** `add_external_id_backup`
+
 ## Emergency Procedures
 
 ### If Migration Fails
