@@ -17,9 +17,9 @@
  */
 
 import React, { useState, useEffect } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { Link } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
-import { Users, Calendar, ClipboardList, TrendingUp, Eye, Activity, Clock, Award, X } from 'lucide-react'
+import { X, Award } from 'lucide-react'
 import { reportsApi } from '../services/reports'
 import { subjectsApi } from '../services/subjects'
 import { pointsApi, type StudentPoints } from '../services/points'
@@ -27,7 +27,8 @@ import { activityApi, type ActivityItem } from '../services/activity'
 import { termsApi } from '../services/terms'
 import { AdminReport, StudentReport, Term } from '../types'
 import { Subject } from '../types/subject'
-import { DashboardLayout, usePageLayout } from '../components/layouts'
+import { usePageLayout } from '../components/layouts'
+import { StatTile } from '../components/ui'
 import BulkAttendanceModal from '../components/BulkAttendanceModal'
 import QuickCreateTemplateModal from '../components/QuickCreateTemplateModal'
 import AssignmentDetailModal from '../components/assignments/AssignmentDetailModal'
@@ -208,7 +209,6 @@ const QuickAwardModal: React.FC<QuickAwardModalProps> = ({ onClose, onSuccess })
 
 const Dashboard: React.FC = () => {
   const { user } = useAuth()
-  const navigate = useNavigate()
   const { loading, setLoading } = usePageLayout({ initialLoading: true })
   const [adminReport, setAdminReport] = useState<AdminReport | null>(null)
   const [studentReport, setStudentReport] = useState<StudentReport | null>(null)
@@ -335,299 +335,216 @@ const Dashboard: React.FC = () => {
     }
   }, [user?.id])
   
-  // Calculate stats based on loaded data
-  const stats = isAdmin && adminReport ? [
-    {
-      name: 'Active Students',
-      value: adminReport.total_students.toString(),
-      icon: Users,
-      color: 'bg-blue-500',
-      link: '/users',
-    },
-    {
-      name: 'Active Assignments',
-      value: adminReport.active_assignments.toString(),
-      icon: ClipboardList,
-      color: 'bg-green-500',
-      link: '/assignments',
-    },
-    {
-      name: 'Pending Grades',
-      value: adminReport.pending_grades.toString(),
-      icon: ClipboardList,
-      color: 'bg-purple-500',
-      link: '/assignments?view=grading',
-    },
-    {
-      name: 'Days Remaining in Term',
-      value: (() => {
-        const days = calculateDaysRemaining(activeTerm)
-        if (days === null) return 'No term'
-        if (days < 0) return 'Term ended'
-        if (days === 0) return 'Last day'
-        return days.toString()
-      })(),
-      icon: Calendar,
-      color: 'bg-orange-500',
-      link: '/terms',
-    },
-  ] : studentReport ? [
-    {
-      name: 'Active Assignments',
-      value: studentReport.in_progress_assignments.toString(),
-      icon: ClipboardList,
-      color: 'bg-blue-500',
-      link: '/assignments',
-    },
-    {
-      name: 'Completed',
-      value: studentReport.completed_assignments.toString(),
-      icon: TrendingUp,
-      color: 'bg-green-500',
-      link: '/assignments',
-    },
-    {
-      name: 'In Progress',
-      value: studentReport.in_progress_assignments.toString(),
-      icon: Calendar,
-      color: 'bg-purple-500',
-      link: '/assignments',
-    },
-    {
-      name: 'Days Remaining in Term',
-      value: (() => {
-        const days = calculateDaysRemaining(activeTerm)
-        if (days === null) return 'No term'
-        if (days < 0) return 'Term ended'
-        if (days === 0) return 'Last day'
-        return days.toString()
-      })(),
-      icon: Calendar,
-      color: 'bg-orange-500',
-      link: '/terms',
-    },
-  ] : []
+  const hour = new Date().getHours()
+  const greeting = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening'
+  const todayLabel = new Date().toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-16">
+        <svg className="h-6 w-6 animate-spin text-accent" fill="none" viewBox="0 0 24 24">
+          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+        </svg>
+      </div>
+    )
+  }
+
+  const daysRemaining = calculateDaysRemaining(activeTerm)
+  const daysLabel = daysRemaining === null ? 'No term' : daysRemaining < 0 ? 'Term ended' : daysRemaining === 0 ? 'Last day' : String(daysRemaining)
 
   return (
-    <DashboardLayout
-      title="Welcome back"
-      subtitle="Here's what's happening with your homeschool program today."
-      userName={user?.first_name}
-      stats={stats}
-      loading={loading}
-    >
+    <div>
+      {/* ── Page header ── */}
+      <div className="flex items-start justify-between gap-4 mb-6">
+        <div>
+          <h1 className="font-serif text-[30px] font-medium tracking-[-0.01em] text-ink leading-tight">
+            {greeting}{user?.first_name ? `, ${user.first_name}` : ''}.
+          </h1>
+          <p className="mt-1.5 text-muted text-[14px]">
+            {todayLabel}
+            {activeTerm && <> · {activeTerm.name}</>}
+          </p>
+        </div>
+        {isAdmin && (
+          <div className="flex gap-2 mt-1">
+            <button
+              onClick={() => setShowBulkAttendanceModal(true)}
+              className="h-[34px] px-3 text-[13px] font-semibold rounded-field border border-btn-border bg-panel text-ink hover:bg-track transition-colors"
+            >
+              Mark attendance
+            </button>
+            <button
+              onClick={() => setShowCreateTemplateModal(true)}
+              className="h-[34px] px-4 text-[13px] font-semibold rounded-field bg-btn-primary-bg text-btn-primary-fg hover:opacity-90 transition-opacity"
+            >
+              + New assignment
+            </button>
+          </div>
+        )}
+      </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-        {/* Enhanced Recent Activity */}
-        <div className="bg-white dark:bg-gray-800 shadow-lg rounded-xl border border-gray-100 dark:border-gray-700">
-          <div className="px-6 py-5 border-b border-gray-200 dark:border-gray-600 dark:border-gray-700 bg-gradient-to-r from-gray-50 to-gray-100 dark:from-gray-700 dark:to-gray-800 rounded-t-xl">
-            <div className="flex items-center justify-between">
-              <h3 className="text-xl font-semibold text-gray-900 dark:text-gray-100 flex items-center">
-                <div className="w-8 h-8 bg-blue-500 rounded-lg flex items-center justify-center mr-3">
-                  <Activity className="h-4 w-4 text-white" />
-                </div>
-                Recent Activity
-              </h3>
+      {/* ── Health tiles ── */}
+      {isAdmin && adminReport && (
+        <div className="grid grid-cols-5 gap-3 mb-6">
+          <StatTile label="Students" value={String(adminReport.total_students ?? 0)} />
+          <StatTile label="Active assignments" value={String(adminReport.active_assignments ?? 0)} />
+          <StatTile label="Pending grades" value={String(adminReport.pending_grades ?? 0)} accent={(adminReport.pending_grades ?? 0) > 0} />
+          <StatTile label="Avg grade" value={`${adminReport.average_grade ?? 0}%`} accent={(adminReport.average_grade ?? 0) >= 80} />
+          <StatTile label="Days left in term" value={daysLabel} />
+        </div>
+      )}
+
+      {!isAdmin && studentReport && (
+        <div className="grid grid-cols-4 gap-3 mb-6">
+          <StatTile label="Assignments" value={String(studentReport.total_assignments ?? 0)} />
+          <StatTile label="Completed" value={String(studentReport.completed_assignments ?? 0)} accent />
+          <StatTile label="In progress" value={String(studentReport.in_progress_assignments ?? 0)} />
+          <StatTile label="Days left" value={daysLabel} />
+        </div>
+      )}
+
+      {/* ── Two-column body ── */}
+      <div className="grid grid-cols-[1.55fr_1fr] gap-4">
+        {/* LEFT — Activity feed */}
+        <div className="bg-panel border border-line rounded-card overflow-hidden">
+          <div className="flex items-center justify-between px-5 py-3.5 border-b border-line-2">
+            <h3 className="text-[15px] font-semibold text-ink">Recent activity</h3>
+            {recentActivity.length > 3 && (
               <button
                 onClick={() => setShowRecentActivity(!showRecentActivity)}
-                className="text-sm text-blue-600 hover:text-blue-800 flex items-center px-3 py-1.5 rounded-lg hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors"
+                className="text-[12.5px] font-semibold text-accent hover:text-ink transition-colors"
               >
-                <Eye className="h-4 w-4 mr-1" />
-                {showRecentActivity ? 'Hide' : 'View All'}
+                {showRecentActivity ? 'Show less' : `View all ${recentActivity.length}`}
               </button>
-            </div>
-          </div>
-          <div className="p-6">
-            {activityLoading ? (
-              <div className="space-y-4">
-                {Array.from({ length: 4 }).map((_, index) => (
-                  <div key={index} className="flex items-start space-x-3 animate-pulse">
-                    <div className="flex-shrink-0 w-2 h-2 bg-gray-300 rounded-full mt-2"></div>
-                    <div className="flex-1 min-w-0">
-                      <div className="h-4 bg-gray-300 rounded mb-2"></div>
-                      <div className="h-3 bg-gray-300 rounded w-1/2"></div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            ) : recentActivity.length === 0 ? (
-              <div className="text-center py-8">
-                <Activity className="h-8 w-8 text-gray-400 mx-auto mb-3" />
-                <p className="text-sm text-gray-500 dark:text-gray-400">No recent activity to display</p>
-                <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">Activity will appear here as you use the system</p>
-              </div>
-            ) : (
-              <div className="space-y-4">
-                {(showRecentActivity ? recentActivity : recentActivity.slice(0, 3)).map((activity, index) => {
-                  const isClickable = isAssignmentActivity(activity)
-                  return (
-                    <div 
-                      key={index} 
-                      className={`flex items-start space-x-4 p-3 rounded-lg transition-colors ${
-                        isClickable 
-                          ? 'hover:bg-blue-50 dark:hover:bg-blue-900/20 cursor-pointer hover:shadow-sm' 
-                          : 'hover:bg-gray-50 dark:hover:bg-gray-700'
-                      }`}
-                      onClick={() => isClickable && handleActivityClick(activity)}
-                      title={isClickable ? 'Click to view assignment details' : undefined}
-                    >
-                      <div className={`flex-shrink-0 w-3 h-3 rounded-full mt-1.5 shadow-sm ${
-                        isClickable 
-                          ? 'bg-gradient-to-r from-green-500 to-green-600' 
-                          : 'bg-gradient-to-r from-blue-500 to-blue-600'
-                      }`}></div>
-                      <div className="flex-1 min-w-0">
-                        <p className={`text-sm font-semibold mb-1 ${
-                          isClickable 
-                            ? 'text-green-800 dark:text-green-200' 
-                            : 'text-gray-900 dark:text-gray-100'
-                        }`}>
-                          {activity.description}
-                          {isClickable && (
-                            <span className="ml-2 text-xs text-green-600 dark:text-green-400">📋 View Details</span>
-                          )}
-                        </p>
-                        <p className="text-xs text-gray-600 dark:text-gray-400 flex items-center">
-                          <Clock className="h-3 w-3 mr-1" />
-                          {activity.student_name && `${activity.student_name} • `}{activity.time_ago}
-                        </p>
-                        {activity.details?.subject && (
-                          <span 
-                            className="inline-block mt-1 px-2 py-1 text-xs rounded-full text-white font-medium shadow-sm"
-                            style={{ 
-                              backgroundColor: getSubjectColor(activity.details.subject),
-                              opacity: 0.9
-                            }}
-                          >
-                            {activity.details.subject}
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                  )
-                })}
-                {!showRecentActivity && recentActivity.length > 3 && (
-                  <div className="text-center pt-3 border-t border-gray-100 dark:border-gray-700">
-                    <p className="text-sm text-gray-500 dark:text-gray-400 font-medium">
-                      {recentActivity.length - 3} more activities...
-                    </p>
-                  </div>
-                )}
-              </div>
             )}
+          </div>
+          <div className="p-4 space-y-1">
+            {activityLoading ? (
+              <div className="py-8 text-center text-[13px] text-faint">Loading…</div>
+            ) : recentActivity.length === 0 ? (
+              <div className="py-10 text-center">
+                <p className="text-[14px] font-semibold text-ink-2 mb-1">No activity yet</p>
+                <p className="text-[12.5px] text-faint">Activity will appear here as you use the system.</p>
+              </div>
+            ) : (showRecentActivity ? recentActivity : recentActivity.slice(0, 5)).map((activity, i) => {
+              const clickable = isAssignmentActivity(activity)
+              return (
+                <div
+                  key={i}
+                  onClick={() => clickable && handleActivityClick(activity)}
+                  className={`flex items-start gap-3 px-3 py-2.5 rounded-[9px] transition-colors ${
+                    clickable ? 'cursor-pointer hover:bg-accent-soft' : 'hover:bg-faintest/40'
+                  }`}
+                >
+                  <span className={`w-2 h-2 rounded-full flex-none mt-[5px] ${clickable ? 'bg-pos-fg' : 'bg-accent'}`} />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-[13.5px] font-semibold text-ink leading-snug">{activity.description}</p>
+                    <p className="text-[12px] text-faint mt-0.5">
+                      {activity.student_name && `${activity.student_name} · `}{activity.time_ago}
+                    </p>
+                    {activity.details?.subject && (
+                      <span
+                        className="inline-block mt-1 px-1.5 py-0.5 rounded text-[11px] font-semibold text-white"
+                        style={{ background: getSubjectColor(activity.details.subject) }}
+                      >
+                        {activity.details.subject}
+                      </span>
+                    )}
+                  </div>
+                </div>
+              )
+            })}
           </div>
         </div>
 
-        {/* Enhanced Quick Actions */}
-        <div className="bg-white dark:bg-gray-800 shadow-lg rounded-xl border border-gray-100 dark:border-gray-700">
-          <div className="px-6 py-5 border-b border-gray-200 dark:border-gray-600 dark:border-gray-700 bg-gradient-to-r from-gray-50 to-gray-100 dark:from-gray-700 dark:to-gray-800 rounded-t-xl">
-            <h3 className="text-xl font-semibold text-gray-900 dark:text-gray-100 flex items-center">
-              <div className="w-8 h-8 bg-green-500 rounded-lg flex items-center justify-center mr-3">
-                <TrendingUp className="h-4 w-4 text-white" />
-              </div>
-              Quick Actions
-            </h3>
-          </div>
-          <div className="p-6">
-            <div className="space-y-3">
+        {/* RIGHT — Quick actions + needs you */}
+        <div className="flex flex-col gap-4">
+          {/* Quick actions */}
+          <div className="bg-panel border border-line rounded-card overflow-hidden">
+            <div className="px-5 py-3.5 border-b border-line-2">
+              <h3 className="text-[15px] font-semibold text-ink">Quick actions</h3>
+            </div>
+            <div className="p-3 space-y-1.5">
               {isAdmin ? (
                 <>
-                  <button 
-                    onClick={() => setShowAwardModal(true)}
-                    className="w-full flex items-center px-4 py-4 text-left text-sm font-semibold text-gray-800 dark:text-gray-200 hover:bg-yellow-50 dark:hover:bg-yellow-900/20 hover:text-yellow-700 dark:hover:text-yellow-400 rounded-lg border border-gray-200 dark:border-gray-600 hover:border-yellow-200 dark:hover:border-yellow-500 transition-all duration-200 shadow-sm hover:shadow-md"
-                  >
-                    <div className="w-8 h-8 bg-yellow-100 rounded-lg flex items-center justify-center mr-3">
-                      <Award className="h-4 w-4 text-yellow-600" />
-                    </div>
-                    Award Points to Student
+                  <button onClick={() => setShowAwardModal(true)} className="w-full flex items-center gap-3 px-3 py-2.5 rounded-[9px] text-[13.5px] font-semibold text-ink hover:bg-track transition-colors text-left">
+                    <span className="w-7 h-7 rounded-[7px] bg-acc-soft flex items-center justify-center text-[14px]">⭐</span>
+                    Award points
                   </button>
-                  <button 
-                    onClick={() => setShowBulkAttendanceModal(true)}
-                    className="w-full flex items-center px-4 py-4 text-left text-sm font-semibold text-gray-800 dark:text-gray-200 hover:bg-blue-50 dark:hover:bg-blue-900/20 hover:text-blue-700 dark:hover:text-blue-400 rounded-lg border border-gray-200 dark:border-gray-600 hover:border-blue-200 dark:hover:border-blue-500 transition-all duration-200 shadow-sm hover:shadow-md"
-                  >
-                    <div className="w-8 h-8 bg-blue-100 rounded-lg flex items-center justify-center mr-3">
-                      <Calendar className="h-4 w-4 text-blue-600" />
-                    </div>
-                    Mark Today's Attendance
+                  <button onClick={() => setShowBulkAttendanceModal(true)} className="w-full flex items-center gap-3 px-3 py-2.5 rounded-[9px] text-[13.5px] font-semibold text-ink hover:bg-track transition-colors text-left">
+                    <span className="w-7 h-7 rounded-[7px] bg-accent-soft flex items-center justify-center text-[14px]">📋</span>
+                    Mark attendance
                   </button>
-                  <button
-                    onClick={() => setShowCreateTemplateModal(true)}
-                    className="w-full flex items-center px-4 py-4 text-left text-sm font-semibold text-gray-800 dark:text-gray-200 hover:bg-green-50 dark:hover:bg-green-900/20 hover:text-green-700 dark:hover:text-green-400 rounded-lg border border-gray-200 dark:border-gray-600 hover:border-green-200 dark:hover:border-green-500 transition-all duration-200 shadow-sm hover:shadow-md"
-                  >
-                    <div className="w-8 h-8 bg-green-100 rounded-lg flex items-center justify-center mr-3">
-                      <ClipboardList className="h-4 w-4 text-green-600" />
-                    </div>
-                    Create Assignment Template
+                  <button onClick={() => setShowCreateTemplateModal(true)} className="w-full flex items-center gap-3 px-3 py-2.5 rounded-[9px] text-[13.5px] font-semibold text-ink hover:bg-track transition-colors text-left">
+                    <span className="w-7 h-7 rounded-[7px] bg-accent-soft flex items-center justify-center text-[14px]">✏️</span>
+                    New assignment template
                   </button>
-                  <button 
-                    onClick={() => navigate('/users')}
-                    className="w-full flex items-center px-4 py-4 text-left text-sm font-semibold text-gray-800 dark:text-gray-200 hover:bg-orange-50 dark:hover:bg-orange-900/20 hover:text-orange-700 dark:hover:text-orange-400 rounded-lg border border-gray-200 dark:border-gray-600 hover:border-orange-200 dark:hover:border-orange-500 transition-all duration-200 shadow-sm hover:shadow-md"
-                  >
-                    <div className="w-8 h-8 bg-orange-100 rounded-lg flex items-center justify-center mr-3">
-                      <Users className="h-4 w-4 text-orange-600" />
-                    </div>
-                    Manage Students
-                  </button>
+                  <Link to="/users" className="flex items-center gap-3 px-3 py-2.5 rounded-[9px] text-[13.5px] font-semibold text-ink hover:bg-track transition-colors">
+                    <span className="w-7 h-7 rounded-[7px] bg-accent-soft flex items-center justify-center text-[14px]">👤</span>
+                    Manage students
+                  </Link>
                 </>
               ) : (
                 <>
-                  <button 
-                    onClick={() => navigate('/assignments')}
-                    className="w-full flex items-center px-4 py-4 text-left text-sm font-semibold text-gray-800 dark:text-gray-200 hover:bg-blue-50 dark:hover:bg-blue-900/20 hover:text-blue-700 dark:hover:text-blue-400 rounded-lg border border-gray-200 dark:border-gray-600 hover:border-blue-200 dark:hover:border-blue-500 transition-all duration-200 shadow-sm hover:shadow-md"
-                  >
-                    <div className="w-8 h-8 bg-blue-100 rounded-lg flex items-center justify-center mr-3">
-                      <ClipboardList className="h-4 w-4 text-blue-600" />
-                    </div>
-                    View My Assignments
-                  </button>
-                  <button
-                    onClick={() => navigate('/reports')}
-                    className="w-full flex items-center px-4 py-4 text-left text-sm font-semibold text-gray-800 dark:text-gray-200 hover:bg-green-50 dark:hover:bg-green-900/20 hover:text-green-700 dark:hover:text-green-400 rounded-lg border border-gray-200 dark:border-gray-600 hover:border-green-200 dark:hover:border-green-500 transition-all duration-200 shadow-sm hover:shadow-md"
-                  >
-                    <div className="w-8 h-8 bg-green-100 rounded-lg flex items-center justify-center mr-3">
-                      <TrendingUp className="h-4 w-4 text-green-600" />
-                    </div>
-                    View Progress Reports
-                  </button>
-                  <button 
-                    onClick={() => navigate('/profile')}
-                    className="w-full flex items-center px-4 py-4 text-left text-sm font-semibold text-gray-800 dark:text-gray-200 hover:bg-orange-50 dark:hover:bg-orange-900/20 hover:text-orange-700 dark:hover:text-orange-400 rounded-lg border border-gray-200 dark:border-gray-600 hover:border-orange-200 dark:hover:border-orange-500 transition-all duration-200 shadow-sm hover:shadow-md"
-                  >
-                    <div className="w-8 h-8 bg-orange-100 rounded-lg flex items-center justify-center mr-3">
-                      <Users className="h-4 w-4 text-orange-600" />
-                    </div>
-                    Update Profile
-                  </button>
+                  <Link to="/assignments" className="flex items-center gap-3 px-3 py-2.5 rounded-[9px] text-[13.5px] font-semibold text-ink hover:bg-track transition-colors">
+                    <span className="w-7 h-7 rounded-[7px] bg-accent-soft flex items-center justify-center text-[14px]">📚</span>
+                    My assignments
+                  </Link>
+                  <Link to="/reports" className="flex items-center gap-3 px-3 py-2.5 rounded-[9px] text-[13.5px] font-semibold text-ink hover:bg-track transition-colors">
+                    <span className="w-7 h-7 rounded-[7px] bg-accent-soft flex items-center justify-center text-[14px]">📊</span>
+                    View progress
+                  </Link>
+                  <Link to="/journal" className="flex items-center gap-3 px-3 py-2.5 rounded-[9px] text-[13.5px] font-semibold text-ink hover:bg-track transition-colors">
+                    <span className="w-7 h-7 rounded-[7px] bg-accent-soft flex items-center justify-center text-[14px]">📓</span>
+                    Write in journal
+                  </Link>
                 </>
               )}
             </div>
           </div>
+
+          {/* Needs you (admin: pending grades + flagged) */}
+          {isAdmin && adminReport && (adminReport.pending_grades ?? 0) > 0 && (
+            <div className="bg-panel border border-accent-line rounded-card overflow-hidden">
+              <div className="px-5 py-3.5 border-b border-line-2">
+                <h3 className="text-[15px] font-semibold text-ink">Needs you today</h3>
+              </div>
+              <Link
+                to="/assignments?view=grading"
+                className="flex items-center justify-between gap-3 px-5 py-3.5 hover:bg-accent-soft transition-colors"
+              >
+                <div className="flex items-center gap-3">
+                  <span className="w-8 h-8 rounded-[8px] bg-neg-bg flex items-center justify-center text-[14px]">📝</span>
+                  <div>
+                    <p className="text-[13.5px] font-semibold text-ink">{adminReport.pending_grades} assignment{adminReport.pending_grades !== 1 ? 's' : ''} to grade</p>
+                    <p className="text-[12px] text-faint">Submitted and waiting for feedback</p>
+                  </div>
+                </div>
+                <span className="text-[12px] font-semibold text-accent flex-none">Grade →</span>
+              </Link>
+            </div>
+          )}
         </div>
       </div>
 
-      {/* Quick Award Points Modal */}
+      {/* ── Modals ── */}
       {showAwardModal && (
         <QuickAwardModal
           onClose={() => setShowAwardModal(false)}
           onSuccess={handleAwardSuccess}
         />
       )}
-
-      {/* Bulk Attendance Modal */}
       <BulkAttendanceModal
         isOpen={showBulkAttendanceModal}
         onClose={() => setShowBulkAttendanceModal(false)}
         onSuccess={handleAttendanceSuccess}
       />
-
-      {/* Quick Create Template Modal */}
       <QuickCreateTemplateModal
         isOpen={showCreateTemplateModal}
         onClose={() => setShowCreateTemplateModal(false)}
         onSuccess={handleTemplateSuccess}
       />
-
-      {/* Assignment Detail Modal */}
       {showAssignmentDetailModal && selectedAssignmentId && (
         <AssignmentDetailModal
           assignmentId={selectedAssignmentId}
@@ -638,7 +555,7 @@ const Dashboard: React.FC = () => {
           }}
         />
       )}
-    </DashboardLayout>
+    </div>
   )
 }
 

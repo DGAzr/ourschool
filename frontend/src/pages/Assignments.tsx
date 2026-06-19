@@ -27,22 +27,8 @@ import { useAssignmentFilters } from '../hooks/useAssignmentFilters'
 import { useViewDensity } from '../hooks/useViewDensity'
 
 // Components
-import AssignmentHeader from '../components/assignments/AssignmentHeader'
-// TODO: Will use these when implementing filters and list view components
-// import AssignmentFilters from '../components/assignments/AssignmentFilters'
-// import GradingFilters from '../components/assignments/GradingFilters'
-// import AssignmentTemplatesList from '../components/assignments/AssignmentTemplatesList'
-// import GradingAssignmentsList from '../components/assignments/GradingAssignmentsList'
-// import StudentAssignmentsList from '../components/assignments/StudentAssignmentsList'
-import AssignmentTemplateCard from '../components/assignments/AssignmentTemplateCard'
-import AssignmentTemplateListItem from '../components/assignments/AssignmentTemplateListItem'
-import AssignmentTemplatesTable from '../components/assignments/AssignmentTemplatesTable'
-import GradingAssignmentCard from '../components/assignments/GradingAssignmentCard'
-import GradingAssignmentListItem from '../components/assignments/GradingAssignmentListItem'
-import GradingAssignmentsTable from '../components/assignments/GradingAssignmentsTable'
+import { SegmentedControl, StatTile, Pill, SubjectDot, statusToPillVariant, useToast } from '../components/ui'
 import StudentAssignmentCard from '../components/assignments/StudentAssignmentCard'
-import { CompactListLayout } from '../components/layouts'
-import ViewDensitySelector from '../components/common/ViewDensitySelector'
 import CreateTemplateModal from '../components/assignments/CreateTemplateModal'
 import EditTemplateModal from '../components/assignments/EditTemplateModal'
 import AssignTemplateModal from '../components/assignments/AssignTemplateModal'
@@ -86,17 +72,24 @@ const Assignments: React.FC = () => {
   const [editingAssignment, setEditingAssignment] = useState<StudentAssignment | null>(null)
   const [submittingAssignment, setSubmittingAssignment] = useState<StudentAssignment | null>(null)
   const [selectedTemplates, setSelectedTemplates] = useState<Set<number>>(new Set())
+  const [templateView, setTemplateView] = useState<'shelves' | 'table' | 'cards'>('shelves')
+  const [queueFilter, setQueueFilter] = useState<'needs' | 'overdue' | 'all'>('needs')
+  const [selectedQueueId, setSelectedQueueId] = useState<number | null>(null)
+  const [menuOpenId, setMenuOpenId] = useState<number | null>(null)
+  const [gradeInput, setGradeInput] = useState('')
+  const [feedbackInput, setFeedbackInput] = useState('')
 
-  // View density
+  // View density (kept for backward compat with useViewDensity hook but unused in new UI)
   const { viewDensity: templatesViewDensity, setViewDensity: setTemplatesViewDensity } = useViewDensity({
     storageKey: 'assignments-templates-view-density',
     defaultDensity: 'table'
   })
-  
   const { viewDensity: gradingViewDensity, setViewDensity: setGradingViewDensity } = useViewDensity({
-    storageKey: 'assignments-grading-view-density', 
+    storageKey: 'assignments-grading-view-density',
     defaultDensity: 'table'
   })
+  // suppress unused warnings (view density stored for compat with hook, not used in new UI)
+  void templatesViewDensity; void setTemplatesViewDensity; void gradingViewDensity; void setGradingViewDensity
 
   // Filters
   const {
@@ -106,8 +99,6 @@ const Assignments: React.FC = () => {
     setSelectedSubject,
     selectedType,
     setSelectedType,
-    selectedStatuses,
-    setSelectedStatuses,
     selectedStudent,
     setSelectedStudent,
     filterTemplates,
@@ -133,6 +124,8 @@ const Assignments: React.FC = () => {
     adminViewMode,
     selectedSubject,
   })
+
+  const { toast } = useToast()
 
   // Utility functions
   const getSubjectById = (id: number) => subjects.find(s => s.id === id)
@@ -294,41 +287,6 @@ const Assignments: React.FC = () => {
     setShowGradeModal(true)
   }
 
-  const handleUpdateAssignmentStatus = async (assignmentId: number, status: string) => {
-    try {
-      await assignmentsApi.updateStudentAssignment(assignmentId, { status })
-      refetch()
-    } catch (err) {
-      setError('Failed to update assignment status')
-    }
-  }
-
-  const handleEditAssignment = (assignment: StudentAssignment) => {
-    setEditingAssignment(assignment)
-    setShowEditAssignmentModal(true)
-  }
-
-  // Status filter helpers
-  const handleStatusToggle = (status: string) => {
-    setSelectedStatuses(prev => 
-      prev.includes(status) 
-        ? prev.filter(s => s !== status)
-        : [...prev, status]
-    )
-  }
-
-  const isStatusSelected = (status: string) => selectedStatuses.includes(status)
-
-  const clearAllStatusFilters = () => setSelectedStatuses([])
-
-  const selectAllStatuses = () => {
-    setSelectedStatuses(['not_started', 'in_progress', 'submitted', 'graded'])
-  }
-
-  const selectActiveStatuses = () => {
-    setSelectedStatuses(['not_started', 'in_progress', 'submitted'])
-  }
-
   // Apply filters
   const filteredTemplates = filterTemplates(templates)
   const filteredStudentAssignments = filterStudentAssignments(studentAssignments)
@@ -336,417 +294,686 @@ const Assignments: React.FC = () => {
 
   if (!user) {
     return (
-      <div className="text-center py-12">
-        <div className="inline-block animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
-        <p className="text-gray-600 mt-2">Loading...</p>
+      <div className="flex items-center justify-center py-16">
+        <svg className="h-6 w-6 animate-spin text-accent" fill="none" viewBox="0 0 24 24">
+          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+        </svg>
       </div>
     )
   }
 
-  return (
-    <div className="space-y-8">
-      <AssignmentHeader
-        isAdmin={isAdmin}
-        adminViewMode={adminViewMode}
-        setAdminViewMode={setAdminViewMode}
-        onCreateTemplate={handleCreateTemplate}
-        onQuickAssign={() => setShowQuickAssignModal(true)}
-        onImportTemplate={handleImportTemplate}
-        onBulkExport={handleBulkExport}
-        selectedTemplates={selectedTemplates}
-        pendingGradesCount={submittedAssignments.length}
-      />
+  /* ── derived data ── */
+  // Group filtered templates by subject for Shelves view
+  const templateGroups = (() => {
+    const groups: { subjectId: number | null; name: string; color: string; templates: typeof filteredTemplates }[] = []
+    const seen = new Map<string, typeof groups[0]>()
+    for (const t of filteredTemplates) {
+      const sub = getSubjectById(t.subject_id ?? 0)
+      const key = sub ? String(sub.id) : 'none'
+      if (!seen.has(key)) {
+        const g = { subjectId: sub?.id ?? null, name: sub?.name ?? 'No Subject', color: (sub as any)?.color ?? '#8B7355', templates: [] as typeof filteredTemplates }
+        seen.set(key, g)
+        groups.push(g)
+      }
+      seen.get(key)!.templates.push(t)
+    }
+    return groups
+  })()
 
-      {/* Error Message */}
+  const needsGrading = allAssignments.filter(a => a.status === 'submitted' && !a.is_graded)
+  const overdueAssignments = allAssignments.filter(a => a.status !== 'graded' && a.due_date && new Date(a.due_date) < new Date())
+  const gradedCount = allAssignments.filter(a => a.is_graded).length
+  const inProgressCount = allAssignments.filter(a => a.status === 'in_progress').length
+
+  const queueItems = queueFilter === 'needs' ? needsGrading
+    : queueFilter === 'overdue' ? overdueAssignments
+    : filteredAllAssignments
+
+  const selectedAssignment = selectedQueueId ? queueItems.find(a => a.id === selectedQueueId) ?? queueItems[0] : queueItems[0]
+
+  const TYPE_LABELS: Record<string, string> = {
+    homework: 'Homework', quiz: 'Quiz', test: 'Test', project: 'Project',
+    essay: 'Essay', lab: 'Lab', presentation: 'Presentation', other: 'Other',
+  }
+
+  const handleSaveGrade = async () => {
+    if (!selectedAssignment) return
+    const pts = parseFloat(gradeInput)
+    if (isNaN(pts)) return
+    try {
+      await assignmentsApi.gradeStudentAssignment(selectedAssignment.id, { points_earned: pts, teacher_feedback: feedbackInput })
+      toast('Grade saved')
+      setGradeInput('')
+      setFeedbackInput('')
+      refetch()
+      const next = queueItems.find(a => a.id !== selectedAssignment.id)
+      setSelectedQueueId(next?.id ?? null)
+    } catch {
+      toast('Failed to save grade', 'danger')
+    }
+  }
+
+  return (
+    <div className="space-y-0">
+      {/* ── Page header ── */}
+      <div className="flex items-start justify-between mb-6">
+        <div>
+          <p className="text-[11px] font-semibold text-faint uppercase tracking-[.06em] mb-1">
+            {isAdmin ? 'Library' : 'My Work'}
+          </p>
+          <h1 className="text-[27px] font-bold text-ink tracking-[-0.02em] leading-none">Assignments</h1>
+          {isAdmin && (
+            <p className="mt-1.5 text-[13px] text-muted">
+              <span className="font-mono">{filteredTemplates.length}</span> template{filteredTemplates.length !== 1 ? 's' : ''}
+              {submittedAssignments.length > 0 && (
+                <> · <span className="font-mono text-accent">{submittedAssignments.length}</span> awaiting grade</>
+              )}
+            </p>
+          )}
+        </div>
+        <div className="flex items-center gap-2 mt-1">
+          {isAdmin && (
+            <>
+              {adminViewMode === 'templates' && (
+                <>
+                  {selectedTemplates.size > 0 && (
+                    <button
+                      onClick={handleBulkExport}
+                      className="h-[34px] px-3 text-[13px] font-semibold rounded-field border border-btn-border bg-panel text-ink hover:bg-track transition-colors"
+                    >
+                      Export {selectedTemplates.size}
+                    </button>
+                  )}
+                  <button
+                    onClick={handleImportTemplate}
+                    className="h-[34px] px-3 text-[13px] font-semibold rounded-field border border-btn-border bg-panel text-ink hover:bg-track transition-colors"
+                  >
+                    Import
+                  </button>
+                  <button
+                    onClick={handleCreateTemplate}
+                    className="h-[34px] px-4 text-[13px] font-semibold rounded-field bg-btn-primary-bg text-btn-primary-fg hover:opacity-90 transition-opacity"
+                  >
+                    + New template
+                  </button>
+                </>
+              )}
+              <SegmentedControl
+                segments={[
+                  { value: 'templates', label: 'Library' },
+                  { value: 'grading', label: 'Grading', count: submittedAssignments.length || undefined },
+                ]}
+                value={adminViewMode}
+                onChange={setAdminViewMode}
+              />
+            </>
+          )}
+        </div>
+      </div>
+
+      {/* ── Error ── */}
       {error && (
-        <div className="bg-red-50 dark:bg-red-900 border border-red-200 dark:border-red-700 text-red-700 dark:text-red-200 px-4 py-3 rounded">
+        <div className="mb-4 px-4 py-3 rounded-card text-[13px] text-neg-fg bg-neg-bg border border-neg-fg/20">
           {error}
         </div>
       )}
 
-      {/* Enhanced Filters */}
-      <div className="bg-white dark:bg-gray-800 shadow-lg rounded-xl p-6 border border-gray-100 dark:border-gray-700">
-        {isAdmin && adminViewMode === 'grading' ? (
-          /* Enhanced Grading Filters */
-          <div className="space-y-6">
-            {/* Top Row - Search, Subject, Student, View */}
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">Search Assignments</label>
-                <input
-                  type="text"
-                  placeholder="Search by name or description..."
-                  value={searchTerm}
-                  onChange={(e) => setSearchTerm(e.target.value)}
-                  className="w-full border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-500 dark:placeholder-gray-400 rounded-lg px-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">Subject</label>
-                <select
-                  value={selectedSubject || ''}
-                  onChange={(e) => setSelectedSubject(e.target.value ? parseInt(e.target.value) : null)}
-                  className="w-full border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 rounded-lg px-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
-                >
-                  <option value="">All Subjects</option>
-                  {subjects.map(subject => (
-                    <option key={subject.id} value={subject.id}>
-                      {subject.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">Student</label>
-                <select
-                  value={selectedStudent || ''}
-                  onChange={(e) => setSelectedStudent(e.target.value ? parseInt(e.target.value) : null)}
-                  className="w-full border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 rounded-lg px-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
-                >
-                  <option value="">All Students</option>
-                  {students.map(student => (
-                    <option key={student.id} value={student.id}>
-                      {student.first_name} {student.last_name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">View</label>
-                <ViewDensitySelector
-                  viewDensity={gradingViewDensity}
-                  onViewDensityChange={setGradingViewDensity}
-                />
-              </div>
-            </div>
-
-            {/* Status Filter with Checkboxes */}
-            <div>
-              <div className="flex items-center justify-between mb-3">
-                <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300">Assignment Status</label>
-                <div className="flex space-x-2">
-                  <button
-                    onClick={selectActiveStatuses}
-                    className="text-xs text-green-600 dark:text-green-400 hover:text-green-800 dark:hover:text-green-300 font-medium"
-                  >
-                    Active Only
-                  </button>
-                  <span className="text-xs text-gray-400">|</span>
-                  <button
-                    onClick={selectAllStatuses}
-                    className="text-xs text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 font-medium"
-                  >
-                    All
-                  </button>
-                  <span className="text-xs text-gray-400">|</span>
-                  <button
-                    onClick={clearAllStatusFilters}
-                    className="text-xs text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-300 font-medium"
-                  >
-                    None
-                  </button>
-                </div>
-              </div>
-              <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-                {[
-                  { 
-                    value: 'not_started', 
-                    label: 'Not Started',
-                    selectedClasses: 'border-gray-500 bg-gray-50 dark:bg-gray-900',
-                    checkboxClasses: 'text-gray-600 focus:ring-gray-500'
-                  },
-                  { 
-                    value: 'in_progress', 
-                    label: 'In Progress',
-                    selectedClasses: 'border-blue-500 bg-blue-50 dark:bg-blue-900',
-                    checkboxClasses: 'text-blue-600 focus:ring-blue-500'
-                  },
-                  { 
-                    value: 'submitted', 
-                    label: 'Submitted',
-                    selectedClasses: 'border-purple-500 bg-purple-50 dark:bg-purple-900',
-                    checkboxClasses: 'text-purple-600 focus:ring-purple-500'
-                  },
-                  { 
-                    value: 'graded', 
-                    label: 'Graded',
-                    selectedClasses: 'border-indigo-500 bg-indigo-50 dark:bg-indigo-900',
-                    checkboxClasses: 'text-indigo-600 focus:ring-indigo-500'
-                  }
-                ].map(status => (
-                  <label
-                    key={status.value}
-                    className={`flex items-center p-3 rounded-lg border-2 cursor-pointer transition-all ${
-                      isStatusSelected(status.value)
-                        ? status.selectedClasses
-                        : 'border-gray-200 dark:border-gray-600 hover:border-gray-300 dark:hover:border-gray-500'
-                    }`}
-                  >
-                    <input
-                      type="checkbox"
-                      checked={isStatusSelected(status.value)}
-                      onChange={() => handleStatusToggle(status.value)}
-                      className={`h-4 w-4 ${status.checkboxClasses} border-gray-300 rounded`}
-                    />
-                    <span className="ml-2 text-sm font-medium text-gray-700 dark:text-gray-300">
-                      {status.label}
-                    </span>
-                  </label>
-                ))}
-              </div>
-              {selectedStatuses.length > 0 && (
-                <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">
-                  Showing {selectedStatuses.length} status{selectedStatuses.length !== 1 ? 'es' : ''}: {selectedStatuses.join(', ')}
-                </p>
-              )}
-            </div>
-          </div>
-        ) : (
-          /* Standard Template/Student Filters */
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-6">
-            <div>
-              <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">Search Assignments</label>
-              <input
-                type="text"
-                placeholder="Search by name or description..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-500 dark:placeholder-gray-400 rounded-lg px-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">Subject</label>
-              <select
-                value={selectedSubject || ''}
-                onChange={(e) => setSelectedSubject(e.target.value ? parseInt(e.target.value) : null)}
-                className="w-full border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 rounded-lg px-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
-              >
-                <option value="">All Subjects</option>
-                {subjects.map(subject => (
-                  <option key={subject.id} value={subject.id}>
-                    {subject.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">Type</label>
-              <select
-                value={selectedType || ''}
-                onChange={(e) => setSelectedType(e.target.value || null)}
-                className="w-full border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 rounded-lg px-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
-              >
-                <option value="">All Types</option>
-                <option value="homework">Homework</option>
-                <option value="quiz">Quiz</option>
-                <option value="test">Test</option>
-                <option value="project">Project</option>
-                <option value="essay">Essay</option>
-                <option value="lab">Lab</option>
-                <option value="presentation">Presentation</option>
-                <option value="other">Other</option>
-              </select>
-            </div>
-            <div>
-              <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">View</label>
-              <ViewDensitySelector
-                viewDensity={templatesViewDensity}
-                onViewDensityChange={setTemplatesViewDensity}
-              />
-            </div>
-          </div>
-        )}
-      </div>
-
-      {/* Loading State */}
+      {/* ── Loading ── */}
       {loading && (
-        <div className="flex justify-center items-center py-12">
-          <svg className="h-8 w-8 animate-spin text-blue-500" fill="none" viewBox="0 0 24 24">
-            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+        <div className="flex items-center justify-center py-16">
+          <svg className="h-6 w-6 animate-spin text-accent" fill="none" viewBox="0 0 24 24">
+            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
           </svg>
-          <span className="ml-2 text-gray-600 dark:text-gray-400">Loading assignments...</span>
         </div>
       )}
 
-      {/* Content */}
-      {!loading && (
+      {/* ════════════════════════════════════════
+          ADMIN — LIBRARY (templates) TAB
+      ════════════════════════════════════════ */}
+      {!loading && isAdmin && adminViewMode === 'templates' && (
         <>
-          {isAdmin && adminViewMode === 'templates' ? (
-            // Admin Templates View with CompactListLayout
-            <CompactListLayout
-              viewDensity={templatesViewDensity}
-              items={
-                templatesViewDensity === 'table'
-                  ? [
-                      <AssignmentTemplatesTable
-                        key="templates-table"
-                        templates={filteredTemplates}
-                        subjects={subjects}
-                                        selectedTemplates={selectedTemplates}
-                        onTemplateSelectionToggle={toggleTemplateSelection}
-                        onEditTemplate={handleEditTemplate}
-                        onDeleteTemplate={handleDeleteTemplate}
-                        onAssignTemplate={handleAssignTemplate}
-                        onArchiveTemplate={handleArchiveTemplate}
-                        onExportTemplate={handleExportTemplate}
-                        emptyMessage={
-                          searchTerm || selectedSubject || selectedType 
-                            ? 'No templates match your filters' 
-                            : 'No assignment templates found'
-                        }
-                        emptyDescription={
-                          searchTerm || selectedSubject || selectedType
-                            ? 'Try adjusting your search terms or filters.'
-                            : 'Get started by creating your first assignment template.'
-                        }
-                      />
-                    ]
-                  : templatesViewDensity === 'spacious' 
-                  ? filteredTemplates.map((template) => (
-                      <AssignmentTemplateCard
-                        key={template.id}
-                        template={template}
-                        subject={getSubjectById(template.subject_id)}
-                        onEdit={handleEditTemplate}
-                        onDelete={handleDeleteTemplate}
-                        onAssign={handleAssignTemplate}
-                        onArchive={handleArchiveTemplate}
-                        onExport={handleExportTemplate}
-                        isSelected={selectedTemplates.has(template.id)}
-                        onSelectionToggle={toggleTemplateSelection}
-                      />
-                    ))
-                  : filteredTemplates.map((template) => (
-                      <AssignmentTemplateListItem
-                        key={template.id}
-                        template={template}
-                        subject={getSubjectById(template.subject_id)}
-                        onEdit={() => handleEditTemplate(template)}
-                        onDelete={() => handleDeleteTemplate(template)}
-                        onAssign={() => handleAssignTemplate(template)}
-                        onArchive={() => handleArchiveTemplate(template)}
-                        onExport={() => handleExportTemplate(template)}
-                        isSelected={selectedTemplates.has(template.id)}
-                        onSelectionToggle={() => toggleTemplateSelection(template.id)}
-                        viewDensity={templatesViewDensity}
-                      />
-                    ))
-              }
-              emptyMessage={
-                searchTerm || selectedSubject || selectedType 
-                  ? 'No templates match your filters' 
-                  : 'No assignment templates found'
-              }
-              emptyDescription={
-                searchTerm || selectedSubject || selectedType
-                  ? 'Try adjusting your search terms or filters.'
-                  : 'Get started by creating your first assignment template.'
-              }
-            />
-          ) : isAdmin && adminViewMode === 'grading' ? (
-            // Enhanced Admin Grading View with CompactListLayout
-            <CompactListLayout
-              viewDensity={gradingViewDensity}
-              items={
-                gradingViewDensity === 'table'
-                  ? [
-                      <GradingAssignmentsTable
-                        key="grading-table"
-                        assignments={filteredAllAssignments}
-                        subjects={subjects}
-                        students={students}
-                        onGradeAssignment={handleGradeAssignment}
-                        onEditAssignment={handleEditAssignment}
-                        onArchiveAssignment={handleArchiveStudentAssignment}
-                        onDeleteAssignment={handleDeleteStudentAssignment}
-                        onUpdateAssignmentStatus={handleUpdateAssignmentStatus}
-                        onRefresh={refetch}
-                        emptyMessage="No assignments found"
-                        emptyDescription={
-                          searchTerm || selectedSubject
-                            ? 'No assignments match your current filters.'
-                            : 'No assignments have been created yet.'
-                        }
-                      />
-                    ]
-                  : gradingViewDensity === 'spacious'
-                  ? filteredAllAssignments.map((assignment) => (
-                      <GradingAssignmentCard
-                        key={assignment.id}
-                        assignment={assignment}
-                        subject={assignment.template?.subject_id ? getSubjectById(assignment.template.subject_id) : undefined}
-                        student={students.find(s => s.id === assignment.student_id)}
-                        onGrade={handleGradeAssignment}
-                        onUpdateStatus={handleUpdateAssignmentStatus}
-                        onEdit={handleEditAssignment}
-                        onDelete={handleDeleteStudentAssignment}
-                        onArchive={handleArchiveStudentAssignment}
-                      />
-                    ))
-                  : filteredAllAssignments.map((assignment) => (
-                      <GradingAssignmentListItem
-                        key={assignment.id}
-                        assignment={assignment}
-                        subject={assignment.template?.subject_id ? getSubjectById(assignment.template.subject_id) : undefined}
-                        student={students.find(s => s.id === assignment.student_id)}
-                        onGrade={handleGradeAssignment}
-                        onUpdateStatus={handleUpdateAssignmentStatus}
-                        onEdit={handleEditAssignment}
-                        onDelete={handleDeleteStudentAssignment}
-                        onArchive={handleArchiveStudentAssignment}
-                        viewDensity={gradingViewDensity}
-                      />
-                    ))
-              }
-              emptyMessage="No assignments found"
-              emptyDescription={
-                searchTerm || selectedSubject
-                  ? 'No assignments match your current filters.'
-                  : 'No assignments have been created yet.'
-              }
-            />
-          ) : (
-            // Student View - Keep as cards for now since it's primarily for individual students
-            <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
-              {filteredStudentAssignments.length === 0 ? (
-                <div className="col-span-full text-center py-16 bg-white dark:bg-gray-800 rounded-lg">
-                  <div className="w-20 h-20 bg-indigo-100 dark:bg-indigo-900 rounded-full flex items-center justify-center mx-auto mb-4">
-                    <svg className="h-10 w-10 text-indigo-400 dark:text-indigo-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6.253v13m0-13C10.832 5.477 9.246 5 7.5 5S4.168 5.477 3 6.253v13C4.168 18.477 5.754 18 7.5 18s3.332.477 4.5 1.253m0-13C13.168 5.477 14.754 5 16.5 5c1.746 0 3.332.477 4.5 1.253v13C19.832 18.477 18.246 18 16.5 18c-1.746 0-3.332.477-4.5 1.253" />
-                    </svg>
-                  </div>
-                  <h3 className="text-xl font-semibold text-gray-900 dark:text-gray-100 mb-2">
-                    {searchTerm || selectedSubject || selectedType 
-                      ? 'No assignments match your filters' 
-                      : 'No assignments assigned yet'
-                    }
-                  </h3>
-                  <p className="text-gray-600 dark:text-gray-400">
-                    {searchTerm || selectedSubject || selectedType
-                      ? 'Try adjusting your search terms or filters.'
-                      : 'Your assigned work will appear here when your teacher creates assignments for you.'
-                    }
-                  </p>
+          {/* Toolbar */}
+          <div className="flex items-center gap-3 mb-4">
+            <div className="relative flex-1 max-w-[280px]">
+              <svg className="absolute left-3 top-1/2 -translate-y-1/2 text-faint" width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                <circle cx="11" cy="11" r="8" /><path d="m21 21-4.35-4.35" />
+              </svg>
+              <input
+                type="text"
+                placeholder="Search templates…"
+                value={searchTerm}
+                onChange={e => setSearchTerm(e.target.value)}
+                className="w-full pl-8 pr-3 py-2 bg-field-bg border border-field-border rounded-field text-[13px] text-ink placeholder:text-faintest focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent"
+              />
+            </div>
+            <select
+              value={selectedSubject ?? ''}
+              onChange={e => setSelectedSubject(e.target.value ? parseInt(e.target.value) : null)}
+              className="h-[34px] px-3 bg-field-bg border border-field-border rounded-field text-[13px] text-ink focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent"
+            >
+              <option value="">All Subjects</option>
+              {subjects.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+            </select>
+            <select
+              value={selectedType ?? ''}
+              onChange={e => setSelectedType(e.target.value || null)}
+              className="h-[34px] px-3 bg-field-bg border border-field-border rounded-field text-[13px] text-ink focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent"
+            >
+              <option value="">All Types</option>
+              {Object.entries(TYPE_LABELS).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+            </select>
+            <div className="ml-auto">
+              <SegmentedControl
+                segments={[
+                  { value: 'shelves', label: 'Shelves' },
+                  { value: 'table', label: 'Table' },
+                  { value: 'cards', label: 'Cards' },
+                ]}
+                value={templateView}
+                onChange={setTemplateView}
+              />
+            </div>
+          </div>
+
+          {/* ── Shelves view ── */}
+          {templateView === 'shelves' && (
+            <div className="bg-panel border border-line rounded-card overflow-hidden">
+              {templateGroups.length === 0 ? (
+                <div className="py-14 text-center">
+                  <p className="text-[15px] font-semibold text-ink-2 mb-1">No templates match your filters</p>
+                  <p className="text-[13px] text-faint">Try clearing search, subject, or type.</p>
                 </div>
-              ) : (
-                filteredStudentAssignments.map((assignment) => (
-                  <StudentAssignmentCard
-                    key={assignment.id}
-                    assignment={assignment}
-                    subject={assignment.template?.subject_id ? getSubjectById(assignment.template.subject_id) : undefined}
-                    isAdmin={isAdmin}
-                    onStart={handleStartAssignment}
-                    onComplete={handleCompleteAssignment}
-                    onArchive={handleArchiveStudentAssignment}
-                    onDelete={handleDeleteStudentAssignment}
-                  />
-                ))
-              )}
+              ) : templateGroups.map((group, gi) => (
+                <div key={group.subjectId ?? 'none'}>
+                  {/* Subject header */}
+                  <div className="flex items-center gap-2.5 px-4 py-2.5 bg-panel-2 border-b border-line-3">
+                    <SubjectDot color={group.color} size={10} />
+                    <span className="font-bold text-[13.5px] tracking-[-0.01em] text-ink">{group.name}</span>
+                    <span className="font-mono text-[11.5px] text-faint">{group.templates.length}</span>
+                  </div>
+                  {group.templates.map((template, ri) => (
+                    <div
+                      key={template.id}
+                      className={`relative flex items-center gap-3 px-4 py-3.5 group ${
+                        ri < group.templates.length - 1 || gi < templateGroups.length - 1 ? 'border-b border-line-2' : ''
+                      } hover:bg-faintest/40 transition-colors`}
+                    >
+                      {/* Checkbox */}
+                      <button
+                        onClick={() => toggleTemplateSelection(template.id)}
+                        className={`w-4 h-4 rounded border flex-none flex items-center justify-center transition-colors ${
+                          selectedTemplates.has(template.id)
+                            ? 'bg-accent border-accent text-white'
+                            : 'border-check-border bg-field-bg'
+                        }`}
+                      >
+                        {selectedTemplates.has(template.id) && (
+                          <svg width="9" height="7" fill="none" viewBox="0 0 9 7"><path d="M1 3.5 3.5 6 8 1" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" /></svg>
+                        )}
+                      </button>
+                      {/* Name + desc */}
+                      <div className="flex-1 min-w-0">
+                        <div className="font-semibold text-[14px] text-ink tracking-[-0.01em]">{template.name}</div>
+                        {template.description && (
+                          <div className="text-[12px] text-faint mt-0.5 truncate">{template.description}</div>
+                        )}
+                      </div>
+                      {/* Type pill */}
+                      <span className="flex-none inline-block px-2.5 py-[3px] rounded-pill bg-track text-ink-2 text-[11.5px] font-semibold">
+                        {TYPE_LABELS[template.assignment_type] ?? template.assignment_type}
+                      </span>
+                      {/* Points */}
+                      <span className="flex-none w-[62px] text-right font-mono tabular-nums text-[13px] text-ink-2">
+                        {template.max_points ?? '—'} pts
+                      </span>
+                      {/* Duration */}
+                      <span className="flex-none w-[52px] text-right font-mono tabular-nums text-[13px] text-muted">
+                        {template.estimated_duration_minutes ? `${template.estimated_duration_minutes}m` : '—'}
+                      </span>
+                      {/* Assigned count */}
+                      <span className="flex-none w-[40px] flex justify-center">
+                        {(template.total_assigned ?? 0) > 0 ? (
+                          <span className="px-1.5 py-0.5 rounded bg-accent-soft text-accent text-[11px] font-mono font-semibold">
+                            {template.total_assigned}
+                          </span>
+                        ) : (
+                          <span className="text-[11px] text-faintest">—</span>
+                        )}
+                      </span>
+                      {/* Actions (hover-revealed) */}
+                      <div className="flex-none w-[96px] flex justify-end gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <button
+                          onClick={() => handleAssignTemplate(template)}
+                          className="h-[30px] px-3 border border-btn-border bg-panel rounded-[7px] text-[12.5px] font-semibold text-ink hover:bg-track transition-colors"
+                        >
+                          Assign
+                        </button>
+                        <div className="relative">
+                          <button
+                            onClick={() => setMenuOpenId(menuOpenId === template.id ? null : template.id)}
+                            className="w-[30px] h-[30px] border border-line bg-panel rounded-[7px] text-muted flex items-center justify-center text-[16px] leading-none hover:bg-track transition-colors"
+                          >
+                            ⋯
+                          </button>
+                          {menuOpenId === template.id && (
+                            <div className="absolute right-0 top-[34px] z-20 bg-panel border border-field-border rounded-[10px] shadow-menu p-1 w-40 animate-pop">
+                              <button onClick={() => { handleEditTemplate(template); setMenuOpenId(null) }} className="w-full text-left px-2.5 py-2 text-[13px] text-ink-2 hover:bg-track rounded-[6px]">Edit</button>
+                              <button onClick={() => { handleExportTemplate(template); setMenuOpenId(null) }} className="w-full text-left px-2.5 py-2 text-[13px] text-ink-2 hover:bg-track rounded-[6px]">Export</button>
+                              <button onClick={() => { handleArchiveTemplate(template); setMenuOpenId(null) }} className="w-full text-left px-2.5 py-2 text-[13px] text-ink-2 hover:bg-track rounded-[6px]">Archive</button>
+                              <div className="h-px bg-line-2 my-1 mx-1.5" />
+                              <button onClick={() => { handleDeleteTemplate(template); setMenuOpenId(null) }} className="w-full text-left px-2.5 py-2 text-[13px] text-danger hover:bg-track rounded-[6px]">Delete</button>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* ── Table view ── */}
+          {templateView === 'table' && (
+            <div className="bg-panel border border-line rounded-card overflow-hidden">
+              <table className="w-full border-collapse text-[13.5px]">
+                <thead>
+                  <tr className="bg-panel-2 border-b border-line">
+                    <th className="w-[42px] pl-4 py-2.5 text-left">
+                      <button
+                        onClick={() => {
+                          if (selectedTemplates.size === filteredTemplates.length) {
+                            setSelectedTemplates(new Set())
+                          } else {
+                            setSelectedTemplates(new Set(filteredTemplates.map(t => t.id)))
+                          }
+                        }}
+                        className={`w-4 h-4 rounded border flex items-center justify-center transition-colors ${
+                          selectedTemplates.size === filteredTemplates.length && filteredTemplates.length > 0
+                            ? 'bg-accent border-accent text-white'
+                            : 'border-check-border bg-field-bg'
+                        }`}
+                      >
+                        {selectedTemplates.size === filteredTemplates.length && filteredTemplates.length > 0 && (
+                          <svg width="9" height="7" fill="none" viewBox="0 0 9 7"><path d="M1 3.5 3.5 6 8 1" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" /></svg>
+                        )}
+                      </button>
+                    </th>
+                    {['Template', 'Subject', 'Type', 'Points', 'Time', 'Assigned'].map(h => (
+                      <th key={h} className="px-3 py-2.5 text-left text-[11px] font-semibold text-faint uppercase tracking-[.05em]">{h}</th>
+                    ))}
+                    <th className="w-[120px] px-4 py-2.5" />
+                  </tr>
+                </thead>
+                <tbody>
+                  {filteredTemplates.length === 0 ? (
+                    <tr><td colSpan={8} className="py-14 text-center text-[13px] text-faint">No templates match your filters</td></tr>
+                  ) : filteredTemplates.map(template => {
+                    const sub = getSubjectById(template.subject_id ?? 0)
+                    return (
+                      <tr key={template.id} className="group border-b border-line-2 hover:bg-faintest/40 transition-colors">
+                        <td className="pl-4 py-3 align-middle">
+                          <button
+                            onClick={() => toggleTemplateSelection(template.id)}
+                            className={`w-4 h-4 rounded border flex items-center justify-center transition-colors ${
+                              selectedTemplates.has(template.id) ? 'bg-accent border-accent text-white' : 'border-check-border bg-field-bg'
+                            }`}
+                          >
+                            {selectedTemplates.has(template.id) && (
+                              <svg width="9" height="7" fill="none" viewBox="0 0 9 7"><path d="M1 3.5 3.5 6 8 1" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" /></svg>
+                            )}
+                          </button>
+                        </td>
+                        <td className="px-3 py-3 align-middle">
+                          <div className="font-semibold text-ink tracking-[-0.01em]">{template.name}</div>
+                          {template.description && <div className="text-[12px] text-faint mt-0.5 truncate max-w-[300px]">{template.description}</div>}
+                        </td>
+                        <td className="px-3 py-3 align-middle">
+                          <div className="flex items-center gap-2">
+                            <SubjectDot color={(sub as any)?.color ?? '#8B7355'} size={9} />
+                            <span className="text-ink-2">{sub?.name ?? '—'}</span>
+                          </div>
+                        </td>
+                        <td className="px-3 py-3 align-middle">
+                          <span className="inline-block px-2.5 py-[3px] rounded-pill bg-track text-ink-2 text-[11.5px] font-semibold">
+                            {TYPE_LABELS[template.assignment_type] ?? template.assignment_type}
+                          </span>
+                        </td>
+                        <td className="px-3 py-3 align-middle text-right font-mono tabular-nums text-ink-2">{template.max_points ?? '—'}</td>
+                        <td className="px-3 py-3 align-middle text-right font-mono tabular-nums text-muted">{template.estimated_duration_minutes ? `${template.estimated_duration_minutes}m` : '—'}</td>
+                        <td className="px-3 py-3 align-middle">
+                          {(template.total_assigned ?? 0) > 0 ? (
+                            <span className="px-1.5 py-0.5 rounded bg-accent-soft text-accent text-[11px] font-mono font-semibold">{template.total_assigned}</span>
+                          ) : <span className="text-faintest text-[12px]">—</span>}
+                        </td>
+                        <td className="px-4 py-3 align-middle text-right">
+                          <div className="flex justify-end gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                            <button onClick={() => handleAssignTemplate(template)} className="h-[28px] px-2.5 border border-btn-border bg-panel rounded-[7px] text-[12px] font-semibold text-ink hover:bg-track transition-colors">Assign</button>
+                            <button onClick={() => handleEditTemplate(template)} className="h-[28px] px-2.5 border border-btn-border bg-panel rounded-[7px] text-[12px] font-semibold text-ink hover:bg-track transition-colors">Edit</button>
+                            <button onClick={() => handleDeleteTemplate(template)} className="h-[28px] px-2.5 border border-btn-border bg-panel rounded-[7px] text-[12px] font-semibold text-danger hover:bg-neg-bg transition-colors">Del</button>
+                          </div>
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          {/* ── Cards view ── */}
+          {templateView === 'cards' && (
+            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
+              {filteredTemplates.length === 0 ? (
+                <div className="col-span-full py-14 text-center">
+                  <p className="text-[15px] font-semibold text-ink-2 mb-1">No templates match your filters</p>
+                  <p className="text-[13px] text-faint">Try clearing search, subject, or type.</p>
+                </div>
+              ) : filteredTemplates.map(template => {
+                const sub = getSubjectById(template.subject_id ?? 0)
+                return (
+                  <div key={template.id} className="bg-panel border border-line rounded-card p-4 shadow-card hover:shadow-float transition-shadow group">
+                    <div className="flex items-start justify-between gap-2 mb-2">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <SubjectDot color={(sub as any)?.color ?? '#8B7355'} size={8} />
+                        <span className="text-[11.5px] text-muted truncate">{sub?.name ?? 'No subject'}</span>
+                      </div>
+                      <Pill variant={statusToPillVariant(template.assignment_type)}>
+                        {TYPE_LABELS[template.assignment_type] ?? template.assignment_type}
+                      </Pill>
+                    </div>
+                    <h3 className="font-semibold text-[14px] text-ink tracking-[-0.01em] mb-1">{template.name}</h3>
+                    {template.description && (
+                      <p className="text-[12.5px] text-faint line-clamp-2 mb-3">{template.description}</p>
+                    )}
+                    <div className="flex items-center justify-between mt-3 pt-3 border-t border-line-2">
+                      <div className="flex items-center gap-3 text-[12px] text-muted font-mono tabular-nums">
+                        <span>{template.max_points ?? '—'} pts</span>
+                        {template.estimated_duration_minutes && <span>{template.estimated_duration_minutes}m</span>}
+                      </div>
+                      <div className="flex gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <button onClick={() => handleAssignTemplate(template)} className="h-[28px] px-2.5 border border-btn-border bg-panel rounded-[7px] text-[12px] font-semibold text-ink hover:bg-track transition-colors">Assign</button>
+                        <button onClick={() => handleEditTemplate(template)} className="h-[28px] px-2.5 border border-btn-border bg-panel rounded-[7px] text-[12px] font-semibold text-ink hover:bg-track transition-colors">Edit</button>
+                      </div>
+                    </div>
+                  </div>
+                )
+              })}
             </div>
           )}
         </>
       )}
+
+      {/* ════════════════════════════════════════
+          ADMIN — GRADING DESK TAB
+      ════════════════════════════════════════ */}
+      {!loading && isAdmin && adminViewMode === 'grading' && (
+        <div className="flex flex-col gap-0" style={{ height: 'calc(100vh - 11rem)', minHeight: 520 }}>
+          {/* Stat tiles */}
+          <div className="grid grid-cols-4 gap-3 mb-4 flex-none">
+            <StatTile label="Awaiting grade" value={String(needsGrading.length)} accent={needsGrading.length > 0} />
+            <StatTile label="Overdue" value={String(overdueAssignments.length)} />
+            <StatTile label="In progress" value={String(inProgressCount)} />
+            <StatTile label="Graded" value={String(gradedCount)} />
+          </div>
+
+          {/* Search + filter bar */}
+          <div className="flex items-center gap-3 mb-4 flex-none">
+            <div className="relative flex-1 max-w-[260px]">
+              <svg className="absolute left-3 top-1/2 -translate-y-1/2 text-faint" width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                <circle cx="11" cy="11" r="8" /><path d="m21 21-4.35-4.35" />
+              </svg>
+              <input
+                type="text"
+                placeholder="Search…"
+                value={searchTerm}
+                onChange={e => setSearchTerm(e.target.value)}
+                className="w-full pl-8 pr-3 py-2 bg-field-bg border border-field-border rounded-field text-[13px] text-ink placeholder:text-faintest focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent"
+              />
+            </div>
+            <select
+              value={selectedSubject ?? ''}
+              onChange={e => setSelectedSubject(e.target.value ? parseInt(e.target.value) : null)}
+              className="h-[34px] px-3 bg-field-bg border border-field-border rounded-field text-[13px] text-ink focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent"
+            >
+              <option value="">All Subjects</option>
+              {subjects.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+            </select>
+            <select
+              value={selectedStudent ?? ''}
+              onChange={e => setSelectedStudent(e.target.value ? parseInt(e.target.value) : null)}
+              className="h-[34px] px-3 bg-field-bg border border-field-border rounded-field text-[13px] text-ink focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent"
+            >
+              <option value="">All Students</option>
+              {students.map(s => <option key={s.id} value={s.id}>{s.first_name} {s.last_name}</option>)}
+            </select>
+          </div>
+
+          {/* Split layout: Queue + Detail */}
+          <div className="flex gap-4 flex-1 min-h-0">
+            {/* Queue (360px) */}
+            <div className="flex-none w-[360px] bg-panel border border-line rounded-card flex flex-col min-h-0">
+              <div className="flex-none p-3 border-b border-line-3">
+                <SegmentedControl
+                  segments={[
+                    { value: 'needs', label: 'To grade', count: needsGrading.length },
+                    { value: 'overdue', label: 'Overdue', count: overdueAssignments.length },
+                    { value: 'all', label: 'All' },
+                  ]}
+                  value={queueFilter}
+                  onChange={setQueueFilter}
+                  className="w-full"
+                />
+              </div>
+              <div className="flex-1 overflow-y-auto p-2 space-y-1">
+                {queueItems.length === 0 ? (
+                  <div className="py-10 text-center text-[13px] text-faint">Nothing here</div>
+                ) : queueItems.map(a => {
+                  const stu = students.find(s => s.id === a.student_id)
+                  const sub = a.template?.subject_id ? getSubjectById(a.template.subject_id) : undefined
+                  const isSelected = a.id === (selectedAssignment?.id)
+                  return (
+                    <button
+                      key={a.id}
+                      onClick={() => setSelectedQueueId(a.id)}
+                      className={`w-full text-left p-3 rounded-[10px] transition-colors ${
+                        isSelected ? 'bg-accent-soft' : 'hover:bg-track'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="flex items-center gap-2 min-w-0">
+                          <SubjectDot color={(sub as any)?.color ?? '#8B7355'} size={8} />
+                          <span className="font-semibold text-[13.5px] text-ink truncate">
+                            {stu ? `${stu.first_name} ${stu.last_name}` : 'Student'}
+                          </span>
+                        </span>
+                        <Pill variant={statusToPillVariant(a.status)}>
+                          {a.status.replace('_', ' ')}
+                        </Pill>
+                      </div>
+                      <div className="text-[13px] text-ink-2 mt-1.5 truncate">{a.template?.name ?? '—'}</div>
+                      <div className="flex items-center justify-between mt-1.5 text-[11.5px] text-faint">
+                        <span>{sub?.name ?? '—'}</span>
+                        {a.due_date && <span className="font-mono">{new Date(a.due_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</span>}
+                      </div>
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+
+            {/* Detail panel */}
+            <div className="flex-1 bg-panel border border-line rounded-card flex flex-col min-h-0 overflow-y-auto">
+              {!selectedAssignment ? (
+                <div className="flex-1 flex items-center justify-center text-[13px] text-faint">
+                  Select an assignment from the queue
+                </div>
+              ) : (() => {
+                const stu = students.find(s => s.id === selectedAssignment.student_id)
+                const sub = selectedAssignment.template?.subject_id ? getSubjectById(selectedAssignment.template.subject_id) : undefined
+                const maxPts = selectedAssignment.template?.max_points ?? 100
+                return (
+                  <div className="p-6 space-y-5">
+                    {/* Header */}
+                    <div className="flex items-start justify-between gap-4">
+                      <div>
+                        <p className="text-[11px] font-semibold text-faint uppercase tracking-[.06em] mb-1">
+                          {sub?.name ?? 'Assignment'} · {stu ? `${stu.first_name} ${stu.last_name}` : ''}
+                        </p>
+                        <h2 className="text-[18px] font-bold text-ink tracking-[-0.015em] leading-snug">
+                          {selectedAssignment.template?.name ?? 'Assignment'}
+                        </h2>
+                      </div>
+                      <Pill variant={statusToPillVariant(selectedAssignment.status)}>
+                        {selectedAssignment.status.replace('_', ' ')}
+                      </Pill>
+                    </div>
+
+                    {/* Submission notes */}
+                    {selectedAssignment.submission_notes && (
+                      <div className="bg-panel-2 border border-line-2 rounded-card p-4">
+                        <p className="text-[11px] font-semibold text-faint uppercase tracking-[.05em] mb-2">Student notes</p>
+                        <p className="text-[13.5px] text-ink-2 leading-relaxed">{selectedAssignment.submission_notes}</p>
+                      </div>
+                    )}
+
+                    {/* Grade entry */}
+                    {!selectedAssignment.is_graded && (
+                      <div className="space-y-3">
+                        <div>
+                          <label className="block text-[11px] font-semibold text-faint uppercase tracking-[.06em] mb-1.5">Points earned</label>
+                          <div className="flex items-center gap-2">
+                            <input
+                              type="number"
+                              min={0}
+                              max={maxPts}
+                              value={gradeInput}
+                              onChange={e => setGradeInput(e.target.value)}
+                              placeholder="0"
+                              className="w-24 bg-field-bg border border-field-border rounded-field px-3 py-2 text-[14px] font-mono text-ink focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent"
+                            />
+                            <span className="text-[13px] text-muted">/ {maxPts}</span>
+                          </div>
+                          {/* Quick-score buttons */}
+                          <div className="flex gap-1.5 mt-2">
+                            {[100, 90, 80, 70].map(pct => (
+                              <button
+                                key={pct}
+                                onClick={() => setGradeInput(String(Math.round(maxPts * pct / 100)))}
+                                className="px-2.5 py-1 rounded-pill border border-btn-border bg-panel text-[11.5px] font-semibold text-ink-2 hover:bg-track transition-colors"
+                              >
+                                {pct}%
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                        <div>
+                          <label className="block text-[11px] font-semibold text-faint uppercase tracking-[.06em] mb-1.5">Feedback (optional)</label>
+                          <textarea
+                            value={feedbackInput}
+                            onChange={e => setFeedbackInput(e.target.value)}
+                            rows={3}
+                            placeholder="Leave feedback for the student…"
+                            className="w-full bg-field-bg border border-field-border rounded-field px-3 py-2 text-[13.5px] text-ink resize-none focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent placeholder:text-faintest"
+                          />
+                        </div>
+                        <button
+                          onClick={handleSaveGrade}
+                          disabled={!gradeInput}
+                          className="h-[36px] px-5 rounded-field bg-btn-primary-bg text-btn-primary-fg text-[13.5px] font-semibold disabled:opacity-40 hover:opacity-90 transition-opacity"
+                        >
+                          Save & next
+                        </button>
+                      </div>
+                    )}
+
+                    {/* Already graded */}
+                    {selectedAssignment.is_graded && (
+                      <div className="bg-pos-bg border border-pos-fg/20 rounded-card p-4">
+                        <p className="text-[11px] font-semibold text-faint uppercase tracking-[.05em] mb-1">Grade recorded</p>
+                        <p className="font-mono text-[22px] font-semibold text-pos-fg">
+                          {selectedAssignment.points_earned} / {maxPts}
+                          {selectedAssignment.letter_grade && (
+                            <span className="ml-2 text-[16px]">({selectedAssignment.letter_grade})</span>
+                          )}
+                        </p>
+                        {selectedAssignment.teacher_feedback && (
+                          <p className="text-[13px] text-ink-2 mt-2 leading-relaxed">{selectedAssignment.teacher_feedback}</p>
+                        )}
+                        <button
+                          onClick={() => handleGradeAssignment(selectedAssignment)}
+                          className="mt-3 h-[30px] px-3 border border-btn-border bg-panel rounded-[7px] text-[12.5px] font-semibold text-ink hover:bg-track transition-colors"
+                        >
+                          Edit grade
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                )
+              })()}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ════════════════════════════════════════
+          STUDENT VIEW
+      ════════════════════════════════════════ */}
+      {!loading && !isAdmin && (
+        <>
+          {/* Toolbar */}
+          <div className="flex items-center gap-3 mb-4">
+            <div className="relative flex-1 max-w-[260px]">
+              <svg className="absolute left-3 top-1/2 -translate-y-1/2 text-faint" width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+                <circle cx="11" cy="11" r="8" /><path d="m21 21-4.35-4.35" />
+              </svg>
+              <input
+                type="text"
+                placeholder="Search assignments…"
+                value={searchTerm}
+                onChange={e => setSearchTerm(e.target.value)}
+                className="w-full pl-8 pr-3 py-2 bg-field-bg border border-field-border rounded-field text-[13px] text-ink placeholder:text-faintest focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent"
+              />
+            </div>
+            <select
+              value={selectedSubject ?? ''}
+              onChange={e => setSelectedSubject(e.target.value ? parseInt(e.target.value) : null)}
+              className="h-[34px] px-3 bg-field-bg border border-field-border rounded-field text-[13px] text-ink"
+            >
+              <option value="">All Subjects</option>
+              {subjects.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+            </select>
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-4">
+            {filteredStudentAssignments.length === 0 ? (
+              <div className="col-span-full py-14 text-center">
+                <p className="text-[15px] font-semibold text-ink-2 mb-1">
+                  {searchTerm || selectedSubject ? 'No assignments match your filters' : 'No assignments yet'}
+                </p>
+                <p className="text-[13px] text-faint">
+                  {searchTerm || selectedSubject ? 'Try clearing your filters.' : 'Your assigned work will appear here.'}
+                </p>
+              </div>
+            ) : filteredStudentAssignments.map(assignment => (
+              <StudentAssignmentCard
+                key={assignment.id}
+                assignment={assignment}
+                subject={assignment.template?.subject_id ? getSubjectById(assignment.template.subject_id) : undefined}
+                isAdmin={isAdmin}
+                onStart={handleStartAssignment}
+                onComplete={handleCompleteAssignment}
+                onArchive={handleArchiveStudentAssignment}
+                onDelete={handleDeleteStudentAssignment}
+              />
+            ))}
+          </div>
+        </>
+      )}
+
+      {/* ── Modals ── */}
 
       {/* Quick Assign Modal */}
       {showQuickAssignModal && (

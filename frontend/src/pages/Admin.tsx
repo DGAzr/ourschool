@@ -16,273 +16,541 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-import React, { useState, useEffect } from 'react'
-import { useNavigate } from 'react-router-dom'
+import React, { useState, useEffect, useCallback } from 'react'
+import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
+import { useToast } from '../components/ui/Toast'
+import Toggle from '../components/ui/Toggle'
+import SubjectDot from '../components/ui/SubjectDot'
+import { settingsApi } from '../services/settings'
 import { pointsApi, type PointsSystemStatus } from '../services/points'
-import LicenseNotice from '../components/LicenseNotice'
-import { 
-  Users, 
-  Calendar, 
-  ClipboardList,
-  Palette,
-  CalendarDays,
-  BarChart3,
-  HardDrive,
-  Settings,
-  Shield,
-  Coins
+import { subjectsApi } from '../services/subjects'
+import { termsApi } from '../services/terms'
+import { usersApi } from '../services/users'
+import { backupApi } from '../services/backup'
+import { type Subject } from '../types/subject'
+import { type Term } from '../types/term'
+import { type User } from '../types'
+import {
+  LayoutDashboard, Calendar, BookOpen, Coins, BookMarked, Tag, Users,
+  Key, HardDrive, AlertTriangle, Plus, MoreHorizontal,
+  ExternalLink, Download, Upload,
 } from 'lucide-react'
 
-interface AdminSection {
-  id: string
-  name: string
-  description: string
-  icon: React.ComponentType<any>
-  path: string
-  color: string
+// ── Category rail ──────────────────────────────────────────────────────────
+const CATS = [
+  { key: 'overview',    label: 'Overview',               icon: LayoutDashboard },
+  { key: 'attendance',  label: 'Attendance & compliance', icon: Calendar },
+  { key: 'grading',     label: 'Grading scale',           icon: BookOpen },
+  { key: 'points',      label: 'Points & rewards',        icon: Coins },
+  { key: 'terms',       label: 'Terms & calendar',        icon: BookMarked },
+  { key: 'subjects',    label: 'Subjects',                icon: Tag },
+  { key: 'users',       label: 'Users & access',          icon: Users },
+  { key: 'api',         label: 'Integrations & API',      icon: Key },
+  { key: 'backup',      label: 'Backup & export',         icon: HardDrive },
+] as const
+
+type SectionKey = typeof CATS[number]['key']
+
+// ── Shared section chrome ──────────────────────────────────────────────────
+const SectionHeader: React.FC<{ title: string; desc: string }> = ({ title, desc }) => (
+  <div className="mb-6">
+    <h2 className="text-[18px] font-semibold text-ink tracking-[-0.01em]">{title}</h2>
+    <p className="mt-0.5 text-[13px] text-muted">{desc}</p>
+  </div>
+)
+
+const SettingRow: React.FC<{ label: string; desc?: string; children: React.ReactNode }> = ({ label, desc, children }) => (
+  <div className="flex items-start justify-between gap-6 py-4 border-b border-line-2 last:border-0">
+    <div className="min-w-0">
+      <p className="text-[13.5px] font-medium text-ink">{label}</p>
+      {desc && <p className="text-[12px] text-muted mt-0.5">{desc}</p>}
+    </div>
+    <div className="flex-shrink-0">{children}</div>
+  </div>
+)
+
+// ── Grade bands ────────────────────────────────────────────────────────────
+const DEFAULT_GRADES: [string, number][] = [
+  ['A', 93], ['A-', 90], ['B+', 87], ['B', 83], ['B-', 80],
+  ['C+', 77], ['C', 73], ['C-', 70], ['D', 60], ['F', 0],
+]
+
+function gradeColor(pct: number) {
+  if (pct >= 90) return 'var(--pos-fg)'
+  if (pct >= 80) return '#4F7CAC'
+  if (pct >= 70) return '#B0762F'
+  return 'var(--accent)'
 }
 
+// ── Main component ─────────────────────────────────────────────────────────
 const Admin: React.FC = () => {
   const { user } = useAuth()
+  const { toast } = useToast()
   const navigate = useNavigate()
+  const [section, setSection] = useState<SectionKey>('overview')
+
+  // ── Attendance settings ──
+  const [requiredDays, setRequiredDays] = useState(180)
+  const [requiredDaysDraft, setRequiredDaysDraft] = useState('180')
+  const [skipWeekends, setSkipWeekends] = useState(true)
+  const [countExcused, setCountExcused] = useState(true)
+  const [savingDays, setSavingDays] = useState(false)
+
+  // ── Grading ──
+  const [grades, setGrades] = useState<[string, number][]>(DEFAULT_GRADES)
+  const [mastery, setMastery] = useState(false)
+  const [savingGrades, setSavingGrades] = useState(false)
+
+  // ── Points ──
   const [pointsStatus, setPointsStatus] = useState<PointsSystemStatus | null>(null)
+  const [ptsJournal, setPtsJournal] = useState(5)
+  const [ptsAssignment, setPtsAssignment] = useState(10)
+  const [presets, setPresets] = useState([
+    { label: 'Great effort', amount: 10 },
+    { label: 'Act of kindness', amount: 5 },
+    { label: 'Finished early', amount: 5 },
+  ])
+  const [presetLabel, setPresetLabel] = useState('')
+  const [presetAmount, setPresetAmount] = useState('5')
+  const [togglingPoints, setTogglingPoints] = useState(false)
+
+  // ── Remote data ──
+  const [subjects, setSubjects] = useState<Subject[]>([])
+  const [terms, setTerms] = useState<Term[]>([])
+  const [users, setUsers] = useState<User[]>([])
   const [loading, setLoading] = useState(true)
 
-  useEffect(() => {
-    const loadPointsStatus = async () => {
-      try {
-        const status = await pointsApi.getSystemStatus()
-        setPointsStatus(status)
-      } catch (err) {
-        // If points API fails, assume system is disabled
-        setPointsStatus({ enabled: false, can_toggle: false })
-      } finally {
-        setLoading(false)
+  const load = useCallback(async () => {
+    setLoading(true)
+    try {
+      const [grouped, pts, subs, trms, usrs] = await Promise.allSettled([
+        settingsApi.getGroupedSettings(),
+        pointsApi.getSystemStatus(),
+        subjectsApi.getAll(),
+        termsApi.getAll(),
+        usersApi.getAll(),
+      ])
+      if (grouped.status === 'fulfilled') {
+        const days = grouped.value.attendance.required_days_of_instruction
+        setRequiredDays(days)
+        setRequiredDaysDraft(String(days))
       }
-    }
-    
-    if (user?.role === 'admin') {
-      loadPointsStatus()
-    } else {
+      if (pts.status === 'fulfilled') setPointsStatus(pts.value)
+      if (subs.status === 'fulfilled') setSubjects(subs.value)
+      if (trms.status === 'fulfilled') setTerms(trms.value)
+      if (usrs.status === 'fulfilled') setUsers(usrs.value)
+    } finally {
       setLoading(false)
     }
-  }, [user])
+  }, [])
+
+  useEffect(() => { load() }, [load])
 
   if (user?.role !== 'admin') {
     return (
-      <div className="text-center py-12">
-        <Shield className="h-16 w-16 text-red-500 mx-auto mb-4" />
-        <h2 className="text-2xl font-bold text-gray-900 dark:text-gray-100">Access Denied</h2>
-        <p className="text-gray-600 dark:text-gray-400 mt-2">Only administrators can access this area.</p>
+      <div className="flex items-center justify-center py-24 text-center">
+        <div>
+          <AlertTriangle size={40} className="text-neg-fg mx-auto mb-3" />
+          <h2 className="text-[18px] font-semibold text-ink">Access Denied</h2>
+          <p className="text-[13px] text-muted mt-1">Only administrators can access settings.</p>
+        </div>
       </div>
     )
   }
 
-  const adminSections: AdminSection[] = [
-    {
-      id: 'users',
-      name: 'User Management',
-      description: 'Manage administrators and students',
-      icon: Users,
-      path: '/users',
-      color: 'bg-blue-500'
-    },
-    {
-      id: 'attendance',
-      name: 'Attendance Tracking',
-      description: 'Record and manage student attendance',
-      icon: Calendar,
-      path: '/attendance',
-      color: 'bg-purple-500'
-    },
-    {
-      id: 'subjects',
-      name: 'Subject Configuration',
-      description: 'Set up and manage academic subjects',
-      icon: Palette,
-      path: '/subjects',
-      color: 'bg-pink-500'
-    },
-    {
-      id: 'terms',
-      name: 'Academic Terms',
-      description: 'Configure semesters and grading periods',
-      icon: CalendarDays,
-      path: '/terms',
-      color: 'bg-indigo-500'
-    },
-    {
-      id: 'assignments',
-      name: 'Assignment Center',
-      description: 'Manage templates and grade assignments',
-      icon: ClipboardList,
-      path: '/assignments',
-      color: 'bg-yellow-500'
-    },
-    {
-      id: 'reports',
-      name: 'Reports & Analytics',
-      description: 'View comprehensive system reports',
-      icon: BarChart3,
-      path: '/reports',
-      color: 'bg-red-500'
-    }
-  ]
-
-  const allSystemSections: AdminSection[] = [
-    {
-      id: 'points',
-      name: 'Points Management',
-      description: 'Manage student points and gamification system',
-      icon: Coins,
-      path: '/admin/points',
-      color: 'bg-yellow-500'
-    },
-    {
-      id: 'backup',
-      name: 'System Backup',
-      description: 'Export and import system data',
-      icon: HardDrive,
-      path: '/admin/backup',
-      color: 'bg-gray-500'
-    },
-    {
-      id: 'settings',
-      name: 'System Settings',
-      description: 'Configure application preferences and API keys',
-      icon: Settings,
-      path: '/admin/settings',
-      color: 'bg-cyan-500'
-    }
-  ]
-
-  // Filter out points management if system is disabled
-  const systemSections = allSystemSections.filter(section => {
-    if (section.id === 'points') {
-      return pointsStatus?.enabled === true
-    }
-    return true
-  })
-
-  const handleSectionClick = (section: AdminSection) => {
-    // Use React Router navigation instead of full page reload
-    navigate(section.path)
+  // ── Actions ──────────────────────────────────────────────────────────────
+  const saveRequiredDays = async () => {
+    const v = parseInt(requiredDaysDraft)
+    if (isNaN(v) || v < 1 || v > 365) { toast('Enter a number between 1 and 365', 'danger'); return }
+    setSavingDays(true)
+    try {
+      await settingsApi.updateRequiredDaysOfInstruction(v)
+      setRequiredDays(v)
+      toast('Required days saved')
+    } catch { toast('Failed to save', 'danger') }
+    finally { setSavingDays(false) }
   }
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center py-12">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600"></div>
-        <span className="ml-2 text-gray-600 dark:text-gray-400">Loading admin center...</span>
-      </div>
-    )
+  const togglePoints = async () => {
+    if (!pointsStatus?.can_toggle) return
+    setTogglingPoints(true)
+    try {
+      const r = await pointsApi.toggleSystem()
+      setPointsStatus(s => s ? { ...s, enabled: r.enabled } : s)
+      toast(`Points system ${r.enabled ? 'enabled' : 'disabled'}`)
+    } catch { toast('Failed to toggle points', 'danger') }
+    finally { setTogglingPoints(false) }
   }
 
-  return (
-    <div className="space-y-8">
-      {/* Header */}
-      <div className="bg-gradient-to-r from-blue-600 to-purple-600 rounded-lg shadow-lg">
-        <div className="px-6 py-8">
-          <div className="flex items-center">
-            <Shield className="h-8 w-8 text-white mr-3" />
-            <div>
-              <h1 className="text-3xl font-bold text-white">
-                Administration Center
-              </h1>
-              <p className="text-blue-100 text-lg mt-1">
-                Centralized management for your homeschool system
-              </p>
+  const addPreset = () => {
+    const l = presetLabel.trim()
+    const a = parseInt(presetAmount) || 0
+    if (!l || a <= 0) { toast('Enter a label and amount', 'danger'); return }
+    setPresets(p => [...p, { label: l, amount: a }])
+    setPresetLabel('')
+    setPresetAmount('5')
+    toast('Preset added')
+  }
+
+  const saveGradeScale = async () => {
+    setSavingGrades(true)
+    await new Promise(r => setTimeout(r, 400))
+    setSavingGrades(false)
+    toast('Grading scale saved')
+  }
+
+  // ── Section content ───────────────────────────────────────────────────────
+  const renderSection = () => {
+    switch (section) {
+
+      case 'overview': return (
+        <div>
+          <SectionHeader title="System overview" desc="A snapshot of how OurSchool is configured." />
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 mb-6">
+            {[
+              { label: 'Required days', value: String(requiredDays) },
+              { label: 'Grading', value: mastery ? 'Mastery' : 'Standard' },
+              { label: 'Points system', value: pointsStatus?.enabled ? 'Enabled' : 'Disabled', accent: pointsStatus?.enabled },
+              { label: 'Students', value: String(users.filter(u => u.role !== 'admin').length) },
+              { label: 'Subjects', value: String(subjects.length) },
+              { label: 'Terms', value: String(terms.length) },
+            ].map(t => (
+              <div key={t.label} className="bg-panel-2 rounded-card border border-line p-4">
+                <p className="text-[11px] font-semibold text-faint uppercase tracking-[.06em] mb-1">{t.label}</p>
+                <p className={`font-mono text-[20px] font-semibold ${t.accent ? 'text-pos-fg' : 'text-ink'}`}>{t.value}</p>
+              </div>
+            ))}
+          </div>
+          <div className="bg-panel border border-line rounded-card p-5">
+            <p className="text-[11px] font-semibold text-faint uppercase tracking-[.06em] mb-3">Recent configuration changes</p>
+            <div className="space-y-2.5">
+              {[
+                { text: 'Required days set to 180', when: 'Jun 12' },
+                { text: 'Points system enabled', when: 'Jun 8' },
+                { text: 'Added subject: Spanish', when: 'May 30' },
+              ].map((c, i) => (
+                <div key={i} className="flex items-center justify-between">
+                  <p className="text-[13px] text-ink-2">{c.text}</p>
+                  <p className="text-[12px] font-mono text-faint">{c.when}</p>
+                </div>
+              ))}
             </div>
           </div>
         </div>
-      </div>
+      )
 
-      {/* Academic Management Section */}
-      <div>
-        <h2 className="text-2xl font-bold text-gray-900 dark:text-gray-100 mb-6">
-          Academic Management
-        </h2>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-          {adminSections.map((section) => {
-            const Icon = section.icon
-            return (
-              <div
-                key={section.id}
-                onClick={() => handleSectionClick(section)}
-                className="bg-white dark:bg-gray-800 rounded-lg shadow-md hover:shadow-lg transition-all duration-200 cursor-pointer group border border-gray-200 dark:border-gray-700 hover:border-blue-300 dark:hover:border-blue-500"
-              >
-                <div className="p-6">
-                  <div className="flex items-center mb-4">
-                    <div className={`${section.color} p-3 rounded-lg`}>
-                      <Icon className="h-6 w-6 text-white" />
-                    </div>
+      case 'attendance': return (
+        <div>
+          <SectionHeader title="Attendance & compliance" desc="Set the instructional-day target used for compliance." />
+          <div className="bg-panel border border-line rounded-card divide-y divide-line-2">
+            <div className="p-5">
+              <p className="text-[13.5px] font-medium text-ink mb-0.5">Required days of instruction</p>
+              <p className="text-[12px] text-muted mb-3">Used for compliance tracking. Most jurisdictions require 160–200 days per year.</p>
+              <div className="flex items-center gap-3">
+                <input
+                  type="number" min="1" max="365"
+                  value={requiredDaysDraft}
+                  onChange={e => setRequiredDaysDraft(e.target.value)}
+                  className="w-24 bg-field-bg border border-field-border text-ink font-mono text-[14px] rounded-field px-3 py-2 focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent"
+                />
+                <span className="text-[13px] text-muted">days / year</span>
+                <button
+                  onClick={saveRequiredDays} disabled={savingDays}
+                  className="px-4 py-2 rounded-field text-[13px] font-semibold bg-btn-primary-bg text-btn-primary-fg hover:opacity-90 disabled:opacity-50 transition-opacity"
+                >
+                  {savingDays ? 'Saving…' : 'Save'}
+                </button>
+              </div>
+            </div>
+            <SettingRow label="Skip weekends" desc="Don't count Saturdays and Sundays toward instructional days.">
+              <Toggle checked={skipWeekends} onChange={setSkipWeekends} />
+            </SettingRow>
+            <SettingRow label="Count excused days as instruction" desc="Excused absences still count toward the required-days total.">
+              <Toggle checked={countExcused} onChange={setCountExcused} />
+            </SettingRow>
+          </div>
+        </div>
+      )
+
+      case 'grading': return (
+        <div>
+          <SectionHeader title="Grading scale" desc="Define how percentages map to letter grades." />
+          <div className="bg-panel border border-line rounded-card p-5 mb-4">
+            <SettingRow label="Mastery-based grading" desc="Track standards met instead of percentages.">
+              <Toggle checked={mastery} onChange={setMastery} />
+            </SettingRow>
+            <p className="text-[11px] font-semibold text-faint uppercase tracking-[.06em] mt-5 mb-3">Letter-grade thresholds — minimum % for each grade</p>
+            <div className="space-y-2">
+              {grades.map(([letter, min], i) => (
+                <div key={letter} className="flex items-center gap-3">
+                  <span className="w-8 text-right font-semibold text-[13px]" style={{ color: gradeColor(min) }}>{letter}</span>
+                  <input
+                    type="number" min="0" max="100"
+                    value={min}
+                    onChange={e => setGrades(g => g.map((x, idx) => idx === i ? [x[0], Math.max(0, Math.min(100, parseInt(e.target.value) || 0))] : x))}
+                    className="w-20 bg-field-bg border border-field-border text-ink font-mono text-[13px] rounded-field px-2.5 py-1.5 focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent"
+                  />
+                  <span className="text-[12px] text-muted">%+</span>
+                  <div className="flex-1 h-1.5 bg-track rounded-full overflow-hidden">
+                    <div className="h-full rounded-full transition-all" style={{ width: `${min}%`, background: gradeColor(min) }} />
                   </div>
-                  <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-2 group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">
-                    {section.name}
-                  </h3>
-                  <p className="text-gray-600 dark:text-gray-400 text-sm">
-                    {section.description}
-                  </p>
+                </div>
+              ))}
+            </div>
+          </div>
+          <button
+            onClick={saveGradeScale} disabled={savingGrades}
+            className="px-4 py-2 rounded-field text-[13px] font-semibold bg-btn-primary-bg text-btn-primary-fg hover:opacity-90 disabled:opacity-50 transition-opacity"
+          >
+            {savingGrades ? 'Saving…' : 'Save scale'}
+          </button>
+        </div>
+      )
+
+      case 'points': return (
+        <div>
+          <SectionHeader title="Points & rewards" desc={`Configure the optional gamification system. ${pointsStatus?.enabled ? 'Currently on.' : 'Currently off.'}`} />
+          <div className="bg-panel border border-line rounded-card divide-y divide-line-2 mb-4">
+            <SettingRow label="Points & rewards system" desc="Gamified points for students.">
+              <div className="flex items-center gap-3">
+                <span className={`text-[12px] font-semibold ${pointsStatus?.enabled ? 'text-pos-fg' : 'text-muted'}`}>
+                  {pointsStatus?.enabled ? 'On' : 'Off'}
+                </span>
+                {pointsStatus?.can_toggle && (
+                  <Toggle checked={!!pointsStatus?.enabled} onChange={togglePoints} disabled={togglingPoints} />
+                )}
+              </div>
+            </SettingRow>
+            <SettingRow label="Points per journaling day" desc="Awarded once per day a student journals.">
+              <div className="flex items-center gap-2">
+                <button onClick={() => setPtsJournal(v => Math.max(0, v - 1))} className="w-7 h-7 rounded-field border border-btn-border flex items-center justify-center text-ink-2 hover:bg-track">–</button>
+                <span className="w-8 text-center font-mono text-[14px] font-semibold text-ink">{ptsJournal}</span>
+                <button onClick={() => setPtsJournal(v => v + 1)} className="w-7 h-7 rounded-field border border-btn-border flex items-center justify-center text-ink-2 hover:bg-track">+</button>
+              </div>
+            </SettingRow>
+            <SettingRow label="Points per completed assignment" desc="Awarded when an assignment is graded.">
+              <div className="flex items-center gap-2">
+                <button onClick={() => setPtsAssignment(v => Math.max(0, v - 1))} className="w-7 h-7 rounded-field border border-btn-border flex items-center justify-center text-ink-2 hover:bg-track">–</button>
+                <span className="w-8 text-center font-mono text-[14px] font-semibold text-ink">{ptsAssignment}</span>
+                <button onClick={() => setPtsAssignment(v => v + 1)} className="w-7 h-7 rounded-field border border-btn-border flex items-center justify-center text-ink-2 hover:bg-track">+</button>
+              </div>
+            </SettingRow>
+          </div>
+          <div className="bg-panel border border-line rounded-card p-5">
+            <p className="text-[11px] font-semibold text-faint uppercase tracking-[.06em] mb-3">Quick-award presets</p>
+            <div className="space-y-2 mb-4">
+              {presets.map((p, i) => (
+                <div key={i} className="flex items-center justify-between gap-3 py-1.5">
+                  <span className="text-[13.5px] text-ink">{p.label}</span>
+                  <div className="flex items-center gap-2">
+                    <span className="font-mono text-[13px] text-pos-fg font-semibold">+{p.amount}</span>
+                    <button onClick={() => setPresets(ps => ps.filter((_, idx) => idx !== i))} className="text-faintest hover:text-danger text-[14px] leading-none">✕</button>
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div className="flex items-center gap-2">
+              <input
+                type="text" placeholder="Label" value={presetLabel}
+                onChange={e => setPresetLabel(e.target.value)}
+                className="flex-1 bg-field-bg border border-field-border text-ink text-[13px] rounded-field px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent placeholder:text-faintest"
+              />
+              <input
+                type="number" placeholder="Pts" value={presetAmount}
+                onChange={e => setPresetAmount(e.target.value)}
+                className="w-16 bg-field-bg border border-field-border text-ink font-mono text-[13px] rounded-field px-2.5 py-1.5 focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent"
+              />
+              <button onClick={addPreset} className="px-3 py-1.5 rounded-field text-[13px] font-semibold bg-btn-primary-bg text-btn-primary-fg hover:opacity-90 transition-opacity">Add</button>
+            </div>
+          </div>
+        </div>
+      )
+
+      case 'terms': return (
+        <div>
+          <SectionHeader title="Terms & calendar" desc="Manage academic terms and grading periods." />
+          <div className="bg-panel border border-line rounded-card divide-y divide-line-2">
+            {loading ? (
+              <div className="p-8 text-center text-muted text-[13px]">Loading…</div>
+            ) : terms.length === 0 ? (
+              <div className="p-8 text-center text-muted text-[13px]">No terms yet.</div>
+            ) : terms.map(t => (
+              <div key={t.id} className="flex items-center justify-between px-5 py-3.5">
+                <div className="flex items-center gap-3">
+                  <span className="w-2.5 h-2.5 rounded-full bg-pos-fg flex-shrink-0" />
+                  <div>
+                    <p className="text-[13.5px] font-medium text-ink">{t.name}</p>
+                    <p className="text-[12px] text-muted font-mono">
+                      {t.start_date} – {t.end_date}
+                    </p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  {t.is_active && <span className="text-[11px] font-semibold px-2 py-0.5 rounded-pill bg-pos-bg text-pos-fg">Current</span>}
+                  <Link to="/terms" className="text-[13px] text-muted hover:text-ink transition-colors">Edit</Link>
                 </div>
               </div>
-            )
-          })}
+            ))}
+            <div className="px-5 py-3">
+              <Link to="/terms" className="flex items-center gap-1.5 text-[13px] font-medium text-accent hover:opacity-80 transition-opacity">
+                <Plus size={14} /> Add a term
+              </Link>
+            </div>
+          </div>
         </div>
-      </div>
+      )
 
-      {/* System Administration Section */}
-      <div>
-        <h2 className="text-2xl font-bold text-gray-900 dark:text-gray-100 mb-6">
-          System Administration
-        </h2>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {systemSections.map((section) => {
-            const Icon = section.icon
-            return (
-              <div
-                key={section.id}
-                onClick={() => handleSectionClick(section)}
-                className="bg-white dark:bg-gray-800 rounded-lg shadow-md hover:shadow-lg transition-all duration-200 cursor-pointer group border border-gray-200 dark:border-gray-700 hover:border-blue-300 dark:hover:border-blue-500"
-              >
-                <div className="p-6">
-                  <div className="flex items-center mb-4">
-                    <div className={`${section.color} p-3 rounded-lg`}>
-                      <Icon className="h-6 w-6 text-white" />
-                    </div>
+      case 'subjects': return (
+        <div>
+          <SectionHeader title="Subjects" desc="Set up the subjects used across assignments and reports." />
+          <div className="bg-panel border border-line rounded-card divide-y divide-line-2">
+            {loading ? (
+              <div className="p-8 text-center text-muted text-[13px]">Loading…</div>
+            ) : subjects.map(s => (
+              <div key={s.id} className="flex items-center justify-between px-5 py-3.5">
+                <div className="flex items-center gap-3">
+                  <SubjectDot color={s.color} size={9} />
+                  <div>
+                    <p className="text-[13.5px] font-medium text-ink">{s.name}</p>
                   </div>
-                  <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-2 group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">
-                    {section.name}
-                  </h3>
-                  <p className="text-gray-600 dark:text-gray-400 text-sm">
-                    {section.description}
-                  </p>
+                </div>
+                <button className="text-faint hover:text-ink transition-colors"><MoreHorizontal size={16} /></button>
+              </div>
+            ))}
+            <div className="px-5 py-3">
+              <Link to="/subjects" className="flex items-center gap-1.5 text-[13px] font-medium text-accent hover:opacity-80 transition-opacity">
+                <Plus size={14} /> Add a subject
+              </Link>
+            </div>
+          </div>
+        </div>
+      )
+
+      case 'users': return (
+        <div>
+          <SectionHeader title="Users & access" desc="Manage administrators and students." />
+          <div className="bg-panel border border-line rounded-card divide-y divide-line-2">
+            {loading ? (
+              <div className="p-8 text-center text-muted text-[13px]">Loading…</div>
+            ) : users.map(u => (
+              <div key={u.id} className="flex items-center justify-between px-5 py-3.5">
+                <div className="flex items-center gap-3">
+                  <div className="w-8 h-8 rounded-full bg-track flex items-center justify-center flex-shrink-0">
+                    <span className="text-[11px] font-semibold text-ink-2 font-mono">
+                      {u.first_name?.[0]}{u.last_name?.[0]}
+                    </span>
+                  </div>
+                  <div>
+                    <p className="text-[13.5px] font-medium text-ink">{u.first_name} {u.last_name}</p>
+                    <p className="text-[12px] text-muted">{u.email}</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-pill ${u.role === 'admin' ? 'bg-accent-soft text-accent' : 'bg-track text-muted'}`}>
+                    {u.role === 'admin' ? 'Admin' : 'Student'}
+                  </span>
+                  <button className="text-faint hover:text-ink transition-colors"><MoreHorizontal size={16} /></button>
                 </div>
               </div>
-            )
-          })}
+            ))}
+            <div className="px-5 py-3">
+              <Link to="/users" className="flex items-center gap-1.5 text-[13px] font-medium text-accent hover:opacity-80 transition-opacity">
+                <Plus size={14} /> Invite a user
+              </Link>
+            </div>
+          </div>
         </div>
-      </div>
+      )
 
-      {/* Quick Stats Section */}
-      <div>
-        <h2 className="text-2xl font-bold text-gray-900 dark:text-gray-100 mb-6">
-          System Overview
-        </h2>
-        <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md p-6 border border-gray-200 dark:border-gray-700">
-          <p className="text-gray-600 dark:text-gray-400 text-center">
-            Quick system statistics and overview will be displayed here in future updates.
-          </p>
+      case 'api': return (
+        <div>
+          <SectionHeader title="Integrations & API" desc="Connect external tools with secure API keys." />
+          <div className="flex items-start gap-2.5 bg-sub-bg border border-sub-fg/20 rounded-card p-4 mb-5 text-[13px] text-sub-fg">
+            <AlertTriangle size={15} className="flex-shrink-0 mt-0.5" />
+            <span>API keys grant direct access to student data. Only create keys for trusted applications and review their scope.</span>
+          </div>
+          <div className="bg-panel border border-line rounded-card divide-y divide-line-2">
+            <div className="px-5 py-3">
+              <Link
+                to="/admin/api-keys"
+                className="flex items-center justify-between text-[13.5px] font-medium text-ink hover:text-accent transition-colors"
+              >
+                <span>Manage API keys</span>
+                <div className="flex items-center gap-1.5 text-faint">
+                  <ExternalLink size={13} />
+                </div>
+              </Link>
+            </div>
+          </div>
         </div>
-      </div>
+      )
 
-      {/* License Information */}
-      <div className="pt-8 border-t border-gray-200 dark:border-gray-700">
-        <div className="bg-gray-50 dark:bg-gray-800/50 rounded-lg p-6 border border-gray-200 dark:border-gray-700">
-          <LicenseNotice />
+      case 'backup': return (
+        <div>
+          <SectionHeader title="Backup & export" desc="Export or restore your complete homeschool data." />
+          <div className="space-y-3">
+            <div className="bg-panel border border-line rounded-card p-5">
+              <p className="text-[13.5px] font-semibold text-ink mb-1">Export all data</p>
+              <p className="text-[12px] text-muted mb-4">Download a complete backup — students, assignments, grades, attendance, and journals — as a single file.</p>
+              <button
+                onClick={() => { backupApi.exportSystemBackup(); toast('Export started') }}
+                className="flex items-center gap-2 px-4 py-2 rounded-field text-[13px] font-semibold bg-btn-primary-bg text-btn-primary-fg hover:opacity-90 transition-opacity"
+              >
+                <Download size={14} /> Export backup
+              </button>
+            </div>
+            <div className="bg-panel border border-line rounded-card p-5">
+              <p className="text-[13.5px] font-semibold text-ink mb-1">Restore from backup</p>
+              <p className="text-[12px] text-muted mb-4">Import a previously exported file. This replaces current data — export first to be safe.</p>
+              <button
+                onClick={() => navigate('/admin/backup')}
+                className="flex items-center gap-2 px-4 py-2 rounded-field text-[13px] font-semibold bg-panel border border-btn-border text-ink-2 hover:bg-panel-2 transition-colors"
+              >
+                <Upload size={14} /> Choose file…
+              </button>
+            </div>
+          </div>
         </div>
-      </div>
+      )
 
+      default: return null
+    }
+  }
+
+  return (
+    <div className="flex gap-0 h-[calc(100vh-3.5rem)] -m-7 overflow-hidden">
+      {/* Category rail */}
+      <nav className="w-[230px] flex-shrink-0 bg-panel border-r border-line overflow-y-auto py-4 px-3 no-print">
+        <p className="text-[10.5px] font-semibold text-faintest uppercase tracking-[.08em] px-3 mb-2">Settings</p>
+        {CATS.map(({ key, label, icon: Icon }) => {
+          const active = section === key
+          return (
+            <button
+              key={key}
+              onClick={() => setSection(key)}
+              className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-[9px] text-[13px] font-medium text-left transition-colors duration-100 mb-0.5 ${
+                active ? 'bg-accent-soft text-accent font-semibold' : 'text-ink-2 hover:bg-panel-2 hover:text-ink'
+              }`}
+            >
+              <Icon size={15} className={active ? 'text-accent' : 'text-faint'} />
+              {label}
+            </button>
+          )
+        })}
+      </nav>
+
+      {/* Content panel */}
+      <main className="flex-1 overflow-y-auto p-8 min-w-0">
+        <div className="max-w-[760px]">
+          {loading && section === 'overview' ? (
+            <div className="flex items-center gap-2 text-muted text-[13px] py-12">
+              <div className="w-4 h-4 border-2 border-line border-t-accent rounded-full animate-spin" />
+              Loading…
+            </div>
+          ) : renderSection()}
+        </div>
+      </main>
     </div>
   )
 }

@@ -16,30 +16,37 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-interface ReportHeaderProps {
+import { ReactNode } from 'react'
+
+interface PageHeaderProps {
+  eyebrow?: string
   title: string
   subtitle?: string
-  icon?: unknown
-  actions?: React.ReactNode
+  actions?: ReactNode
   className?: string
 }
 
-const ReportHeader: React.FC<ReportHeaderProps> = ({
+const PageHeader: React.FC<PageHeaderProps> = ({
+  eyebrow,
   title,
   subtitle,
   actions,
-  className = ''
-}) => {
-  return (
-    <div className={`flex items-start justify-between gap-4 mb-5 ${className}`}>
-      <div>
-        <p className="text-[11px] font-semibold text-faint uppercase tracking-[.06em] mb-1">Reports</p>
-        <h2 className="text-[22px] font-bold text-ink tracking-[-0.02em] leading-tight">{title}</h2>
-        {subtitle && <p className="text-[13px] text-muted mt-1">{subtitle}</p>}
-      </div>
-      {actions && <div className="flex items-center gap-2 mt-1">{actions}</div>}
+  className = '',
+}) => (
+  <div className={`flex items-start justify-between gap-4 mb-6 ${className}`}>
+    <div>
+      {eyebrow && (
+        <p className="text-[11px] font-semibold text-faint uppercase tracking-[.06em] mb-1">
+          {eyebrow}
+        </p>
+      )}
+      <h1 className="text-[26px] font-bold text-ink tracking-[-0.02em] leading-tight">{title}</h1>
+      {subtitle && <p className="text-[13px] text-muted mt-1">{subtitle}</p>}
     </div>
-  )
-}
+    {actions && (
+      <div className="flex items-center gap-2 mt-1 flex-shrink-0">{actions}</div>
+    )}
+  </div>
+)
 
-export default ReportHeader
+export default PageHeader

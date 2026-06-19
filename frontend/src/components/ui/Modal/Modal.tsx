@@ -113,35 +113,32 @@ const Modal: React.FC<ModalProps> = ({
   }
 
   return (
-    <div className="fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div 
-        className="fixed inset-0" 
+    <div className="fixed inset-0 bg-overlay flex items-center justify-center z-50 p-4">
+      <div
+        className="fixed inset-0"
         onClick={handleOverlayClick}
         aria-hidden="true"
       />
-      <div 
-        className={`bg-white dark:bg-gray-800 rounded-lg ${MODAL_SIZES[size]} w-full max-h-[90vh] overflow-y-auto relative z-10 shadow-xl`}
+      <div
+        className={`bg-panel border border-line rounded-card ${MODAL_SIZES[size]} w-full max-h-[90vh] overflow-y-auto relative z-10 shadow-float`}
         role="dialog"
         aria-modal="true"
-        aria-labelledby={title ? "modal-title" : undefined}
+        aria-labelledby={title ? 'modal-title' : undefined}
       >
         {(title || showCloseButton) && (
-          <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-gray-700">
+          <div className="flex items-center justify-between px-6 py-4 border-b border-line">
             {title && (
-              <h3 
-                id="modal-title" 
-                className="text-lg font-semibold text-gray-900 dark:text-gray-100"
-              >
+              <h3 id="modal-title" className="text-[16px] font-semibold text-ink tracking-[-0.01em]">
                 {title}
               </h3>
             )}
             {showCloseButton && (
               <button
                 onClick={onClose}
-                className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 transition-colors"
+                className="text-faint hover:text-ink-2 transition-colors ml-auto"
                 aria-label="Close modal"
               >
-                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                 </svg>
               </button>

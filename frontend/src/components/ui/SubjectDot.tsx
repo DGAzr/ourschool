@@ -16,30 +16,19 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-interface ReportHeaderProps {
-  title: string
-  subtitle?: string
-  icon?: unknown
-  actions?: React.ReactNode
+import React from 'react'
+
+interface SubjectDotProps {
+  color?: string
+  size?: number
   className?: string
 }
 
-const ReportHeader: React.FC<ReportHeaderProps> = ({
-  title,
-  subtitle,
-  actions,
-  className = ''
-}) => {
-  return (
-    <div className={`flex items-start justify-between gap-4 mb-5 ${className}`}>
-      <div>
-        <p className="text-[11px] font-semibold text-faint uppercase tracking-[.06em] mb-1">Reports</p>
-        <h2 className="text-[22px] font-bold text-ink tracking-[-0.02em] leading-tight">{title}</h2>
-        {subtitle && <p className="text-[13px] text-muted mt-1">{subtitle}</p>}
-      </div>
-      {actions && <div className="flex items-center gap-2 mt-1">{actions}</div>}
-    </div>
-  )
-}
+const SubjectDot: React.FC<SubjectDotProps> = ({ color = '#74716A', size = 8, className = '' }) => (
+  <span
+    className={`inline-block rounded-full flex-shrink-0 ${className}`}
+    style={{ width: size, height: size, background: color }}
+  />
+)
 
-export default ReportHeader
+export default SubjectDot

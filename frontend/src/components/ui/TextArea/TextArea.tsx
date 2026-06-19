@@ -53,9 +53,9 @@ const TextArea = forwardRef<HTMLTextAreaElement, TextAreaProps>(({
   return (
     <div className={fullWidth ? 'w-full' : ''}>
       {label && (
-        <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+        <label className="block text-[12px] font-semibold text-faint uppercase tracking-wide mb-1.5">
           {label}
-          {props.required && <span className="text-red-500 ml-1">*</span>}
+          {props.required && <span className="text-danger ml-0.5">*</span>}
         </label>
       )}
       <textarea
@@ -65,16 +65,8 @@ const TextArea = forwardRef<HTMLTextAreaElement, TextAreaProps>(({
         disabled={disabled}
         {...props}
       />
-      {error && (
-        <p className="mt-1 text-sm text-red-600 dark:text-red-400">
-          {error}
-        </p>
-      )}
-      {helperText && !error && (
-        <p className="mt-1 text-sm text-gray-500 dark:text-gray-400">
-          {helperText}
-        </p>
-      )}
+      {error && <p className="mt-1 text-[12px] text-danger">{error}</p>}
+      {helperText && !error && <p className="mt-1 text-[12px] text-muted">{helperText}</p>}
     </div>
   )
 })

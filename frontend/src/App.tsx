@@ -22,6 +22,7 @@ import { ThemeProvider } from './contexts/ThemeContext'
 import Layout from './components/Layout'
 import ProtectedRoute from './components/ProtectedRoute'
 import TokenExpiryWarning from './components/TokenExpiryWarning'
+import ToastProvider from './components/ui/Toast'
 import { useEffect, Suspense, lazy } from 'react'
 
 // Lazy load pages for better performance
@@ -42,13 +43,9 @@ const AdminSettings = lazy(() => import('./pages/AdminSettings'))
 const AdminAPIKeys = lazy(() => import('./pages/AdminAPIKeys'))
 const MyPoints = lazy(() => import('./pages/MyPoints'))
 
-// Loading component for Suspense fallback
 const PageLoadingSpinner = () => (
-  <div className="flex items-center justify-center min-h-screen bg-white dark:bg-gray-900">
-    <div className="flex flex-col items-center space-y-4">
-      <div className="w-12 h-12 border-4 border-blue-200 dark:border-blue-800 border-t-blue-600 dark:border-t-blue-400 rounded-full animate-spin"></div>
-      <p className="text-gray-600 dark:text-gray-400 text-sm">Loading...</p>
-    </div>
+  <div className="flex items-center justify-center min-h-screen bg-bg">
+    <div className="w-8 h-8 border-2 border-line border-t-accent rounded-full animate-spin" />
   </div>
 )
 
@@ -77,6 +74,7 @@ function AppContent() {
 
   return (
     <ThemeProvider>
+      <ToastProvider>
       <Suspense fallback={<PageLoadingSpinner />}>
         <Routes>
           <Route path="/login" element={<Login />} />
@@ -100,6 +98,7 @@ function AppContent() {
         </Routes>
       </Suspense>
       <TokenExpiryWarning onExtendSession={extendSession} />
+      </ToastProvider>
     </ThemeProvider>
   )
 }

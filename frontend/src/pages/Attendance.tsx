@@ -16,678 +16,461 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-import React, { useState, useEffect } from 'react'
-import { Calendar, Check, X, Clock, AlertCircle, Loader, Plus, Users, Edit, Trash2 } from 'lucide-react'
+import React, { useState, useEffect, useCallback } from 'react'
+import { ChevronLeft, ChevronRight, Check } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
+import { useToast } from '../components/ui/Toast'
+import SegmentedControl from '../components/ui/SegmentedControl'
 import { attendanceApi } from '../services/attendance'
+import { settingsApi } from '../services/settings'
 import { AttendanceRecord, User } from '../types'
 
+// ── helpers ──────────────────────────────────────────────────────────────
+type Status = 'present' | 'absent' | 'excused'
+
+const toLocalIso = (d: Date) =>
+  `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+
+const todayIso = () => toLocalIso(new Date())
+
+function formatDateLong(iso: string) {
+  const [y, m, d] = iso.split('-').map(Number)
+  return new Date(y, m - 1, d).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })
+}
+
+function formatDateShort(iso: string) {
+  const [y, m, d] = iso.split('-').map(Number)
+  return new Date(y, m - 1, d).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+}
+
+function shiftDate(iso: string, days: number) {
+  const [y, m, d] = iso.split('-').map(Number)
+  const dt = new Date(y, m - 1, d)
+  dt.setDate(dt.getDate() + days)
+  return toLocalIso(dt)
+}
+
+function isWeekend(iso: string) {
+  const [y, m, d] = iso.split('-').map(Number)
+  const dow = new Date(y, m - 1, d).getDay()
+  return dow === 0 || dow === 6
+}
+
+function isFuture(iso: string) { return iso > todayIso() }
+
+// Month calendar helpers
+function monthDays(year: number, month: number) {
+  const days: { iso: string; day: number }[] = []
+  const last = new Date(year, month, 0).getDate()
+  for (let d = 1; d <= last; d++) {
+    const iso = `${year}-${String(month).padStart(2, '0')}-${String(d).padStart(2, '0')}`
+    days.push({ iso, day: d })
+  }
+  return days
+}
+
+function firstDowOfMonth(year: number, month: number) {
+  return new Date(year, month - 1, 1).getDay()
+}
+
+// ── cell colors ───────────────────────────────────────────────────────────
+const cellStyle = (status: Status | undefined, iso: string): React.CSSProperties => {
+  if (isWeekend(iso)) return { background: 'var(--panel-2)', opacity: 0.5 }
+  if (isFuture(iso)) return { background: 'var(--panel-2)', opacity: 0.4 }
+  if (!status) return { background: 'var(--track)' }
+  if (status === 'present') return { background: 'var(--pos-bg)', color: 'var(--pos-fg)' }
+  if (status === 'absent')  return { background: 'var(--neg-bg)', color: 'var(--neg-fg)' }
+  if (status === 'excused') return { background: 'var(--exc-bg)', color: 'var(--exc-fg)' }
+  return {}
+}
+
+const STATUSES: { value: Status; label: string }[] = [
+  { value: 'present', label: 'P' },
+  { value: 'absent',  label: 'A' },
+  { value: 'excused', label: 'E' },
+]
+
+// ── component ─────────────────────────────────────────────────────────────
 const Attendance: React.FC = () => {
-  const { user } = useAuth()
-  const [attendanceRecords, setAttendanceRecords] = useState<AttendanceRecord[]>([])
+  useAuth()
+  const { toast } = useToast()
+
+  const [tab, setTab] = useState<'take' | 'history'>('take')
+  const [activeDate, setActiveDate] = useState(todayIso())
   const [students, setStudents] = useState<User[]>([])
+  const [records, setRecords] = useState<AttendanceRecord[]>([])
+  const [requiredDays, setRequiredDays] = useState(180)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [showAddRecord, setShowAddRecord] = useState(false)
-  const [showBulkRecord, setShowBulkRecord] = useState(false)
-  const [showEditRecord, setShowEditRecord] = useState(false)
-  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
-  const [selectedStudents, setSelectedStudents] = useState<number[]>([])
-  const [editingRecord, setEditingRecord] = useState<AttendanceRecord | null>(null)
-  const [recordToDelete, setRecordToDelete] = useState<AttendanceRecord | null>(null)
+  const [dayNote, setDayNote] = useState('')
+  const [saving, setSaving] = useState<Record<number, boolean>>({})
 
-  // Helper function to get local date in YYYY-MM-DD format
-  const getLocalDateString = () => {
-    const now = new Date()
-    const year = now.getFullYear()
-    const month = String(now.getMonth() + 1).padStart(2, '0')
-    const day = String(now.getDate()).padStart(2, '0')
-    return `${year}-${month}-${day}`
-  }
+  // ── derived attendance map ------------------------------------------------
+  // { "studentId-iso": status }
+  const attendanceMap = React.useMemo(() => {
+    const m: Record<string, Status> = {}
+    for (const r of records) {
+      const s = r.status === 'late' ? 'present' : r.status as Status
+      m[`${r.student_id}-${r.date}`] = s
+    }
+    return m
+  }, [records])
 
-  const [newRecord, setNewRecord] = useState({
-    student_id: 0,
-    date: getLocalDateString(),
-    status: 'present' as const,
-    notes: ''
-  })
-  const [bulkRecord, setBulkRecord] = useState({
-    date: getLocalDateString(),
-    status: 'present' as const,
-    notes: ''
-  })
+  const statusForStudent = (studentId: number, iso: string): Status | undefined =>
+    attendanceMap[`${studentId}-${iso}`]
 
-  useEffect(() => {
-    fetchData()
-  }, [])
+  // ── compliance ────────────────────────────────────────────────────────────
+  const completedDays = React.useMemo(() => {
+    // Days where all students have a status (non-weekend, non-future)
+    const today = todayIso()
+    const uniqueDays = new Set(records.map(r => r.date))
+    let count = 0
+    for (const iso of uniqueDays) {
+      if (isWeekend(iso) || iso > today) continue
+      const studentsOnDay = records.filter(r => r.date === iso)
+      if (students.length > 0 && studentsOnDay.length >= students.length) count++
+    }
+    return count
+  }, [records, students])
 
-  const fetchData = async () => {
+  // ── today's roster summary ────────────────────────────────────────────────
+  const rosterSummary = React.useMemo(() => {
+    const p = students.filter(s => statusForStudent(s.id, activeDate) === 'present').length
+    const a = students.filter(s => statusForStudent(s.id, activeDate) === 'absent').length
+    const e = students.filter(s => statusForStudent(s.id, activeDate) === 'excused').length
+    return { present: p, absent: a, excused: e }
+  }, [students, activeDate, attendanceMap])
+
+  const allMarked = students.length > 0 && students.every(s => !!statusForStudent(s.id, activeDate))
+  const dayComplete = allMarked && !isFuture(activeDate) && !isWeekend(activeDate)
+
+  // ── load data ─────────────────────────────────────────────────────────────
+  const load = useCallback(async () => {
+    setLoading(true)
+    setError(null)
     try {
-      setLoading(true)
-      const [attendanceData, studentsData] = await Promise.all([
+      const [stds, recs, grouped] = await Promise.allSettled([
+        attendanceApi.getStudents(),
         attendanceApi.getAll(),
-        attendanceApi.getStudents() // New endpoint to get students for attendance
+        settingsApi.getGroupedSettings(),
       ])
-      setAttendanceRecords(attendanceData)
-      setStudents(studentsData)
-      setError(null)
-    } catch (err) {
+      if (stds.status === 'fulfilled') setStudents(stds.value)
+      if (recs.status === 'fulfilled') setRecords(recs.value)
+      if (grouped.status === 'fulfilled')
+        setRequiredDays(grouped.value.attendance.required_days_of_instruction)
+    } catch {
       setError('Failed to load attendance data')
     } finally {
       setLoading(false)
     }
-  }
+  }, [])
 
-  const handleAddRecord = async () => {
+  useEffect(() => { load() }, [load])
+
+  // ── mark student ──────────────────────────────────────────────────────────
+  const markStudent = async (studentId: number, iso: string, status: Status) => {
+    setSaving(s => ({ ...s, [studentId]: true }))
+    // Optimistic update
+    setRecords(prev => {
+      const existing = prev.find(r => r.student_id === studentId && r.date === iso)
+      if (existing) {
+        return prev.map(r => r.student_id === studentId && r.date === iso ? { ...r, status } : r)
+      }
+      return [...prev, { id: Date.now(), student_id: studentId, date: iso, status, created_at: '', updated_at: '' }]
+    })
     try {
-      await attendanceApi.create(newRecord)
-      setNewRecord({
-        student_id: 0,
-        date: getLocalDateString(),
-        status: 'present',
-        notes: ''
-      })
-      setShowAddRecord(false)
-      fetchData()
-    } catch (error) {
-      setError('Failed to create attendance record')
+      const existing = records.find(r => r.student_id === studentId && r.date === iso)
+      if (existing) {
+        await attendanceApi.update(existing.id, { status })
+      } else {
+        const created = await attendanceApi.create({ student_id: studentId, date: iso, status, notes: '' })
+        setRecords(prev => prev.map(r =>
+          r.student_id === studentId && r.date === iso && r.id > 1e12 ? created : r
+        ))
+      }
+    } catch {
+      toast('Failed to save', 'danger')
+      load()
+    } finally {
+      setSaving(s => ({ ...s, [studentId]: false }))
     }
   }
 
-  const handleBulkRecord = async () => {
-    if (selectedStudents.length === 0) {
-      setError('Please select at least one student')
-      return
-    }
-
-    try {
-      await attendanceApi.createBulk({
-        student_ids: selectedStudents,
-        date: bulkRecord.date,
-        status: bulkRecord.status,
-        notes: bulkRecord.notes
-      })
-      setBulkRecord({
-        date: getLocalDateString(),
-        status: 'present',
-        notes: ''
-      })
-      setSelectedStudents([])
-      setShowBulkRecord(false)
-      fetchData()
-      setError(null)
-    } catch (error) {
-      setError('Failed to create bulk attendance records')
-    }
+  // ── mark all present ──────────────────────────────────────────────────────
+  const markAllPresent = async () => {
+    if (isWeekend(activeDate) || isFuture(activeDate)) return
+    const unmarked = students.filter(s => !statusForStudent(s.id, activeDate))
+    await Promise.all(unmarked.map(s => markStudent(s.id, activeDate, 'present')))
+    if (unmarked.length) toast(`${unmarked.length} student${unmarked.length > 1 ? 's' : ''} marked present`)
   }
 
-  const toggleStudentSelection = (studentId: number) => {
-    setSelectedStudents(prev => 
-      prev.includes(studentId) 
-        ? prev.filter(id => id !== studentId)
-        : [...prev, studentId]
-    )
-  }
+  // ── month grid data ───────────────────────────────────────────────────────
+  const today = todayIso()
+  const [calYear, calMonth] = today.split('-').map(Number)
+  const days = monthDays(calYear, calMonth)
+  const firstDow = firstDowOfMonth(calYear, calMonth)
 
-  const selectAllStudents = () => {
-    setSelectedStudents(students.map(s => s.id))
-  }
+  const initials = (s: User) => `${s.first_name?.[0] ?? ''}${s.last_name?.[0] ?? ''}`
 
-  const clearAllStudents = () => {
-    setSelectedStudents([])
-  }
-
-  const handleEditRecord = (record: AttendanceRecord) => {
-    setEditingRecord(record)
-    setShowEditRecord(true)
-  }
-
-  const handleUpdateRecord = async () => {
-    if (!editingRecord) return
-    
-    try {
-      await attendanceApi.update(editingRecord.id, {
-        status: editingRecord.status,
-        notes: editingRecord.notes
-      })
-      setShowEditRecord(false)
-      setEditingRecord(null)
-      fetchData()
-      setError(null)
-    } catch (error) {
-      setError('Failed to update attendance record')
-    }
-  }
-
-  const handleDeleteRecord = (record: AttendanceRecord) => {
-    setRecordToDelete(record)
-    setShowDeleteConfirm(true)
-  }
-
-  const confirmDeleteRecord = async () => {
-    if (!recordToDelete) return
-    
-    try {
-      await attendanceApi.delete(recordToDelete.id)
-      setShowDeleteConfirm(false)
-      setRecordToDelete(null)
-      fetchData()
-      setError(null)
-    } catch (error) {
-      setError('Failed to delete attendance record')
-    }
-  }
-
-  // Group attendance records by date
-  const groupedAttendance = attendanceRecords.reduce((groups, record) => {
-    const date = record.date
-    if (!groups[date]) {
-      groups[date] = []
-    }
-    groups[date].push(record)
-    return groups
-  }, {} as Record<string, AttendanceRecord[]>)
-
-
-  const getStatusIcon = (status: string) => {
-    switch (status) {
-      case 'present':
-        return <Check className="h-4 w-4 text-green-500" />
-      case 'absent':
-        return <X className="h-4 w-4 text-red-500" />
-      case 'late':
-        return <Clock className="h-4 w-4 text-yellow-500" />
-      case 'excused':
-        return <AlertCircle className="h-4 w-4 text-blue-500" />
-      default:
-        return null
-    }
-  }
-
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'present':
-        return 'bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-200'
-      case 'absent':
-        return 'bg-red-100 dark:bg-red-900 text-red-800 dark:text-red-200'
-      case 'late':
-        return 'bg-yellow-100 dark:bg-yellow-900 text-yellow-800 dark:text-yellow-200'
-      case 'excused':
-        return 'bg-blue-100 dark:bg-blue-900 text-blue-800 dark:text-blue-200'
-      default:
-        return 'bg-gray-100 dark:bg-gray-700 text-gray-800 dark:text-gray-200'
-    }
-  }
-
-  if (user?.role !== 'admin') {
+  if (loading) {
     return (
-      <div className="text-center py-12">
-        <h2 className="text-2xl font-bold text-gray-900 dark:text-gray-100">Access Denied</h2>
-        <p className="text-gray-600 dark:text-gray-400 mt-2">Only administrators can manage attendance.</p>
+      <div className="flex items-center gap-2 text-muted text-[13px] py-12">
+        <div className="w-4 h-4 border-2 border-line border-t-accent rounded-full animate-spin" />
+        Loading…
       </div>
     )
   }
 
   return (
-    <div className="space-y-8">
-      {/* Enhanced Header Section */}
-      <div className="bg-gradient-to-r from-emerald-600 via-emerald-700 to-emerald-800 rounded-xl shadow-lg">
-        <div className="px-8 py-8 text-white">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center">
-              <div className="w-12 h-12 bg-white bg-opacity-20 rounded-xl flex items-center justify-center mr-4">
-                <Calendar className="h-6 w-6 text-white" />
-              </div>
-              <div>
-                <h1 className="text-3xl font-bold tracking-wide mb-1">
-                  Attendance
-                </h1>
-                <p className="text-emerald-100 text-lg">
-                  Track daily attendance for all students
-                </p>
-              </div>
-            </div>
-            <div className="flex space-x-3">
-              <button 
-                onClick={() => setShowAddRecord(true)}
-                className="inline-flex items-center px-5 py-3 border border-white border-opacity-30 text-sm font-semibold rounded-lg text-white bg-white bg-opacity-20 hover:bg-opacity-30 transition-all duration-200 shadow-sm hover:shadow-md"
-              >
-                <Plus className="h-4 w-4 mr-2" />
-                Individual Record
-              </button>
-              <button 
-                onClick={() => setShowBulkRecord(true)}
-                className="inline-flex items-center px-5 py-3 border border-white border-opacity-30 text-sm font-semibold rounded-lg text-white bg-white bg-opacity-20 hover:bg-opacity-30 transition-all duration-200 shadow-sm hover:shadow-md"
-              >
-                <Users className="h-4 w-4 mr-2" />
-                Bulk Attendance
-              </button>
-            </div>
-          </div>
-        </div>
+    <div>
+      {/* Page header */}
+      <div className="mb-6">
+        <p className="text-[11px] font-semibold text-faint uppercase tracking-[.06em] mb-0.5">Attendance</p>
+        <h1 className="text-[26px] font-semibold text-ink tracking-[-0.02em]">Attendance</h1>
       </div>
 
-      {/* Error Message */}
+      {/* Tab toggle */}
+      <div className="mb-6">
+        <SegmentedControl
+          segments={[
+            { value: 'take', label: 'Take attendance' },
+            { value: 'history', label: 'History & compliance' },
+          ]}
+          value={tab}
+          onChange={setTab}
+        />
+      </div>
+
       {error && (
-        <div className="bg-red-50 dark:bg-red-900 border border-red-200 dark:border-red-700 text-red-700 dark:text-red-200 px-4 py-3 rounded">
-          {error}
-        </div>
+        <div className="mb-4 px-4 py-3 rounded-card text-[13px] text-neg-fg bg-neg-bg border border-neg-fg/20">{error}</div>
       )}
 
-      {/* Loading State */}
-      {loading && (
-        <div className="flex justify-center items-center py-12">
-          <Loader className="h-8 w-8 animate-spin text-blue-500" />
-          <span className="ml-2 text-gray-600 dark:text-gray-400">Loading attendance...</span>
-        </div>
-      )}
-
-      {/* Add Record Modal */}
-      {showAddRecord && (
-        <div className="fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white dark:bg-gray-800 rounded-lg p-6 w-full max-w-md">
-            <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100 mb-4">Add Attendance Record</h3>
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Student</label>
-                <select
-                  value={newRecord.student_id}
-                  onChange={(e) => setNewRecord({ ...newRecord, student_id: parseInt(e.target.value) })}
-                  className="mt-1 block w-full border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 rounded-md px-3 py-2 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-                >
-                  <option value={0}>Select a student</option>
-                  {students.map((student) => (
-                    <option key={student.id} value={student.id}>
-                      {student.first_name} {student.last_name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Date</label>
-                <input
-                  type="date"
-                  value={newRecord.date}
-                  onChange={(e) => setNewRecord({ ...newRecord, date: e.target.value })}
-                  className="mt-1 block w-full border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 rounded-md px-3 py-2 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Status</label>
-                <select
-                  value={newRecord.status}
-                  onChange={(e) => setNewRecord({ ...newRecord, status: e.target.value as any })}
-                  className="mt-1 block w-full border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 rounded-md px-3 py-2 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-                >
-                  <option value="present">Present</option>
-                  <option value="absent">Absent</option>
-                  <option value="late">Late</option>
-                  <option value="excused">Excused</option>
-                </select>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Notes</label>
-                <textarea
-                  value={newRecord.notes}
-                  onChange={(e) => setNewRecord({ ...newRecord, notes: e.target.value })}
-                  rows={3}
-                  className="mt-1 block w-full border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 rounded-md px-3 py-2 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-                  placeholder="Optional notes..."
-                />
-              </div>
+      {/* ── TAKE ATTENDANCE ─────────────────────────────────────────────── */}
+      {tab === 'take' && (
+        <div className="max-w-2xl">
+          {/* Date nav */}
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <p className="text-[11px] font-semibold text-faint uppercase tracking-[.06em]">
+                {isWeekend(activeDate) ? 'Weekend' : isFuture(activeDate) ? 'Future date' : 'Today'}
+              </p>
+              <h2 className="text-[18px] font-semibold text-ink mt-0.5">{formatDateLong(activeDate)}</h2>
             </div>
-            <div className="flex justify-end space-x-3 mt-6">
+            <div className="flex items-center gap-1.5">
               <button
-                onClick={() => setShowAddRecord(false)}
-                className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 rounded-md hover:bg-gray-200 dark:hover:bg-gray-600"
-              >
-                Cancel
-              </button>
+                onClick={() => setActiveDate(d => shiftDate(d, -1))}
+                className="w-8 h-8 flex items-center justify-center rounded-field border border-btn-border text-muted hover:text-ink hover:bg-panel-2 transition-colors"
+              ><ChevronLeft size={15} /></button>
               <button
-                onClick={handleAddRecord}
-                disabled={newRecord.student_id === 0}
-                className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                Add Record
-              </button>
+                onClick={() => setActiveDate(todayIso())}
+                disabled={activeDate === todayIso()}
+                className="px-3 py-1.5 rounded-field border border-btn-border text-[12px] font-semibold text-ink-2 hover:bg-panel-2 disabled:opacity-40 transition-colors"
+              >Today</button>
+              <button
+                onClick={() => setActiveDate(d => shiftDate(d, 1))}
+                className="w-8 h-8 flex items-center justify-center rounded-field border border-btn-border text-muted hover:text-ink hover:bg-panel-2 transition-colors"
+              ><ChevronRight size={15} /></button>
             </div>
           </div>
-        </div>
-      )}
 
-      {/* Bulk Attendance Modal */}
-      {showBulkRecord && (
-        <div className="fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white dark:bg-gray-800 rounded-lg p-6 w-full max-w-2xl max-h-[90vh] overflow-y-auto">
-            <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100 mb-4">Bulk Attendance Recording</h3>
-            
-            <div className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Date</label>
-                  <input
-                    type="date"
-                    value={bulkRecord.date}
-                    onChange={(e) => setBulkRecord({ ...bulkRecord, date: e.target.value })}
-                    className="mt-1 block w-full border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 rounded-md px-3 py-2 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-                  />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Status</label>
-                  <select
-                    value={bulkRecord.status}
-                    onChange={(e) => setBulkRecord({ ...bulkRecord, status: e.target.value as any })}
-                    className="mt-1 block w-full border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 rounded-md px-3 py-2 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-                  >
-                    <option value="present">Present</option>
-                    <option value="absent">Absent</option>
-                    <option value="late">Late</option>
-                    <option value="excused">Excused</option>
-                  </select>
-                </div>
-              </div>
-              
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Notes</label>
-                <textarea
-                  value={bulkRecord.notes}
-                  onChange={(e) => setBulkRecord({ ...bulkRecord, notes: e.target.value })}
-                  rows={2}
-                  className="mt-1 block w-full border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 rounded-md px-3 py-2 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-                  placeholder="Optional notes..."
-                />
-              </div>
-
-              <div>
-                <div className="flex justify-between items-center mb-3">
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
-                    Select Students ({selectedStudents.length} selected)
-                  </label>
-                  <div className="space-x-2">
-                    <button
-                      type="button"
-                      onClick={selectAllStudents}
-                      className="text-sm text-blue-600 hover:text-blue-500"
-                    >
-                      Select All
-                    </button>
-                    <button
-                      type="button"
-                      onClick={clearAllStudents}
-                      className="text-sm text-gray-600 hover:text-gray-500"
-                    >
-                      Clear All
-                    </button>
-                  </div>
-                </div>
-                
-                <div className="border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 rounded-md max-h-60 overflow-y-auto">
-                  {students.map((student) => (
-                    <div
-                      key={student.id}
-                      className="flex items-center p-3 hover:bg-gray-50 dark:hover:bg-gray-600 border-b border-gray-200 dark:border-gray-600 last:border-b-0"
-                    >
-                      <input
-                        type="checkbox"
-                        checked={selectedStudents.includes(student.id)}
-                        onChange={() => toggleStudentSelection(student.id)}
-                        className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
-                      />
-                      <div className="ml-3 flex-1">
-                        <div className="flex items-center">
-                          <div className="flex-shrink-0 h-8 w-8">
-                            <div className="h-8 w-8 rounded-full bg-gray-300 dark:bg-gray-600 flex items-center justify-center">
-                              <span className="text-xs font-medium text-gray-700 dark:text-gray-300">
-                                {student.first_name[0]}{student.last_name[0]}
-                              </span>
-                            </div>
-                          </div>
-                          <div className="ml-3">
-                            <p className="text-sm font-medium text-gray-900 dark:text-gray-100">
-                              {student.first_name} {student.last_name}
-                            </p>
-                            <p className="text-xs text-gray-500 dark:text-gray-400">
-                              {student.grade_level && `${student.grade_level} • `}{student.email}
-                            </p>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
+          {/* Compliance strip */}
+          <div className="bg-panel border border-line rounded-card p-4 mb-4">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-[13px] font-semibold text-ink">
+                <span className="font-mono">{completedDays}</span>
+                <span className="text-muted"> of </span>
+                <span className="font-mono">{requiredDays}</span>
+                <span className="text-muted"> instructional days</span>
+              </span>
+              <span className="text-[12px] font-mono text-muted">{Math.max(0, requiredDays - completedDays)} to go</span>
             </div>
-
-            <div className="flex justify-end space-x-3 mt-6">
-              <button
-                onClick={() => {
-                  setShowBulkRecord(false)
-                  setSelectedStudents([])
-                }}
-                className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 rounded-md hover:bg-gray-200 dark:hover:bg-gray-600"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleBulkRecord}
-                disabled={selectedStudents.length === 0}
-                className="px-4 py-2 text-sm font-medium text-white bg-green-600 rounded-md hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                Record Attendance for {selectedStudents.length} Student{selectedStudents.length !== 1 ? 's' : ''}
-              </button>
+            <div className="h-1.5 bg-track rounded-full overflow-hidden">
+              <div
+                className="h-full rounded-full transition-all"
+                style={{ width: `${Math.min(100, (completedDays / requiredDays) * 100)}%`, background: 'var(--accent)' }}
+              />
             </div>
           </div>
-        </div>
-      )}
 
-      {/* Edit Record Modal */}
-      {showEditRecord && editingRecord && (
-        <div className="fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white dark:bg-gray-800 rounded-lg p-6 w-full max-w-md">
-            <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100 mb-4">Edit Attendance Record</h3>
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Student</label>
-                <div className="mt-1 block w-full border border-gray-300 dark:border-gray-600 rounded-md px-3 py-2 bg-gray-50 dark:bg-gray-700 text-gray-900 dark:text-gray-100">
-                  {(() => {
-                    const student = students.find(s => s.id === editingRecord.student_id)
-                    return student ? `${student.first_name} ${student.last_name}` : 'Unknown Student'
-                  })()}
-                </div>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Date</label>
-                <div className="mt-1 block w-full border border-gray-300 dark:border-gray-600 rounded-md px-3 py-2 bg-gray-50 dark:bg-gray-700 text-gray-900 dark:text-gray-100">
-                  {new Date(editingRecord.date + 'T00:00:00').toLocaleDateString()}
-                </div>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Status</label>
-                <select
-                  value={editingRecord.status}
-                  onChange={(e) => setEditingRecord({ ...editingRecord, status: e.target.value as any })}
-                  className="mt-1 block w-full border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 rounded-md px-3 py-2 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-                >
-                  <option value="present">Present</option>
-                  <option value="absent">Absent</option>
-                  <option value="late">Late</option>
-                  <option value="excused">Excused</option>
-                </select>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Notes</label>
-                <textarea
-                  value={editingRecord.notes || ''}
-                  onChange={(e) => setEditingRecord({ ...editingRecord, notes: e.target.value })}
-                  rows={3}
-                  className="mt-1 block w-full border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 rounded-md px-3 py-2 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-                  placeholder="Optional notes..."
-                />
-              </div>
-            </div>
-            <div className="flex justify-end space-x-3 mt-6">
-              <button
-                onClick={() => {
-                  setShowEditRecord(false)
-                  setEditingRecord(null)
-                }}
-                className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 rounded-md hover:bg-gray-200 dark:hover:bg-gray-600"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleUpdateRecord}
-                className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700"
-              >
-                Update Record
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Delete Confirmation Modal */}
-      {showDeleteConfirm && recordToDelete && (
-        <div className="fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white dark:bg-gray-800 rounded-lg p-6 w-full max-w-md">
-            <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100 mb-4">Delete Attendance Record</h3>
-            <p className="text-sm text-gray-600 dark:text-gray-400 mb-6">
-              Are you sure you want to delete the attendance record for{' '}
-              {(() => {
-                const student = students.find(s => s.id === recordToDelete.student_id)
-                return student ? `${student.first_name} ${student.last_name}` : 'this student'
-              })()} on {new Date(recordToDelete.date + 'T00:00:00').toLocaleDateString()}?
-              This action cannot be undone.
-            </p>
-            <div className="flex justify-end space-x-3">
-              <button
-                onClick={() => {
-                  setShowDeleteConfirm(false)
-                  setRecordToDelete(null)
-                }}
-                className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 rounded-md hover:bg-gray-200 dark:hover:bg-gray-600"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={confirmDeleteRecord}
-                className="px-4 py-2 text-sm font-medium text-white bg-red-600 rounded-md hover:bg-red-700"
-              >
-                Delete Record
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Attendance Records */}
-      {!loading && (
-        <div className="space-y-6">
-          {Object.keys(groupedAttendance).length === 0 ? (
-            <div className="bg-white dark:bg-gray-800 shadow-lg rounded-xl border border-gray-100 dark:border-gray-700 p-12 text-center">
-              <div className="w-16 h-16 bg-emerald-100 dark:bg-emerald-900 rounded-full mx-auto mb-4 flex items-center justify-center">
-                <Calendar className="h-8 w-8 text-emerald-600" />
-              </div>
-              <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-2">No Attendance Records</h3>
-              <p className="text-gray-600 dark:text-gray-400 mb-6">Start tracking attendance by adding your first record!</p>
-              <button 
-                onClick={() => setShowAddRecord(true)}
-                className="inline-flex items-center px-6 py-3 border border-transparent text-sm font-semibold rounded-lg text-white bg-emerald-600 hover:bg-emerald-700 transition-colors"
-              >
-                <Plus className="h-5 w-5 mr-2" />
-                Add First Record
-              </button>
+          {/* Roster */}
+          {isWeekend(activeDate) ? (
+            <div className="bg-panel border border-line rounded-card p-8 text-center text-muted text-[13px]">
+              No attendance on weekends.
             </div>
           ) : (
-            Object.entries(groupedAttendance)
-              .sort(([a], [b]) => new Date(b).getTime() - new Date(a).getTime())
-              .map(([date, records]) => (
-                <div key={date} className="bg-white dark:bg-gray-800 shadow-lg rounded-xl border border-gray-100 dark:border-gray-700">
-                  <div className="px-6 py-5 border-b border-gray-200 dark:border-gray-700 bg-gradient-to-r from-gray-50 to-gray-100 dark:from-gray-700 dark:to-gray-600">
-                    <h3 className="text-xl font-semibold text-gray-900 dark:text-gray-100 flex items-center">
-                      <div className="w-8 h-8 bg-emerald-500 rounded-lg flex items-center justify-center mr-3">
-                        <Calendar className="h-4 w-4 text-white" />
+            <div className="bg-panel border border-line rounded-card overflow-hidden mb-4">
+              {/* Roster header */}
+              <div className="flex items-center justify-between px-5 py-3 border-b border-line bg-panel-2">
+                <div className="flex items-center gap-3">
+                  <span className="text-[12px] font-semibold text-faint uppercase tracking-[.06em]">Roster</span>
+                  <span className="text-[12px] font-mono text-muted">
+                    {rosterSummary.present}P · {rosterSummary.absent}A · {rosterSummary.excused}E
+                  </span>
+                </div>
+                <button
+                  onClick={markAllPresent}
+                  disabled={allMarked}
+                  className="text-[12.5px] font-semibold text-accent hover:opacity-70 disabled:opacity-30 transition-opacity"
+                >
+                  Mark all present
+                </button>
+              </div>
+
+              {/* Student rows */}
+              {students.length === 0 ? (
+                <div className="p-8 text-center text-muted text-[13px]">No students found.</div>
+              ) : students.map((s) => {
+                const status = statusForStudent(s.id, activeDate)
+                const unmarked = !status
+                return (
+                  <div
+                    key={s.id}
+                    className={`flex items-center justify-between px-5 py-3.5 border-b border-line-2 last:border-0 transition-colors ${unmarked ? 'bg-accent-soft' : ''}`}
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className="w-8 h-8 rounded-full bg-track flex items-center justify-center flex-shrink-0">
+                        <span className="text-[11px] font-semibold text-ink-2 font-mono">{initials(s)}</span>
                       </div>
-                      {new Date(date + 'T00:00:00').toLocaleDateString('en-US', {
-                        weekday: 'long',
-                        year: 'numeric',
-                        month: 'long',
-                        day: 'numeric'
-                      })}
-                    </h3>
-                  </div>
-                  <div className="p-6">
-                    <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
-                      {records.map((record) => {
-                        const student = students.find(s => s.id === record.student_id)
-                        if (!student) return null
-                        
+                      <div>
+                        <p className="text-[13.5px] font-medium text-ink">{s.first_name} {s.last_name}</p>
+                      </div>
+                    </div>
+                    {/* P / A / E toggle */}
+                    <div className="flex items-center gap-0.5 bg-track p-[3px] rounded-[8px]">
+                      {STATUSES.map(opt => {
+                        const active = status === opt.value
+                        const color = opt.value === 'present' ? 'var(--pos-fg)' : opt.value === 'absent' ? 'var(--neg-fg)' : 'var(--exc-fg)'
+                        const bg = opt.value === 'present' ? 'var(--pos-bg)' : opt.value === 'absent' ? 'var(--neg-bg)' : 'var(--exc-bg)'
                         return (
-                          <div
-                            key={record.id}
-                            className="bg-gray-50 dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-xl hover:shadow-lg hover:border-gray-300 dark:hover:border-gray-500 transition-all duration-200 overflow-hidden"
+                          <button
+                            key={opt.value}
+                            onClick={() => markStudent(s.id, activeDate, opt.value)}
+                            disabled={saving[s.id]}
+                            style={active ? { background: bg, color } : {}}
+                            className={`px-3 py-1 rounded-[6px] text-[12px] font-semibold transition-all duration-100 ${active ? '' : 'text-muted hover:text-ink-2'}`}
                           >
-                            <div className="p-6">
-                              <div className="flex items-start justify-between mb-4">
-                                <div className="flex items-center flex-1 min-w-0">
-                                  <div className="flex-shrink-0 h-14 w-14">
-                                    <div className="h-14 w-14 rounded-xl bg-gradient-to-br from-emerald-500 to-emerald-600 flex items-center justify-center shadow-sm">
-                                      <span className="text-lg font-bold text-white">
-                                        {student.first_name[0]}{student.last_name[0]}
-                                      </span>
-                                    </div>
-                                  </div>
-                                  <div className="ml-4 flex-1 min-w-0">
-                                    <h4 className="text-lg font-semibold text-gray-900 dark:text-gray-100 truncate mb-1">
-                                      {student.first_name} {student.last_name}
-                                    </h4>
-                                    {student.grade_level && (
-                                      <p className="text-sm text-gray-600 dark:text-gray-400">
-                                        {student.grade_level}
-                                      </p>
-                                    )}
-                                  </div>
-                                </div>
-                                <div className="flex items-center space-x-2 ml-4">
-                                  <button
-                                    onClick={() => handleEditRecord(record)}
-                                    className="p-2.5 text-gray-400 dark:text-gray-500 hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900 rounded-lg transition-colors"
-                                    title="Edit record"
-                                  >
-                                    <Edit className="h-4 w-4" />
-                                  </button>
-                                  <button
-                                    onClick={() => handleDeleteRecord(record)}
-                                    className="p-2.5 text-gray-400 dark:text-gray-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900 rounded-lg transition-colors"
-                                    title="Delete record"
-                                  >
-                                    <Trash2 className="h-4 w-4" />
-                                  </button>
-                                </div>
-                              </div>
-                              
-                              <div className="flex items-center justify-between mb-4">
-                                <span className={`inline-flex items-center px-4 py-2 rounded-lg text-sm font-semibold shadow-sm ${getStatusColor(record.status)}`}>
-                                  {getStatusIcon(record.status)}
-                                  <span className="ml-2 capitalize">{record.status}</span>
-                                </span>
-                              </div>
-                              
-                              {record.notes && (
-                                <div className="bg-white dark:bg-gray-600 rounded-lg p-4 border border-gray-200 dark:border-gray-500">
-                                  <p className="text-sm text-gray-700 dark:text-gray-300 leading-relaxed">
-                                    <span className="font-semibold text-gray-900 dark:text-gray-100">Notes:</span> {record.notes}
-                                  </p>
-                                </div>
-                              )}
-                            </div>
-                          </div>
+                            {opt.label}
+                          </button>
                         )
                       })}
                     </div>
                   </div>
-                </div>
-              ))
+                )
+              })}
+            </div>
+          )}
+
+          {/* Day note */}
+          {!isWeekend(activeDate) && (
+            <div className="mb-4">
+              <textarea
+                placeholder="Note for the day (optional)"
+                value={dayNote}
+                onChange={e => setDayNote(e.target.value)}
+                rows={2}
+                className="w-full bg-field-bg border border-field-border text-ink text-[13.5px] rounded-card px-4 py-3 resize-none focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent placeholder:text-faintest transition-colors"
+              />
+            </div>
+          )}
+
+          {/* Day complete affirmation */}
+          {dayComplete && (
+            <div className="flex items-center gap-2.5 px-5 py-4 bg-pos-bg border border-pos-fg/20 rounded-card text-pos-fg text-[13.5px] font-medium animate-fade-in">
+              <Check size={16} />
+              All students marked — this day counts toward your {requiredDays}-day goal.
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* ── HISTORY & COMPLIANCE ────────────────────────────────────────── */}
+      {tab === 'history' && (
+        <div>
+          {/* Stat tiles */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-6">
+            {[
+              { label: 'Days completed', value: completedDays },
+              { label: 'Days remaining', value: Math.max(0, requiredDays - completedDays) },
+              { label: '% of goal', value: `${Math.round((completedDays / requiredDays) * 100)}%` },
+              { label: 'Avg rate', value: `${students.length > 0 ? Math.round(records.filter(r => r.status === 'present').length / Math.max(1, completedDays * students.length) * 100) : 0}%` },
+            ].map(t => (
+              <div key={t.label} className="bg-panel border border-line rounded-card p-4">
+                <p className="text-[11px] font-semibold text-faint uppercase tracking-[.06em] mb-1">{t.label}</p>
+                <p className="font-mono text-[22px] font-semibold text-ink">{t.value}</p>
+              </div>
+            ))}
+          </div>
+
+          {/* Month calendar grid */}
+          <div className="bg-panel border border-line rounded-card p-5 mb-4 overflow-x-auto">
+            <div className="flex items-center justify-between mb-4">
+              <p className="text-[15px] font-semibold text-ink">
+                {new Date(calYear, calMonth - 1).toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
+              </p>
+              <div className="flex items-center gap-4 text-[11.5px] text-muted">
+                <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm inline-block" style={{ background: 'var(--pos-bg)' }} />Present</span>
+                <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm inline-block" style={{ background: 'var(--exc-bg)' }} />Excused</span>
+                <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm inline-block" style={{ background: 'var(--neg-bg)' }} />Absent</span>
+                <span className="text-faintest">· tap a day to edit</span>
+              </div>
+            </div>
+            {/* Day-of-week headers */}
+            <div className="grid grid-cols-7 gap-1 mb-1">
+              {['Su','Mo','Tu','We','Th','Fr','Sa'].map(d => (
+                <div key={d} className="text-center text-[10.5px] font-semibold text-faint py-1">{d}</div>
+              ))}
+            </div>
+            {/* Calendar cells */}
+            <div className="grid grid-cols-7 gap-1">
+              {/* Empty cells for first week offset */}
+              {Array.from({ length: firstDow }).map((_, i) => <div key={`empty-${i}`} />)}
+              {days.map(({ iso, day }) => {
+                const isToday = iso === today
+                const weekend = isWeekend(iso)
+                const future = isFuture(iso)
+                // For calendar: show aggregate (if any student is absent, show absent)
+                const dayStatuses = students.map(s => statusForStudent(s.id, iso)).filter(Boolean)
+                const agg: Status | undefined = dayStatuses.includes('absent') ? 'absent' : dayStatuses.includes('excused') ? 'excused' : dayStatuses.length > 0 ? 'present' : undefined
+                const cs = cellStyle(agg, iso)
+                return (
+                  <div
+                    key={iso}
+                    onClick={() => { setTab('take'); setActiveDate(iso) }}
+                    title={`${formatDateShort(iso)}${agg ? ` — ${agg}` : ''}`}
+                    className={`relative aspect-square flex items-center justify-center rounded-[6px] text-[11.5px] font-mono font-medium cursor-pointer transition-all hover:opacity-80 ${weekend || future ? 'cursor-default' : ''}`}
+                    style={{ ...cs, outline: isToday ? '2px solid var(--accent)' : undefined, outlineOffset: '-1px' }}
+                  >
+                    {day}
+                  </div>
+                )
+              })}
+            </div>
+          </div>
+
+          {/* Per-student attendance bars */}
+          {students.length > 0 && (
+            <div className="bg-panel border border-line rounded-card p-5">
+              <p className="text-[11px] font-semibold text-faint uppercase tracking-[.06em] mb-4">Attendance rate by student</p>
+              <div className="space-y-3">
+                {students.map(s => {
+                  const sRecords = records.filter(r => r.student_id === s.id)
+                  const presentCount = sRecords.filter(r => r.status === 'present' || r.status === 'late').length
+                  const rate = completedDays > 0 ? Math.round((presentCount / completedDays) * 100) : 0
+                  return (
+                    <div key={s.id} className="flex items-center gap-3">
+                      <div className="w-28 flex-shrink-0 text-[13px] font-medium text-ink truncate">{s.first_name} {s.last_name}</div>
+                      <div className="flex-1 h-1.5 bg-track rounded-full overflow-hidden">
+                        <div
+                          className="h-full rounded-full transition-all"
+                          style={{ width: `${rate}%`, background: rate >= 90 ? 'var(--pos-fg)' : rate >= 70 ? 'var(--accent)' : 'var(--neg-fg)' }}
+                        />
+                      </div>
+                      <span className="w-10 text-right font-mono text-[12px] text-muted">{rate}%</span>
+                    </div>
+                  )
+                })}
+              </div>
+            </div>
           )}
         </div>
       )}

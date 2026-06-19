@@ -2,11 +2,149 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Ensure body has proper dark mode background to prevent white flashes */
-body {
-  @apply bg-gray-50 dark:bg-gray-900 transition-colors;
+/* ── Design tokens ─────────────────────────────────────────────────── */
+:root {
+  /* Surfaces */
+  --bg:        #F6F5F1;
+  --panel:     #FFFFFF;
+  --panel-2:   #FAF9F6;
+
+  /* Text */
+  --ink:       #211F1B;
+  --ink-2:     #3A382F;
+  --muted:     #74716A;
+  --faint:     #9A968D;
+  --faintest:  #B6B2A8;
+
+  /* Borders */
+  --line:      #E7E5DF;
+  --line-2:    #F1EFEA;
+  --line-3:    #EFEDE8;
+
+  /* Controls */
+  --track:     #EDEBE6;
+  --seg-active:#FFFFFF;
+  --field-border:#E2DFD7;
+  --field-bg:  #FFFFFF;
+  --btn-border:#DDD9D0;
+  --check-border:#CFCBC1;
+
+  /* Accent — coral */
+  --accent:      #C75C39;
+  --accent-soft: #FBF4F1;
+  --accent-line: #EAD4C9;
+
+  /* Functional */
+  --danger:    #C0392B;
+  --nav-active:#F3F1EC;
+
+  /* Primary button (inverts in dark) */
+  --btn-primary-bg: #211F1B;
+  --btn-primary-fg: #FFFFFF;
+
+  /* Shadows */
+  --shadow:    rgba(33,31,27,.14);
+  --shadow-lg: rgba(33,31,27,.28);
+  --overlay:   rgba(33,31,27,.40);
+
+  /* Status fg/bg pairs */
+  --pos-fg:    #4E8D6E;  --pos-bg:    #E3EFE7;
+  --info-fg:   #3D6098;  --info-bg:   #E5ECF5;
+  --sub-fg:    #B0552F;  --sub-bg:    #F6E6DD;
+  --exc-fg:    #6E86A8;  --exc-bg:    #E7EDF4;
+  --neg-fg:    #B23B3B;  --neg-bg:    #F6E0DE;
+  --ns-fg:     #74716A;  --ns-bg:     #EDEBE6;
+
+  /* Reply thread tint */
+  --reply:     #F5F3EF;
 }
 
+.dark {
+  --bg:        #1A1916;
+  --panel:     #232220;
+  --panel-2:   #2B2825;
+
+  --ink:       #F2F0EA;
+  --ink-2:     #DAD6CC;
+  --muted:     #A7A296;
+  --faint:     #8A857A;
+  --faintest:  #6E6A60;
+
+  --line:      #34312B;
+  --line-2:    #2C2925;
+  --line-3:    #312E28;
+
+  --track:     #2E2B26;
+  --seg-active:#3A372F;
+  --field-border:#3A372F;
+  --field-bg:  #232220;
+  --btn-border:#3E3A32;
+  --check-border:#4A463D;
+
+  --accent:      #E0794F;
+  --accent-soft: #2E211B;
+  --accent-line: #4A352C;
+
+  --danger:    #E0795F;
+  --nav-active:#2A2722;
+
+  --btn-primary-bg: #EFEDE6;
+  --btn-primary-fg: #1A1916;
+
+  --shadow:    rgba(0,0,0,.5);
+  --shadow-lg: rgba(0,0,0,.6);
+  --overlay:   rgba(8,7,6,.62);
+
+  --pos-fg:    #82C29B;  --pos-bg:    #1E2C23;
+  --info-fg:   #8FB0DC;  --info-bg:   #1F2A38;
+  --sub-fg:    #E69A6F;  --sub-bg:    #352318;
+  --exc-fg:    #8AA6C8;  --exc-bg:    #1F2A38;
+  --neg-fg:    #E68A7A;  --neg-bg:    #38211F;
+  --ns-fg:     #A7A296;  --ns-bg:     #2E2B26;
+
+  --reply:     #252320;
+}
+
+/* ── Base styles ───────────────────────────────────────────────────── */
 html {
-  @apply bg-gray-50 dark:bg-gray-900;
+  background-color: var(--bg);
+  color: var(--ink);
+  font-family: 'Hanken Grotesk', system-ui, sans-serif;
+  font-size: 14px;
+  -webkit-font-smoothing: antialiased;
+}
+
+body {
+  background-color: var(--bg);
+  color: var(--ink);
+  font-family: 'Hanken Grotesk', system-ui, sans-serif;
+}
+
+/* ── Animations ────────────────────────────────────────────────────── */
+@keyframes slideUp {
+  from { transform: translateY(12px); opacity: 0; }
+  to   { transform: translateY(0);    opacity: 1; }
+}
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+@keyframes pop {
+  from { transform: scale(.95); opacity: 0; }
+  to   { transform: scale(1);   opacity: 1; }
+}
+
+.animate-slide-up { animation: slideUp .2s ease both; }
+.animate-fade-in  { animation: fadeIn  .2s ease both; }
+.animate-pop      { animation: pop     .14s cubic-bezier(.2,.9,.3,1) both; }
+
+/* ── Scrollbar ─────────────────────────────────────────────────────── */
+::-webkit-scrollbar       { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--line); border-radius: 99px; }
+::-webkit-scrollbar-thumb:hover { background: var(--faintest); }
+
+/* ── Print ─────────────────────────────────────────────────────────── */
+@media print {
+  .no-print { display: none !important; }
 }

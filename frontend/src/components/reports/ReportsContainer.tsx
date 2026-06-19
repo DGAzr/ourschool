@@ -19,7 +19,6 @@
 import { useAuth } from '../../contexts/AuthContext'
 import { useReportsData } from './hooks/useReportsData'
 import ReportsNavigation from './shared/ReportsNavigation'
-import LoadingSpinner from './shared/LoadingSpinner'
 import OverviewReport from './overview/OverviewReport'
 import TermReport from './terms/TermReport'
 import AttendanceReport from './attendance/AttendanceReport'
@@ -72,23 +71,14 @@ const ReportsContainer: React.FC = () => {
 
   if (error) {
     return (
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="bg-red-50 dark:bg-red-900 border border-red-200 dark:border-red-700 text-red-700 dark:text-red-200 px-4 py-3 rounded-lg">
-          <div className="flex">
-            <div className="ml-3">
-              <h3 className="text-sm font-medium">Error Loading Reports</h3>
-              <div className="mt-2 text-sm">
-                {error}
-              </div>
-            </div>
-          </div>
-        </div>
+      <div className="px-4 py-3 rounded-card text-[13px] text-neg-fg bg-neg-bg border border-neg-fg/20 mb-4">
+        {error}
       </div>
     )
   }
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+    <div>
       <ReportsNavigation
         selectedView={selectedView}
         onViewChange={setSelectedView}
@@ -96,7 +86,12 @@ const ReportsContainer: React.FC = () => {
       />
 
       {loading ? (
-        <LoadingSpinner message="Loading report data..." />
+        <div className="flex items-center justify-center py-16">
+          <svg className="h-6 w-6 animate-spin text-accent" fill="none" viewBox="0 0 24 24">
+            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+          </svg>
+        </div>
       ) : (
         <>
           {selectedView === 'overview' && (
