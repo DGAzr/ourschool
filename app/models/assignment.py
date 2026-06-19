@@ -15,6 +15,7 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 """Assignment models."""
+import uuid
 from datetime import datetime, timezone
 
 from sqlalchemy import (
@@ -48,6 +49,7 @@ class AssignmentTemplate(Base):
     __tablename__ = "assignment_templates"
 
     id = Column(Integer, primary_key=True, index=True)
+    external_id = Column(String(36), unique=True, nullable=False, default=lambda: str(uuid.uuid4()))
     name = Column(String, nullable=False)
     description = Column(Text)
     instructions = Column(Text)

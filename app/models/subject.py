@@ -15,6 +15,7 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 """Subject model."""
+import uuid
 from datetime import datetime, timezone
 
 from sqlalchemy import Column, DateTime, Integer, String, Text
@@ -29,6 +30,7 @@ class Subject(Base):
     __tablename__ = "subjects"
 
     id = Column(Integer, primary_key=True, index=True)
+    external_id = Column(String(36), unique=True, nullable=False, default=lambda: str(uuid.uuid4()))
     name = Column(String, nullable=False)
     description = Column(Text)
     color = Column(String, default="#3B82F6")

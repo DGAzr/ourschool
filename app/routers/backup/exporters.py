@@ -45,6 +45,7 @@ def export_users(db: Session) -> List[UserBackup]:
     users = db.query(User).all()
     for user in users:
         users_data.append(UserBackup(
+            external_id=user.external_id,
             email=user.email,
             username=user.username,
             first_name=user.first_name,
@@ -66,6 +67,7 @@ def export_subjects(db: Session) -> List[SubjectBackup]:
     subjects = db.query(Subject).all()
     for subject in subjects:
         subjects_data.append(SubjectBackup(
+            external_id=subject.external_id,
             name=subject.name,
             description=subject.description,
             color=subject.color
@@ -79,8 +81,10 @@ def export_terms(db: Session) -> List[TermBackup]:
     terms = db.query(Term).all()
     for term in terms:
         terms_data.append(TermBackup(
+            external_id=term.external_id,
             name=term.name,
             type=term.term_type.value,
+            academic_year=term.academic_year,
             start_date=term.start_date,
             end_date=term.end_date,
             is_current=term.is_current,
@@ -100,10 +104,12 @@ def export_assignment_templates(db: Session) -> List[AssignmentTemplateBackup]:
         creator_email = creator.email if creator else "unknown@system.local"
         
         templates_data.append(AssignmentTemplateBackup(
+            external_id=template.external_id,
             name=template.name,
             description=template.description,
             instructions=template.instructions,
             assignment_type=template.assignment_type.value,
+            subject_external_id=template.subject.external_id if template.subject else None,
             subject_name=template.subject.name if template.subject else "Unknown",
             max_points=template.max_points,
             estimated_duration_minutes=template.estimated_duration_minutes,
@@ -123,10 +129,11 @@ def export_term_subjects(db: Session) -> List[TermSubjectBackup]:
     term_subjects = db.query(TermSubject).all()
     for ts in term_subjects:
         term_subjects_data.append(TermSubjectBackup(
-            term_name=ts.term.name,
-            subject_name=ts.subject.name,
-            credits=ts.credits,
-            created_at=ts.created_at
+            term_external_id=ts.term.external_id if ts.term else None,
+            term_name=ts.term.name if ts.term else "Unknown",
+            subject_external_id=ts.subject.external_id if ts.subject else None,
+            subject_name=ts.subject.name if ts.subject else "Unknown",
+            weight=getattr(ts, 'weight', None),
         ))
     return term_subjects_data
 
@@ -137,7 +144,9 @@ def export_student_assignments(db: Session) -> List[StudentAssignmentBackup]:
     student_assignments = db.query(StudentAssignment).all()
     for sa in student_assignments:
         student_assignments_data.append(StudentAssignmentBackup(
+            student_external_id=sa.student.external_id if sa.student else None,
             student_email=sa.student.email if sa.student else "Unknown",
+            template_external_id=sa.template.external_id if sa.template else None,
             assignment_template_name=sa.template.name if sa.template else "Unknown",
             due_date=sa.due_date,
             extended_due_date=sa.extended_due_date,
@@ -205,6 +214,7 @@ def export_attendance_records(db: Session) -> List[AttendanceRecordBackup]:
     attendance = db.query(AttendanceRecord).all()
     for record in attendance:
         attendance_data.append(AttendanceRecordBackup(
+            student_external_id=record.student.external_id if record.student else None,
             student_email=record.student.email if record.student else "Unknown",
             date=record.date,
             status=record.status.value,
@@ -221,6 +231,7 @@ def export_journal_entries(db: Session) -> List[JournalEntryBackup]:
     journal_entries = db.query(JournalEntry).all()
     for entry in journal_entries:
         journal_data.append(JournalEntryBackup(
+            user_external_id=entry.author.external_id if entry.author else None,
             user_email=entry.author.email if entry.author else "Unknown",
             title=entry.title,
             content=entry.content,

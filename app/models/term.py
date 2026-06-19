@@ -15,6 +15,7 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 """Term models."""
+import uuid
 from datetime import date, datetime, timezone
 
 from sqlalchemy import (
@@ -46,6 +47,7 @@ class Term(Base):
     __tablename__ = "terms"
 
     id = Column(Integer, primary_key=True, index=True)
+    external_id = Column(String(36), unique=True, nullable=False, default=lambda: str(uuid.uuid4()))
     name = Column(String, nullable=False)  # e.g., "Fall 2024", "Spring Semester", "Q1"
     description = Column(Text)  # Optional description
 

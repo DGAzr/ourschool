@@ -25,6 +25,7 @@ from pydantic import BaseModel, Field, field_validator
 
 class UserBackup(BaseModel):
     """Schema for backing up user data."""
+    external_id: Optional[str] = None  # Stable cross-version identity (added format 2.0)
     email: str
     username: str
     first_name: str
@@ -40,6 +41,7 @@ class UserBackup(BaseModel):
 
 class SubjectBackup(BaseModel):
     """Schema for backing up subject data."""
+    external_id: Optional[str] = None  # Stable cross-version identity (added format 2.0)
     name: str
     description: Optional[str] = None
     color: str = "#3B82F6"
@@ -47,11 +49,13 @@ class SubjectBackup(BaseModel):
 
 class AssignmentTemplateBackup(BaseModel):
     """Schema for backing up assignment template data."""
+    external_id: Optional[str] = None  # Stable cross-version identity (added format 2.0)
     name: str
     description: Optional[str] = None
     instructions: Optional[str] = None
     assignment_type: str
-    subject_name: str  # Will be resolved during import
+    subject_external_id: Optional[str] = None  # Preferred resolution key (format 2.0)
+    subject_name: str  # Fallback resolution key (all versions)
     max_points: int = 100
     estimated_duration_minutes: Optional[int] = None
     prerequisites: Optional[str] = None
@@ -64,8 +68,10 @@ class AssignmentTemplateBackup(BaseModel):
 
 class StudentAssignmentBackup(BaseModel):
     """Schema for backing up student assignment data."""
-    student_email: str  # For resolution
-    assignment_template_name: str  # For resolution
+    student_external_id: Optional[str] = None  # Preferred resolution key (format 2.0)
+    student_email: str  # Fallback resolution key
+    template_external_id: Optional[str] = None  # Preferred resolution key (format 2.0)
+    assignment_template_name: str  # Fallback resolution key
     due_date: Optional[date] = None
     extended_due_date: Optional[date] = None
     status: str = "not_started"
@@ -85,8 +91,10 @@ class StudentAssignmentBackup(BaseModel):
 
 class TermBackup(BaseModel):
     """Schema for backing up term data."""
+    external_id: Optional[str] = None  # Stable cross-version identity (added format 2.0)
     name: str
     type: str
+    academic_year: Optional[str] = None  # Added format 2.0; derived on import if absent
     start_date: date
     end_date: date
     is_current: bool = False
@@ -96,17 +104,22 @@ class TermBackup(BaseModel):
 
 class TermSubjectBackup(BaseModel):
     """Schema for backing up term-subject relationships."""
-    term_name: str  # For resolution
-    subject_name: str  # For resolution
+    term_external_id: Optional[str] = None  # Preferred resolution key (format 2.0)
+    term_name: str  # Fallback resolution key
+    subject_external_id: Optional[str] = None  # Preferred resolution key (format 2.0)
+    subject_name: str  # Fallback resolution key
     target_grade: Optional[str] = None
     weight: Optional[float] = None
 
 
 class StudentTermGradeBackup(BaseModel):
     """Schema for backing up student term grades."""
-    student_email: str  # For resolution
-    term_name: str  # For resolution
-    subject_name: str  # For resolution
+    student_external_id: Optional[str] = None
+    student_email: str  # Fallback resolution key
+    term_external_id: Optional[str] = None
+    term_name: str  # Fallback resolution key
+    subject_external_id: Optional[str] = None
+    subject_name: str  # Fallback resolution key
     grade: Optional[str] = None
     points_earned: Optional[int] = None
     points_possible: Optional[int] = None
@@ -130,7 +143,8 @@ class GradeHistoryBackup(BaseModel):
 
 class AttendanceRecordBackup(BaseModel):
     """Schema for backing up attendance records."""
-    student_email: str  # For resolution
+    student_external_id: Optional[str] = None
+    student_email: str  # Fallback resolution key
     date: date
     status: str
     notes: Optional[str] = None
@@ -140,7 +154,8 @@ class AttendanceRecordBackup(BaseModel):
 
 class JournalEntryBackup(BaseModel):
     """Schema for backing up journal entries."""
-    user_email: str  # For resolution
+    user_external_id: Optional[str] = None
+    user_email: str  # Fallback resolution key
     title: str
     content: str
     date: date
@@ -155,7 +170,7 @@ class SystemBackup(BaseModel):
     """Complete system backup schema containing all data."""
     
     # Metadata
-    format_version: str = "1.0"
+    format_version: str = "2.0"
     backup_timestamp: datetime
     created_by: str
     system_info: Dict[str, Any] = {}
