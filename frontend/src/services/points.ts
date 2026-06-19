@@ -70,6 +70,11 @@ export interface PointsSystemStatus {
   can_toggle: boolean
 }
 
+export interface AwardPreset {
+  label: string
+  amount: number
+}
+
 export const pointsApi = {
   // System status
   getSystemStatus: async (): Promise<PointsSystemStatus> => {
@@ -108,5 +113,13 @@ export const pointsApi = {
 
   getAdminOverview: async (): Promise<AdminPointsOverview> => {
     return await api.get('/points/admin/overview')
+  },
+
+  getPresets: async (): Promise<AwardPreset[]> => {
+    return await api.get('/points/presets')
+  },
+
+  setPresets: async (presets: AwardPreset[]): Promise<AwardPreset[]> => {
+    return await api.put('/points/presets', presets)
   },
 }

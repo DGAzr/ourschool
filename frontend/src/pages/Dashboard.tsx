@@ -19,10 +19,10 @@
 import React, { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
-import { X, Award } from 'lucide-react'
+import { X } from 'lucide-react'
 import { reportsApi } from '../services/reports'
 import { subjectsApi } from '../services/subjects'
-import { pointsApi, type StudentPoints } from '../services/points'
+import { pointsApi, type StudentPoints, type AwardPreset } from '../services/points'
 import { activityApi, type ActivityItem } from '../services/activity'
 import { termsApi } from '../services/terms'
 import { AdminReport, StudentReport, Term } from '../types'
@@ -41,6 +41,7 @@ interface QuickAwardModalProps {
 
 const QuickAwardModal: React.FC<QuickAwardModalProps> = ({ onClose, onSuccess }) => {
   const [students, setStudents] = useState<StudentPoints[]>([])
+  const [presets, setPresets] = useState<AwardPreset[]>([])
   const [selectedStudentId, setSelectedStudentId] = useState('')
   const [amount, setAmount] = useState('')
   const [notes, setNotes] = useState('')
@@ -50,6 +51,7 @@ const QuickAwardModal: React.FC<QuickAwardModalProps> = ({ onClose, onSuccess })
 
   useEffect(() => {
     loadStudents()
+    pointsApi.getPresets().then(setPresets).catch(() => {})
   }, [])
 
   // ESC key handling
@@ -103,102 +105,118 @@ const QuickAwardModal: React.FC<QuickAwardModalProps> = ({ onClose, onSuccess })
       onSuccess()
       onClose()
     } catch (err: any) {
-      setError(err.response?.data?.detail || 'Failed to award points')
+      setError(err.message || 'Failed to award points')
     } finally {
       setLoading(false)
     }
   }
 
+  const FIELD = 'bg-field-bg border border-field-border rounded-field px-3 py-2 text-[13.5px] text-ink focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent placeholder:text-faintest w-full'
+  const LABEL = 'block text-[12px] font-semibold text-muted uppercase tracking-wide mb-1.5'
+
   return (
-    <div className="fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center z-50">
-      <div className="bg-white dark:bg-gray-800 rounded-lg w-full max-w-md p-6">
-        <div className="flex items-center justify-between mb-4">
-          <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100 flex items-center">
-            <Award className="h-5 w-5 mr-2 text-yellow-500" />
-            Quick Award Points
-          </h3>
-          <button
-            onClick={onClose}
-            className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
-          >
-            <X className="h-5 w-5" />
+    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
+      <div className="bg-panel border border-line rounded-card-lg shadow-xl w-full max-w-md overflow-hidden flex flex-col">
+
+        {/* Header */}
+        <div className="flex items-center justify-between px-6 py-4 border-b border-line">
+          <div>
+            <h3 className="text-[15px] font-semibold text-ink">Quick Award Points</h3>
+            <p className="text-[12px] text-muted mt-0.5">Manually award points to a student</p>
+          </div>
+          <button onClick={onClose} className="w-7 h-7 flex items-center justify-center rounded-full text-faint hover:text-ink hover:bg-track transition-colors">
+            <X className="w-4 h-4" />
           </button>
         </div>
 
-        {error && (
-          <div className="mb-4 bg-red-50 dark:bg-red-900 border border-red-200 dark:border-red-700 text-red-700 dark:text-red-200 px-4 py-3 rounded">
-            {error}
-          </div>
-        )}
+        <form onSubmit={handleSubmit} className="flex flex-col">
+          <div className="px-6 py-5 space-y-5">
 
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-              Select Student
-            </label>
-            {loadingStudents ? (
-              <div className="bg-gray-200 dark:bg-gray-700 animate-pulse rounded-md h-10"></div>
-            ) : (
-              <select
-                value={selectedStudentId}
-                onChange={(e) => setSelectedStudentId(e.target.value)}
-                className="w-full border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 rounded-md px-3 py-2 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-                required
-              >
-                <option value="">Choose a student...</option>
-                {students.map((student) => (
-                  <option key={student.student_id} value={student.student_id}>
-                    {student.student_name}
-                  </option>
-                ))}
-              </select>
+            {error && (
+              <div className="bg-neg-bg text-neg-fg px-4 py-3 rounded-field text-[13px]">{error}</div>
             )}
+
+            <div>
+              <label className={LABEL}>Student <span className="text-neg-fg normal-case">*</span></label>
+              {loadingStudents ? (
+                <div className="h-[38px] bg-track rounded-field animate-pulse" />
+              ) : (
+                <select
+                  value={selectedStudentId}
+                  onChange={e => setSelectedStudentId(e.target.value)}
+                  className={FIELD}
+                  required
+                >
+                  <option value="">Choose a student…</option>
+                  {students.map(s => (
+                    <option key={s.student_id} value={s.student_id}>{s.student_name}</option>
+                  ))}
+                </select>
+              )}
+            </div>
+
+            <div>
+              <label className={LABEL}>Points to Award <span className="text-neg-fg normal-case">*</span></label>
+              {presets.length > 0 && (
+                <div className="flex flex-wrap gap-1.5 mb-2">
+                  {presets.map((p, i) => (
+                    <button
+                      key={i}
+                      type="button"
+                      onClick={() => { setAmount(String(p.amount)); setNotes(p.label) }}
+                      className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-accent/10 border border-accent/20 text-[12px] font-medium text-accent hover:bg-accent/20 transition-colors"
+                    >
+                      <span>{p.label}</span>
+                      <span className="font-semibold">+{p.amount}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+              <input
+                type="number"
+                min="1"
+                value={amount}
+                onChange={e => setAmount(e.target.value)}
+                placeholder="e.g., 10"
+                className={FIELD}
+                required
+              />
+            </div>
+
+            <div>
+              <label className={LABEL}>Reason <span className="text-neg-fg normal-case">*</span></label>
+              <textarea
+                value={notes}
+                onChange={e => setNotes(e.target.value)}
+                placeholder="Explain why you're awarding these points…"
+                rows={3}
+                className={FIELD}
+                required
+              />
+            </div>
           </div>
 
-          <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-              Points to Award
-            </label>
-            <input
-              type="number"
-              min="1"
-              value={amount}
-              onChange={(e) => setAmount(e.target.value)}
-              placeholder="Enter number of points"
-              className="w-full border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 rounded-md px-3 py-2 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-              required
-            />
-          </div>
-
-          <div>
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-              Reason for Award
-            </label>
-            <textarea
-              value={notes}
-              onChange={(e) => setNotes(e.target.value)}
-              placeholder="Explain why you're awarding these points..."
-              rows={3}
-              className="w-full border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 rounded-md px-3 py-2 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-              required
-            />
-          </div>
-
-          <div className="flex space-x-3 pt-4">
+          {/* Footer */}
+          <div className="flex items-center justify-end gap-2 px-6 py-4 border-t border-line bg-panel-2">
             <button
               type="button"
               onClick={onClose}
               disabled={loading}
-              className="flex-1 px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 rounded-md hover:bg-gray-200 dark:hover:bg-gray-600 disabled:opacity-50"
+              className="h-[34px] px-4 text-[13px] font-semibold text-muted hover:text-ink transition-colors disabled:opacity-50"
             >
               Cancel
             </button>
             <button
               type="submit"
               disabled={loading || loadingStudents}
-              className="flex-1 px-4 py-2 text-sm font-medium text-white bg-yellow-600 rounded-md hover:bg-yellow-700 disabled:opacity-50"
+              className="h-[34px] px-4 rounded-field bg-btn-primary-bg text-btn-primary-fg text-[13.5px] font-semibold hover:opacity-90 transition-opacity disabled:opacity-40 flex items-center gap-2"
             >
-              {loading ? 'Awarding...' : 'Award Points'}
+              {loading ? (
+                <>
+                  <span className="w-3.5 h-3.5 border-2 border-current border-t-transparent rounded-full animate-spin" />
+                  Awarding…
+                </>
+              ) : 'Award Points'}
             </button>
           </div>
         </form>

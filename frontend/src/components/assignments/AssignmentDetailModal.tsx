@@ -17,16 +17,15 @@
  */
 
 import React, { useState, useEffect } from 'react'
-import { 
-  X, 
-  FileText, 
-  User, 
-  Calendar, 
-  Clock, 
-  Target, 
-  Award, 
-  BookOpen, 
-  MessageSquare, 
+import {
+  X,
+  FileText,
+  Calendar,
+  Clock,
+  Target,
+  Award,
+  BookOpen,
+  MessageSquare,
   Paperclip,
   ExternalLink,
   CheckCircle,
@@ -50,6 +49,23 @@ interface DetailedAssignment extends StudentAssignment {
   student_name?: string
 }
 
+const SECTION = 'bg-panel-2 border border-line rounded-card-lg p-5'
+const SECTION_TITLE = 'text-[13px] font-semibold text-ink mb-4 flex items-center gap-2'
+const ROW = 'flex items-center justify-between py-2.5 border-b border-line last:border-0'
+const ROW_LABEL = 'text-[12.5px] text-muted flex items-center gap-2'
+const ROW_VALUE = 'text-[13px] font-medium text-ink'
+
+const statusBadge = (status: string) => {
+  switch (status) {
+    case 'not_started': return 'bg-track text-faint border border-line'
+    case 'in_progress': return 'bg-accent/10 text-accent border border-accent/20'
+    case 'submitted': return 'bg-pos-bg text-pos-fg border border-[var(--pos-fg)]/20'
+    case 'graded': return 'bg-pos-bg text-pos-fg border border-[var(--pos-fg)]/20'
+    case 'overdue': return 'bg-neg-bg text-neg-fg border border-[var(--neg-fg)]/20'
+    default: return 'bg-track text-faint border border-line'
+  }
+}
+
 const AssignmentDetailModal: React.FC<AssignmentDetailModalProps> = ({
   assignmentId,
   studentId,
@@ -61,184 +77,122 @@ const AssignmentDetailModal: React.FC<AssignmentDetailModalProps> = ({
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    if (isOpen && assignmentId) {
-      fetchAssignmentDetails()
-    }
+    if (isOpen && assignmentId) fetchAssignmentDetails()
   }, [isOpen, assignmentId, studentId])
+
+  useEffect(() => {
+    const handleEscape = (e: KeyboardEvent) => { if (e.key === 'Escape' && isOpen) onClose() }
+    if (isOpen) { document.addEventListener('keydown', handleEscape); return () => document.removeEventListener('keydown', handleEscape) }
+  }, [isOpen, onClose])
 
   const fetchAssignmentDetails = async () => {
     try {
       setLoading(true)
       setError(null)
-      
-      // Fetch assignment details
-      const assignmentData = await assignmentsApi.getStudentAssignment(assignmentId)
-      if (assignmentData.template) {
-        setAssignment(assignmentData as DetailedAssignment)
+      const data = await assignmentsApi.getStudentAssignment(assignmentId)
+      if (data.template) {
+        setAssignment(data as DetailedAssignment)
       } else {
         setError('Assignment template not found')
       }
     } catch (err: any) {
-      setError(err.response?.data?.detail || 'Failed to load assignment details')
-      // Failed to fetch assignment details
+      setError(err.message || 'Failed to load assignment details')
     } finally {
       setLoading(false)
     }
   }
 
-  const formatDate = (dateString?: string) => {
-    return formatDateOnly(dateString)
-  }
-
-
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'not_started':
-        return 'bg-gray-100 text-gray-800 border-gray-200'
-      case 'in_progress':
-        return 'bg-blue-100 text-blue-800 border-blue-200'
-      case 'submitted':
-        return 'bg-yellow-100 text-yellow-800 border-yellow-200'
-      case 'graded':
-        return 'bg-green-100 text-green-800 border-green-200'
-      case 'overdue':
-        return 'bg-red-100 text-red-800 border-red-200'
-      default:
-        return 'bg-gray-100 text-gray-800 border-gray-200'
-    }
-  }
-
-  const getGradeColor = (percentage?: number | null) => {
-    if (percentage === null || percentage === undefined) return 'text-gray-500'
-    if (percentage >= 90) return 'text-green-600'
-    if (percentage >= 80) return 'text-blue-600'
-    if (percentage >= 70) return 'text-yellow-600'
-    return 'text-red-600'
-  }
-
   if (!isOpen) return null
 
+  const pct = assignment?.percentage_grade
+  const pctColor = pct == null ? 'text-muted' : pct >= 90 ? 'text-pos-fg' : pct >= 70 ? 'text-accent' : 'text-neg-fg'
+
   return (
-    <div className="fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center z-50 p-4">
-      <div className="bg-white dark:bg-gray-800 rounded-xl shadow-xl w-full max-w-4xl max-h-[90vh] overflow-hidden">
+    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
+      <div className="bg-panel border border-line rounded-card-lg shadow-xl w-full max-w-2xl max-h-[90vh] overflow-hidden flex flex-col">
+
         {/* Header */}
-        <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700 bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-900/20 dark:to-indigo-900/20">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center">
-              <div className="w-10 h-10 bg-blue-500 rounded-lg flex items-center justify-center mr-4">
-                <FileText className="h-5 w-5 text-white" />
-              </div>
-              <div>
-                <h3 className="text-xl font-semibold text-gray-900 dark:text-gray-100">
-                  Assignment Details
-                </h3>
-                <p className="text-sm text-gray-600 dark:text-gray-400">
-                  Complete assignment information
-                </p>
-              </div>
-            </div>
-            <button
-              onClick={onClose}
-              disabled={loading}
-              className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 disabled:opacity-50"
-            >
-              <X className="h-6 w-6" />
-            </button>
+        <div className="flex items-center justify-between px-6 py-4 border-b border-line">
+          <div>
+            <h3 className="text-[15px] font-semibold text-ink">Assignment Details</h3>
+            {assignment && (
+              <p className="text-[12px] text-muted mt-0.5">{assignment.template?.name}</p>
+            )}
           </div>
+          <button
+            onClick={onClose}
+            className="w-7 h-7 flex items-center justify-center rounded-full text-faint hover:text-ink hover:bg-track transition-colors"
+          >
+            <X className="w-4 h-4" />
+          </button>
         </div>
 
-        {/* Content */}
-        <div className="overflow-y-auto max-h-[calc(90vh-80px)]">
+        {/* Body */}
+        <div className="flex-1 overflow-y-auto px-6 py-5 space-y-4">
+
           {loading && (
-            <div className="flex items-center justify-center p-8">
-              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500"></div>
-              <span className="ml-3 text-gray-600 dark:text-gray-400">Loading assignment details...</span>
+            <div className="flex flex-col items-center justify-center py-16 gap-3">
+              <div className="w-6 h-6 border-2 border-accent border-t-transparent rounded-full animate-spin" />
+              <p className="text-[13px] text-faint">Loading…</p>
             </div>
           )}
 
           {error && (
-            <div className="p-6">
-              <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-200 px-4 py-3 rounded-md">
-                {error}
-              </div>
-            </div>
+            <div className="bg-neg-bg text-neg-fg px-4 py-3 rounded-field text-[13px]">{error}</div>
           )}
 
           {assignment && (
-            <div className="p-6 space-y-6">
-              {/* Assignment Header */}
-              <div className="bg-gray-50 dark:bg-gray-700 rounded-lg p-6">
+            <>
+              {/* Hero summary */}
+              <div className={SECTION}>
                 <div className="flex items-start justify-between mb-4">
-                  <div className="flex-1">
-                    <h2 className="text-2xl font-bold text-gray-900 dark:text-gray-100 mb-2">
-                      {assignment.template?.name}
-                    </h2>
-                    <div className="flex items-center space-x-4 text-sm text-gray-600 dark:text-gray-400">
-                      <span className="flex items-center">
-                        <BookOpen className="h-4 w-4 mr-1" />
-                        Assignment #{assignment.id}
-                      </span>
-                      {assignment.student_name && (
-                        <span className="flex items-center">
-                          <User className="h-4 w-4 mr-1" />
-                          {assignment.student_name}
-                        </span>
-                      )}
-                    </div>
+                  <div>
+                    <h2 className="text-[18px] font-bold text-ink mb-1">{assignment.template?.name}</h2>
+                    <p className="text-[12.5px] text-muted">Assignment #{assignment.id}</p>
                   </div>
-                  <div className="flex flex-col items-end space-y-2">
-                    <span className={`inline-flex items-center px-3 py-1 text-sm font-medium rounded-full border ${getStatusColor(assignment.status)}`}>
-                      {assignment.status.replace('_', ' ').toUpperCase()}
-                    </span>
-                    {assignment.percentage_grade !== null && (
-                      <span className={`text-lg font-bold ${getGradeColor(assignment.percentage_grade)}`}>
-                        {assignment.percentage_grade?.toFixed(1)}%
-                      </span>
-                    )}
-                  </div>
+                  <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-semibold uppercase tracking-wide ${statusBadge(assignment.status)}`}>
+                    {assignment.status.replace('_', ' ')}
+                  </span>
                 </div>
 
-                {/* Key Metrics */}
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                  <div className="text-center p-3 bg-white dark:bg-gray-600 rounded-lg">
-                    <div className="text-lg font-semibold text-gray-900 dark:text-gray-100">
-                      {assignment.points_earned !== null ? assignment.points_earned : '—'} / {assignment.custom_max_points || assignment.template?.max_points || 0}
+                {/* Metrics grid */}
+                <div className="grid grid-cols-4 gap-2">
+                  {[
+                    {
+                      value: assignment.points_earned !== null && assignment.points_earned !== undefined
+                        ? `${assignment.points_earned} / ${assignment.custom_max_points || assignment.template?.max_points || 0}`
+                        : `— / ${assignment.custom_max_points || assignment.template?.max_points || 0}`,
+                      label: 'Points'
+                    },
+                    { value: assignment.letter_grade || '—', label: 'Letter Grade' },
+                    {
+                      value: assignment.template?.estimated_duration_minutes
+                        ? `${assignment.template.estimated_duration_minutes}m` : '—',
+                      label: 'Est. Duration'
+                    },
+                    { value: `${assignment.time_spent_minutes ?? 0}m`, label: 'Time Spent' },
+                  ].map(({ value, label }) => (
+                    <div key={label} className="bg-panel border border-line rounded-field p-3 text-center">
+                      <div className={`text-[15px] font-semibold ${label === 'Letter Grade' && pct != null ? pctColor : 'text-ink'}`}>{value}</div>
+                      <div className="text-[11px] text-faint mt-0.5">{label}</div>
                     </div>
-                    <div className="text-xs text-gray-500 dark:text-gray-400">Points</div>
-                  </div>
-                  <div className="text-center p-3 bg-white dark:bg-gray-600 rounded-lg">
-                    <div className="text-lg font-semibold text-gray-900 dark:text-gray-100">
-                      {assignment.letter_grade || '—'}
-                    </div>
-                    <div className="text-xs text-gray-500 dark:text-gray-400">Letter Grade</div>
-                  </div>
-                  <div className="text-center p-3 bg-white dark:bg-gray-600 rounded-lg">
-                    <div className="text-lg font-semibold text-gray-900 dark:text-gray-100">
-                      {assignment.template?.estimated_duration_minutes ? `${assignment.template.estimated_duration_minutes}m` : '—'}
-                    </div>
-                    <div className="text-xs text-gray-500 dark:text-gray-400">Est. Duration</div>
-                  </div>
-                  <div className="text-center p-3 bg-white dark:bg-gray-600 rounded-lg">
-                    <div className="text-lg font-semibold text-gray-900 dark:text-gray-100">
-                      {assignment.time_spent_minutes}m
-                    </div>
-                    <div className="text-xs text-gray-500 dark:text-gray-400">Time Spent</div>
-                  </div>
+                  ))}
                 </div>
+
+                {pct !== null && pct !== undefined && (
+                  <p className={`text-right text-[12.5px] font-semibold mt-2 ${pctColor}`}>{pct.toFixed(1)}%</p>
+                )}
               </div>
 
-              {/* Assignment Description & Instructions */}
-              {(assignment.template?.description || assignment.template?.instructions) && (
-                <div className="bg-white dark:bg-gray-700 rounded-lg p-6 border border-gray-200 dark:border-gray-600">
-                  <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4 flex items-center">
-                    <FileText className="h-5 w-5 mr-2" />
-                    Assignment Details
-                  </h3>
-                  
+              {/* Description & instructions */}
+              {(assignment.template?.description || assignment.template?.instructions || assignment.custom_instructions) && (
+                <div className={SECTION}>
+                  <h3 className={SECTION_TITLE}><FileText className="w-4 h-4 text-muted" /> Assignment Details</h3>
+
                   {assignment.template?.description && (
                     <div className="mb-4">
-                      <h4 className="text-md font-medium text-gray-800 dark:text-gray-200 mb-2">Description</h4>
-                      <div className="prose dark:prose-invert max-w-none">
+                      <p className="text-[11.5px] font-semibold text-muted uppercase tracking-wide mb-1.5">Description</p>
+                      <div className="text-[13.5px] text-ink">
                         <MarkdownRenderer content={assignment.template.description} />
                       </div>
                     </div>
@@ -246,17 +200,17 @@ const AssignmentDetailModal: React.FC<AssignmentDetailModalProps> = ({
 
                   {assignment.template?.instructions && (
                     <div className="mb-4">
-                      <h4 className="text-md font-medium text-gray-800 dark:text-gray-200 mb-2">Instructions</h4>
-                      <div className="prose dark:prose-invert max-w-none">
+                      <p className="text-[11.5px] font-semibold text-muted uppercase tracking-wide mb-1.5">Instructions</p>
+                      <div className="text-[13.5px] text-ink">
                         <MarkdownRenderer content={assignment.template.instructions} />
                       </div>
                     </div>
                   )}
 
                   {assignment.custom_instructions && (
-                    <div className="mt-4 p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800">
-                      <h4 className="text-md font-medium text-blue-800 dark:text-blue-200 mb-2">Custom Instructions</h4>
-                      <div className="prose dark:prose-invert max-w-none text-blue-700 dark:text-blue-300">
+                    <div className="px-3 py-2.5 bg-accent/6 border border-accent/20 rounded-field">
+                      <p className="text-[11.5px] font-semibold text-accent uppercase tracking-wide mb-1">Custom Instructions</p>
+                      <div className="text-[13px] text-ink">
                         <MarkdownRenderer content={assignment.custom_instructions} />
                       </div>
                     </div>
@@ -265,98 +219,72 @@ const AssignmentDetailModal: React.FC<AssignmentDetailModalProps> = ({
               )}
 
               {/* Timeline */}
-              <div className="bg-white dark:bg-gray-700 rounded-lg p-6 border border-gray-200 dark:border-gray-600">
-                <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4 flex items-center">
-                  <Clock className="h-5 w-5 mr-2" />
-                  Timeline
-                </h3>
-                
-                <div className="space-y-4">
-                  <div className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-600 rounded-lg">
-                    <div className="flex items-center">
-                      <Calendar className="h-4 w-4 text-gray-500 mr-2" />
-                      <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Assigned Date</span>
+              <div className={SECTION}>
+                <h3 className={SECTION_TITLE}><Clock className="w-4 h-4 text-muted" /> Timeline</h3>
+                <div>
+                  {assignment.assigned_date && (
+                    <div className={ROW}>
+                      <span className={ROW_LABEL}><Calendar className="w-3.5 h-3.5" /> Assigned</span>
+                      <span className={ROW_VALUE}>{formatDateOnly(assignment.assigned_date)}</span>
                     </div>
-                    <span className="text-sm text-gray-900 dark:text-gray-100">{formatDate(assignment.assigned_date)}</span>
-                  </div>
-
+                  )}
                   {assignment.due_date && (
-                    <div className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-600 rounded-lg">
-                      <div className="flex items-center">
-                        <Target className="h-4 w-4 text-orange-500 mr-2" />
-                        <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Due Date</span>
-                      </div>
-                      <span className="text-sm text-gray-900 dark:text-gray-100">{formatDate(assignment.due_date)}</span>
+                    <div className={ROW}>
+                      <span className={ROW_LABEL}><Target className="w-3.5 h-3.5 text-[var(--neg-fg)]" /> Due</span>
+                      <span className={ROW_VALUE}>{formatDateOnly(assignment.due_date)}</span>
                     </div>
                   )}
-
                   {assignment.started_date && (
-                    <div className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-600 rounded-lg">
-                      <div className="flex items-center">
-                        <CheckCircle className="h-4 w-4 text-blue-500 mr-2" />
-                        <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Started</span>
-                      </div>
-                      <span className="text-sm text-gray-900 dark:text-gray-100">{formatDate(assignment.started_date)}</span>
+                    <div className={ROW}>
+                      <span className={ROW_LABEL}><CheckCircle className="w-3.5 h-3.5 text-accent" /> Started</span>
+                      <span className={ROW_VALUE}>{formatDateOnly(assignment.started_date)}</span>
                     </div>
                   )}
-
                   {assignment.submitted_date && (
-                    <div className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-600 rounded-lg">
-                      <div className="flex items-center">
-                        <AlertCircle className="h-4 w-4 text-yellow-500 mr-2" />
-                        <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Submitted</span>
-                      </div>
-                      <span className="text-sm text-gray-900 dark:text-gray-100">{formatDate(assignment.submitted_date)}</span>
+                    <div className={ROW}>
+                      <span className={ROW_LABEL}><AlertCircle className="w-3.5 h-3.5 text-pos-fg" /> Submitted</span>
+                      <span className={ROW_VALUE}>{formatDateOnly(assignment.submitted_date)}</span>
                     </div>
                   )}
-
                   {assignment.graded_date && (
-                    <div className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-600 rounded-lg">
-                      <div className="flex items-center">
-                        <Award className="h-4 w-4 text-green-500 mr-2" />
-                        <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Graded</span>
-                      </div>
-                      <span className="text-sm text-gray-900 dark:text-gray-100">{formatDate(assignment.graded_date)}</span>
+                    <div className={ROW}>
+                      <span className={ROW_LABEL}><Award className="w-3.5 h-3.5 text-pos-fg" /> Graded</span>
+                      <span className={ROW_VALUE}>{formatDateOnly(assignment.graded_date)}</span>
                     </div>
                   )}
                 </div>
               </div>
 
-              {/* Student Submission */}
+              {/* Submission */}
               {(assignment.submission_notes || (assignment.submission_artifacts && assignment.submission_artifacts.length > 0)) && (
-                <div className="bg-white dark:bg-gray-700 rounded-lg p-6 border border-gray-200 dark:border-gray-600">
-                  <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4 flex items-center">
-                    <Users className="h-5 w-5 mr-2" />
-                    Student Submission
-                  </h3>
+                <div className={SECTION}>
+                  <h3 className={SECTION_TITLE}><Users className="w-4 h-4 text-muted" /> Your Submission</h3>
 
                   {assignment.submission_notes && (
-                    <div className="mb-4">
-                      <h4 className="text-md font-medium text-gray-800 dark:text-gray-200 mb-2 flex items-center">
-                        <MessageSquare className="h-4 w-4 mr-2" />
-                        Notes to Admin
-                      </h4>
-                      <div className="p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800">
-                        <p className="text-blue-700 dark:text-blue-300 whitespace-pre-wrap">{assignment.submission_notes}</p>
+                    <div className="mb-3">
+                      <p className="text-[11.5px] font-semibold text-muted uppercase tracking-wide mb-1.5 flex items-center gap-1.5">
+                        <MessageSquare className="w-3.5 h-3.5" /> Notes
+                      </p>
+                      <div className="px-3 py-2.5 bg-accent/6 border border-accent/15 rounded-field text-[13px] text-ink whitespace-pre-wrap">
+                        {assignment.submission_notes}
                       </div>
                     </div>
                   )}
 
                   {assignment.submission_artifacts && assignment.submission_artifacts.length > 0 && (
                     <div>
-                      <h4 className="text-md font-medium text-gray-800 dark:text-gray-200 mb-2 flex items-center">
-                        <Paperclip className="h-4 w-4 mr-2" />
-                        Artifact Links ({assignment.submission_artifacts.length})
-                      </h4>
-                      <div className="space-y-2">
-                        {assignment.submission_artifacts.map((link, index) => (
-                          <div key={index} className="flex items-center space-x-3 p-3 bg-gray-50 dark:bg-gray-600 rounded-lg">
-                            <ExternalLink className="h-4 w-4 text-blue-500 flex-shrink-0" />
+                      <p className="text-[11.5px] font-semibold text-muted uppercase tracking-wide mb-1.5 flex items-center gap-1.5">
+                        <Paperclip className="w-3.5 h-3.5" /> Links ({assignment.submission_artifacts.length})
+                      </p>
+                      <div className="space-y-1.5">
+                        {assignment.submission_artifacts.map((link, i) => (
+                          <div key={i} className="flex items-center gap-2 px-3 py-2 bg-panel border border-line rounded-field">
+                            <ExternalLink className="w-3.5 h-3.5 text-accent flex-shrink-0" />
                             <a
                               href={link}
                               target="_blank"
                               rel="noopener noreferrer"
-                              className="text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 underline break-all flex-1"
+                              className="text-[13px] text-accent underline hover:opacity-80 break-all"
                             >
                               {link}
                             </a>
@@ -368,46 +296,40 @@ const AssignmentDetailModal: React.FC<AssignmentDetailModalProps> = ({
                 </div>
               )}
 
-              {/* Teacher Feedback & Student Notes */}
+              {/* Feedback & notes */}
               {(assignment.teacher_feedback || assignment.student_notes) && (
-                <div className="bg-white dark:bg-gray-700 rounded-lg p-6 border border-gray-200 dark:border-gray-600">
-                  <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4 flex items-center">
-                    <MessageSquare className="h-5 w-5 mr-2" />
-                    Notes & Feedback
-                  </h3>
+                <div className={SECTION}>
+                  <h3 className={SECTION_TITLE}><MessageSquare className="w-4 h-4 text-muted" /> Notes & Feedback</h3>
 
                   {assignment.teacher_feedback && (
-                    <div className="mb-4">
-                      <h4 className="text-md font-medium text-gray-800 dark:text-gray-200 mb-2">Teacher Feedback</h4>
-                      <div className="p-4 bg-green-50 dark:bg-green-900/20 rounded-lg border border-green-200 dark:border-green-800">
-                        <p className="text-green-700 dark:text-green-300 whitespace-pre-wrap">{assignment.teacher_feedback}</p>
+                    <div className="mb-3">
+                      <p className="text-[11.5px] font-semibold text-muted uppercase tracking-wide mb-1.5">Teacher Feedback</p>
+                      <div className="px-3 py-2.5 bg-pos-bg border border-[var(--pos-fg)]/20 rounded-field text-[13px] text-pos-fg whitespace-pre-wrap">
+                        {assignment.teacher_feedback}
                       </div>
                     </div>
                   )}
 
                   {assignment.student_notes && (
                     <div>
-                      <h4 className="text-md font-medium text-gray-800 dark:text-gray-200 mb-2">Student Notes</h4>
-                      <div className="p-4 bg-purple-50 dark:bg-purple-900/20 rounded-lg border border-purple-200 dark:border-purple-800">
-                        <p className="text-purple-700 dark:text-purple-300 whitespace-pre-wrap">{assignment.student_notes}</p>
+                      <p className="text-[11.5px] font-semibold text-muted uppercase tracking-wide mb-1.5">Student Notes</p>
+                      <div className="px-3 py-2.5 bg-track border border-line rounded-field text-[13px] text-ink whitespace-pre-wrap">
+                        {assignment.student_notes}
                       </div>
                     </div>
                   )}
                 </div>
               )}
 
-              {/* Additional Information */}
+              {/* Additional info */}
               {(assignment.template?.prerequisites || assignment.template?.materials_needed) && (
-                <div className="bg-white dark:bg-gray-700 rounded-lg p-6 border border-gray-200 dark:border-gray-600">
-                  <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 mb-4 flex items-center">
-                    <BookOpen className="h-5 w-5 mr-2" />
-                    Additional Information
-                  </h3>
+                <div className={SECTION}>
+                  <h3 className={SECTION_TITLE}><BookOpen className="w-4 h-4 text-muted" /> Additional Information</h3>
 
                   {assignment.template?.prerequisites && (
                     <div className="mb-4">
-                      <h4 className="text-md font-medium text-gray-800 dark:text-gray-200 mb-2">Prerequisites</h4>
-                      <div className="prose dark:prose-invert max-w-none">
+                      <p className="text-[11.5px] font-semibold text-muted uppercase tracking-wide mb-1.5">Prerequisites</p>
+                      <div className="text-[13.5px] text-ink">
                         <MarkdownRenderer content={assignment.template.prerequisites} />
                       </div>
                     </div>
@@ -415,23 +337,23 @@ const AssignmentDetailModal: React.FC<AssignmentDetailModalProps> = ({
 
                   {assignment.template?.materials_needed && (
                     <div>
-                      <h4 className="text-md font-medium text-gray-800 dark:text-gray-200 mb-2">Materials Needed</h4>
-                      <div className="prose dark:prose-invert max-w-none">
+                      <p className="text-[11.5px] font-semibold text-muted uppercase tracking-wide mb-1.5">Materials Needed</p>
+                      <div className="text-[13.5px] text-ink">
                         <MarkdownRenderer content={assignment.template.materials_needed} />
                       </div>
                     </div>
                   )}
                 </div>
               )}
-            </div>
+            </>
           )}
         </div>
 
         {/* Footer */}
-        <div className="px-6 py-4 bg-gray-50 dark:bg-gray-700 border-t border-gray-200 dark:border-gray-600 flex justify-end">
+        <div className="flex items-center justify-end px-6 py-4 border-t border-line bg-panel-2">
           <button
             onClick={onClose}
-            className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-600 border border-gray-300 dark:border-gray-500 rounded-md hover:bg-gray-50 dark:hover:bg-gray-500 transition-colors"
+            className="h-[34px] px-4 text-[13px] font-semibold text-muted hover:text-ink transition-colors"
           >
             Close
           </button>

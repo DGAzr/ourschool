@@ -28,20 +28,15 @@ import { useEffect, Suspense, lazy } from 'react'
 // Lazy load pages for better performance
 const Login = lazy(() => import('./pages/Login'))
 const Dashboard = lazy(() => import('./pages/Dashboard'))
-const Users = lazy(() => import('./pages/Users'))
 const Attendance = lazy(() => import('./pages/Attendance'))
 const Assignments = lazy(() => import('./pages/Assignments'))
 const Grading = lazy(() => import('./pages/Grading'))
-const Subjects = lazy(() => import('./pages/Subjects'))
-const Terms = lazy(() => import('./pages/Terms'))
 const Profile = lazy(() => import('./pages/Profile'))
 const Reports = lazy(() => import('./pages/Reports'))
 const Journal = lazy(() => import('./pages/Journal'))
 const Admin = lazy(() => import('./pages/Admin'))
 const AdminBackup = lazy(() => import('./pages/AdminBackup'))
-const AdminPoints = lazy(() => import('./pages/AdminPoints'))
 const AdminSettings = lazy(() => import('./pages/AdminSettings'))
-const AdminAPIKeys = lazy(() => import('./pages/AdminAPIKeys'))
 const MyPoints = lazy(() => import('./pages/MyPoints'))
 
 const PageLoadingSpinner = () => (
@@ -81,20 +76,15 @@ function AppContent() {
           <Route path="/login" element={<Login />} />
           <Route path="/" element={<ProtectedRoute><Layout /></ProtectedRoute>}>
             <Route index element={<Dashboard />} />
-            <Route path="users" element={<Users />} />
             <Route path="attendance" element={<Attendance />} />
-            <Route path="subjects" element={<Subjects />} />
             <Route path="assignments" element={<Assignments />} />
             <Route path="grading" element={<Grading />} />
-            <Route path="terms" element={<Terms />} />
             <Route path="reports" element={<Reports />} />
             <Route path="journal" element={<Journal />} />
             <Route path="profile" element={<Profile />} />
             <Route path="admin" element={<Admin />} />
             <Route path="admin/backup" element={<AdminBackup />} />
-            <Route path="admin/points" element={<AdminPoints />} />
             <Route path="admin/settings" element={<AdminSettings />} />
-            <Route path="admin/api-keys" element={<AdminAPIKeys />} />
             <Route path="my-points" element={<MyPoints />} />
           </Route>
         </Routes>

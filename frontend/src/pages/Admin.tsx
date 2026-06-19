@@ -17,13 +17,16 @@
  */
 
 import React, { useState, useEffect, useCallback } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { useToast } from '../components/ui/Toast'
 import Toggle from '../components/ui/Toggle'
-import SubjectDot from '../components/ui/SubjectDot'
+import { Button, Input, Select, SegmentedControl, Pill } from '../components/ui'
+import { useAPIKeys } from '../hooks/useAPIKeys'
+import { APIKeyTable, CreateAPIKeyModal } from '../components/api-keys'
+import ErrorBoundary from '../components/ErrorBoundary'
 import { settingsApi } from '../services/settings'
-import { pointsApi, type PointsSystemStatus } from '../services/points'
+import { pointsApi, type PointsSystemStatus, type AwardPreset, type AdminPointsOverview, type StudentPoints, type PointsLedger } from '../services/points'
 import { subjectsApi } from '../services/subjects'
 import { termsApi } from '../services/terms'
 import { usersApi } from '../services/users'
@@ -31,10 +34,12 @@ import { backupApi } from '../services/backup'
 import { type Subject } from '../types/subject'
 import { type Term } from '../types/term'
 import { type User } from '../types'
+import { format, parseISO } from 'date-fns'
+import { type TermCreate } from '../types'
 import {
   LayoutDashboard, Calendar, BookOpen, Coins, BookMarked, Tag, Users,
-  Key, HardDrive, AlertTriangle, Plus, MoreHorizontal,
-  ExternalLink, Download, Upload,
+  Key, HardDrive, AlertTriangle, Plus,
+  Download, Upload, Edit2, Trash2, CheckCircle2, FileText, X, Palette,
 } from 'lucide-react'
 
 // ── Category rail ──────────────────────────────────────────────────────────
@@ -105,12 +110,7 @@ const Admin: React.FC = () => {
   // ── Points ──
   const [pointsStatus, setPointsStatus] = useState<PointsSystemStatus | null>(null)
   const [ptsJournal, setPtsJournal] = useState(5)
-  const [ptsAssignment, setPtsAssignment] = useState(10)
-  const [presets, setPresets] = useState([
-    { label: 'Great effort', amount: 10 },
-    { label: 'Act of kindness', amount: 5 },
-    { label: 'Finished early', amount: 5 },
-  ])
+  const [presets, setPresets] = useState<AwardPreset[]>([])
   const [presetLabel, setPresetLabel] = useState('')
   const [presetAmount, setPresetAmount] = useState('5')
   const [togglingPoints, setTogglingPoints] = useState(false)
@@ -121,12 +121,61 @@ const Admin: React.FC = () => {
   const [users, setUsers] = useState<User[]>([])
   const [loading, setLoading] = useState(true)
 
+  // ── Term management ──
+  const [showTermForm, setShowTermForm] = useState(false)
+  const [editingTerm, setEditingTerm] = useState<Term | null>(null)
+  const [termFormData, setTermFormData] = useState<TermCreate>({
+    name: '', description: '', start_date: '', end_date: '',
+    academic_year: '', term_type: 'semester', term_order: 1,
+  })
+  const [termValidationErrors, setTermValidationErrors] = useState<Record<string, string>>({})
+  const [termError, setTermError] = useState<string | null>(null)
+
+  // ── Subject management ──
+  const [showSubjectForm, setShowSubjectForm] = useState(false)
+  const [editingSubject, setEditingSubject] = useState<Subject | null>(null)
+  const [subjectForm, setSubjectForm] = useState({ name: '', description: '', color: '#3B82F6' })
+  const [subjectError, setSubjectError] = useState<string | null>(null)
+
+  // ── User management ──
+  const EMPTY_NEW_USER = { first_name: '', last_name: '', email: '', username: '', password: '', role: 'student' as 'admin' | 'student', date_of_birth: '', grade_level: 1 }
+  const EMPTY_EDIT_USER = { first_name: '', last_name: '', email: '', username: '', is_active: true, date_of_birth: '', grade_level: 1 }
+  const [showAddUser, setShowAddUser] = useState(false)
+  const [showEditUser, setShowEditUser] = useState(false)
+  const [editingUser, setEditingUser] = useState<User | null>(null)
+  const [newUser, setNewUser] = useState(EMPTY_NEW_USER)
+  const [editUser, setEditUser] = useState(EMPTY_EDIT_USER)
+  const [newUserErrors, setNewUserErrors] = useState<Record<string, string>>({})
+  const [editUserErrors, setEditUserErrors] = useState<Record<string, string>>({})
+  const [userFilter, setUserFilter] = useState<'all' | 'students' | 'admins'>('all')
+  const [userError, setUserError] = useState<string | null>(null)
+
+  // ── API key management ──
+  const apiKeysHook = useAPIKeys()
+  const [showCreateKey, setShowCreateKey] = useState(false)
+
+  // ── Points management ──
+  const [pointsOverview, setPointsOverview] = useState<AdminPointsOverview | null>(null)
+  const [pointsOverviewLoading, setPointsOverviewLoading] = useState(false)
+  const [selectedStudentPoints, setSelectedStudentPoints] = useState<StudentPoints | null>(null)
+  const [showAdjustModal, setShowAdjustModal] = useState(false)
+  const [showLedgerModal, setShowLedgerModal] = useState(false)
+  const [adjustAmount, setAdjustAmount] = useState('')
+  const [adjustNotes, setAdjustNotes] = useState('')
+  const [adjustLoading, setAdjustLoading] = useState(false)
+  const [adjustError, setAdjustError] = useState<string | null>(null)
+  const [ledger, setLedger] = useState<PointsLedger | null>(null)
+  const [ledgerLoading, setLedgerLoading] = useState(false)
+  const [ledgerPage, setLedgerPage] = useState(1)
+  const [ledgerError, setLedgerError] = useState<string | null>(null)
+
   const load = useCallback(async () => {
     setLoading(true)
     try {
-      const [grouped, pts, subs, trms, usrs] = await Promise.allSettled([
+      const [grouped, pts, presetData, subs, trms, usrs] = await Promise.allSettled([
         settingsApi.getGroupedSettings(),
         pointsApi.getSystemStatus(),
+        pointsApi.getPresets(),
         subjectsApi.getAll(),
         termsApi.getAll(),
         usersApi.getAll(),
@@ -137,6 +186,7 @@ const Admin: React.FC = () => {
         setRequiredDaysDraft(String(days))
       }
       if (pts.status === 'fulfilled') setPointsStatus(pts.value)
+      if (presetData.status === 'fulfilled') setPresets(presetData.value)
       if (subs.status === 'fulfilled') setSubjects(subs.value)
       if (trms.status === 'fulfilled') setTerms(trms.value)
       if (usrs.status === 'fulfilled') setUsers(usrs.value)
@@ -146,6 +196,34 @@ const Admin: React.FC = () => {
   }, [])
 
   useEffect(() => { load() }, [load])
+  useEffect(() => { if (section === 'points' && pointsStatus?.enabled && !pointsOverview) loadPointsOverview() }, [section, pointsStatus?.enabled])
+
+  useEffect(() => {
+    const handleEscape = (e: KeyboardEvent) => { if (e.key === 'Escape' && showTermForm) resetTermForm() }
+    if (showTermForm) { document.addEventListener('keydown', handleEscape); return () => document.removeEventListener('keydown', handleEscape) }
+  }, [showTermForm])
+
+  useEffect(() => {
+    const handleEscape = (e: KeyboardEvent) => { if (e.key === 'Escape') resetSubjectForm() }
+    if (showSubjectForm) { document.addEventListener('keydown', handleEscape); return () => document.removeEventListener('keydown', handleEscape) }
+  }, [showSubjectForm])
+
+  useEffect(() => {
+    const handleEscape = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') { setShowAddUser(false); setShowEditUser(false); setEditingUser(null); setNewUserErrors({}); setEditUserErrors({}) }
+    }
+    if (showAddUser || showEditUser) { document.addEventListener('keydown', handleEscape); return () => document.removeEventListener('keydown', handleEscape) }
+  }, [showAddUser, showEditUser])
+
+  useEffect(() => {
+    const handleEscape = (e: KeyboardEvent) => { if (e.key === 'Escape') setShowAdjustModal(false) }
+    if (showAdjustModal) { document.addEventListener('keydown', handleEscape); return () => document.removeEventListener('keydown', handleEscape) }
+  }, [showAdjustModal])
+
+  useEffect(() => {
+    const handleEscape = (e: KeyboardEvent) => { if (e.key === 'Escape') setShowLedgerModal(false) }
+    if (showLedgerModal) { document.addEventListener('keydown', handleEscape); return () => document.removeEventListener('keydown', handleEscape) }
+  }, [showLedgerModal])
 
   if (user?.role !== 'admin') {
     return (
@@ -183,14 +261,26 @@ const Admin: React.FC = () => {
     finally { setTogglingPoints(false) }
   }
 
-  const addPreset = () => {
+  const addPreset = async () => {
     const l = presetLabel.trim()
     const a = parseInt(presetAmount) || 0
     if (!l || a <= 0) { toast('Enter a label and amount', 'danger'); return }
-    setPresets(p => [...p, { label: l, amount: a }])
+    const updated = [...presets, { label: l, amount: a }]
+    setPresets(updated)
     setPresetLabel('')
     setPresetAmount('5')
-    toast('Preset added')
+    try {
+      await pointsApi.setPresets(updated)
+      toast('Preset added')
+    } catch { toast('Preset added locally but failed to save', 'danger') }
+  }
+
+  const removePreset = async (idx: number) => {
+    const updated = presets.filter((_, i) => i !== idx)
+    setPresets(updated)
+    try {
+      await pointsApi.setPresets(updated)
+    } catch { toast('Failed to remove preset', 'danger') }
   }
 
   const saveGradeScale = async () => {
@@ -198,6 +288,261 @@ const Admin: React.FC = () => {
     await new Promise(r => setTimeout(r, 400))
     setSavingGrades(false)
     toast('Grading scale saved')
+  }
+
+  // ── Term helpers ──────────────────────────────────────────────────────────
+  const formatTermDate = (s: string) => { try { return format(parseISO(s), 'MMM d, yyyy') } catch { return s } }
+
+  const calcTermProgress = (start: string, end: string) => {
+    try {
+      const s = parseISO(start), e = parseISO(end), now = new Date()
+      if (now < s) return { progress: 0, daysRemaining: Math.ceil((e.getTime() - s.getTime()) / 86400000) }
+      if (now > e) return { progress: 100, daysRemaining: 0 }
+      const total = Math.ceil((e.getTime() - s.getTime()) / 86400000)
+      const elapsed = Math.ceil((now.getTime() - s.getTime()) / 86400000)
+      return { progress: Math.round(Math.min(Math.max((elapsed / total) * 100, 0), 100)), daysRemaining: Math.max(Math.ceil((e.getTime() - now.getTime()) / 86400000), 0) }
+    } catch { return { progress: 0, daysRemaining: 0 } }
+  }
+
+  const termTypeLabel = (t: string) => ({ semester: 'Semester', quarter: 'Quarter', trimester: 'Trimester', custom: 'Custom' }[t] || t)
+
+  const validateTermAcademicYear = (v: string): string | null => {
+    if (!v.trim()) return 'Academic year is required'
+    if (/^\d{4}$/.test(v)) { const y = parseInt(v); return (y < 1900 || y > 2100) ? 'Year must be between 1900 and 2100' : null }
+    if (/^\d{4}-\d{4}$/.test(v)) {
+      const [a, b] = v.split('-').map(Number)
+      if (a < 1900 || b > 2100) return 'Years must be between 1900 and 2100'
+      if (b <= a) return 'End year must be after start year'
+      if (b - a > 5) return 'Range cannot exceed 5 years'
+      return null
+    }
+    return 'Enter a year (e.g., "2025") or range (e.g., "2025-2026")'
+  }
+
+  const resetTermForm = () => {
+    const yr = `${new Date().getFullYear()}-${new Date().getFullYear() + 1}`
+    const nextOrder = Math.max(...terms.filter(t => t.academic_year === yr).map(t => t.term_order), 0) + 1
+    setTermFormData({ name: '', description: '', start_date: '', end_date: '', academic_year: yr, term_type: 'semester', term_order: nextOrder })
+    setEditingTerm(null)
+    setShowTermForm(false)
+    setTermError(null)
+    setTermValidationErrors({})
+  }
+
+  const openTermEdit = (term: Term) => {
+    setEditingTerm(term)
+    setTermFormData({ name: term.name, description: term.description || '', start_date: term.start_date, end_date: term.end_date, academic_year: term.academic_year, term_type: term.term_type, term_order: term.term_order })
+    setShowTermForm(true)
+  }
+
+  const handleTermSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setTermValidationErrors({})
+    const err = validateTermAcademicYear(termFormData.academic_year)
+    if (err) { setTermValidationErrors({ academic_year: err }); return }
+    try {
+      if (editingTerm) {
+        const updated = await termsApi.update(editingTerm.id, termFormData)
+        setTerms(prev => prev.map(t => t.id === editingTerm.id ? updated : t).sort((a, b) => a.term_order - b.term_order))
+      } else {
+        const created = await termsApi.create(termFormData)
+        setTerms(prev => [...prev, created].sort((a, b) => a.term_order - b.term_order))
+      }
+      resetTermForm()
+      toast(editingTerm ? 'Term updated' : 'Term created')
+    } catch (err: any) {
+      const detail = err.message || ''
+      if (detail.toLowerCase().includes('academic year')) setTermValidationErrors({ academic_year: detail })
+      else setTermError(detail || 'Failed to save term')
+    }
+  }
+
+  const handleTermDelete = async (id: number) => {
+    if (!confirm('Delete this term?')) return
+    try {
+      await termsApi.delete(id)
+      setTerms(prev => prev.filter(t => t.id !== id))
+      toast('Term deleted')
+    } catch (err: any) { setTermError(err.message || 'Failed to delete term') }
+  }
+
+  const handleTermActivate = async (id: number) => {
+    try {
+      await termsApi.activate(id)
+      setTerms(prev => prev.map(t => ({ ...t, is_active: t.id === id })))
+      toast('Term activated')
+    } catch (err: any) { setTermError(err.message || 'Failed to activate term') }
+  }
+
+  // ── Subject handlers ──────────────────────────────────────────────────────
+  const resetSubjectForm = () => { setSubjectForm({ name: '', description: '', color: '#3B82F6' }); setEditingSubject(null); setShowSubjectForm(false); setSubjectError(null) }
+  const openSubjectEdit = (s: Subject) => { setEditingSubject(s); setSubjectForm({ name: s.name, description: s.description || '', color: s.color }); setShowSubjectForm(true) }
+
+  const handleSubjectSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    try {
+      if (editingSubject) {
+        const updated = await subjectsApi.update(editingSubject.id, subjectForm)
+        setSubjects(prev => prev.map(s => s.id === editingSubject.id ? updated : s))
+        toast('Subject updated')
+      } else {
+        const created = await subjectsApi.create(subjectForm)
+        setSubjects(prev => [...prev, created])
+        toast('Subject created')
+      }
+      resetSubjectForm()
+    } catch (err: any) { setSubjectError(err.message || 'Failed to save subject') }
+  }
+
+  const handleSubjectDelete = async (id: number) => {
+    if (!confirm('Delete this subject? This cannot be undone.')) return
+    try {
+      await subjectsApi.delete(id)
+      setSubjects(prev => prev.filter(s => s.id !== id))
+      toast('Subject deleted')
+    } catch (err: any) { setSubjectError(err.message || 'Failed to delete subject') }
+  }
+
+  // ── User handlers ─────────────────────────────────────────────────────────
+  const validateNewUser = () => {
+    const e: Record<string, string> = {}
+    if (!newUser.first_name.trim()) e.first_name = 'Required'
+    if (!newUser.last_name.trim()) e.last_name = 'Required'
+    if (!newUser.email.trim()) e.email = 'Required'
+    else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(newUser.email)) e.email = 'Invalid email'
+    if (!newUser.username.trim()) e.username = 'Required'
+    if (!newUser.password) e.password = 'Required'
+    else if (newUser.password.length < 6) e.password = 'At least 6 characters'
+    return e
+  }
+
+  const validateEditUser = () => {
+    const e: Record<string, string> = {}
+    if (!editUser.first_name.trim()) e.first_name = 'Required'
+    if (!editUser.last_name.trim()) e.last_name = 'Required'
+    if (!editUser.email.trim()) e.email = 'Required'
+    else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(editUser.email)) e.email = 'Invalid email'
+    if (!editUser.username.trim()) e.username = 'Required'
+    return e
+  }
+
+  const handleAddUser = async () => {
+    const errors = validateNewUser()
+    if (Object.keys(errors).length > 0) { setNewUserErrors(errors); return }
+    try {
+      await usersApi.create({
+        first_name: newUser.first_name, last_name: newUser.last_name,
+        email: newUser.email, username: newUser.username, password: newUser.password,
+        role: newUser.role,
+        ...(newUser.role === 'student' && { grade_level: newUser.grade_level, ...(newUser.date_of_birth ? { date_of_birth: newUser.date_of_birth } : {}) }),
+      })
+      const data = await usersApi.getAll()
+      setUsers(data)
+      setNewUser(EMPTY_NEW_USER)
+      setNewUserErrors({})
+      setShowAddUser(false)
+      toast('User created')
+    } catch (err: any) { setUserError(err.message || 'Failed to create user') }
+  }
+
+  const handleEditUser = async () => {
+    if (!editingUser) return
+    const errors = validateEditUser()
+    if (Object.keys(errors).length > 0) { setEditUserErrors(errors); return }
+    try {
+      await usersApi.update(editingUser.id, editUser)
+      const data = await usersApi.getAll()
+      setUsers(data)
+      setShowEditUser(false)
+      setEditingUser(null)
+      setEditUserErrors({})
+      toast('User updated')
+    } catch (err: any) { setUserError(err.message || 'Failed to update user') }
+  }
+
+  const handleDeleteUser = async (id: number) => {
+    if (!confirm('Delete this user?')) return
+    try {
+      await usersApi.delete(id)
+      setUsers(prev => prev.filter(u => u.id !== id))
+      toast('User deleted')
+    } catch (err: any) { setUserError(err.message || 'Failed to delete user') }
+  }
+
+  const handleResetPassword = async (id: number, username: string) => {
+    if (!confirm(`Reset password for ${username}? This will generate a temporary password.`)) return
+    try {
+      const r = await usersApi.resetPassword(id)
+      alert(`Temporary password for ${username}: ${r.temporary_password}\n\nShare this securely and ask them to change it on next login.`)
+    } catch (err: any) { setUserError(`Failed to reset password: ${err.message}`) }
+  }
+
+  const openEditUser = (u: User) => {
+    setEditingUser(u)
+    setEditUserErrors({})
+    setEditUser({ first_name: u.first_name, last_name: u.last_name, email: u.email, username: u.username, is_active: u.is_active, date_of_birth: u.date_of_birth || '', grade_level: u.grade_level || 1 })
+    setShowEditUser(true)
+  }
+
+  // ── Points management handlers ────────────────────────────────────────────
+  const loadPointsOverview = async () => {
+    if (!pointsStatus?.enabled) return
+    try {
+      setPointsOverviewLoading(true)
+      const data = await pointsApi.getAdminOverview()
+      setPointsOverview(data)
+    } catch { /* silent */ } finally { setPointsOverviewLoading(false) }
+  }
+
+  const openAdjustModal = (s: StudentPoints) => {
+    setSelectedStudentPoints(s)
+    setAdjustAmount('')
+    setAdjustNotes('')
+    setAdjustError(null)
+    setShowAdjustModal(true)
+  }
+
+  const handleAdjustSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!selectedStudentPoints) return
+    const amt = parseInt(adjustAmount)
+    if (isNaN(amt) || amt === 0) { setAdjustError('Enter a non-zero point amount'); return }
+    if (!adjustNotes.trim()) { setAdjustError('Reason is required'); return }
+    try {
+      setAdjustLoading(true)
+      setAdjustError(null)
+      await pointsApi.adjustPoints({ student_id: selectedStudentPoints.student_id, amount: amt, notes: adjustNotes.trim() })
+      setShowAdjustModal(false)
+      toast(`Points adjusted for ${selectedStudentPoints.student_name}`)
+      loadPointsOverview()
+    } catch (err: any) { setAdjustError(err.message || 'Failed to adjust points') }
+    finally { setAdjustLoading(false) }
+  }
+
+  const openLedgerModal = async (s: StudentPoints) => {
+    setSelectedStudentPoints(s)
+    setLedger(null)
+    setLedgerPage(1)
+    setLedgerError(null)
+    setShowLedgerModal(true)
+    try {
+      setLedgerLoading(true)
+      const data = await pointsApi.getStudentLedger(s.student_id, 1, 10)
+      setLedger(data)
+    } catch (err: any) { setLedgerError(err.message || 'Failed to load ledger') }
+    finally { setLedgerLoading(false) }
+  }
+
+  const loadLedgerPage = async (page: number) => {
+    if (!selectedStudentPoints) return
+    try {
+      setLedgerLoading(true)
+      setLedgerError(null)
+      const data = await pointsApi.getStudentLedger(selectedStudentPoints.student_id, page, 10)
+      setLedger(data)
+      setLedgerPage(page)
+    } catch (err: any) { setLedgerError(err.message || 'Failed to load ledger') }
+    finally { setLedgerLoading(false) }
   }
 
   // ── Section content ───────────────────────────────────────────────────────
@@ -309,9 +654,11 @@ const Admin: React.FC = () => {
       )
 
       case 'points': return (
-        <div>
+        <div className="space-y-5">
           <SectionHeader title="Points & rewards" desc={`Configure the optional gamification system. ${pointsStatus?.enabled ? 'Currently on.' : 'Currently off.'}`} />
-          <div className="bg-panel border border-line rounded-card divide-y divide-line-2 mb-4">
+
+          {/* Configuration */}
+          <div className="bg-panel border border-line rounded-card divide-y divide-line-2">
             <SettingRow label="Points & rewards system" desc="Gamified points for students.">
               <div className="flex items-center gap-3">
                 <span className={`text-[12px] font-semibold ${pointsStatus?.enabled ? 'text-pos-fg' : 'text-muted'}`}>
@@ -329,14 +676,9 @@ const Admin: React.FC = () => {
                 <button onClick={() => setPtsJournal(v => v + 1)} className="w-7 h-7 rounded-field border border-btn-border flex items-center justify-center text-ink-2 hover:bg-track">+</button>
               </div>
             </SettingRow>
-            <SettingRow label="Points per completed assignment" desc="Awarded when an assignment is graded.">
-              <div className="flex items-center gap-2">
-                <button onClick={() => setPtsAssignment(v => Math.max(0, v - 1))} className="w-7 h-7 rounded-field border border-btn-border flex items-center justify-center text-ink-2 hover:bg-track">–</button>
-                <span className="w-8 text-center font-mono text-[14px] font-semibold text-ink">{ptsAssignment}</span>
-                <button onClick={() => setPtsAssignment(v => v + 1)} className="w-7 h-7 rounded-field border border-btn-border flex items-center justify-center text-ink-2 hover:bg-track">+</button>
-              </div>
-            </SettingRow>
           </div>
+
+          {/* Quick-award presets */}
           <div className="bg-panel border border-line rounded-card p-5">
             <p className="text-[11px] font-semibold text-faint uppercase tracking-[.06em] mb-3">Quick-award presets</p>
             <div className="space-y-2 mb-4">
@@ -345,144 +687,685 @@ const Admin: React.FC = () => {
                   <span className="text-[13.5px] text-ink">{p.label}</span>
                   <div className="flex items-center gap-2">
                     <span className="font-mono text-[13px] text-pos-fg font-semibold">+{p.amount}</span>
-                    <button onClick={() => setPresets(ps => ps.filter((_, idx) => idx !== i))} className="text-faintest hover:text-danger text-[14px] leading-none">✕</button>
+                    <button onClick={() => removePreset(i)} className="text-faintest hover:text-danger text-[14px] leading-none">✕</button>
                   </div>
                 </div>
               ))}
             </div>
             <div className="flex items-center gap-2">
-              <input
-                type="text" placeholder="Label" value={presetLabel}
-                onChange={e => setPresetLabel(e.target.value)}
-                className="flex-1 bg-field-bg border border-field-border text-ink text-[13px] rounded-field px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent placeholder:text-faintest"
-              />
-              <input
-                type="number" placeholder="Pts" value={presetAmount}
-                onChange={e => setPresetAmount(e.target.value)}
-                className="w-16 bg-field-bg border border-field-border text-ink font-mono text-[13px] rounded-field px-2.5 py-1.5 focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent"
-              />
+              <input type="text" placeholder="Label" value={presetLabel} onChange={e => setPresetLabel(e.target.value)}
+                className="flex-1 bg-field-bg border border-field-border text-ink text-[13px] rounded-field px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent placeholder:text-faintest" />
+              <input type="number" placeholder="Pts" value={presetAmount} onChange={e => setPresetAmount(e.target.value)}
+                className="w-16 bg-field-bg border border-field-border text-ink font-mono text-[13px] rounded-field px-2.5 py-1.5 focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent" />
               <button onClick={addPreset} className="px-3 py-1.5 rounded-field text-[13px] font-semibold bg-btn-primary-bg text-btn-primary-fg hover:opacity-90 transition-opacity">Add</button>
             </div>
           </div>
+
+          {/* Student balances */}
+          {pointsStatus?.enabled && (
+            <div>
+              <div className="flex items-center justify-between mb-3">
+                <p className="text-[11px] font-semibold text-faint uppercase tracking-[.06em]">Student balances</p>
+                <button onClick={loadPointsOverview} className="text-[12px] text-accent hover:opacity-80 transition-opacity">Refresh</button>
+              </div>
+
+              {pointsOverviewLoading ? (
+                <div className="flex items-center justify-center py-10"><div className="w-5 h-5 border-2 border-accent border-t-transparent rounded-full animate-spin" /></div>
+              ) : !pointsOverview ? (
+                <div className="bg-panel border border-line rounded-card p-8 text-center">
+                  <p className="text-[13px] text-muted mb-3">Load student balances to view and adjust points.</p>
+                  <button onClick={loadPointsOverview} className="h-[34px] px-4 rounded-field bg-btn-primary-bg text-btn-primary-fg text-[13px] font-semibold hover:opacity-90 transition-opacity">Load balances</button>
+                </div>
+              ) : (
+                <>
+                  {/* Stats row */}
+                  <div className="grid grid-cols-3 gap-3 mb-4">
+                    {[
+                      { label: 'Students', value: String(pointsOverview.total_students), sub: `${pointsOverview.total_students_with_points} with points` },
+                      { label: 'Total Awarded', value: pointsOverview.total_points_awarded.toLocaleString() },
+                      { label: 'Total Spent', value: pointsOverview.total_points_spent.toLocaleString() },
+                    ].map(t => (
+                      <div key={t.label} className="bg-panel-2 border border-line rounded-card p-4">
+                        <p className="text-[11px] font-semibold text-faint uppercase tracking-[.06em] mb-1">{t.label}</p>
+                        <p className="font-mono text-[18px] font-semibold text-ink">{t.value}</p>
+                        {t.sub && <p className="text-[11px] text-faint mt-0.5">{t.sub}</p>}
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Table */}
+                  <div className="overflow-x-auto rounded-card border border-line">
+                    <table className="min-w-full divide-y divide-line">
+                      <thead className="bg-panel-2">
+                        <tr>
+                          {['Student', 'Balance', 'Earned', 'Spent', ''].map(h => (
+                            <th key={h} className="px-5 py-3 text-left text-[11px] font-semibold text-faint uppercase tracking-[.06em]">{h}</th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody className="bg-panel divide-y divide-line">
+                        {pointsOverview.student_points.length === 0 ? (
+                          <tr><td colSpan={5} className="px-5 py-10 text-center text-[13px] text-muted">No students with points yet.</td></tr>
+                        ) : pointsOverview.student_points.map(sp => (
+                          <tr key={sp.id} className="hover:bg-panel-2 transition-colors">
+                            <td className="px-5 py-3.5 text-[13.5px] font-semibold text-ink whitespace-nowrap">{sp.student_name}</td>
+                            <td className="px-5 py-3.5 font-mono text-[13.5px] font-semibold text-ink whitespace-nowrap">{sp.current_balance.toLocaleString()}</td>
+                            <td className="px-5 py-3.5 font-mono text-[13px] text-pos-fg whitespace-nowrap">+{sp.total_earned.toLocaleString()}</td>
+                            <td className="px-5 py-3.5 font-mono text-[13px] text-neg-fg whitespace-nowrap">−{sp.total_spent.toLocaleString()}</td>
+                            <td className="px-5 py-3.5 whitespace-nowrap">
+                              <div className="flex items-center gap-2">
+                                <button onClick={() => openAdjustModal(sp)} className="h-7 px-2.5 rounded-field text-[12px] font-semibold bg-btn-primary-bg text-btn-primary-fg hover:opacity-90 transition-opacity flex items-center gap-1">
+                                  <Plus className="w-3 h-3" /> Adjust
+                                </button>
+                                <button onClick={() => openLedgerModal(sp)} className="h-7 px-2.5 rounded-field text-[12px] font-medium text-muted hover:text-ink hover:bg-track transition-colors">
+                                  Ledger
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </>
+              )}
+            </div>
+          )}
+
+          {/* Adjust points modal */}
+          {showAdjustModal && selectedStudentPoints && (
+            <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
+              <div className="bg-panel border border-line rounded-card-lg shadow-xl w-full max-w-md overflow-hidden flex flex-col">
+                <div className="flex items-center justify-between px-6 py-4 border-b border-line">
+                  <div>
+                    <h3 className="text-[15px] font-semibold text-ink">Adjust Points</h3>
+                    <p className="text-[12px] text-muted mt-0.5">{selectedStudentPoints.student_name} · {selectedStudentPoints.current_balance.toLocaleString()} current balance</p>
+                  </div>
+                  <button onClick={() => setShowAdjustModal(false)} className="w-7 h-7 flex items-center justify-center rounded-full text-faint hover:text-ink hover:bg-track transition-colors"><X className="w-4 h-4" /></button>
+                </div>
+                <form onSubmit={handleAdjustSubmit} className="flex flex-col">
+                  <div className="px-6 py-5 space-y-4">
+                    {adjustError && <div className="bg-neg-bg text-neg-fg px-4 py-3 rounded-field text-[13px]">{adjustError}</div>}
+                    <div>
+                      <label className="block text-[12px] font-semibold text-muted uppercase tracking-wide mb-1.5">Point Adjustment <span className="text-neg-fg normal-case">*</span></label>
+                      <input type="number" value={adjustAmount} onChange={e => setAdjustAmount(e.target.value)} placeholder="Positive to add, negative to deduct"
+                        className="bg-field-bg border border-field-border rounded-field px-3 py-2 text-[13.5px] text-ink focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent placeholder:text-faintest w-full" autoFocus />
+                      <p className="mt-1.5 text-[12px] text-faint">Use positive to award, negative to deduct</p>
+                    </div>
+                    <div>
+                      <label className="block text-[12px] font-semibold text-muted uppercase tracking-wide mb-1.5">Reason <span className="text-neg-fg normal-case">*</span></label>
+                      <textarea value={adjustNotes} onChange={e => setAdjustNotes(e.target.value)} rows={3} placeholder="Explain the reason for this adjustment…"
+                        className="bg-field-bg border border-field-border rounded-field px-3 py-2 text-[13.5px] text-ink focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent placeholder:text-faintest w-full" />
+                    </div>
+                  </div>
+                  <div className="flex items-center justify-end gap-2 px-6 py-4 border-t border-line bg-panel-2">
+                    <button type="button" onClick={() => setShowAdjustModal(false)} disabled={adjustLoading} className="h-[34px] px-4 text-[13px] font-semibold text-muted hover:text-ink transition-colors disabled:opacity-50">Cancel</button>
+                    <button type="submit" disabled={adjustLoading} className="h-[34px] px-4 rounded-field bg-btn-primary-bg text-btn-primary-fg text-[13.5px] font-semibold hover:opacity-90 transition-opacity disabled:opacity-40 flex items-center gap-2">
+                      {adjustLoading ? <><span className="w-3.5 h-3.5 border-2 border-current border-t-transparent rounded-full animate-spin" />Saving…</> : 'Save Adjustment'}
+                    </button>
+                  </div>
+                </form>
+              </div>
+            </div>
+          )}
+
+          {/* Ledger modal */}
+          {showLedgerModal && selectedStudentPoints && (
+            <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
+              <div className="bg-panel border border-line rounded-card-lg shadow-xl w-full max-w-2xl max-h-[90vh] overflow-hidden flex flex-col">
+                <div className="flex items-center justify-between px-6 py-4 border-b border-line">
+                  <div>
+                    <h3 className="text-[15px] font-semibold text-ink">Points Ledger</h3>
+                    <p className="text-[12px] text-muted mt-0.5">{selectedStudentPoints.student_name} · {selectedStudentPoints.current_balance.toLocaleString()} balance</p>
+                  </div>
+                  <button onClick={() => setShowLedgerModal(false)} className="w-7 h-7 flex items-center justify-center rounded-full text-faint hover:text-ink hover:bg-track transition-colors"><X className="w-4 h-4" /></button>
+                </div>
+
+                <div className="flex-1 overflow-y-auto px-6 py-5">
+                  {ledgerLoading && !ledger ? (
+                    <div className="flex items-center justify-center py-16"><div className="w-6 h-6 border-2 border-accent border-t-transparent rounded-full animate-spin" /></div>
+                  ) : ledgerError ? (
+                    <div className="bg-neg-bg text-neg-fg px-4 py-3 rounded-field text-[13px]">{ledgerError}</div>
+                  ) : ledger ? (
+                    <>
+                      {/* Summary tiles */}
+                      <div className="grid grid-cols-3 gap-3 mb-5">
+                        {[
+                          { label: 'Balance', value: ledger.student_points.current_balance.toLocaleString(), color: 'text-ink' },
+                          { label: 'Total Earned', value: `+${ledger.student_points.total_earned.toLocaleString()}`, color: 'text-pos-fg' },
+                          { label: 'Total Spent', value: `−${ledger.student_points.total_spent.toLocaleString()}`, color: 'text-neg-fg' },
+                        ].map(t => (
+                          <div key={t.label} className="bg-panel-2 border border-line rounded-field p-3 text-center">
+                            <p className={`font-mono text-[16px] font-semibold ${t.color}`}>{t.value}</p>
+                            <p className="text-[11px] text-faint mt-0.5">{t.label}</p>
+                          </div>
+                        ))}
+                      </div>
+
+                      {/* Transactions */}
+                      {ledger.transactions.length === 0 ? (
+                        <p className="text-center text-[13px] text-muted py-8">No transactions yet.</p>
+                      ) : (
+                        <div className="divide-y divide-line border border-line rounded-card overflow-hidden">
+                          {ledger.transactions.map(tx => {
+                            const isPos = tx.amount >= 0
+                            return (
+                              <div key={tx.id} className="flex items-center justify-between px-4 py-3 bg-panel hover:bg-panel-2 transition-colors">
+                                <div className="min-w-0">
+                                  <p className="text-[13px] font-medium text-ink">{tx.source_description || 'Points Transaction'}</p>
+                                  {tx.notes && <p className="text-[12px] text-muted mt-0.5">{tx.notes}</p>}
+                                  <p className="text-[11.5px] text-faint mt-0.5">
+                                    {new Date(tx.created_at).toLocaleString()}{tx.admin_name ? ` · ${tx.admin_name}` : ''}
+                                  </p>
+                                </div>
+                                <span className={`font-mono text-[14px] font-semibold ml-4 flex-shrink-0 ${isPos ? 'text-pos-fg' : 'text-neg-fg'}`}>
+                                  {isPos ? '+' : '−'}{Math.abs(tx.amount).toLocaleString()}
+                                </span>
+                              </div>
+                            )
+                          })}
+                        </div>
+                      )}
+
+                      {/* Pagination */}
+                      {ledger.total_pages > 1 && (
+                        <div className="flex items-center justify-between mt-4">
+                          <p className="text-[12px] text-faint">Page {ledgerPage} of {ledger.total_pages}</p>
+                          <div className="flex gap-2">
+                            <button onClick={() => loadLedgerPage(ledgerPage - 1)} disabled={ledgerPage === 1 || ledgerLoading}
+                              className="h-[30px] px-3 rounded-field border border-line text-[12px] font-medium text-muted hover:text-ink hover:bg-track transition-colors disabled:opacity-40">← Prev</button>
+                            <button onClick={() => loadLedgerPage(ledgerPage + 1)} disabled={ledgerPage === ledger.total_pages || ledgerLoading}
+                              className="h-[30px] px-3 rounded-field border border-line text-[12px] font-medium text-muted hover:text-ink hover:bg-track transition-colors disabled:opacity-40">Next →</button>
+                          </div>
+                        </div>
+                      )}
+                    </>
+                  ) : null}
+                </div>
+
+                <div className="flex items-center justify-between px-6 py-4 border-t border-line bg-panel-2">
+                  <button onClick={() => openAdjustModal(selectedStudentPoints)} className="h-[34px] px-4 rounded-field bg-btn-primary-bg text-btn-primary-fg text-[13px] font-semibold hover:opacity-90 transition-opacity flex items-center gap-2">
+                    <Plus className="w-3.5 h-3.5" /> Adjust Points
+                  </button>
+                  <button onClick={() => setShowLedgerModal(false)} className="h-[34px] px-4 text-[13px] font-semibold text-muted hover:text-ink transition-colors">Close</button>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       )
 
-      case 'terms': return (
-        <div>
-          <SectionHeader title="Terms & calendar" desc="Manage academic terms and grading periods." />
-          <div className="bg-panel border border-line rounded-card divide-y divide-line-2">
+      case 'terms': {
+        const TFIELD = 'bg-field-bg border border-field-border rounded-field px-3 py-2 text-[13.5px] text-ink focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent placeholder:text-faintest w-full'
+        const TLABEL = 'block text-[12px] font-semibold text-muted uppercase tracking-wide mb-1.5'
+        return (
+          <div>
+            <div className="flex items-center justify-between mb-6">
+              <div>
+                <h2 className="text-[18px] font-semibold text-ink tracking-[-0.01em]">Terms & calendar</h2>
+                <p className="mt-0.5 text-[13px] text-muted">Manage academic terms and grading periods.</p>
+              </div>
+              <button
+                onClick={() => setShowTermForm(true)}
+                className="h-[34px] px-4 rounded-field bg-btn-primary-bg text-btn-primary-fg text-[13.5px] font-semibold hover:opacity-90 transition-opacity flex items-center gap-2"
+              >
+                <Plus className="w-4 h-4" /> Add Term
+              </button>
+            </div>
+
+            {termError && <div className="bg-neg-bg text-neg-fg px-4 py-3 rounded-field text-[13px] mb-4">{termError}</div>}
+
             {loading ? (
-              <div className="p-8 text-center text-muted text-[13px]">Loading…</div>
+              <div className="flex items-center justify-center py-16">
+                <div className="w-6 h-6 border-2 border-accent border-t-transparent rounded-full animate-spin" />
+              </div>
             ) : terms.length === 0 ? (
-              <div className="p-8 text-center text-muted text-[13px]">No terms yet.</div>
-            ) : terms.map(t => (
-              <div key={t.id} className="flex items-center justify-between px-5 py-3.5">
-                <div className="flex items-center gap-3">
-                  <span className="w-2.5 h-2.5 rounded-full bg-pos-fg flex-shrink-0" />
-                  <div>
-                    <p className="text-[13.5px] font-medium text-ink">{t.name}</p>
-                    <p className="text-[12px] text-muted font-mono">
-                      {t.start_date} – {t.end_date}
-                    </p>
-                  </div>
+              <div className="bg-panel border border-line rounded-card-lg flex flex-col items-center justify-center py-16 gap-4">
+                <div className="w-12 h-12 rounded-full bg-track flex items-center justify-center">
+                  <Calendar className="w-6 h-6 text-faint" />
                 </div>
-                <div className="flex items-center gap-2">
-                  {t.is_active && <span className="text-[11px] font-semibold px-2 py-0.5 rounded-pill bg-pos-bg text-pos-fg">Current</span>}
-                  <Link to="/terms" className="text-[13px] text-muted hover:text-ink transition-colors">Edit</Link>
+                <div className="text-center">
+                  <p className="text-[15px] font-semibold text-ink">No academic terms yet</p>
+                  <p className="text-[13px] text-muted mt-1">Create a term to start organizing your curriculum</p>
                 </div>
+                <button
+                  onClick={() => setShowTermForm(true)}
+                  className="h-[34px] px-4 rounded-field bg-btn-primary-bg text-btn-primary-fg text-[13.5px] font-semibold hover:opacity-90 transition-opacity flex items-center gap-2"
+                >
+                  <Plus className="w-4 h-4" /> Create First Term
+                </button>
               </div>
-            ))}
-            <div className="px-5 py-3">
-              <Link to="/terms" className="flex items-center gap-1.5 text-[13px] font-medium text-accent hover:opacity-80 transition-opacity">
-                <Plus size={14} /> Add a term
-              </Link>
-            </div>
-          </div>
-        </div>
-      )
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {terms.map(term => {
+                  const { progress, daysRemaining } = calcTermProgress(term.start_date, term.end_date)
+                  return (
+                    <div key={term.id} className={`bg-panel border rounded-card-lg overflow-hidden flex flex-col transition-shadow hover:shadow-md ${term.is_active ? 'border-accent/40' : 'border-line'}`}>
+                      <div className={`px-5 py-4 ${term.is_active ? 'bg-accent/8' : 'bg-panel-2'}`}>
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="min-w-0">
+                            <div className="flex items-center gap-2 mb-0.5">
+                              <h3 className="text-[15px] font-semibold text-ink truncate">{term.name}</h3>
+                              {term.is_active && (
+                                <span className="shrink-0 inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-pos-bg text-pos-fg">
+                                  <CheckCircle2 className="w-3 h-3" /> Active
+                                </span>
+                              )}
+                            </div>
+                            <p className="text-[12px] text-muted">{term.academic_year} · {termTypeLabel(term.term_type)}</p>
+                          </div>
+                        </div>
+                      </div>
 
-      case 'subjects': return (
-        <div>
-          <SectionHeader title="Subjects" desc="Set up the subjects used across assignments and reports." />
-          <div className="bg-panel border border-line rounded-card divide-y divide-line-2">
-            {loading ? (
-              <div className="p-8 text-center text-muted text-[13px]">Loading…</div>
-            ) : subjects.map(s => (
-              <div key={s.id} className="flex items-center justify-between px-5 py-3.5">
-                <div className="flex items-center gap-3">
-                  <SubjectDot color={s.color} size={9} />
-                  <div>
-                    <p className="text-[13.5px] font-medium text-ink">{s.name}</p>
-                  </div>
-                </div>
-                <button className="text-faint hover:text-ink transition-colors"><MoreHorizontal size={16} /></button>
-              </div>
-            ))}
-            <div className="px-5 py-3">
-              <Link to="/subjects" className="flex items-center gap-1.5 text-[13px] font-medium text-accent hover:opacity-80 transition-opacity">
-                <Plus size={14} /> Add a subject
-              </Link>
-            </div>
-          </div>
-        </div>
-      )
+                      {term.is_active && (
+                        <div className="h-1 bg-track">
+                          <div className="h-full bg-accent transition-all duration-300" style={{ width: `${progress}%` }} />
+                        </div>
+                      )}
 
-      case 'users': return (
-        <div>
-          <SectionHeader title="Users & access" desc="Manage administrators and students." />
-          <div className="bg-panel border border-line rounded-card divide-y divide-line-2">
-            {loading ? (
-              <div className="p-8 text-center text-muted text-[13px]">Loading…</div>
-            ) : users.map(u => (
-              <div key={u.id} className="flex items-center justify-between px-5 py-3.5">
-                <div className="flex items-center gap-3">
-                  <div className="w-8 h-8 rounded-full bg-track flex items-center justify-center flex-shrink-0">
-                    <span className="text-[11px] font-semibold text-ink-2 font-mono">
-                      {u.first_name?.[0]}{u.last_name?.[0]}
-                    </span>
+                      <div className="px-5 py-4 flex-1 flex flex-col gap-3">
+                        {term.description && <p className="text-[13px] text-muted leading-relaxed">{term.description}</p>}
+                        <div className="space-y-2">
+                          <div className="flex items-center gap-2 text-[13px]">
+                            <Calendar className="w-3.5 h-3.5 text-faint shrink-0" />
+                            <span className="text-ink">{formatTermDate(term.start_date)} – {formatTermDate(term.end_date)}</span>
+                          </div>
+                          {term.is_active && (
+                            <p className="text-[12px] text-muted pl-5">{progress}% complete · {daysRemaining} day{daysRemaining !== 1 ? 's' : ''} remaining</p>
+                          )}
+                          <div className="flex items-center gap-2 text-[13px]">
+                            <span className="w-3.5 h-3.5 shrink-0 flex items-center justify-center text-[10px] font-bold text-faint">#{term.term_order}</span>
+                            <span className="text-muted">Term order</span>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center justify-between pt-3 mt-auto border-t border-line">
+                          <div className="flex items-center gap-1.5">
+                            <button
+                              onClick={() => navigate('/reports')}
+                              className="h-7 px-2.5 rounded-field text-[12px] font-semibold text-muted hover:text-ink hover:bg-track transition-colors flex items-center gap-1"
+                            >
+                              <FileText className="w-3.5 h-3.5" /> Reports
+                            </button>
+                            {!term.is_active && (
+                              <button
+                                onClick={() => handleTermActivate(term.id)}
+                                className="h-7 px-2.5 rounded-field text-[12px] font-semibold text-pos-fg bg-pos-bg hover:opacity-80 transition-opacity flex items-center gap-1"
+                              >
+                                <CheckCircle2 className="w-3.5 h-3.5" /> Activate
+                              </button>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-0.5">
+                            <button
+                              onClick={() => openTermEdit(term)}
+                              className="w-7 h-7 flex items-center justify-center rounded-field text-faint hover:text-ink hover:bg-track transition-colors"
+                              title="Edit"
+                            >
+                              <Edit2 className="w-3.5 h-3.5" />
+                            </button>
+                            <button
+                              onClick={() => handleTermDelete(term.id)}
+                              className="w-7 h-7 flex items-center justify-center rounded-field text-faint hover:text-neg-fg hover:bg-neg-bg transition-colors"
+                              title="Delete"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+
+            {/* Term form modal */}
+            {showTermForm && (
+              <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
+                <div className="bg-panel border border-line rounded-card-lg shadow-xl w-full max-w-md overflow-hidden flex flex-col">
+                  <div className="flex items-center justify-between px-6 py-4 border-b border-line">
+                    <div>
+                      <h3 className="text-[15px] font-semibold text-ink">{editingTerm ? 'Edit Term' : 'New Term'}</h3>
+                      <p className="text-[12px] text-muted mt-0.5">{editingTerm ? 'Update term details' : 'Add a new academic term'}</p>
+                    </div>
+                    <button onClick={resetTermForm} className="w-7 h-7 flex items-center justify-center rounded-full text-faint hover:text-ink hover:bg-track transition-colors">
+                      <X className="w-4 h-4" />
+                    </button>
                   </div>
-                  <div>
-                    <p className="text-[13.5px] font-medium text-ink">{u.first_name} {u.last_name}</p>
-                    <p className="text-[12px] text-muted">{u.email}</p>
-                  </div>
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className={`text-[11px] font-semibold px-2 py-0.5 rounded-pill ${u.role === 'admin' ? 'bg-accent-soft text-accent' : 'bg-track text-muted'}`}>
-                    {u.role === 'admin' ? 'Admin' : 'Student'}
-                  </span>
-                  <button className="text-faint hover:text-ink transition-colors"><MoreHorizontal size={16} /></button>
+                  <form onSubmit={handleTermSubmit} className="flex flex-col">
+                    <div className="px-6 py-5 space-y-4 overflow-y-auto max-h-[70vh]">
+                      <div>
+                        <label className={TLABEL}>Name <span className="text-neg-fg normal-case">*</span></label>
+                        <input type="text" required autoFocus value={termFormData.name} onChange={e => setTermFormData(p => ({ ...p, name: e.target.value }))} className={TFIELD} placeholder="e.g., Fall 2025" />
+                      </div>
+                      <div>
+                        <label className={TLABEL}>Description</label>
+                        <textarea value={termFormData.description} onChange={e => setTermFormData(p => ({ ...p, description: e.target.value }))} className={TFIELD} rows={2} placeholder="Optional description" />
+                      </div>
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <label className={TLABEL}>Start Date <span className="text-neg-fg normal-case">*</span></label>
+                          <input type="date" required value={termFormData.start_date} onChange={e => setTermFormData(p => ({ ...p, start_date: e.target.value }))} className={TFIELD} />
+                        </div>
+                        <div>
+                          <label className={TLABEL}>End Date <span className="text-neg-fg normal-case">*</span></label>
+                          <input type="date" required value={termFormData.end_date} onChange={e => setTermFormData(p => ({ ...p, end_date: e.target.value }))} className={TFIELD} />
+                        </div>
+                      </div>
+                      <div>
+                        <label className={TLABEL}>Academic Year <span className="text-neg-fg normal-case">*</span></label>
+                        <input
+                          type="text" required value={termFormData.academic_year}
+                          onChange={e => {
+                            const v = e.target.value
+                            const nextOrder = Math.max(...terms.filter(t => t.academic_year === v).map(t => t.term_order), 0) + 1
+                            setTermFormData(p => ({ ...p, academic_year: v, term_order: nextOrder }))
+                            if (termValidationErrors.academic_year) setTermValidationErrors(p => ({ ...p, academic_year: '' }))
+                          }}
+                          className={termValidationErrors.academic_year ? TFIELD.replace('border-field-border', 'border-[var(--neg-fg)]') : TFIELD}
+                          placeholder='e.g., 2025 or 2025-2026'
+                        />
+                        {termValidationErrors.academic_year
+                          ? <p className="mt-1.5 text-[12px] text-neg-fg">{termValidationErrors.academic_year}</p>
+                          : <p className="mt-1.5 text-[12px] text-faint">Single year (e.g., "2025") or range (e.g., "2025-2026")</p>
+                        }
+                      </div>
+                      <div className="grid grid-cols-2 gap-3">
+                        <div>
+                          <label className={TLABEL}>Term Type</label>
+                          <select value={termFormData.term_type} onChange={e => setTermFormData(p => ({ ...p, term_type: e.target.value as any }))} className={TFIELD}>
+                            <option value="semester">Semester</option>
+                            <option value="quarter">Quarter</option>
+                            <option value="trimester">Trimester</option>
+                            <option value="custom">Custom</option>
+                          </select>
+                        </div>
+                        <div>
+                          <label className={TLABEL}>Order <span className="text-neg-fg normal-case">*</span></label>
+                          <input type="number" required min="1" value={termFormData.term_order} onChange={e => setTermFormData(p => ({ ...p, term_order: parseInt(e.target.value) }))} className={TFIELD} />
+                        </div>
+                      </div>
+                    </div>
+                    <div className="flex items-center justify-end gap-2 px-6 py-4 border-t border-line bg-panel-2">
+                      <button type="button" onClick={resetTermForm} className="h-[34px] px-4 text-[13px] font-semibold text-muted hover:text-ink transition-colors">Cancel</button>
+                      <button type="submit" className="h-[34px] px-4 rounded-field bg-btn-primary-bg text-btn-primary-fg text-[13.5px] font-semibold hover:opacity-90 transition-opacity">
+                        {editingTerm ? 'Save Changes' : 'Create Term'}
+                      </button>
+                    </div>
+                  </form>
                 </div>
               </div>
-            ))}
-            <div className="px-5 py-3">
-              <Link to="/users" className="flex items-center gap-1.5 text-[13px] font-medium text-accent hover:opacity-80 transition-opacity">
-                <Plus size={14} /> Invite a user
-              </Link>
-            </div>
+            )}
           </div>
-        </div>
-      )
+        )
+      }
+
+      case 'subjects': {
+        const SF = 'bg-field-bg border border-field-border rounded-field px-3 py-2 text-[13.5px] text-ink focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent placeholder:text-faintest w-full'
+        const SL = 'block text-[12px] font-semibold text-muted uppercase tracking-wide mb-1.5'
+        return (
+          <div>
+            <div className="flex items-center justify-between mb-6">
+              <div>
+                <h2 className="text-[18px] font-semibold text-ink tracking-[-0.01em]">Subjects</h2>
+                <p className="mt-0.5 text-[13px] text-muted">Set up the subjects used across assignments and reports.</p>
+              </div>
+              <button onClick={() => setShowSubjectForm(true)} className="h-[34px] px-4 rounded-field bg-btn-primary-bg text-btn-primary-fg text-[13.5px] font-semibold hover:opacity-90 transition-opacity flex items-center gap-2">
+                <Plus className="w-4 h-4" /> Add Subject
+              </button>
+            </div>
+
+            {subjectError && <div className="bg-neg-bg text-neg-fg px-4 py-3 rounded-field text-[13px] mb-4">{subjectError}</div>}
+
+            {loading ? (
+              <div className="flex items-center justify-center py-16"><div className="w-6 h-6 border-2 border-accent border-t-transparent rounded-full animate-spin" /></div>
+            ) : subjects.length === 0 ? (
+              <div className="bg-panel border border-line rounded-card-lg flex flex-col items-center justify-center py-16 gap-4">
+                <div className="w-12 h-12 rounded-full bg-track flex items-center justify-center">
+                  <Tag className="w-6 h-6 text-faint" />
+                </div>
+                <div className="text-center">
+                  <p className="text-[15px] font-semibold text-ink">No subjects yet</p>
+                  <p className="text-[13px] text-muted mt-1">Add subjects to organize your curriculum</p>
+                </div>
+                <button onClick={() => setShowSubjectForm(true)} className="h-[34px] px-4 rounded-field bg-btn-primary-bg text-btn-primary-fg text-[13.5px] font-semibold hover:opacity-90 transition-opacity flex items-center gap-2">
+                  <Plus className="w-4 h-4" /> Add First Subject
+                </button>
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+                {subjects.map(s => (
+                  <div key={s.id} className="bg-panel border border-line rounded-card-lg overflow-hidden hover:border-accent/30 transition-colors">
+                    <div className="h-1" style={{ backgroundColor: s.color }} />
+                    <div className="p-4 flex items-center justify-between">
+                      <div className="flex items-center gap-3 min-w-0">
+                        <div className="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0" style={{ backgroundColor: s.color + '22' }}>
+                          <Palette className="w-4 h-4" style={{ color: s.color }} />
+                        </div>
+                        <div className="min-w-0">
+                          <p className="text-[13.5px] font-semibold text-ink truncate">{s.name}</p>
+                          {s.description && <p className="text-[12px] text-muted truncate">{s.description}</p>}
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-0.5 flex-shrink-0 ml-2">
+                        <button onClick={() => openSubjectEdit(s)} className="w-7 h-7 flex items-center justify-center rounded-field text-faint hover:text-ink hover:bg-track transition-colors" title="Edit"><Edit2 className="w-3.5 h-3.5" /></button>
+                        <button onClick={() => handleSubjectDelete(s.id)} className="w-7 h-7 flex items-center justify-center rounded-field text-faint hover:text-neg-fg hover:bg-neg-bg transition-colors" title="Delete"><Trash2 className="w-3.5 h-3.5" /></button>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {showSubjectForm && (
+              <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
+                <div className="bg-panel border border-line rounded-card-lg shadow-xl w-full max-w-md overflow-hidden flex flex-col">
+                  <div className="flex items-center justify-between px-6 py-4 border-b border-line">
+                    <div>
+                      <h3 className="text-[15px] font-semibold text-ink">{editingSubject ? 'Edit Subject' : 'New Subject'}</h3>
+                      <p className="text-[12px] text-muted mt-0.5">{editingSubject ? 'Update subject details' : 'Add a new subject'}</p>
+                    </div>
+                    <button onClick={resetSubjectForm} className="w-7 h-7 flex items-center justify-center rounded-full text-faint hover:text-ink hover:bg-track transition-colors"><X className="w-4 h-4" /></button>
+                  </div>
+                  <form onSubmit={handleSubjectSubmit} className="flex flex-col">
+                    <div className="px-6 py-5 space-y-4">
+                      <div>
+                        <label className={SL}>Name <span className="text-neg-fg normal-case">*</span></label>
+                        <input type="text" required autoFocus value={subjectForm.name} onChange={e => setSubjectForm(p => ({ ...p, name: e.target.value }))} className={SF} placeholder="e.g., Mathematics" />
+                      </div>
+                      <div>
+                        <label className={SL}>Description</label>
+                        <textarea value={subjectForm.description} onChange={e => setSubjectForm(p => ({ ...p, description: e.target.value }))} className={SF} rows={2} placeholder="Optional description" />
+                      </div>
+                      <div>
+                        <label className={SL}>Color</label>
+                        <div className="flex items-center gap-3">
+                          <input type="color" value={subjectForm.color} onChange={e => setSubjectForm(p => ({ ...p, color: e.target.value }))} className="h-9 w-16 rounded-field border border-field-border cursor-pointer bg-field-bg p-0.5" />
+                          <input type="text" value={subjectForm.color} onChange={e => setSubjectForm(p => ({ ...p, color: e.target.value }))} className={SF} placeholder="#3B82F6" />
+                        </div>
+                      </div>
+                    </div>
+                    <div className="flex items-center justify-end gap-2 px-6 py-4 border-t border-line bg-panel-2">
+                      <button type="button" onClick={resetSubjectForm} className="h-[34px] px-4 text-[13px] font-semibold text-muted hover:text-ink transition-colors">Cancel</button>
+                      <button type="submit" className="h-[34px] px-4 rounded-field bg-btn-primary-bg text-btn-primary-fg text-[13.5px] font-semibold hover:opacity-90 transition-opacity">{editingSubject ? 'Save Changes' : 'Create Subject'}</button>
+                    </div>
+                  </form>
+                </div>
+              </div>
+            )}
+          </div>
+        )
+      }
+
+      case 'users': {
+        const filteredUsers = users.filter(u => userFilter === 'students' ? u.role === 'student' : userFilter === 'admins' ? u.role === 'admin' : true)
+        const filterOptions = [
+          { label: `All (${users.length})`, value: 'all' },
+          { label: `Students (${users.filter(u => u.role === 'student').length})`, value: 'students' },
+          { label: `Admins (${users.filter(u => u.role === 'admin').length})`, value: 'admins' },
+        ]
+        return (
+          <div>
+            <div className="flex items-center justify-between mb-6">
+              <div>
+                <h2 className="text-[18px] font-semibold text-ink tracking-[-0.01em]">Users & access</h2>
+                <p className="mt-0.5 text-[13px] text-muted">Manage administrators and students.</p>
+              </div>
+              <Button icon={<Plus size={14} />} onClick={() => setShowAddUser(true)}>Add User</Button>
+            </div>
+
+            {userError && <div className="bg-neg-bg text-neg-fg px-4 py-3 rounded-field text-[13px] mb-4">{userError}</div>}
+
+            <div className="mb-4">
+              <SegmentedControl segments={filterOptions} value={userFilter} onChange={v => setUserFilter(v as any)} />
+            </div>
+
+            {loading ? (
+              <div className="flex items-center justify-center py-16"><div className="w-6 h-6 border-2 border-accent border-t-transparent rounded-full animate-spin" /></div>
+            ) : (
+              <div className="overflow-x-auto rounded-card border border-line">
+                <table className="min-w-full divide-y divide-line">
+                  <thead className="bg-panel-2">
+                    <tr>
+                      {['Name', 'Email', 'Username', 'Role', 'Grade', 'Status', ''].map(h => (
+                        <th key={h} className="px-5 py-3 text-left text-[11px] font-semibold text-faint uppercase tracking-[.06em]">{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody className="bg-panel divide-y divide-line">
+                    {filteredUsers.length === 0 ? (
+                      <tr><td colSpan={7} className="px-5 py-10 text-center text-[13px] text-muted">No users found.</td></tr>
+                    ) : filteredUsers.map(u => (
+                      <tr key={u.id} className="hover:bg-panel-2 transition-colors duration-100">
+                        <td className="px-5 py-3.5 text-[13.5px] font-semibold text-ink whitespace-nowrap">{u.first_name} {u.last_name}</td>
+                        <td className="px-5 py-3.5 text-[13.5px] text-ink-2 whitespace-nowrap">{u.email}</td>
+                        <td className="px-5 py-3.5 text-[13.5px] text-ink-2 whitespace-nowrap font-mono">{u.username}</td>
+                        <td className="px-5 py-3.5 whitespace-nowrap"><Pill variant={u.role === 'admin' ? 'sub' : 'info'}>{u.role === 'admin' ? 'Admin' : 'Student'}</Pill></td>
+                        <td className="px-5 py-3.5 text-[13.5px] text-ink-2 whitespace-nowrap">{u.role === 'student' && u.grade_level ? `Grade ${u.grade_level}` : '—'}</td>
+                        <td className="px-5 py-3.5 whitespace-nowrap"><Pill variant={u.is_active ? 'pos' : 'neg'}>{u.is_active ? 'Active' : 'Inactive'}</Pill></td>
+                        <td className="px-5 py-3.5 whitespace-nowrap">
+                          <div className="flex items-center gap-2">
+                            <button onClick={() => openEditUser(u)} className="text-muted hover:text-ink transition-colors" title="Edit"><Edit2 className="h-4 w-4" /></button>
+                            <button onClick={() => handleResetPassword(u.id, u.username)} className="text-muted hover:text-sub-fg transition-colors" title="Reset password"><Key className="h-4 w-4" /></button>
+                            <button onClick={() => handleDeleteUser(u.id)} className="text-muted hover:text-neg-fg transition-colors" title="Delete"><Trash2 className="h-4 w-4" /></button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+
+            {showAddUser && (
+              <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
+                <div className="w-full max-w-md bg-panel border border-line rounded-card-lg shadow-xl overflow-hidden">
+                  <div className="px-6 py-4 border-b border-line flex items-center justify-between">
+                    <div>
+                      <h3 className="text-[15px] font-semibold text-ink">Add New User</h3>
+                      <p className="text-[12px] text-muted mt-0.5">Create an administrator or student account</p>
+                    </div>
+                    <button onClick={() => { setShowAddUser(false); setNewUserErrors({}) }} className="w-7 h-7 flex items-center justify-center rounded-full text-faint hover:text-ink hover:bg-track transition-colors"><X className="w-4 h-4" /></button>
+                  </div>
+                  <div className="px-6 py-5 space-y-4 max-h-[70vh] overflow-y-auto">
+                    <div className="grid grid-cols-2 gap-3">
+                      <Input label="First Name" required value={newUser.first_name} error={newUserErrors.first_name} onChange={e => { setNewUser(p => ({ ...p, first_name: e.target.value })); setNewUserErrors(p => ({ ...p, first_name: '' })) }} />
+                      <Input label="Last Name" required value={newUser.last_name} error={newUserErrors.last_name} onChange={e => { setNewUser(p => ({ ...p, last_name: e.target.value })); setNewUserErrors(p => ({ ...p, last_name: '' })) }} />
+                    </div>
+                    <Input label="Email" type="email" required value={newUser.email} error={newUserErrors.email} onChange={e => { setNewUser(p => ({ ...p, email: e.target.value })); setNewUserErrors(p => ({ ...p, email: '' })) }} />
+                    <Input label="Username" required value={newUser.username} error={newUserErrors.username} onChange={e => { setNewUser(p => ({ ...p, username: e.target.value })); setNewUserErrors(p => ({ ...p, username: '' })) }} />
+                    <Input label="Password" type="password" required value={newUser.password} error={newUserErrors.password} onChange={e => { setNewUser(p => ({ ...p, password: e.target.value })); setNewUserErrors(p => ({ ...p, password: '' })) }} />
+                    <Select label="Role" value={newUser.role} onChange={e => setNewUser(p => ({ ...p, role: e.target.value as any }))} options={[{ value: 'student', label: 'Student' }, { value: 'admin', label: 'Administrator' }]} />
+                    {newUser.role === 'student' && (
+                      <>
+                        <Input label="Date of Birth" type="date" value={newUser.date_of_birth} onChange={e => setNewUser(p => ({ ...p, date_of_birth: e.target.value }))} />
+                        <Input label="Grade Level" type="number" value={String(newUser.grade_level)} onChange={e => setNewUser(p => ({ ...p, grade_level: parseInt(e.target.value) || 1 }))} />
+                      </>
+                    )}
+                  </div>
+                  <div className="px-6 py-4 border-t border-line bg-panel-2 flex justify-end gap-2">
+                    <Button variant="secondary" onClick={() => { setShowAddUser(false); setNewUserErrors({}) }}>Cancel</Button>
+                    <Button onClick={handleAddUser}>Add User</Button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {showEditUser && editingUser && (
+              <div className="fixed inset-0 bg-black/40 z-50 flex items-center justify-center p-4">
+                <div className="w-full max-w-md bg-panel border border-line rounded-card-lg shadow-xl overflow-hidden">
+                  <div className="px-6 py-4 border-b border-line flex items-center justify-between">
+                    <div>
+                      <h3 className="text-[15px] font-semibold text-ink">Edit User</h3>
+                      <p className="text-[12px] text-muted mt-0.5">{editingUser.first_name} {editingUser.last_name}</p>
+                    </div>
+                    <button onClick={() => { setShowEditUser(false); setEditingUser(null); setEditUserErrors({}) }} className="w-7 h-7 flex items-center justify-center rounded-full text-faint hover:text-ink hover:bg-track transition-colors"><X className="w-4 h-4" /></button>
+                  </div>
+                  <div className="px-6 py-5 space-y-4 max-h-[70vh] overflow-y-auto">
+                    <div className="grid grid-cols-2 gap-3">
+                      <Input label="First Name" required value={editUser.first_name} error={editUserErrors.first_name} onChange={e => { setEditUser(p => ({ ...p, first_name: e.target.value })); setEditUserErrors(p => ({ ...p, first_name: '' })) }} />
+                      <Input label="Last Name" required value={editUser.last_name} error={editUserErrors.last_name} onChange={e => { setEditUser(p => ({ ...p, last_name: e.target.value })); setEditUserErrors(p => ({ ...p, last_name: '' })) }} />
+                    </div>
+                    <Input label="Email" type="email" required value={editUser.email} error={editUserErrors.email} onChange={e => { setEditUser(p => ({ ...p, email: e.target.value })); setEditUserErrors(p => ({ ...p, email: '' })) }} />
+                    <Input label="Username" required value={editUser.username} error={editUserErrors.username} onChange={e => { setEditUser(p => ({ ...p, username: e.target.value })); setEditUserErrors(p => ({ ...p, username: '' })) }} />
+                    <Select label="Status" value={editUser.is_active ? 'active' : 'inactive'} onChange={e => setEditUser(p => ({ ...p, is_active: e.target.value === 'active' }))} options={[{ value: 'active', label: 'Active' }, { value: 'inactive', label: 'Inactive' }]} />
+                    {editingUser.role === 'student' && (
+                      <>
+                        <Input label="Date of Birth" type="date" value={editUser.date_of_birth} onChange={e => setEditUser(p => ({ ...p, date_of_birth: e.target.value }))} />
+                        <Input label="Grade Level" type="number" value={String(editUser.grade_level)} onChange={e => setEditUser(p => ({ ...p, grade_level: parseInt(e.target.value) || 1 }))} />
+                      </>
+                    )}
+                  </div>
+                  <div className="px-6 py-4 border-t border-line bg-panel-2 flex justify-end gap-2">
+                    <Button variant="secondary" onClick={() => { setShowEditUser(false); setEditingUser(null); setEditUserErrors({}) }}>Cancel</Button>
+                    <Button onClick={handleEditUser}>Save Changes</Button>
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+        )
+      }
 
       case 'api': return (
         <div>
-          <SectionHeader title="Integrations & API" desc="Connect external tools with secure API keys." />
+          <div className="flex items-center justify-between mb-6">
+            <div>
+              <h2 className="text-[18px] font-semibold text-ink tracking-[-0.01em]">Integrations & API</h2>
+              <p className="mt-0.5 text-[13px] text-muted">Connect external tools with secure API keys.</p>
+            </div>
+            <button onClick={() => setShowCreateKey(true)} className="h-[34px] px-4 rounded-field bg-btn-primary-bg text-btn-primary-fg text-[13.5px] font-semibold hover:opacity-90 transition-opacity flex items-center gap-2">
+              <Plus className="w-4 h-4" /> Create API Key
+            </button>
+          </div>
           <div className="flex items-start gap-2.5 bg-sub-bg border border-sub-fg/20 rounded-card p-4 mb-5 text-[13px] text-sub-fg">
             <AlertTriangle size={15} className="flex-shrink-0 mt-0.5" />
             <span>API keys grant direct access to student data. Only create keys for trusted applications and review their scope.</span>
           </div>
-          <div className="bg-panel border border-line rounded-card divide-y divide-line-2">
-            <div className="px-5 py-3">
-              <Link
-                to="/admin/api-keys"
-                className="flex items-center justify-between text-[13.5px] font-medium text-ink hover:text-accent transition-colors"
-              >
-                <span>Manage API keys</span>
-                <div className="flex items-center gap-1.5 text-faint">
-                  <ExternalLink size={13} />
-                </div>
-              </Link>
-            </div>
-          </div>
+          <ErrorBoundary>
+            <APIKeyTable
+              apiKeys={apiKeysHook.apiKeys}
+              expandedStats={apiKeysHook.expandedStats}
+              onToggleStatsExpanded={apiKeysHook.toggleStatsExpanded}
+              onToggleActive={apiKeysHook.toggleAPIKeyActive}
+              onDelete={apiKeysHook.deleteAPIKey}
+              refreshing={apiKeysHook.refreshing}
+              autoRefresh={apiKeysHook.autoRefresh}
+              onToggleAutoRefresh={apiKeysHook.toggleAutoRefresh}
+              lastRefresh={apiKeysHook.lastRefresh}
+              onRefresh={apiKeysHook.refreshData}
+            />
+          </ErrorBoundary>
+          <ErrorBoundary>
+            <CreateAPIKeyModal
+              isOpen={showCreateKey}
+              onClose={() => setShowCreateKey(false)}
+              onSuccess={() => { setShowCreateKey(false); apiKeysHook.refreshData() }}
+              error={apiKeysHook.error}
+              setError={apiKeysHook.setError}
+            />
+          </ErrorBoundary>
         </div>
       )
 

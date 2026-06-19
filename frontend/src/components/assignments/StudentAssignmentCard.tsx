@@ -33,6 +33,23 @@ interface StudentAssignmentCardProps {
   onDelete?: (assignment: StudentAssignment) => void
 }
 
+const statusBadge = (status: string) => {
+  switch (status) {
+    case 'not_started':
+      return 'bg-track text-faint border border-line'
+    case 'in_progress':
+      return 'bg-accent/10 text-accent border border-accent/20'
+    case 'submitted':
+      return 'bg-[var(--pos-bg)] text-[var(--pos-fg)] border border-[var(--pos-fg)]/20'
+    case 'graded':
+      return 'bg-pos-bg text-pos-fg border border-[var(--pos-fg)]/20'
+    case 'overdue':
+      return 'bg-neg-bg text-neg-fg border border-[var(--neg-fg)]/20'
+    default:
+      return 'bg-track text-faint border border-line'
+  }
+}
+
 const StudentAssignmentCard: React.FC<StudentAssignmentCardProps> = ({
   assignment,
   subject,
@@ -47,9 +64,9 @@ const StudentAssignmentCard: React.FC<StudentAssignmentCardProps> = ({
   const renderActionButton = () => {
     if (assignment.status === 'not_started' && onStart) {
       return (
-        <button 
+        <button
           onClick={() => onStart(assignment.id)}
-          className="flex-1 bg-blue-600 text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-blue-700"
+          className="flex-1 h-[34px] px-4 rounded-field bg-btn-primary-bg text-btn-primary-fg text-[13px] font-semibold hover:opacity-90 transition-opacity"
         >
           Start Assignment
         </button>
@@ -58,9 +75,9 @@ const StudentAssignmentCard: React.FC<StudentAssignmentCardProps> = ({
 
     if (assignment.status === 'in_progress' && onComplete) {
       return (
-        <button 
+        <button
           onClick={() => onComplete(assignment)}
-          className="flex-1 bg-green-600 text-white px-4 py-2 rounded-md text-sm font-medium hover:bg-green-700"
+          className="flex-1 h-[34px] px-4 rounded-field bg-pos-bg text-pos-fg text-[13px] font-semibold hover:opacity-80 transition-opacity"
         >
           Submit Assignment
         </button>
@@ -69,7 +86,7 @@ const StudentAssignmentCard: React.FC<StudentAssignmentCardProps> = ({
 
     if (assignment.status === 'submitted' && !assignment.is_graded) {
       return (
-        <div className="flex-1 bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300 px-4 py-2 rounded-md text-sm font-medium text-center">
+        <div className="flex-1 h-[34px] px-4 rounded-field bg-track text-muted text-[13px] font-medium flex items-center justify-center">
           Waiting for Grade
         </div>
       )
@@ -77,7 +94,7 @@ const StudentAssignmentCard: React.FC<StudentAssignmentCardProps> = ({
 
     if (assignment.is_graded) {
       return (
-        <div className="flex-1 bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-200 px-4 py-2 rounded-md text-sm font-medium text-center">
+        <div className="flex-1 h-[34px] px-4 rounded-field bg-pos-bg text-pos-fg text-[13px] font-medium flex items-center justify-center">
           Graded: {assignment.letter_grade || 'Not Set'}
         </div>
       )
@@ -87,100 +104,98 @@ const StudentAssignmentCard: React.FC<StudentAssignmentCardProps> = ({
   }
 
   return (
-    <div className="bg-white dark:bg-gray-800 shadow rounded-lg overflow-hidden hover:shadow-md transition-shadow border border-gray-200 dark:border-gray-700">
-      {/* Header with Subject Color */}
-      <div className="h-2" style={{ backgroundColor: subject?.color || '#6B7280' }}></div>
-      
-      <div className="p-6">
-        {/* Assignment Header */}
-        <div className="flex items-start justify-between mb-4">
+    <div className="bg-panel border border-line rounded-card-lg overflow-hidden hover:border-accent/30 transition-colors">
+      {/* Subject color stripe */}
+      <div className="h-1" style={{ backgroundColor: subject?.color || 'var(--accent)' }} />
+
+      <div className="p-5">
+        {/* Header */}
+        <div className="flex items-start justify-between mb-3">
           <div className="flex-1 min-w-0">
-            <div className="flex items-center mb-2">
-              <span className="text-lg mr-2">
+            <div className="flex items-center gap-2 mb-1">
+              <span className="text-base leading-none">
                 {assignmentUtils.getAssignmentTypeIcon(template?.assignment_type || '')}
               </span>
-              <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 truncate">
+              <h3 className="text-[15px] font-semibold text-ink truncate">
                 {template?.name}
               </h3>
             </div>
-            <div className="flex items-center space-x-2 text-sm text-gray-600 dark:text-gray-400">
-              <span className="font-medium">{subject?.name}</span>
+            <div className="flex items-center gap-2 text-[12.5px] text-muted">
+              <span>{subject?.name}</span>
               {assignment.due_date && (
                 <>
-                  <span>•</span>
-                  <span>Due: {formatDateOnly(assignment.due_date, { month: 'short', day: 'numeric', year: 'numeric' })}</span>
+                  <span className="text-faintest">·</span>
+                  <span>Due {formatDateOnly(assignment.due_date, { month: 'short', day: 'numeric', year: 'numeric' })}</span>
                 </>
               )}
             </div>
           </div>
-          
-          {/* Status Badge */}
-          <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${assignmentUtils.getStatusColor(assignment.status)}`}>
-            {assignment.status.replace('_', ' ').toUpperCase()}
+
+          <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold uppercase tracking-wide ${statusBadge(assignment.status)}`}>
+            {assignment.status.replace('_', ' ')}
           </span>
         </div>
 
         {/* Description */}
         {template?.description && (
-          <div className="mb-4">
-            <MarkdownRenderer 
-              content={template.description} 
-              className="text-gray-600 dark:text-gray-400 text-sm line-clamp-2" 
-            />
+          <div className="mb-3 text-[13px] text-muted line-clamp-2">
+            <MarkdownRenderer content={template.description} className="line-clamp-2" />
           </div>
         )}
 
-        {/* Assignment Details */}
-        <div className="flex items-center justify-between text-sm text-gray-600 dark:text-gray-400 mb-4">
-          <div className="flex items-center space-x-4">
-            <span>📋 {assignment.custom_max_points || template?.max_points || 0} points</span>
+        {/* Meta row */}
+        <div className="flex items-center justify-between text-[12.5px] text-muted mb-4">
+          <div className="flex items-center gap-3">
+            <span>📋 {assignment.custom_max_points || template?.max_points || 0} pts</span>
             {template?.estimated_duration_minutes && (
-              <span>⏱️ {assignmentUtils.formatDuration(template.estimated_duration_minutes)}</span>
+              <span>⏱ {assignmentUtils.formatDuration(template.estimated_duration_minutes)}</span>
             )}
           </div>
-          {assignment.percentage_grade !== null && (
-            <span className={`font-medium ${assignmentUtils.calculateGradeColor(assignment.percentage_grade)}`}>
-              {assignment.percentage_grade?.toFixed(1)}%
+          {assignment.percentage_grade !== null && assignment.percentage_grade !== undefined && (
+            <span className={`font-semibold text-[13px] ${
+              assignment.percentage_grade >= 90 ? 'text-pos-fg' :
+              assignment.percentage_grade >= 70 ? 'text-accent' : 'text-neg-fg'
+            }`}>
+              {assignment.percentage_grade.toFixed(1)}%
             </span>
           )}
         </div>
 
-        {/* Submission Details */}
-        {(assignment.status === 'submitted' || assignment.is_graded) && (assignment.submission_notes || (assignment.submission_artifacts && assignment.submission_artifacts.length > 0)) && (
-          <div className="mb-4 p-3 bg-blue-50 dark:bg-blue-900/20 rounded-md border border-blue-200 dark:border-blue-800">
-            <h4 className="text-xs font-medium text-blue-800 dark:text-blue-200 mb-2">Your Submission</h4>
+        {/* Submission preview */}
+        {(assignment.status === 'submitted' || assignment.is_graded) &&
+          (assignment.submission_notes || (assignment.submission_artifacts && assignment.submission_artifacts.length > 0)) && (
+          <div className="mb-4 px-3 py-2.5 bg-accent/6 border border-accent/15 rounded-field">
+            <p className="text-[11.5px] font-semibold text-accent mb-1 uppercase tracking-wide">Your Submission</p>
             {assignment.submission_notes && (
-              <p className="text-xs text-blue-700 dark:text-blue-300 mb-2">
-                <span className="font-medium">Notes:</span> {assignment.submission_notes.length > 100 ? assignment.submission_notes.substring(0, 100) + '...' : assignment.submission_notes}
-              </p>
+              <p className="text-[12.5px] text-muted line-clamp-2">{assignment.submission_notes}</p>
             )}
             {assignment.submission_artifacts && assignment.submission_artifacts.length > 0 && (
-              <p className="text-xs text-blue-700 dark:text-blue-300">
-                <span className="font-medium">Links:</span> {assignment.submission_artifacts.length} artifact{assignment.submission_artifacts.length !== 1 ? 's' : ''} submitted
+              <p className="text-[12px] text-muted">
+                {assignment.submission_artifacts.length} link{assignment.submission_artifacts.length !== 1 ? 's' : ''} submitted
               </p>
             )}
           </div>
         )}
 
-        {/* Action Buttons */}
-        <div className="flex space-x-2">
+        {/* Actions */}
+        <div className="flex gap-2">
           {renderActionButton()}
           {isAdmin && onArchive && (
             <button
               onClick={() => onArchive(assignment)}
-              className="p-2 text-gray-400 dark:text-gray-500 hover:text-yellow-600 hover:bg-yellow-50 dark:hover:bg-yellow-900 rounded-md transition-colors"
-              title="Archive Assignment"
+              className="w-[34px] h-[34px] flex items-center justify-center rounded-field text-faint hover:text-ink hover:bg-track transition-colors"
+              title="Archive"
             >
-              <Archive className="h-4 w-4" />
+              <Archive className="w-4 h-4" />
             </button>
           )}
           {isAdmin && onDelete && (
             <button
               onClick={() => onDelete(assignment)}
-              className="p-2 text-gray-400 dark:text-gray-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900 rounded-md transition-colors"
-              title="Delete Assignment"
+              className="w-[34px] h-[34px] flex items-center justify-center rounded-field text-faint hover:text-neg-fg hover:bg-neg-bg transition-colors"
+              title="Delete"
             >
-              <Trash2 className="h-4 w-4" />
+              <Trash2 className="w-4 h-4" />
             </button>
           )}
         </div>
