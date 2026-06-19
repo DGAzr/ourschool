@@ -349,8 +349,8 @@ def assign_template_to_students(
     created_assignments = []
     failed_assignments = []
 
-    # Use current date for assignment date
-    assigned_date = date.today()
+    # Use current date for assignment date, or the provided one
+    assigned_date = assignment_request.assigned_date or date.today()
 
     for student_id in assignment_request.student_ids:
         try:

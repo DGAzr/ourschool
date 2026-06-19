@@ -42,12 +42,13 @@ const QuickAssignModal: React.FC<QuickAssignModalProps> = ({ isOpen, onClose, on
     assignment_type: 'homework',
     max_points: 100,
     due_date: '',
+    assigned_date: new Date().toISOString().split('T')[0],
   })
 
   useEffect(() => {
     if (isOpen) {
       loadData()
-      setForm({ name: '', subject_id: 0, assignment_type: 'homework', max_points: 100, due_date: '' })
+      setForm({ name: '', subject_id: 0, assignment_type: 'homework', max_points: 100, due_date: '', assigned_date: new Date().toISOString().split('T')[0] })
       setSelectedStudents([])
       setError(null)
     }
@@ -98,6 +99,7 @@ const QuickAssignModal: React.FC<QuickAssignModalProps> = ({ isOpen, onClose, on
         template_id: template.id,
         student_ids: selectedStudents,
         due_date: form.due_date || undefined,
+        assigned_date: form.assigned_date || undefined,
       })
       onSuccess()
       onClose()
@@ -206,6 +208,20 @@ const QuickAssignModal: React.FC<QuickAssignModalProps> = ({ isOpen, onClose, on
                       disabled={loading}
                     />
                   </div>
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Assign Date</label>
+                  <input
+                    type="date"
+                    value={form.assigned_date}
+                    onChange={e => setForm(f => ({ ...f, assigned_date: e.target.value }))}
+                    className="w-full border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 rounded-md px-3 py-2 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                    disabled={loading}
+                  />
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                    The date this assignment was given (defaults to today)
+                  </p>
                 </div>
 
                 <div>

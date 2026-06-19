@@ -1,5 +1,10 @@
 services:
   db:
+    # Only started when --profile local-db is used.
+    # To use an external PostgreSQL database, omit this profile and set DATABASE_URL
+    # (or DATABASE_HOST / DATABASE_PORT / DATABASE_NAME / DATABASE_USER / DATABASE_PASSWORD)
+    # in your .env file, then run: docker-compose up backend frontend
+    profiles: ["local-db"]
     image: postgres:15-alpine
     restart: unless-stopped
     environment:
@@ -15,6 +20,11 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
 
   backend:
     build:
@@ -23,11 +33,14 @@ services:
     restart: unless-stopped
     environment:
       # Database configuration
-      DATABASE_HOST: db
-      DATABASE_PORT: 5432
-      DATABASE_NAME: ${POSTGRES_DB:-ourschool}
-      DATABASE_USER: ${POSTGRES_USER:-postgres}
-      DATABASE_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      # Set DATABASE_URL to use an external PostgreSQL instance and skip the local db service.
+      # If DATABASE_URL is set it takes precedence over the individual vars below.
+      DATABASE_URL: ${DATABASE_URL:-}
+      DATABASE_HOST: ${DATABASE_HOST:-db}
+      DATABASE_PORT: ${DATABASE_PORT:-5432}
+      DATABASE_NAME: ${DATABASE_NAME:-${POSTGRES_DB:-ourschool}}
+      DATABASE_USER: ${DATABASE_USER:-${POSTGRES_USER:-postgres}}
+      DATABASE_PASSWORD: ${DATABASE_PASSWORD:-${POSTGRES_PASSWORD:-postgres}}
 
       # Security configuration
       SECRET_KEY: ${SECRET_KEY:-your-secret-key-change-this-in-production}
@@ -39,14 +52,17 @@ services:
       BACKEND_PORT: ${BACKEND_PORT:-8000}
 
       # Logging configuration
-      LOG_LEVEL: ${LOG_LEVEL:-INFO}
-      LOG_FORMAT: ${LOG_FORMAT:-json}
+      # BACKEND_LOG_LEVEL overrides LOG_LEVEL for this service only.
+      # Valid values: DEBUG, INFO, WARNING, ERROR, CRITICAL
+      LOG_LEVEL: ${BACKEND_LOG_LEVEL:-${LOG_LEVEL:-INFO}}
+      LOG_FORMAT: ${BACKEND_LOG_FORMAT:-${LOG_FORMAT:-json}}
 
       # CORS configuration
       ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-http://localhost:4173,http://frontend:4173}
     depends_on:
       db:
         condition: service_healthy
+        required: false  # skipped when db service is not running (external DB mode)
     ports:
       - "${BACKEND_PORT:-8000}:8000"
     volumes:
@@ -60,6 +76,11 @@ services:
       timeout: 10s
       retries: 5
       start_period: 30s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
 
   frontend:
     build:
@@ -80,6 +101,11 @@ services:
       timeout: 10s
       retries: 3
       start_period: 10s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
 
 volumes:
   postgres_data:

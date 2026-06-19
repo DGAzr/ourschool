@@ -31,9 +31,12 @@ from .exporters import (
     export_attendance_records,
     export_grade_history,
     export_journal_entries,
+    export_point_transactions,
     export_student_assignments,
+    export_student_points,
     export_student_term_grades,
     export_subjects,
+    export_system_settings,
     export_term_subjects,
     export_terms,
     export_users,
@@ -66,10 +69,13 @@ def export_system_backup(
         grade_history_data = export_grade_history(db)
         attendance_data = export_attendance_records(db)
         journal_data = export_journal_entries(db)
-        
+        student_points_data = export_student_points(db)
+        point_transactions_data = export_point_transactions(db)
+        system_settings_data = export_system_settings(db)
+
         # Create system backup
         backup = SystemBackup(
-            format_version="1.0",
+            format_version="2.0",
             backup_timestamp=datetime.now(timezone.utc),
             created_by=f"{current_user.first_name} {current_user.last_name}".strip() or current_user.email,
             system_info={
@@ -80,6 +86,9 @@ def export_system_backup(
                 "total_terms": len(terms_data),
                 "total_attendance_records": len(attendance_data),
                 "total_journal_entries": len(journal_data),
+                "total_student_points": len(student_points_data),
+                "total_point_transactions": len(point_transactions_data),
+                "total_system_settings": len(system_settings_data),
             },
             users=users_data,
             subjects=subjects_data,
@@ -90,7 +99,10 @@ def export_system_backup(
             student_term_grades=term_grades_data,
             grade_history=grade_history_data,
             attendance_records=attendance_data,
-            journal_entries=journal_data
+            journal_entries=journal_data,
+            student_points=student_points_data,
+            point_transactions=point_transactions_data,
+            system_settings=system_settings_data,
         )
         
         total_objects = sum(backup.system_info.values())

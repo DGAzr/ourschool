@@ -113,6 +113,7 @@ class StudentAssignmentUpdate(BaseModel):
 
     due_date: Optional[date] = None
     extended_due_date: Optional[date] = None
+    assigned_date: Optional[date] = None
     status: Optional[AssignmentStatus] = None
     custom_instructions: Optional[str] = None
     custom_max_points: Optional[int] = Field(None, ge=1, le=1000)
@@ -236,6 +237,7 @@ class AssignmentAssignmentRequest(BaseModel):
     template_id: int
     student_ids: List[int] = Field(..., min_items=1)
     due_date: Optional[date] = None
+    assigned_date: Optional[date] = None
     custom_instructions: Optional[str] = None
     custom_max_points: Optional[int] = Field(None, ge=1, le=1000)
 

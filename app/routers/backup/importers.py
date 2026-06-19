@@ -108,6 +108,9 @@ def import_system_data(
         _import_grade_history(db, backup_data.grade_history, result, dry_run)
         _import_attendance_records(db, backup_data.attendance_records, result, dry_run)
         _import_journal_entries(db, backup_data.journal_entries, result, dry_run)
+        _import_student_points(db, backup_data.student_points, result, dry_run)
+        _import_point_transactions(db, backup_data.point_transactions, result, dry_run)
+        _import_system_settings(db, backup_data.system_settings, result, dry_run)
 
         if not dry_run:
             db.commit()
@@ -455,53 +458,84 @@ def _import_student_term_grades(db: Session, term_grades_data, result, dry_run):
     """Import student term grades."""
     users_by_uuid = result.id_mappings.get("users_by_uuid", {})
     users_by_email = result.id_mappings.get("users_by_email", {})
-    imported = 0
+    terms_by_uuid = result.id_mappings.get("terms_by_uuid", {})
+    terms_by_name = result.id_mappings.get("terms_by_name", {})
+    subjects_by_uuid = result.id_mappings.get("subjects_by_uuid", {})
+    subjects_by_name = result.id_mappings.get("subjects_by_name", {})
+    imported = skipped = 0
 
     for tg_data in term_grades_data:
         student_id = _resolve(getattr(tg_data, 'student_external_id', None), tg_data.student_email, users_by_uuid, users_by_email)
-        if not student_id:
-            result.import_log.append(f"Skipped student_term_grade: {tg_data.student_email} (unresolved)")
+        term_id = _resolve(getattr(tg_data, 'term_external_id', None), tg_data.term_name, terms_by_uuid, terms_by_name)
+        subject_id = _resolve(getattr(tg_data, 'subject_external_id', None), tg_data.subject_name, subjects_by_uuid, subjects_by_name)
+
+        if not student_id or not term_id or not subject_id:
+            result.import_log.append(
+                f"Skipped student_term_grade: {tg_data.student_email}/{tg_data.term_name}/{tg_data.subject_name} (unresolved)"
+            )
+            result.warnings.append(
+                f"StudentTermGrade for {tg_data.student_email} skipped — could not resolve student, term, or subject"
+            )
             continue
 
         if not dry_run:
-            from app.models.term import StudentTermGrade
+            from app.models.term import StudentTermGrade, TermSubject
+            term_subject = db.query(TermSubject).filter(
+                TermSubject.term_id == term_id,
+                TermSubject.subject_id == subject_id
+            ).first()
+            if not term_subject:
+                result.import_log.append(
+                    f"Skipped student_term_grade: {tg_data.term_name}/{tg_data.subject_name} (TermSubject not found)"
+                )
+                result.warnings.append(
+                    f"StudentTermGrade for {tg_data.student_email} skipped — TermSubject {tg_data.term_name}/{tg_data.subject_name} not found"
+                )
+                continue
+
+            existing = db.query(StudentTermGrade).filter(
+                StudentTermGrade.student_id == student_id,
+                StudentTermGrade.term_subject_id == term_subject.id
+            ).first()
+            if existing:
+                skipped += 1
+                result.import_log.append(f"Skipped existing student_term_grade for {tg_data.student_email}")
+                continue
+
             new_tg = StudentTermGrade(
                 student_id=student_id,
-                term_subject_id=0,
-                current_points_earned=tg_data.points_earned or 0,
-                current_points_possible=tg_data.points_possible or 0,
-                current_percentage=tg_data.percentage,
-                current_letter_grade=tg_data.grade
+                term_subject_id=term_subject.id,
+                current_points_earned=tg_data.current_points_earned,
+                current_points_possible=tg_data.current_points_possible,
+                current_percentage=tg_data.current_percentage,
+                current_letter_grade=tg_data.current_letter_grade,
+                final_points_earned=tg_data.final_points_earned,
+                final_points_possible=tg_data.final_points_possible,
+                final_percentage=tg_data.final_percentage,
+                final_letter_grade=tg_data.final_letter_grade,
+                is_finalized=tg_data.is_finalized,
+                assignments_completed=tg_data.assignments_completed,
+                assignments_total=tg_data.assignments_total,
+                progress_notes=tg_data.progress_notes,
             )
             db.add(new_tg)
             db.flush()
-            result.import_log.append(f"Created student_term_grade for {tg_data.student_email}")
+            result.import_log.append(f"Created student_term_grade for {tg_data.student_email}/{tg_data.term_name}/{tg_data.subject_name}")
         imported += 1
 
     result.imported_counts["student_term_grades"] = imported
+    result.skipped_counts["student_term_grades"] = skipped
 
 
 def _import_grade_history(db: Session, grade_history_data, result, dry_run):
-    """Import grade history."""
-    imported = 0
-    for gh_data in grade_history_data:
-        if not dry_run:
-            from app.models.term import GradeHistory
-            new_gh = GradeHistory(
-                student_id=0,
-                term_id=0,
-                subject_id=0,
-                old_letter_grade=gh_data.grade,
-                new_letter_grade=gh_data.grade,
-                old_percentage_grade=gh_data.percentage,
-                new_percentage_grade=gh_data.percentage,
-                change_reason="Imported from backup"
-            )
-            db.add(new_gh)
-            db.flush()
-            result.import_log.append("Created grade_history entry")
-        imported += 1
-    result.imported_counts["grade_history"] = imported
+    """Grade history is audit data — exported for archival but not re-imported."""
+    count = len(grade_history_data) if grade_history_data else 0
+    if count:
+        result.warnings.append(
+            f"{count} grade_history entries present in backup but not imported (audit data — grades are restored via student_term_grades)"
+        )
+    result.imported_counts["grade_history"] = 0
+    result.skipped_counts["grade_history"] = count
 
 
 def _import_attendance_records(db: Session, attendance_data, result, dry_run):
@@ -560,3 +594,102 @@ def _import_journal_entries(db: Session, journal_data, result, dry_run):
         imported += 1
 
     result.imported_counts["journal_entries"] = imported
+
+
+def _import_system_settings(db: Session, system_settings_data, result, dry_run):
+    """Import system settings. Skips keys that already exist."""
+    imported = skipped = 0
+    for ss_data in system_settings_data:
+        if not dry_run:
+            from app.models.points import SystemSettings
+            existing = db.query(SystemSettings).filter(SystemSettings.setting_key == ss_data.setting_key).first()
+            if existing:
+                skipped += 1
+                result.import_log.append(f"Skipped existing system_setting: {ss_data.setting_key}")
+                continue
+            new_ss = SystemSettings(
+                setting_key=ss_data.setting_key,
+                setting_value=ss_data.setting_value,
+                setting_type=ss_data.setting_type,
+                description=ss_data.description,
+                is_active=ss_data.is_active,
+            )
+            db.add(new_ss)
+            db.flush()
+            result.import_log.append(f"Created system_setting: {ss_data.setting_key}")
+        imported += 1
+    result.imported_counts["system_settings"] = imported
+    result.skipped_counts["system_settings"] = skipped
+
+
+def _import_student_points(db: Session, student_points_data, result, dry_run):
+    """Import student point balances. One record per student — skips if already exists."""
+    users_by_uuid = result.id_mappings.get("users_by_uuid", {})
+    users_by_email = result.id_mappings.get("users_by_email", {})
+    imported = skipped = 0
+
+    for sp_data in student_points_data:
+        student_id = _resolve(getattr(sp_data, 'student_external_id', None), sp_data.student_email, users_by_uuid, users_by_email)
+        if not student_id:
+            result.import_log.append(f"Skipped student_points: {sp_data.student_email} (unresolved)")
+            continue
+
+        if not dry_run:
+            from app.models.points import StudentPoints
+            existing = db.query(StudentPoints).filter(StudentPoints.student_id == student_id).first()
+            if existing:
+                skipped += 1
+                result.import_log.append(f"Skipped existing student_points for {sp_data.student_email}")
+                continue
+            new_sp = StudentPoints(
+                student_id=student_id,
+                current_balance=sp_data.current_balance,
+                total_earned=sp_data.total_earned,
+                total_spent=sp_data.total_spent,
+            )
+            db.add(new_sp)
+            db.flush()
+            result.import_log.append(f"Created student_points for {sp_data.student_email}")
+        imported += 1
+
+    result.imported_counts["student_points"] = imported
+    result.skipped_counts["student_points"] = skipped
+
+
+def _import_point_transactions(db: Session, point_transactions_data, result, dry_run):
+    """Import point transactions. Deduplicates on (student_id, amount, transaction_type, created_at)."""
+    users_by_uuid = result.id_mappings.get("users_by_uuid", {})
+    users_by_email = result.id_mappings.get("users_by_email", {})
+    imported = skipped = 0
+
+    for tx_data in point_transactions_data:
+        student_id = _resolve(getattr(tx_data, 'student_external_id', None), tx_data.student_email, users_by_uuid, users_by_email)
+        if not student_id:
+            result.import_log.append(f"Skipped point_transaction: {tx_data.student_email} (unresolved)")
+            continue
+
+        if not dry_run:
+            from app.models.points import PointTransaction
+            existing = db.query(PointTransaction).filter(
+                PointTransaction.student_id == student_id,
+                PointTransaction.amount == tx_data.amount,
+                PointTransaction.transaction_type == tx_data.transaction_type,
+                PointTransaction.created_at == tx_data.created_at,
+            ).first()
+            if existing:
+                skipped += 1
+                continue
+            new_tx = PointTransaction(
+                student_id=student_id,
+                amount=tx_data.amount,
+                transaction_type=tx_data.transaction_type,
+                source_description=tx_data.source_description,
+                notes=tx_data.notes,
+            )
+            db.add(new_tx)
+            db.flush()
+            result.import_log.append(f"Created point_transaction for {tx_data.student_email}: {tx_data.amount} pts ({tx_data.transaction_type})")
+        imported += 1
+
+    result.imported_counts["point_transactions"] = imported
+    result.skipped_counts["point_transactions"] = skipped

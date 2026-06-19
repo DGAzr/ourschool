@@ -238,6 +238,10 @@ def get_all_students_with_points(db: Session) -> List[StudentPoints]:
             )
             # Detach from SQLAlchemy's identity map so it can never be flushed to the DB
             make_transient(dummy_points)
+            now = datetime.now(timezone.utc)
+            dummy_points.id = -(student.id)   # negative user ID: unique + signals "no real record"
+            dummy_points.created_at = now
+            dummy_points.updated_at = now
             dummy_points.student = student
             dummy_points.student_name = f"{student.first_name} {student.last_name}"
             result.append(dummy_points)

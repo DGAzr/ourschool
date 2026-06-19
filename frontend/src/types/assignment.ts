@@ -99,6 +99,7 @@ export interface AssignmentAssignmentRequest {
   template_id: number
   student_ids: number[]
   due_date?: string
+  assigned_date?: string
   custom_instructions?: string
   custom_max_points?: number
 }

@@ -96,6 +96,7 @@ export const assignmentsApi = {
   async updateStudentAssignment(assignmentId: number, update: {
     due_date?: string
     extended_due_date?: string
+    assigned_date?: string
     status?: string
     custom_instructions?: string
     custom_max_points?: number

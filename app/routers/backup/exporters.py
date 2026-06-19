@@ -22,6 +22,7 @@ from sqlalchemy.orm import Session
 from app.models.assignment import AssignmentTemplate, StudentAssignment
 from app.models.attendance import AttendanceRecord
 from app.models.journal import JournalEntry
+from app.models.points import PointTransaction, StudentPoints
 from app.models.subject import Subject
 from app.models.term import GradeHistory, StudentTermGrade, Term, TermSubject
 from app.models.user import User
@@ -30,9 +31,12 @@ from app.schemas.backup import (
     AttendanceRecordBackup,
     GradeHistoryBackup,
     JournalEntryBackup,
+    PointTransactionBackup,
     StudentAssignmentBackup,
+    StudentPointsBackup,
     StudentTermGradeBackup,
     SubjectBackup,
+    SystemSettingsBackup,
     TermBackup,
     TermSubjectBackup,
     UserBackup,
@@ -172,16 +176,28 @@ def export_student_term_grades(db: Session) -> List[StudentTermGradeBackup]:
     term_grades_data = []
     term_grades = db.query(StudentTermGrade).all()
     for grade in term_grades:
+        ts = grade.term_subject
+        term = ts.term if ts else None
+        subject = ts.subject if ts else None
         term_grades_data.append(StudentTermGradeBackup(
+            student_external_id=grade.student.external_id if grade.student else None,
             student_email=grade.student.email if grade.student else "Unknown",
-            term_name=grade.term.name if grade.term else "Unknown", 
-            subject_name=grade.subject.name if grade.subject else "Unknown",
-            letter_grade=grade.letter_grade,
-            percentage_grade=grade.percentage_grade,
-            credits_earned=grade.credits_earned,
-            gpa_points=grade.gpa_points,
-            is_final=grade.is_final,
-            notes=grade.notes,
+            term_external_id=term.external_id if term else None,
+            term_name=term.name if term else "Unknown",
+            subject_external_id=subject.external_id if subject else None,
+            subject_name=subject.name if subject else "Unknown",
+            current_points_earned=grade.current_points_earned or 0.0,
+            current_points_possible=grade.current_points_possible or 0.0,
+            current_percentage=grade.current_percentage,
+            current_letter_grade=grade.current_letter_grade,
+            final_points_earned=grade.final_points_earned,
+            final_points_possible=grade.final_points_possible,
+            final_percentage=grade.final_percentage,
+            final_letter_grade=grade.final_letter_grade,
+            is_finalized=grade.is_finalized or False,
+            assignments_completed=grade.assignments_completed or 0,
+            assignments_total=grade.assignments_total or 0,
+            progress_notes=grade.progress_notes,
             created_at=grade.created_at,
             updated_at=grade.updated_at
         ))
@@ -189,20 +205,23 @@ def export_student_term_grades(db: Session) -> List[StudentTermGradeBackup]:
 
 
 def export_grade_history(db: Session) -> List[GradeHistoryBackup]:
-    """Export all grade history."""
+    """Export all grade history audit entries."""
     grade_history_data = []
     grade_history = db.query(GradeHistory).all()
     for history in grade_history:
+        stg = history.student_term_grade
+        ts = stg.term_subject if stg else None
+        term = ts.term if ts else None
+        subject = ts.subject if ts else None
+        student = stg.student if stg else None
         grade_history_data.append(GradeHistoryBackup(
-            student_email=history.student.email if history.student else "Unknown",
-            term_name=history.term.name if history.term else "Unknown",
-            subject_name=history.subject.name if history.subject else "Unknown",
-            old_letter_grade=history.old_letter_grade,
-            new_letter_grade=history.new_letter_grade,
-            old_percentage_grade=history.old_percentage_grade,
-            new_percentage_grade=history.new_percentage_grade,
+            student_email=student.email if student else "Unknown",
+            term_name=term.name if term else "Unknown",
+            subject_name=subject.name if subject else "Unknown",
+            field_name=history.field_name,
+            old_value=history.old_value,
+            new_value=history.new_value,
             change_reason=history.change_reason,
-            changed_by=history.changed_by,
             changed_at=history.changed_at
         ))
     return grade_history_data
@@ -241,3 +260,50 @@ def export_journal_entries(db: Session) -> List[JournalEntryBackup]:
             updated_at=entry.updated_at
         ))
     return journal_data
+
+
+def export_system_settings(db: Session) -> List[SystemSettingsBackup]:
+    """Export all system settings."""
+    from app.models.points import SystemSettings
+    settings_data = []
+    for setting in db.query(SystemSettings).all():
+        settings_data.append(SystemSettingsBackup(
+            setting_key=setting.setting_key,
+            setting_value=setting.setting_value,
+            setting_type=setting.setting_type,
+            description=setting.description,
+            is_active=setting.is_active,
+        ))
+    return settings_data
+
+
+def export_student_points(db: Session) -> List[StudentPointsBackup]:
+    """Export all student point balances."""
+    points_data = []
+    for sp in db.query(StudentPoints).all():
+        points_data.append(StudentPointsBackup(
+            student_external_id=sp.student.external_id if sp.student else None,
+            student_email=sp.student.email if sp.student else "Unknown",
+            current_balance=sp.current_balance,
+            total_earned=sp.total_earned,
+            total_spent=sp.total_spent,
+            created_at=sp.created_at,
+            updated_at=sp.updated_at
+        ))
+    return points_data
+
+
+def export_point_transactions(db: Session) -> List[PointTransactionBackup]:
+    """Export all point transactions in chronological order."""
+    transactions_data = []
+    for tx in db.query(PointTransaction).order_by(PointTransaction.created_at).all():
+        transactions_data.append(PointTransactionBackup(
+            student_external_id=tx.student.external_id if tx.student else None,
+            student_email=tx.student.email if tx.student else "Unknown",
+            amount=tx.amount,
+            transaction_type=tx.transaction_type,
+            source_description=tx.source_description,
+            notes=tx.notes,
+            created_at=tx.created_at
+        ))
+    return transactions_data

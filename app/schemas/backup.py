@@ -120,25 +120,41 @@ class StudentTermGradeBackup(BaseModel):
     term_name: str  # Fallback resolution key
     subject_external_id: Optional[str] = None
     subject_name: str  # Fallback resolution key
-    grade: Optional[str] = None
-    points_earned: Optional[int] = None
-    points_possible: Optional[int] = None
-    percentage: Optional[float] = None
-    comments: Optional[str] = None
+    current_points_earned: float = 0.0
+    current_points_possible: float = 0.0
+    current_percentage: Optional[float] = None
+    current_letter_grade: Optional[str] = None
+    final_points_earned: Optional[float] = None
+    final_points_possible: Optional[float] = None
+    final_percentage: Optional[float] = None
+    final_letter_grade: Optional[str] = None
+    is_finalized: bool = False
+    assignments_completed: int = 0
+    assignments_total: int = 0
+    progress_notes: Optional[str] = None
     created_at: datetime
     updated_at: datetime
 
 
 class GradeHistoryBackup(BaseModel):
-    """Schema for backing up grade history."""
-    student_email: str  # For resolution
-    term_name: str  # For resolution
-    subject_name: str  # For resolution
-    grade: str
-    points_earned: int
-    points_possible: int
-    percentage: float
-    recorded_at: datetime
+    """Schema for backing up grade history audit entries."""
+    student_email: str  # For reference (import is skipped — audit data only)
+    term_name: str
+    subject_name: str
+    field_name: str
+    old_value: Optional[str] = None
+    new_value: Optional[str] = None
+    change_reason: Optional[str] = None
+    changed_at: datetime
+
+
+class SystemSettingsBackup(BaseModel):
+    """Schema for backing up system settings."""
+    setting_key: str
+    setting_value: str
+    setting_type: str
+    description: Optional[str] = None
+    is_active: bool = True
 
 
 class AttendanceRecordBackup(BaseModel):
@@ -162,6 +178,28 @@ class JournalEntryBackup(BaseModel):
     is_private: bool = False
     created_at: datetime
     updated_at: datetime
+
+
+class StudentPointsBackup(BaseModel):
+    """Schema for backing up student point balances."""
+    student_external_id: Optional[str] = None
+    student_email: str  # Fallback resolution key
+    current_balance: int = 0
+    total_earned: int = 0
+    total_spent: int = 0
+    created_at: datetime
+    updated_at: datetime
+
+
+class PointTransactionBackup(BaseModel):
+    """Schema for backing up individual point transactions."""
+    student_external_id: Optional[str] = None
+    student_email: str  # Fallback resolution key
+    amount: int
+    transaction_type: str
+    source_description: Optional[str] = None
+    notes: Optional[str] = None
+    created_at: datetime
 
 
 # Complete system backup schema
@@ -188,6 +226,9 @@ class SystemBackup(BaseModel):
     grade_history: List[GradeHistoryBackup] = []
     attendance_records: List[AttendanceRecordBackup] = []
     journal_entries: List[JournalEntryBackup] = []
+    student_points: List[StudentPointsBackup] = []
+    point_transactions: List[PointTransactionBackup] = []
+    system_settings: List[SystemSettingsBackup] = []
     
     # Import statistics
     class Config:

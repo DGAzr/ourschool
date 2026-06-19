@@ -34,8 +34,15 @@ const EditAssignmentModal: React.FC<EditAssignmentModalProps> = ({
   onClose, 
   onSuccess 
 }) => {
+  const formatDateForInput = (dateString: string) => {
+    if (!dateString) return ''
+    // Handle both 'YYYY-MM-DD' and 'YYYY-MM-DDTHH:mm:ss' formats
+    return dateString.split('T')[0]
+  }
+
   const [dueDate, setDueDate] = useState<string>(assignment.due_date || '')
   const [extendedDueDate, setExtendedDueDate] = useState<string>(assignment.extended_due_date || '')
+  const [assignedDate, setAssignedDate] = useState<string>(formatDateForInput(assignment.assigned_date) || '')
   const [customInstructions, setCustomInstructions] = useState<string>(assignment.custom_instructions || '')
   const [customMaxPoints, setCustomMaxPoints] = useState<number | undefined>(assignment.custom_max_points || undefined)
   const [studentNotes, setStudentNotes] = useState<string>(assignment.student_notes || '')
@@ -57,6 +64,7 @@ const EditAssignmentModal: React.FC<EditAssignmentModalProps> = ({
       await assignmentsApi.updateStudentAssignment(assignment.id, {
         due_date: dueDate || undefined,
         extended_due_date: extendedDueDate || undefined,
+        assigned_date: assignedDate || undefined,
         custom_instructions: customInstructions || undefined,
         custom_max_points: customMaxPoints || undefined,
         student_notes: studentNotes || undefined
@@ -70,11 +78,7 @@ const EditAssignmentModal: React.FC<EditAssignmentModalProps> = ({
     }
   }
 
-  const formatDateForInput = (dateString: string) => {
-    if (!dateString) return ''
-    // Handle both 'YYYY-MM-DD' and 'YYYY-MM-DDTHH:mm:ss' formats
-    return dateString.split('T')[0]
-  }
+
 
   return (
     <div className="fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center z-50">
@@ -125,7 +129,19 @@ const EditAssignmentModal: React.FC<EditAssignmentModalProps> = ({
             </div>
 
             {/* Due Dates */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  Assign Date
+                </label>
+                <input
+                  type="date"
+                  value={formatDateForInput(assignedDate)}
+                  onChange={(e) => setAssignedDate(e.target.value)}
+                  className="w-full border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 rounded-md px-3 py-2 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                />
+              </div>
+
               <div>
                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                   Due Date
