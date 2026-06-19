@@ -117,10 +117,11 @@ def import_system_backup(
         log_backup_operation("import", current_user.email, "Starting system backup import")
         
         # Delegate to import handler
-        result = import_system_data(db, import_request.backup_data, current_user)
+        result = import_system_data(db, import_request.backup_data, current_user, import_request.import_options)
         
         if result.success:
-            log_backup_operation("import", current_user.email, f"Import completed successfully. {len(result.imported_objects)} objects imported")
+            total = sum(result.imported_counts.values()) if result.imported_counts else 0
+            log_backup_operation("import", current_user.email, f"Import completed successfully. {total} objects imported")
         else:
             log_backup_operation("import", current_user.email, f"Import failed with {len(result.errors)} errors")
             

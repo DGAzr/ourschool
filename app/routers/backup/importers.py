@@ -16,7 +16,7 @@
 
 """Data import utilities for backup operations."""
 import logging
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from typing import Any, Dict
 
 from sqlalchemy.orm import Session
@@ -34,8 +34,8 @@ logger = logging.getLogger(__name__)
 
 
 def import_system_data(
-    db: Session, 
-    backup_data: SystemBackup, 
+    db: Session,
+    backup_data: SystemBackup,
     current_user: User,
     import_options: Dict[str, Any] = None
 ) -> SystemBackupImportResult:
@@ -82,16 +82,13 @@ def import_system_data(
         backup_dict = sanitize_import_data(backup_data.dict())
         backup_data = SystemBackup(**backup_dict)
         
-        if not dry_run:
-            db.begin()
-        
         # Import in dependency order
         _import_users(db, backup_data.users, result, import_options, dry_run)
         _import_subjects(db, backup_data.subjects, result, dry_run)
-        _import_terms(db, backup_data.terms, result, dry_run)
-        _import_assignment_templates(db, backup_data.assignment_templates, result, dry_run)
+        _import_terms(db, backup_data.terms, result, dry_run, current_user.id)
+        _import_assignment_templates(db, backup_data.assignment_templates, result, dry_run, current_user.id)
         _import_term_subjects(db, backup_data.term_subjects, result, dry_run)
-        _import_student_assignments(db, backup_data.student_assignments, result, dry_run)
+        _import_student_assignments(db, backup_data.student_assignments, result, dry_run, current_user.id)
         _import_student_term_grades(db, backup_data.student_term_grades, result, dry_run)
         _import_grade_history(db, backup_data.grade_history, result, dry_run)
         _import_attendance_records(db, backup_data.attendance_records, result, dry_run)
@@ -206,7 +203,7 @@ def _import_subjects(db: Session, subjects_data, result, dry_run):
     result.id_mappings["subjects"] = subject_mapping
 
 
-def _import_terms(db: Session, terms_data, result, dry_run):
+def _import_terms(db: Session, terms_data, result, dry_run, admin_user_id: int):
     """Import terms with conflict handling."""
     term_mapping = {}
     imported_terms = 0
@@ -223,12 +220,19 @@ def _import_terms(db: Session, terms_data, result, dry_run):
         
         if not dry_run:
             from app.enums import TermType
+            start = term_data.start_date
+            # Derive academic year: school years starting Aug or later span two calendar years
+            if start.month >= 8:
+                academic_year = f"{start.year}-{start.year + 1}"
+            else:
+                academic_year = f"{start.year - 1}-{start.year}"
             new_term = Term(
                 name=term_data.name,
-                type=TermType(term_data.type),
-                start_date=term_data.start_date,
+                term_type=TermType(term_data.type),
+                start_date=start,
                 end_date=term_data.end_date,
-                is_current=term_data.is_current
+                academic_year=academic_year,
+                created_by=admin_user_id,
             )
             db.add(new_term)
             db.flush()
@@ -242,32 +246,33 @@ def _import_terms(db: Session, terms_data, result, dry_run):
     result.id_mappings["terms"] = term_mapping
 
 
-def _import_assignment_templates(db: Session, templates_data, result, dry_run):
+def _import_assignment_templates(db: Session, templates_data, result, dry_run, admin_user_id: int):
     """Import assignment templates with conflict handling."""
     template_mapping = {}
     imported_templates = 0
     skipped_templates = 0
-    
+
     subject_mapping = result.id_mappings.get("subjects", {})
-    
+
     for template_data in templates_data:
         existing_template = db.query(AssignmentTemplate).filter(
             AssignmentTemplate.name == template_data.name
         ).first()
-        
+
         if existing_template:
             template_mapping[template_data.name] = existing_template.id
             skipped_templates += 1
             result.import_log.append(f"Skipped existing template: {template_data.name}")
             continue
-        
+
         if not dry_run:
             from app.enums import AssignmentType
-            
-            subject_id = None
-            if template_data.subject_name and template_data.subject_name in subject_mapping:
-                subject_id = subject_mapping[template_data.subject_name]
-            
+
+            subject_id = subject_mapping.get(template_data.subject_name) if template_data.subject_name else None
+            if not subject_id:
+                result.import_log.append(f"Skipped template '{template_data.name}': subject '{template_data.subject_name}' not found")
+                continue
+
             new_template = AssignmentTemplate(
                 name=template_data.name,
                 description=template_data.description,
@@ -278,15 +283,16 @@ def _import_assignment_templates(db: Session, templates_data, result, dry_run):
                 estimated_duration_minutes=template_data.estimated_duration_minutes,
                 prerequisites=template_data.prerequisites,
                 materials_needed=template_data.materials_needed,
-                is_exportable=template_data.is_exportable
+                is_exportable=template_data.is_exportable,
+                created_by=admin_user_id,
             )
             db.add(new_template)
             db.flush()
             template_mapping[template_data.name] = new_template.id
             result.import_log.append(f"Created new template: {template_data.name}")
-        
+
         imported_templates += 1
-    
+
     result.imported_counts["assignment_templates"] = imported_templates
     result.skipped_counts["assignment_templates"] = skipped_templates
     result.id_mappings["assignment_templates"] = template_mapping
@@ -327,12 +333,12 @@ def _import_term_subjects(db: Session, term_subjects_data, result, dry_run):
     result.imported_counts["term_subjects"] = imported
 
 
-def _import_student_assignments(db: Session, student_assignments_data, result, dry_run):
+def _import_student_assignments(db: Session, student_assignments_data, result, dry_run, admin_user_id: int):
     """Import student assignments."""
     user_mapping = result.id_mappings.get("users", {})
     template_mapping = result.id_mappings.get("assignment_templates", {})
     imported = 0
-    
+
     for sa_data in student_assignments_data:
         student_id = user_mapping.get(sa_data.student_email)
         template_id = template_mapping.get(sa_data.assignment_template_name)
@@ -355,7 +361,8 @@ def _import_student_assignments(db: Session, student_assignments_data, result, d
                 student_notes=sa_data.student_notes,
                 submission_notes=sa_data.submission_notes,
                 custom_instructions=sa_data.custom_instructions,
-                custom_max_points=sa_data.custom_max_points
+                custom_max_points=sa_data.custom_max_points,
+                assigned_by=admin_user_id,
             )
             db.add(new_sa)
             db.flush()
@@ -450,7 +457,7 @@ def _import_journal_entries(db: Session, journal_data, result, dry_run):
         if not dry_run:
             from app.models.journal import JournalEntry
             new_je = JournalEntry(
-                student_id=0,  # Placeholder — requires student resolution
+                student_id=author_id,
                 author_id=author_id,
                 title=je_data.title,
                 content=je_data.content,
