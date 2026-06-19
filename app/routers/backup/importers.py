@@ -92,6 +92,11 @@ def import_system_data(
         backup_dict = sanitize_import_data(backup_data.model_dump())
         backup_data = SystemBackup(**backup_dict)
 
+        # TODO: Implement "clean_import" option — truncate all data tables in reverse
+        # dependency order before importing, preserving only the current admin session user.
+        # This is the more honest restore semantics vs. the current merge behavior which
+        # allows duplicate records on re-import. Wire to a checkbox in the UI with a warning.
+
         # Import in dependency order
         _import_users(db, backup_data.users, result, import_options, dry_run)
         _import_subjects(db, backup_data.subjects, result, dry_run)
