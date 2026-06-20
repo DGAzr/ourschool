@@ -172,7 +172,7 @@ const AssignmentTemplatesTable: React.FC<AssignmentTemplatesTableProps> = ({
                       <button onClick={() => onExportTemplate(template)} className="p-1.5 rounded-field text-muted hover:text-ink hover:bg-panel-2 transition-colors" title="Export template">
                         <Download className="h-3.5 w-3.5" />
                       </button>
-                      <div className="relative" ref={(el) => dropdownRefs.current[template.id] = el}>
+                      <div className="relative" ref={(el) => { dropdownRefs.current[template.id] = el }}>
                         <button
                           onClick={() => setOpenDropdownId(openDropdownId === template.id ? null : template.id)}
                           className="p-1.5 rounded-field text-faint hover:text-ink hover:bg-panel-2 transition-colors"
