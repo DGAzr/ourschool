@@ -80,173 +80,92 @@ const EditAssignmentModal: React.FC<EditAssignmentModalProps> = ({
 
 
 
+  const FIELD = 'bg-field-bg border border-field-border rounded-field px-3 py-2 text-[13px] text-ink focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent w-full'
+  const LABEL = 'block text-[11px] font-semibold text-muted uppercase tracking-wide mb-1.5'
+
   return (
-    <div className="fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center z-50">
-      <div className="bg-white dark:bg-gray-800 rounded-lg w-full max-w-2xl max-h-[90vh] overflow-y-auto">
+    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
+      <div className="bg-panel border border-line rounded-card-lg shadow-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
         <form onSubmit={handleSubmit}>
-          {/* Header */}
-          <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700">
-            <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100">Edit Assignment</h3>
-            <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
-              {assignment.template?.name} - {student?.first_name} {student?.last_name}
-            </p>
+          <div className="px-6 py-4 border-b border-line">
+            <h3 className="text-[15px] font-semibold text-ink">Edit Assignment</h3>
+            <p className="text-[13px] text-muted mt-0.5">{assignment.template?.name} — {student?.first_name} {student?.last_name}</p>
           </div>
 
-          {/* Form Content */}
-          <div className="px-6 py-4 space-y-6">
-            {/* Error Message */}
+          <div className="px-6 py-5 space-y-5">
             {error && (
-              <div className="bg-red-50 dark:bg-red-900 border border-red-200 dark:border-red-700 text-red-700 dark:text-red-200 px-4 py-3 rounded">
-                {error}
-              </div>
+              <div className="bg-neg-bg border border-neg-fg/20 text-neg-fg px-4 py-3 rounded-field text-[13px]">{error}</div>
             )}
 
-            {/* Assignment Status Info */}
-            <div className="bg-gray-50 dark:bg-gray-700 rounded-lg p-4">
-              <h4 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Current Status</h4>
-              <div className="grid grid-cols-2 gap-4 text-sm">
-                <div>
-                  <span className="text-gray-500 dark:text-gray-400">Status:</span>
-                  <span className="ml-2 capitalize">{assignment.status.replace('_', ' ')}</span>
-                </div>
-                <div>
-                  <span className="text-gray-500 dark:text-gray-400">Assigned:</span>
-                  <span className="ml-2">{formatDateOnly(assignment.assigned_date, { month: 'short', day: 'numeric', year: 'numeric' })}</span>
-                </div>
+            <div className="bg-panel-2 border border-line rounded-field p-4">
+              <p className="text-[11px] font-semibold text-muted uppercase tracking-wide mb-2">Current Status</p>
+              <div className="grid grid-cols-2 gap-3 text-[13px]">
+                <div><span className="text-muted">Status:</span><span className="ml-2 text-ink capitalize">{assignment.status.replace('_', ' ')}</span></div>
+                <div><span className="text-muted">Assigned:</span><span className="ml-2 text-ink">{formatDateOnly(assignment.assigned_date, { month: 'short', day: 'numeric', year: 'numeric' })}</span></div>
                 {assignment.is_graded && (
                   <>
-                    <div>
-                      <span className="text-gray-500 dark:text-gray-400">Points:</span>
-                      <span className="ml-2">{assignment.points_earned || 0} / {assignment.custom_max_points || assignment.template?.max_points || 0}</span>
-                    </div>
-                    <div>
-                      <span className="text-gray-500 dark:text-gray-400">Grade:</span>
-                      <span className="ml-2">{assignment.letter_grade || 'N/A'}</span>
-                    </div>
+                    <div><span className="text-muted">Points:</span><span className="ml-2 text-ink">{assignment.points_earned || 0} / {assignment.custom_max_points || assignment.template?.max_points || 0}</span></div>
+                    <div><span className="text-muted">Grade:</span><span className="ml-2 text-ink">{assignment.letter_grade || 'N/A'}</span></div>
                   </>
                 )}
               </div>
             </div>
 
-            {/* Due Dates */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                  Assign Date
-                </label>
-                <input
-                  type="date"
-                  value={formatDateForInput(assignedDate)}
-                  onChange={(e) => setAssignedDate(e.target.value)}
-                  className="w-full border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 rounded-md px-3 py-2 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-                />
+                <label className={LABEL}>Assign Date</label>
+                <input type="date" value={formatDateForInput(assignedDate)} onChange={(e) => setAssignedDate(e.target.value)} className={FIELD} />
               </div>
-
               <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                  Due Date
-                </label>
-                <input
-                  type="date"
-                  value={formatDateForInput(dueDate)}
-                  onChange={(e) => setDueDate(e.target.value)}
-                  className="w-full border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 rounded-md px-3 py-2 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-                />
+                <label className={LABEL}>Due Date</label>
+                <input type="date" value={formatDateForInput(dueDate)} onChange={(e) => setDueDate(e.target.value)} className={FIELD} />
               </div>
-
               <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                  Extended Due Date
-                </label>
-                <input
-                  type="date"
-                  value={formatDateForInput(extendedDueDate)}
-                  onChange={(e) => setExtendedDueDate(e.target.value)}
-                  className="w-full border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 rounded-md px-3 py-2 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-                />
-                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                  Optional extension for this student
-                </p>
+                <label className={LABEL}>Extended Due Date</label>
+                <input type="date" value={formatDateForInput(extendedDueDate)} onChange={(e) => setExtendedDueDate(e.target.value)} className={FIELD} />
+                <p className="text-[11px] text-faint mt-1">Optional extension for this student</p>
               </div>
             </div>
 
-            {/* Custom Max Points */}
             <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                Custom Max Points
-              </label>
-              <input
-                type="number"
-                min="1"
-                max="1000"
-                value={customMaxPoints || ''}
+              <label className={LABEL}>Custom Max Points</label>
+              <input type="number" min="1" max="1000" value={customMaxPoints || ''}
                 onChange={(e) => setCustomMaxPoints(e.target.value ? parseInt(e.target.value) : undefined)}
-                placeholder={`Default: ${assignment.template?.max_points || 'Not set'}`}
-                className="w-full border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 rounded-md px-3 py-2 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-              />
-              <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                Override the default max points for this specific assignment
-              </p>
+                placeholder={`Default: ${assignment.template?.max_points || 'Not set'}`} className={FIELD} />
+              <p className="text-[11px] text-faint mt-1">Override the default max points for this specific assignment</p>
             </div>
 
-            {/* Custom Instructions */}
             <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                Custom Instructions
-              </label>
-              <textarea
-                value={customInstructions}
-                onChange={(e) => setCustomInstructions(e.target.value)}
-                rows={3}
-                className="w-full border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 rounded-md px-3 py-2 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-                placeholder="Any specific instructions for this assignment..."
-              />
+              <label className={LABEL}>Custom Instructions</label>
+              <textarea value={customInstructions} onChange={(e) => setCustomInstructions(e.target.value)}
+                rows={3} className={FIELD} placeholder="Any specific instructions for this assignment..." />
             </div>
 
-            {/* Student Notes */}
             <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                Student Notes
-              </label>
-              <textarea
-                value={studentNotes}
-                onChange={(e) => setStudentNotes(e.target.value)}
-                rows={3}
-                className="w-full border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 rounded-md px-3 py-2 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-                placeholder="Notes visible to the student about this assignment..."
-              />
+              <label className={LABEL}>Student Notes</label>
+              <textarea value={studentNotes} onChange={(e) => setStudentNotes(e.target.value)}
+                rows={3} className={FIELD} placeholder="Notes visible to the student about this assignment..." />
             </div>
 
-            {/* Template Information (Read-only) */}
             <div>
-              <h4 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Template Information</h4>
-              <div className="bg-gray-50 dark:bg-gray-700 rounded-lg p-3 text-sm text-gray-600 dark:text-gray-400">
-                <p><strong>Template:</strong> {assignment.template?.name}</p>
-                {assignment.template?.description && (
-                  <p><strong>Description:</strong> {assignment.template.description}</p>
-                )}
-                <p><strong>Type:</strong> {assignment.template?.assignment_type}</p>
-                <p><strong>Default Points:</strong> {assignment.template?.max_points}</p>
+              <p className="text-[11px] font-semibold text-muted uppercase tracking-wide mb-2">Template Information</p>
+              <div className="bg-panel-2 border border-line rounded-field p-3 text-[13px] text-muted space-y-1">
+                <p><strong className="text-ink">Template:</strong> {assignment.template?.name}</p>
+                {assignment.template?.description && <p><strong className="text-ink">Description:</strong> {assignment.template.description}</p>}
+                <p><strong className="text-ink">Type:</strong> {assignment.template?.assignment_type}</p>
+                <p><strong className="text-ink">Default Points:</strong> {assignment.template?.max_points}</p>
               </div>
             </div>
           </div>
 
-          {/* Footer */}
-          <div className="px-6 py-4 border-t border-gray-200 dark:border-gray-700 flex justify-end space-x-3">
-            <button
-              type="button"
-              onClick={onClose}
-              disabled={loading}
-              className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 rounded-md hover:bg-gray-200 dark:hover:bg-gray-600 disabled:opacity-50"
-            >
+          <div className="px-6 py-4 border-t border-line flex justify-end gap-3">
+            <button type="button" onClick={onClose} disabled={loading}
+              className="px-4 py-2 text-[13px] font-medium text-ink border border-btn-border bg-panel rounded-field hover:bg-track disabled:opacity-50">
               Cancel
             </button>
-            <button
-              type="submit"
-              disabled={loading}
-              className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {loading ? 'Saving Changes...' : 'Save Changes'}
+            <button type="submit" disabled={loading}
+              className="px-4 py-2 text-[13px] font-semibold bg-btn-primary-bg text-btn-primary-fg rounded-field hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed">
+              {loading ? 'Saving…' : 'Save Changes'}
             </button>
           </div>
         </form>

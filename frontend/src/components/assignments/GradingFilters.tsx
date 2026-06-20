@@ -18,7 +18,10 @@
 
 import React from 'react'
 import { Subject, User } from '../../types'
-import { ASSIGNMENT_STATUS_COLORS, ASSIGNMENT_STATUSES } from '../../constants'
+import { ASSIGNMENT_STATUSES } from '../../constants'
+
+const FIELD = 'bg-field-bg border border-field-border rounded-field px-3 py-2 text-[13px] text-ink focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent w-full'
+const LABEL = 'block text-[11px] font-semibold text-muted uppercase tracking-wide mb-1.5'
 
 interface GradingFiltersProps {
   searchTerm: string
@@ -37,149 +40,95 @@ interface GradingFiltersProps {
 }
 
 const GradingFilters: React.FC<GradingFiltersProps> = ({
-  searchTerm,
-  setSearchTerm,
-  selectedSubject,
-  setSelectedSubject,
-  selectedStudent,
-  setSelectedStudent,
-  selectedStatuses,
-  onStatusToggle,
-  onSelectAllStatuses,
-  onSelectActiveStatuses,
-  onClearAllStatuses,
-  subjects,
-  students
+  searchTerm, setSearchTerm,
+  selectedSubject, setSelectedSubject,
+  selectedStudent, setSelectedStudent,
+  selectedStatuses, onStatusToggle,
+  onSelectAllStatuses, onSelectActiveStatuses, onClearAllStatuses,
+  subjects, students
 }) => {
-  const isStatusSelected = (status: string) => selectedStatuses.includes(status)
-
   const statusOptions = [
-    { 
-      value: ASSIGNMENT_STATUSES.NOT_STARTED, 
-      label: 'Not Started',
-      selectedClasses: `${ASSIGNMENT_STATUS_COLORS.not_started.border} ${ASSIGNMENT_STATUS_COLORS.not_started.bg}`,
-      checkboxClasses: ASSIGNMENT_STATUS_COLORS.not_started.checkbox
-    },
-    { 
-      value: ASSIGNMENT_STATUSES.IN_PROGRESS, 
-      label: 'In Progress',
-      selectedClasses: `${ASSIGNMENT_STATUS_COLORS.in_progress.border} ${ASSIGNMENT_STATUS_COLORS.in_progress.bg}`,
-      checkboxClasses: ASSIGNMENT_STATUS_COLORS.in_progress.checkbox
-    },
-    { 
-      value: ASSIGNMENT_STATUSES.SUBMITTED, 
-      label: 'Submitted',
-      selectedClasses: `${ASSIGNMENT_STATUS_COLORS.submitted.border} ${ASSIGNMENT_STATUS_COLORS.submitted.bg}`,
-      checkboxClasses: ASSIGNMENT_STATUS_COLORS.submitted.checkbox
-    },
-    { 
-      value: ASSIGNMENT_STATUSES.GRADED, 
-      label: 'Graded',
-      selectedClasses: `${ASSIGNMENT_STATUS_COLORS.graded.border} ${ASSIGNMENT_STATUS_COLORS.graded.bg}`,
-      checkboxClasses: ASSIGNMENT_STATUS_COLORS.graded.checkbox
-    }
+    { value: ASSIGNMENT_STATUSES.NOT_STARTED, label: 'Not Started' },
+    { value: ASSIGNMENT_STATUSES.IN_PROGRESS,  label: 'In Progress' },
+    { value: ASSIGNMENT_STATUSES.SUBMITTED,    label: 'Submitted' },
+    { value: ASSIGNMENT_STATUSES.GRADED,       label: 'Graded' },
   ]
 
+  const STATUS_ACTIVE: Record<string, string> = {
+    not_started: 'bg-panel-2 border-line text-muted',
+    in_progress:  'bg-accent/10 border-accent/30 text-accent',
+    submitted:    'bg-pos-bg border-pos-fg/20 text-pos-fg',
+    graded:       'bg-accent/10 border-accent/30 text-accent',
+  }
+
   return (
-    <div className="bg-white dark:bg-gray-800 shadow-lg rounded-xl p-6 border border-gray-100 dark:border-gray-700">
-      <div className="space-y-6">
-        {/* Top Row - Search, Subject, Student */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          <div>
-            <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">Search Assignments</label>
-            <input
-              type="text"
-              placeholder="Search by name or description..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="w-full border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 placeholder-gray-500 dark:placeholder-gray-400 rounded-lg px-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
-            />
-          </div>
-          <div>
-            <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">Subject</label>
-            <select
-              value={selectedSubject || ''}
-              onChange={(e) => setSelectedSubject(e.target.value ? parseInt(e.target.value) : null)}
-              className="w-full border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 rounded-lg px-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
-            >
-              <option value="">All Subjects</option>
-              {subjects.map(subject => (
-                <option key={subject.id} value={subject.id}>
-                  {subject.name}
-                </option>
-              ))}
-            </select>
-          </div>
-          <div>
-            <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300 mb-3">Student</label>
-            <select
-              value={selectedStudent || ''}
-              onChange={(e) => setSelectedStudent(e.target.value ? parseInt(e.target.value) : null)}
-              className="w-full border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 rounded-lg px-4 py-3 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-colors"
-            >
-              <option value="">All Students</option>
-              {students.map(student => (
-                <option key={student.id} value={student.id}>
-                  {student.first_name} {student.last_name}
-                </option>
-              ))}
-            </select>
+    <div className="bg-panel border border-line rounded-card-lg p-5 space-y-5">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div>
+          <label className={LABEL}>Search Assignments</label>
+          <input
+            type="text"
+            placeholder="Search by name or description…"
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className={FIELD}
+          />
+        </div>
+        <div>
+          <label className={LABEL}>Subject</label>
+          <select
+            value={selectedSubject || ''}
+            onChange={(e) => setSelectedSubject(e.target.value ? parseInt(e.target.value) : null)}
+            className={FIELD}
+          >
+            <option value="">All Subjects</option>
+            {subjects.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+          </select>
+        </div>
+        <div>
+          <label className={LABEL}>Student</label>
+          <select
+            value={selectedStudent || ''}
+            onChange={(e) => setSelectedStudent(e.target.value ? parseInt(e.target.value) : null)}
+            className={FIELD}
+          >
+            <option value="">All Students</option>
+            {students.map(s => <option key={s.id} value={s.id}>{s.first_name} {s.last_name}</option>)}
+          </select>
+        </div>
+      </div>
+
+      <div>
+        <div className="flex items-center justify-between mb-2">
+          <label className={LABEL}>Status</label>
+          <div className="flex gap-3">
+            <button onClick={onSelectActiveStatuses} className="text-[11px] text-accent hover:underline">Active only</button>
+            <span className="text-faintest">·</span>
+            <button onClick={onSelectAllStatuses} className="text-[11px] text-muted hover:text-ink">All</button>
+            <span className="text-faintest">·</span>
+            <button onClick={onClearAllStatuses} className="text-[11px] text-muted hover:text-ink">None</button>
           </div>
         </div>
-
-        {/* Status Filter with Checkboxes */}
-        <div>
-          <div className="flex items-center justify-between mb-3">
-            <label className="block text-sm font-semibold text-gray-700 dark:text-gray-300">Assignment Status</label>
-            <div className="flex space-x-2">
-              <button
-                onClick={onSelectActiveStatuses}
-                className="text-xs text-green-600 dark:text-green-400 hover:text-green-800 dark:hover:text-green-300 font-medium"
-              >
-                Active Only
-              </button>
-              <span className="text-xs text-gray-400">|</span>
-              <button
-                onClick={onSelectAllStatuses}
-                className="text-xs text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 font-medium"
-              >
-                All
-              </button>
-              <span className="text-xs text-gray-400">|</span>
-              <button
-                onClick={onClearAllStatuses}
-                className="text-xs text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-300 font-medium"
-              >
-                None
-              </button>
-            </div>
-          </div>
-          <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-            {statusOptions.map(status => (
+        <div className="flex flex-wrap gap-2">
+          {statusOptions.map(s => {
+            const active = selectedStatuses.includes(s.value)
+            return (
               <label
-                key={status.value}
-                className={`flex items-center p-3 border-2 rounded-lg cursor-pointer transition-all duration-200 ${
-                  isStatusSelected(status.value)
-                    ? status.selectedClasses + ' shadow-sm'
-                    : 'border-gray-200 dark:border-gray-700 hover:border-gray-300 dark:hover:border-gray-600'
+                key={s.value}
+                className={`flex items-center gap-2 px-3 py-2 border rounded-field cursor-pointer transition-colors text-[12px] font-medium ${
+                  active ? STATUS_ACTIVE[s.value] ?? 'bg-panel-2 border-line text-muted' : 'border-line text-muted hover:border-field-border hover:text-ink'
                 }`}
               >
                 <input
                   type="checkbox"
-                  checked={isStatusSelected(status.value)}
-                  onChange={() => onStatusToggle(status.value)}
-                  className={`mr-3 h-4 w-4 rounded ${status.checkboxClasses}`}
+                  checked={active}
+                  onChange={() => onStatusToggle(s.value)}
+                  className="h-3.5 w-3.5 accent-[var(--accent)] rounded"
                 />
-                <span className={`text-sm font-medium ${
-                  isStatusSelected(status.value)
-                    ? 'text-gray-900 dark:text-gray-100'
-                    : 'text-gray-700 dark:text-gray-300'
-                }`}>
-                  {status.label}
-                </span>
+                {s.label}
               </label>
-            ))}
-          </div>
+            )
+          })}
         </div>
       </div>
     </div>

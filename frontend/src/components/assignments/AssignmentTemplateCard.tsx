@@ -48,115 +48,86 @@ const AssignmentTemplateCard: React.FC<AssignmentTemplateCardProps> = ({
   const [showActions, setShowActions] = useState(false)
   const actionsRef = useRef<HTMLDivElement>(null)
 
-  // Close dropdown when clicking outside
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (actionsRef.current && !actionsRef.current.contains(event.target as Node)) {
         setShowActions(false)
       }
     }
-
-    if (showActions) {
-      document.addEventListener('mousedown', handleClickOutside)
-    }
-
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside)
-    }
+    if (showActions) document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [showActions])
+
   return (
-    <div className="bg-white dark:bg-gray-800 shadow rounded-lg hover:shadow-md transition-shadow border border-gray-200 dark:border-gray-700 relative">
-      {/* Header with Subject Color */}
-      <div className="h-2" style={{ backgroundColor: subject?.color || '#6B7280' }}></div>
-      
-      <div className="p-6">
-        {/* Template Header */}
-        <div className="flex items-start justify-between mb-4">
+    <div className="bg-panel border border-line rounded-card-lg overflow-hidden hover:shadow-sm transition-shadow relative">
+      <div className="h-1.5" style={{ backgroundColor: subject?.color || 'var(--faintest)' }} />
+
+      <div className="p-5">
+        <div className="flex items-start justify-between mb-3">
           <div className="flex-1 min-w-0">
-            <div className="flex items-center mb-2">
+            <div className="flex items-center gap-2 mb-1.5">
               {onSelectionToggle && (
                 <input
                   type="checkbox"
                   checked={isSelected}
                   onChange={() => onSelectionToggle(template.id)}
-                  className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded mr-3"
+                  className="h-3.5 w-3.5 accent-[var(--accent)] rounded"
                 />
               )}
-              <span className="text-lg mr-2">
+              <span className="text-base">
                 {assignmentUtils.getAssignmentTypeIcon(template.assignment_type)}
               </span>
-              <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 truncate">
-                {template.name}
-              </h3>
+              <h3 className="text-[14px] font-semibold text-ink truncate">{template.name}</h3>
             </div>
-            <div className="flex items-center space-x-2 text-sm text-gray-600 dark:text-gray-400">
-              <span className="font-medium">{subject?.name}</span>
-            </div>
+            <p className="text-[12px] text-muted">{subject?.name}</p>
           </div>
-          
-          {/* Actions Menu */}
-          <div className="relative ml-4" ref={actionsRef}>
+
+          <div className="relative ml-3" ref={actionsRef}>
             <button
               onClick={() => setShowActions(!showActions)}
-              className="p-2 text-gray-400 dark:text-gray-500 hover:text-gray-600 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-md transition-colors"
-              title="More actions"
+              className="p-1.5 text-faint hover:text-ink hover:bg-panel-2 rounded-field transition-colors"
             >
-              <MoreVertical className="h-4 w-4" />
+              <MoreVertical className="h-3.5 w-3.5" />
             </button>
-            
+
             {showActions && (
-              <div className="absolute right-0 top-10 w-48 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-md shadow-lg z-50">
+              <div className="absolute right-0 top-8 w-44 bg-panel border border-line rounded-card shadow-lg z-50">
                 <button
-                  onClick={() => {
-                    onAssign(template)
-                    setShowActions(false)
-                  }}
-                  className="w-full text-left px-3 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-green-50 dark:hover:bg-green-900 flex items-center"
+                  onClick={() => { onAssign(template); setShowActions(false) }}
+                  className="w-full text-left px-3 py-2 text-[12px] text-ink hover:bg-panel-2 flex items-center gap-2"
                 >
-                  <Users className="h-4 w-4 mr-2 text-green-600" />
+                  <Users className="h-3.5 w-3.5 text-pos-fg" />
                   Assign to Students
                 </button>
                 <button
-                  onClick={() => {
-                    onEdit(template)
-                    setShowActions(false)
-                  }}
-                  className="w-full text-left px-3 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-blue-50 dark:hover:bg-blue-900 flex items-center"
+                  onClick={() => { onEdit(template); setShowActions(false) }}
+                  className="w-full text-left px-3 py-2 text-[12px] text-ink hover:bg-panel-2 flex items-center gap-2"
                 >
-                  <Edit className="h-4 w-4 mr-2 text-blue-600" />
+                  <Edit className="h-3.5 w-3.5 text-accent" />
                   Edit Template
                 </button>
                 {onExport && (
                   <button
-                    onClick={() => {
-                      onExport(template)
-                      setShowActions(false)
-                    }}
-                    className="w-full text-left px-3 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-orange-50 dark:hover:bg-orange-900 flex items-center"
+                    onClick={() => { onExport(template); setShowActions(false) }}
+                    className="w-full text-left px-3 py-2 text-[12px] text-ink hover:bg-panel-2 flex items-center gap-2"
                   >
-                    <Download className="h-4 w-4 mr-2 text-orange-600" />
+                    <Download className="h-3.5 w-3.5 text-muted" />
                     Export Template
                   </button>
                 )}
                 <button
-                  onClick={() => {
-                    onArchive(template)
-                    setShowActions(false)
-                  }}
-                  className="w-full text-left px-3 py-2 text-sm text-gray-700 dark:text-gray-300 hover:bg-yellow-50 dark:hover:bg-yellow-900 flex items-center"
+                  onClick={() => { onArchive(template); setShowActions(false) }}
+                  className="w-full text-left px-3 py-2 text-[12px] text-ink hover:bg-panel-2 flex items-center gap-2"
                 >
-                  <Archive className="h-4 w-4 mr-2 text-yellow-600" />
+                  <Archive className="h-3.5 w-3.5 text-muted" />
                   Archive Template
                 </button>
-                <div className="border-t border-gray-200 dark:border-gray-700"></div>
+                <div className="border-t border-line" />
                 <button
-                  onClick={() => {
-                    onDelete(template)
-                    setShowActions(false)
-                  }}
-                  className="w-full text-left px-3 py-2 text-sm text-red-600 hover:bg-red-50 dark:hover:bg-red-900 flex items-center"
+                  onClick={() => { onDelete(template); setShowActions(false) }}
+                  className="w-full text-left px-3 py-2 text-[12px] text-neg-fg hover:bg-neg-bg flex items-center gap-2"
                 >
-                  <Trash2 className="h-4 w-4 mr-2" />
+                  <Trash2 className="h-3.5 w-3.5" />
                   Delete Template
                 </button>
               </div>
@@ -164,43 +135,37 @@ const AssignmentTemplateCard: React.FC<AssignmentTemplateCardProps> = ({
           </div>
         </div>
 
-        {/* Description */}
         {template.description && (
           <div className="mb-4">
-            <MarkdownRenderer 
-              content={template.description} 
-              className="text-sm text-gray-600 dark:text-gray-400 line-clamp-2" 
+            <MarkdownRenderer
+              content={template.description}
+              className="text-[12px] text-muted line-clamp-2"
             />
           </div>
         )}
 
-        {/* Template Details */}
-        <div className="space-y-3">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center space-x-4 text-sm">
-              <div className="flex items-center text-gray-600 dark:text-gray-400">
-                <Target className="h-4 w-4 mr-1" />
-                <span>{template.max_points} pts</span>
-              </div>
-              {template.estimated_duration_minutes && (
-                <div className="flex items-center text-gray-600 dark:text-gray-400">
-                  <Clock className="h-4 w-4 mr-1" />
-                  <span>{assignmentUtils.formatDuration(template.estimated_duration_minutes)}</span>
-                </div>
-              )}
+        <div className="space-y-2">
+          <div className="flex items-center gap-4 text-[12px] text-muted">
+            <div className="flex items-center gap-1">
+              <Target className="h-3.5 w-3.5" />
+              <span>{template.max_points} pts</span>
             </div>
-            
+            {template.estimated_duration_minutes && (
+              <div className="flex items-center gap-1">
+                <Clock className="h-3.5 w-3.5" />
+                <span>{assignmentUtils.formatDuration(template.estimated_duration_minutes)}</span>
+              </div>
+            )}
           </div>
 
-          {/* Assignment Stats */}
-          <div className="flex items-center justify-between pt-3 border-t border-gray-200 dark:border-gray-700">
-            <div className="text-sm text-gray-600 dark:text-gray-400">
-              <span className="font-medium text-gray-700 dark:text-gray-300">{template.total_assigned || 0}</span> students assigned
-            </div>
+          <div className="flex items-center justify-between pt-3 border-t border-line-2">
+            <span className="text-[12px] text-muted">
+              <span className="font-medium text-ink">{template.total_assigned || 0}</span> assigned
+            </span>
             {template.average_grade && (
-              <div className={`text-sm font-medium ${assignmentUtils.calculateGradeColor(template.average_grade)}`}>
+              <span className={`text-[12px] font-medium ${assignmentUtils.calculateGradeColor(template.average_grade)}`}>
                 Avg: {template.average_grade.toFixed(1)}%
-              </div>
+              </span>
             )}
           </div>
         </div>

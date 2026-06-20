@@ -17,6 +17,7 @@
  */
 
 import React from 'react'
+import { Upload, Zap, Download, Plus } from 'lucide-react'
 
 interface AssignmentHeaderProps {
   isAdmin: boolean
@@ -42,104 +43,83 @@ const AssignmentHeader: React.FC<AssignmentHeaderProps> = ({
   pendingGradesCount = 0,
 }) => {
   return (
-    <div className="bg-gradient-to-r from-blue-600 via-blue-700 to-blue-800 rounded-xl shadow-lg">
-      <div className="px-8 py-8 text-white">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center">
-            <div className="w-12 h-12 bg-white bg-opacity-20 rounded-xl flex items-center justify-center mr-4">
-              <svg className="h-6 w-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-              </svg>
-            </div>
-            <div>
-              <h1 className="text-3xl font-bold tracking-wide mb-1">
-                {isAdmin ? 'Assignment Management' : 'My Assignments'}
-              </h1>
-              <p className="text-blue-100 text-lg">
-                {isAdmin 
-                  ? 'Create and manage assignment templates and student assignments'
-                  : 'Track your assigned work and submissions'
-                }
-              </p>
-            </div>
-          </div>
-          {isAdmin && (
-            <div className="flex items-center space-x-4">
-              {/* Admin View Mode Toggle */}
-              <div className="flex bg-white bg-opacity-20 rounded-lg p-1">
-                <button
-                  onClick={() => setAdminViewMode('templates')}
-                  className={`px-4 py-2 text-sm font-semibold rounded-md transition-all duration-200 ${
-                    adminViewMode === 'templates'
-                      ? 'bg-white text-blue-700 shadow-sm'
-                      : 'text-white hover:bg-white hover:bg-opacity-20'
-                  }`}
-                >
-                  Templates
-                </button>
-                <button
-                  onClick={() => setAdminViewMode('grading')}
-                  className={`relative px-4 py-2 text-sm font-semibold rounded-md transition-all duration-200 ${
-                    adminViewMode === 'grading'
-                      ? 'bg-white text-blue-700 shadow-sm'
-                      : 'text-white hover:bg-white hover:bg-opacity-20'
-                  }`}
-                >
-                  Grading
-                  {pendingGradesCount > 0 && (
-                    <span className="absolute -top-1.5 -right-1.5 h-5 min-w-5 px-1 bg-red-500 text-white text-xs font-bold rounded-full flex items-center justify-center">
-                      {pendingGradesCount}
-                    </span>
-                  )}
-                </button>
-              </div>
+    <div className="flex items-center justify-between mb-6">
+      <div>
+        <p className="text-[11px] font-semibold text-faint uppercase tracking-[.06em] mb-1">
+          {isAdmin ? 'Library' : 'My Work'}
+        </p>
+        <h1 className="text-[27px] font-bold text-ink tracking-[-0.02em] leading-none">
+          {isAdmin ? 'Assignments' : 'My Assignments'}
+        </h1>
+      </div>
 
-              {adminViewMode === 'templates' && (
-                <div className="flex space-x-3">
-                  <button
-                    onClick={onQuickAssign}
-                    className="inline-flex items-center px-4 py-3 border border-white border-opacity-30 text-sm font-semibold rounded-lg text-white bg-white bg-opacity-10 hover:bg-opacity-20 transition-all duration-200 shadow-sm hover:shadow-md"
-                  >
-                    <svg className="h-4 w-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-                    </svg>
-                    Quick Assign
-                  </button>
-                  <button
-                    onClick={onImportTemplate}
-                    className="inline-flex items-center px-4 py-3 border border-white border-opacity-30 text-sm font-semibold rounded-lg text-white bg-white bg-opacity-10 hover:bg-opacity-20 transition-all duration-200 shadow-sm hover:shadow-md"
-                  >
-                    <svg className="h-4 w-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
-                    </svg>
-                    Import
-                  </button>
-                  {selectedTemplates.size > 0 && (
-                    <button 
-                      onClick={onBulkExport}
-                      className="inline-flex items-center px-4 py-3 border border-white border-opacity-30 text-sm font-semibold rounded-lg text-white bg-white bg-opacity-10 hover:bg-opacity-20 transition-all duration-200 shadow-sm hover:shadow-md"
-                    >
-                      <svg className="h-4 w-4 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-                      </svg>
-                      Export ({selectedTemplates.size})
-                    </button>
-                  )}
-                  <button 
-                    onClick={onCreateTemplate}
-                    className="inline-flex items-center px-6 py-3 border border-white border-opacity-30 text-sm font-semibold rounded-lg text-white bg-white bg-opacity-20 hover:bg-opacity-30 transition-all duration-200 shadow-sm hover:shadow-md"
-                  >
-                    <svg className="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                    </svg>
-                    Create Template
-                  </button>
-                </div>
+      {isAdmin && (
+        <div className="flex items-center gap-2">
+          {/* View toggle */}
+          <div className="flex bg-panel-2 border border-line rounded-field p-0.5">
+            <button
+              onClick={() => setAdminViewMode('templates')}
+              className={`px-3 py-1.5 text-[12px] font-semibold rounded-[6px] transition-colors ${
+                adminViewMode === 'templates'
+                  ? 'bg-panel text-ink shadow-sm'
+                  : 'text-muted hover:text-ink'
+              }`}
+            >
+              Templates
+            </button>
+            <button
+              onClick={() => setAdminViewMode('grading')}
+              className={`relative px-3 py-1.5 text-[12px] font-semibold rounded-[6px] transition-colors ${
+                adminViewMode === 'grading'
+                  ? 'bg-panel text-ink shadow-sm'
+                  : 'text-muted hover:text-ink'
+              }`}
+            >
+              Grading
+              {pendingGradesCount > 0 && (
+                <span className="absolute -top-1 -right-1 h-4 min-w-4 px-1 bg-accent text-btn-primary-fg text-[9px] font-bold rounded-full flex items-center justify-center">
+                  {pendingGradesCount}
+                </span>
               )}
-            </div>
+            </button>
+          </div>
+
+          {adminViewMode === 'templates' && (
+            <>
+              <button
+                onClick={onQuickAssign}
+                className="h-[34px] px-3 text-[13px] font-semibold rounded-field border border-btn-border bg-panel text-ink hover:bg-track transition-colors flex items-center gap-1.5"
+              >
+                <Zap size={13} />
+                Quick Assign
+              </button>
+              <button
+                onClick={onImportTemplate}
+                className="h-[34px] px-3 text-[13px] font-semibold rounded-field border border-btn-border bg-panel text-ink hover:bg-track transition-colors flex items-center gap-1.5"
+              >
+                <Upload size={13} />
+                Import
+              </button>
+              {selectedTemplates.size > 0 && (
+                <button
+                  onClick={onBulkExport}
+                  className="h-[34px] px-3 text-[13px] font-semibold rounded-field border border-btn-border bg-panel text-ink hover:bg-track transition-colors flex items-center gap-1.5"
+                >
+                  <Download size={13} />
+                  Export {selectedTemplates.size}
+                </button>
+              )}
+              <button
+                onClick={onCreateTemplate}
+                className="h-[34px] px-4 text-[13px] font-semibold rounded-field bg-btn-primary-bg text-btn-primary-fg hover:opacity-90 transition-opacity flex items-center gap-1.5"
+              >
+                <Plus size={14} />
+                New template
+              </button>
+            </>
           )}
         </div>
-      </div>
+      )}
     </div>
   )
 }

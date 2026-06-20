@@ -87,71 +87,39 @@ const EditTemplateModal: React.FC<EditTemplateModalProps> = ({
     setFormData(prev => ({ ...prev, [field]: value }))
   }
 
+  const FIELD = 'bg-field-bg border border-field-border rounded-field px-3 py-2 text-[13px] text-ink focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent w-full'
+  const LABEL = 'block text-[11px] font-semibold text-muted uppercase tracking-wide mb-1.5'
+
   return (
-    <div className="fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center z-50">
-      <div className="bg-white dark:bg-gray-800 rounded-lg w-full max-w-4xl max-h-[90vh] overflow-y-auto">
+    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
+      <div className="bg-panel border border-line rounded-card-lg shadow-xl w-full max-w-4xl max-h-[90vh] overflow-y-auto">
         <form onSubmit={handleSubmit}>
-          {/* Header */}
-          <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700">
-            <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100">Edit Assignment Template</h3>
-            <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
-              Update the details for "{template.name}"
-            </p>
+          <div className="px-6 py-4 border-b border-line">
+            <h3 className="text-[15px] font-semibold text-ink">Edit Assignment Template</h3>
+            <p className="text-[13px] text-muted mt-0.5">Update the details for "{template.name}"</p>
           </div>
 
-          {/* Form Content */}
-          <div className="px-6 py-4 space-y-6">
-            {/* Error Message */}
+          <div className="px-6 py-5 space-y-5">
             {error && (
-              <div className="bg-red-50 dark:bg-red-900 border border-red-200 dark:border-red-700 text-red-700 dark:text-red-200 px-4 py-3 rounded">
-                {error}
-              </div>
+              <div className="bg-neg-bg border border-neg-fg/20 text-neg-fg px-4 py-3 rounded-field text-[13px]">{error}</div>
             )}
 
-            {/* Basic Information */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
               <div className="lg:col-span-2">
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                  Template Name *
-                </label>
-                <input
-                  type="text"
-                  value={formData.name || ''}
-                  onChange={(e) => updateFormData('name', e.target.value)}
-                  className="w-full border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 rounded-md px-3 py-2 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-                  placeholder="e.g., Multiplication Practice Worksheet"
-                  required
-                />
+                <label className={LABEL}>Template Name *</label>
+                <input type="text" value={formData.name || ''} onChange={(e) => updateFormData('name', e.target.value)}
+                  className={FIELD} placeholder="e.g., Multiplication Practice Worksheet" required />
               </div>
-
               <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                  Subject *
-                </label>
-                <select
-                  value={formData.subject_id || 0}
-                  onChange={(e) => updateFormData('subject_id', parseInt(e.target.value))}
-                  className="w-full border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 rounded-md px-3 py-2 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-                  required
-                >
+                <label className={LABEL}>Subject *</label>
+                <select value={formData.subject_id || 0} onChange={(e) => updateFormData('subject_id', parseInt(e.target.value))} className={FIELD} required>
                   <option value={0}>Select a subject</option>
-                  {subjects?.map(subject => (
-                    <option key={subject.id} value={subject.id}>
-                      {subject.name}
-                    </option>
-                  ))}
+                  {subjects?.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
                 </select>
               </div>
-
               <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                  Assignment Type
-                </label>
-                <select
-                  value={formData.assignment_type || 'homework'}
-                  onChange={(e) => updateFormData('assignment_type', e.target.value)}
-                  className="w-full border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 rounded-md px-3 py-2 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-                >
+                <label className={LABEL}>Assignment Type</label>
+                <select value={formData.assignment_type || 'homework'} onChange={(e) => updateFormData('assignment_type', e.target.value)} className={FIELD}>
                   <option value="homework">📝 Homework</option>
                   <option value="project">🏗️ Project</option>
                   <option value="test">📊 Test</option>
@@ -163,127 +131,65 @@ const EditTemplateModal: React.FC<EditTemplateModalProps> = ({
                   <option value="practice">🎯 Practice</option>
                 </select>
               </div>
-
             </div>
 
-            {/* Grading and Time */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                  Maximum Points
-                </label>
-                <input
-                  type="number"
-                  min="1"
-                  max="1000"
-                  value={formData.max_points || 100}
-                  onChange={(e) => updateFormData('max_points', parseInt(e.target.value))}
-                  className="w-full border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 rounded-md px-3 py-2 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-                />
+                <label className={LABEL}>Maximum Points</label>
+                <input type="number" min="1" max="1000" value={formData.max_points || 100}
+                  onChange={(e) => updateFormData('max_points', parseInt(e.target.value))} className={FIELD} />
               </div>
-
               <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                  Estimated Duration (minutes)
-                </label>
-                <input
-                  type="number"
-                  min="1"
-                  value={formData.estimated_duration_minutes || ''}
+                <label className={LABEL}>Estimated Duration (minutes)</label>
+                <input type="number" min="1" value={formData.estimated_duration_minutes || ''}
                   onChange={(e) => updateFormData('estimated_duration_minutes', e.target.value ? parseInt(e.target.value) : undefined)}
-                  className="w-full border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 rounded-md px-3 py-2 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-                  placeholder="e.g., 30"
-                />
+                  className={FIELD} placeholder="e.g., 30" />
               </div>
             </div>
 
-            {/* Description */}
             <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                Description
-              </label>
-              <textarea
-                value={formData.description || ''}
-                onChange={(e) => updateFormData('description', e.target.value)}
-                rows={3}
-                className="w-full border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 rounded-md px-3 py-2 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-                placeholder="Brief description of what this assignment covers..."
-              />
+              <label className={LABEL}>Description</label>
+              <textarea value={formData.description || ''} onChange={(e) => updateFormData('description', e.target.value)}
+                rows={3} className={FIELD} placeholder="Brief description of what this assignment covers..." />
             </div>
 
-            {/* Instructions */}
             <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                Instructions
-              </label>
-              <textarea
-                value={formData.instructions || ''}
-                onChange={(e) => updateFormData('instructions', e.target.value)}
-                rows={4}
-                className="w-full border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 rounded-md px-3 py-2 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-                placeholder="Detailed instructions for students on how to complete this assignment..."
-              />
+              <label className={LABEL}>Instructions</label>
+              <textarea value={formData.instructions || ''} onChange={(e) => updateFormData('instructions', e.target.value)}
+                rows={4} className={FIELD} placeholder="Detailed instructions for students on how to complete this assignment..." />
             </div>
 
-            {/* Prerequisites */}
             <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                Prerequisites
-              </label>
-              <textarea
-                value={formData.prerequisites || ''}
-                onChange={(e) => updateFormData('prerequisites', e.target.value)}
-                rows={2}
-                className="w-full border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 rounded-md px-3 py-2 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-                placeholder="What students should know or complete before starting this assignment..."
-              />
+              <label className={LABEL}>Prerequisites</label>
+              <textarea value={formData.prerequisites || ''} onChange={(e) => updateFormData('prerequisites', e.target.value)}
+                rows={2} className={FIELD} placeholder="What students should know or complete before starting this assignment..." />
             </div>
 
-            {/* Materials */}
             <div>
-              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                Materials Needed
-              </label>
-              <textarea
-                value={formData.materials_needed || ''}
-                onChange={(e) => updateFormData('materials_needed', e.target.value)}
-                rows={2}
-                className="w-full border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 rounded-md px-3 py-2 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-                placeholder="List any materials, resources, or tools needed for this assignment..."
-              />
+              <label className={LABEL}>Materials Needed</label>
+              <textarea value={formData.materials_needed || ''} onChange={(e) => updateFormData('materials_needed', e.target.value)}
+                rows={2} className={FIELD} placeholder="List any materials, resources, or tools needed for this assignment..." />
             </div>
 
-            {/* Options */}
-            <div className="flex items-center">
+            <label className="flex items-center gap-2.5 cursor-pointer">
               <input
-                type="checkbox"
-                id="is_exportable"
+                type="checkbox" id="is_exportable"
                 checked={formData.is_exportable || false}
                 onChange={(e) => updateFormData('is_exportable', e.target.checked)}
-                className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                className="h-3.5 w-3.5 accent-[var(--accent)] rounded"
               />
-              <label htmlFor="is_exportable" className="ml-2 block text-sm text-gray-900 dark:text-gray-100">
-                Allow this template to be exported and shared with other OurSchool systems
-              </label>
-            </div>
+              <span className="text-[13px] text-ink">Allow this template to be exported and shared with other OurSchool systems</span>
+            </label>
           </div>
 
-          {/* Footer */}
-          <div className="px-6 py-4 border-t border-gray-200 dark:border-gray-700 flex justify-end space-x-3">
-            <button
-              type="button"
-              onClick={onClose}
-              disabled={loading}
-              className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 rounded-md hover:bg-gray-200 dark:hover:bg-gray-600 disabled:opacity-50"
-            >
+          <div className="px-6 py-4 border-t border-line flex justify-end gap-3">
+            <button type="button" onClick={onClose} disabled={loading}
+              className="px-4 py-2 text-[13px] font-medium text-ink border border-btn-border bg-panel rounded-field hover:bg-track disabled:opacity-50">
               Cancel
             </button>
-            <button
-              type="submit"
-              disabled={loading || !formData.name?.trim() || !formData.subject_id}
-              className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {loading ? 'Updating...' : 'Update Template'}
+            <button type="submit" disabled={loading || !formData.name?.trim() || !formData.subject_id}
+              className="px-4 py-2 text-[13px] font-semibold bg-btn-primary-bg text-btn-primary-fg rounded-field hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed">
+              {loading ? 'Updating…' : 'Update Template'}
             </button>
           </div>
         </form>
