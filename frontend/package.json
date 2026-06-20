@@ -11,7 +11,7 @@
     "lint:fix": "eslint . --ext ts,tsx --fix"
   },
   "dependencies": {
-    "@tanstack/react-query": "^4.44.0",
+    "@tanstack/react-query": "^5.101.0",
     "axios": "^1.18.0",
     "date-fns": "^4.4.0",
     "lucide-react": "^1.21.0",
