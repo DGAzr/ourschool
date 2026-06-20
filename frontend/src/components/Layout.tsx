@@ -180,7 +180,7 @@ const Layout: React.FC = () => {
   )
 
   return (
-    <div className="flex min-h-screen bg-bg">
+    <div className="flex h-screen bg-bg">
       {/* Mobile overlay */}
       {sidebarOpen && (
         <div

@@ -31,7 +31,6 @@ interface StudentsReportProps {
   onTermChange?: (termId: number) => void
 }
 
-const gradeLetter = (p: number) => p >= 90 ? 'A' : p >= 80 ? 'B' : p >= 70 ? 'C' : p >= 60 ? 'D' : 'F'
 const gradeColor = (p: number) =>
   p >= 90 ? 'text-pos-fg' : p >= 80 ? 'text-info-fg' : p >= 70 ? 'text-sub-fg' : 'text-neg-fg'
 const gradeBg = (p: number) =>
@@ -79,6 +78,7 @@ const StudentsReport: React.FC<StudentsReportProps> = ({ studentProgress, terms,
   ]
 
   const grade = selectedStudent ? (selectedStudent.overall_grade || selectedStudent.average_grade || 0) : 0
+  const overallLetter = selectedStudent?.overall_letter_grade ?? ''
   const subjects = selectedStudent ? (selectedStudent.subject_grades || selectedStudent.subjects || []) : []
   const displayName = selectedStudent
     ? (selectedStudent.first_name && selectedStudent.last_name
@@ -127,7 +127,7 @@ const StudentsReport: React.FC<StudentsReportProps> = ({ studentProgress, terms,
             </div>
 
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-              <StatTile label="Overall Grade" value={`${grade.toFixed(1)}%`} sub={gradeLetter(grade)} accent={grade >= 80} />
+              <StatTile label="Overall Grade" value={`${grade.toFixed(1)}%`} sub={overallLetter} accent={grade >= 80} />
               <StatTile label="Assignments" value={`${selectedStudent.completed_assignments} / ${selectedStudent.total_assignments}`} sub="completed" />
               <StatTile label="Completion" value={`${(selectedStudent.completion_rate || (selectedStudent.total_assignments ? selectedStudent.completed_assignments / selectedStudent.total_assignments * 100 : 0)).toFixed(1)}%`} />
               <StatTile label="Attendance" value={formatAttendanceRate(selectedStudent.attendance_rate)} />
@@ -183,7 +183,7 @@ const StudentsReport: React.FC<StudentsReportProps> = ({ studentProgress, terms,
                               {subject.average_percentage.toFixed(1)}%
                             </span>
                             <span className={`text-[11px] font-bold px-1.5 py-0.5 rounded-pill ${gradeBg(subject.average_percentage)}`}>
-                              {gradeLetter(subject.average_percentage)}
+                              {subject.letter_grade}
                             </span>
                           </div>
                         </td>

@@ -448,6 +448,21 @@ def _import_student_assignments(db: Session, student_assignments_data, result, d
             )
             db.add(new_sa)
             db.flush()
+
+            # The backup format only carries status + points, not the derived
+            # grading fields. Reconstruct them so imported grades are complete:
+            # an assignment with a score and GRADED status is a graded grade.
+            if (
+                new_sa.points_earned is not None
+                and new_sa.status == AssignmentStatus.GRADED
+            ):
+                new_sa.is_graded = True
+                new_sa.graded_date = (
+                    new_sa.due_date or new_sa.assigned_date or date.today()
+                )
+                new_sa.calculate_percentage_grade()
+                db.flush()
+
             result.import_log.append(f"Created student_assignment for {sa_data.student_email}")
         imported += 1
 

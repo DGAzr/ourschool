@@ -15,10 +15,22 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 """CRUD operations for system settings."""
+import json
 from typing import Dict, List, Optional, Any
 from sqlalchemy.orm import Session
 from app.models.points import SystemSettings
 from app.schemas.settings import SystemSettingCreate, SystemSettingUpdate
+from app.enums import AssignmentType
+
+
+# Key for the per-assignment-type grade weight multipliers (JSON object).
+ASSIGNMENT_TYPE_WEIGHTS_KEY = "grades.type_weights"
+
+# Default weight for every assignment type. Neutral (1.0) means grades behave
+# as plain points-weighting until an admin chooses to weight a type differently.
+DEFAULT_ASSIGNMENT_TYPE_WEIGHTS: Dict[str, float] = {
+    t.value: 1.0 for t in AssignmentType
+}
 
 
 def get_setting(db: Session, setting_key: str) -> Optional[SystemSettings]:
@@ -108,6 +120,31 @@ def get_setting_value(db: Session, setting_key: str, default_value: Any = None, 
         return default_value
 
 
+def get_assignment_type_weights(db: Session) -> Dict[str, float]:
+    """Return the per-assignment-type grade weight multipliers.
+
+    Falls back to neutral (all 1.0) when the setting is missing or malformed,
+    and fills in 1.0 for any assignment type not present in the stored value.
+    """
+    weights = dict(DEFAULT_ASSIGNMENT_TYPE_WEIGHTS)
+    setting = get_setting(db, ASSIGNMENT_TYPE_WEIGHTS_KEY)
+    if not setting:
+        return weights
+
+    try:
+        stored = json.loads(setting.setting_value)
+    except (ValueError, TypeError):
+        return weights
+
+    if isinstance(stored, dict):
+        for key, value in stored.items():
+            try:
+                weights[key] = float(value)
+            except (TypeError, ValueError):
+                continue
+    return weights
+
+
 def initialize_default_settings(db: Session) -> None:
     """Initialize default system settings if they don't exist."""
     defaults = [
@@ -122,9 +159,15 @@ def initialize_default_settings(db: Session) -> None:
             "setting_value": "true",
             "setting_type": "boolean",
             "description": "Enable or disable the student points system"
+        },
+        {
+            "setting_key": ASSIGNMENT_TYPE_WEIGHTS_KEY,
+            "setting_value": json.dumps(DEFAULT_ASSIGNMENT_TYPE_WEIGHTS),
+            "setting_type": "json",
+            "description": "Per-assignment-type grade weight multipliers. Neutral (1.0) behaves as plain points-weighting."
         }
     ]
-    
+
     for default in defaults:
         existing = get_setting(db, default["setting_key"])
         if not existing:

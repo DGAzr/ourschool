@@ -1560,7 +1560,7 @@ const Admin: React.FC = () => {
   }
 
   return (
-    <div className="flex -m-7 min-h-[calc(100vh-3.5rem)]">
+    <div className="flex -m-7 h-screen">
       {/* Category rail */}
       <nav className="w-[230px] flex-none bg-panel-2 border-r border-line py-[22px] px-[14px] no-print">
         <p className="text-[12px] font-semibold text-faint uppercase tracking-[.08em] px-2 mb-3">Settings</p>

@@ -25,7 +25,6 @@ interface TermReportProps {
   loading: boolean
 }
 
-const gradeLetter = (p: number) => p >= 90 ? 'A' : p >= 80 ? 'B' : p >= 70 ? 'C' : p >= 60 ? 'D' : 'F'
 const gradeColor = (p: number) =>
   p >= 90 ? 'text-pos-fg' : p >= 80 ? 'text-info-fg' : p >= 70 ? 'text-sub-fg' : 'text-neg-fg'
 const gradeBg = (p: number) =>
@@ -56,7 +55,7 @@ const TermReport: React.FC<TermReportProps> = ({ termGrades, loading }) => {
   }
 
   const gradesByTerm = termGrades.reduce((acc, grade) => {
-    const key = `${grade.academic_year} — ${grade.term}`
+    const key = grade.term_name
     if (!acc[key]) acc[key] = []
     acc[key].push(grade)
     return acc
@@ -84,8 +83,12 @@ const TermReport: React.FC<TermReportProps> = ({ termGrades, loading }) => {
                   </p>
                   <div className="flex items-center gap-4 text-[12px] text-muted font-mono">
                     <span>{grade.earned_points} / {grade.total_points} pts</span>
-                    <span>{grade.total_assignments} assignments</span>
-                    <span>{grade.completion_rate.toFixed(0)}% complete</span>
+                    <span>{grade.assignments_count} assignments</span>
+                    <span>
+                      {grade.assignments_count > 0
+                        ? Math.round((grade.completed_count / grade.assignments_count) * 100)
+                        : 0}% complete
+                    </span>
                   </div>
                 </div>
                 <div className="flex items-center gap-2 flex-none">
@@ -93,7 +96,7 @@ const TermReport: React.FC<TermReportProps> = ({ termGrades, loading }) => {
                     {grade.percentage.toFixed(1)}%
                   </span>
                   <span className={`text-[11px] font-bold px-2 py-0.5 rounded-pill ${gradeBg(grade.percentage)}`}>
-                    {gradeLetter(grade.percentage)}
+                    {grade.letter_grade}
                   </span>
                 </div>
               </div>

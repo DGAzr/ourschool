@@ -61,6 +61,7 @@ class SubjectPerformance(BaseModel):
     subject_id: int
     subject_name: str
     average_percentage: float
+    letter_grade: str
     total_assignments: int
     completed_assignments: int
     points_earned: Optional[float] = None
@@ -86,6 +87,7 @@ class StudentProgress(BaseModel):
     current_term_percentage: float
     current_term_letter_grade: str
     overall_grade: float
+    overall_letter_grade: str
     total_assignments: int
     completed_assignments: int
     pending_assignments: int

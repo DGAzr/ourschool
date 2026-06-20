@@ -29,8 +29,6 @@ from sqlalchemy import (
     Integer,
     String,
     Text,
-    case,
-    func,
 )
 from sqlalchemy.orm import relationship
 
@@ -182,12 +180,22 @@ class StudentAssignment(Base):
             self.status = AssignmentStatus.NOT_STARTED
 
     def update_term_grade(self, session):
-        """Update the student's term grade when this assignment is graded."""
+        """Update the student's term grade when this assignment is graded.
+
+        Uses the canonical points-weighted calculation (with per-assignment-type
+        weights) and buckets assignments into the term by effective due date, so
+        the persisted StudentTermGrade agrees with the live report card.
+        """
         if not self.is_graded or self.points_earned is None:
             return
 
-        # Find the active term
         from app.models.term import StudentTermGrade, Term, TermSubject
+        from app.crud.settings import get_assignment_type_weights
+        from app.utils.grading import (
+            calculate_letter_grade,
+            compute_weighted_grade,
+            term_membership_filter,
+        )
 
         active_term = session.query(Term).filter(Term.is_active).first()
         if not active_term:
@@ -222,61 +230,50 @@ class StudentAssignment(Base):
             )
             session.add(student_term_grade)
 
-        # Recalculate term grade based on all assignments in this term/subject
-        assignment_stats = (
-            session.query(
-                func.sum(StudentAssignment.points_earned).label("total_earned"),
-                func.sum(StudentAssignment.custom_max_points).label(
-                    "total_possible_custom"
-                ),
-                func.count(StudentAssignment.id).label("total_assignments"),
-                func.sum(case([(StudentAssignment.is_graded, 1)], else_=0)).label(
-                    "graded_count"
-                ),
-            )
+        # Recalculate from all assignments in this term/subject (membership by
+        # effective due date), applying the same weighting as the report card.
+        assignments = (
+            session.query(StudentAssignment)
             .join(AssignmentTemplate)
             .filter(
                 StudentAssignment.student_id == self.student_id,
                 AssignmentTemplate.subject_id == self.template.subject_id,
-                StudentAssignment.assigned_date >= active_term.start_date,
-                StudentAssignment.assigned_date <= active_term.end_date,
+                term_membership_filter(active_term),
             )
-            .first()
+            .all()
         )
 
-        if assignment_stats.total_earned is not None:
-            # Calculate total possible points
-            # (using custom points or template max points)
-            total_possible = (
-                session.query(
-                    func.sum(
-                        func.coalesce(
-                            StudentAssignment.custom_max_points,
-                            AssignmentTemplate.max_points,
-                        )
-                    )
+        graded = [
+            a
+            for a in assignments
+            if a.points_earned is not None
+            and (a.is_graded or a.status == AssignmentStatus.GRADED)
+        ]
+        type_weights = get_assignment_type_weights(session)
+        earned, possible, percentage = compute_weighted_grade(
+            (
+                (
+                    a.points_earned,
+                    a.custom_max_points
+                    or (a.template.max_points if a.template else None),
+                    a.template.assignment_type if a.template else None,
                 )
-                .join(AssignmentTemplate)
-                .filter(
-                    StudentAssignment.student_id == self.student_id,
-                    AssignmentTemplate.subject_id == self.template.subject_id,
-                    StudentAssignment.assigned_date >= active_term.start_date,
-                    StudentAssignment.assigned_date <= active_term.end_date,
-                    StudentAssignment.is_graded,
-                )
-                .scalar()
-                or 0
-            )
+                for a in graded
+            ),
+            type_weights,
+        )
 
-            student_term_grade.current_points_earned = assignment_stats.total_earned
-            student_term_grade.current_points_possible = total_possible
-            student_term_grade.assignments_completed = (
-                assignment_stats.graded_count or 0
-            )
-            student_term_grade.assignments_total = (
-                assignment_stats.total_assignments or 0
-            )
-            student_term_grade.calculate_current_grade()
+        student_term_grade.current_points_earned = earned
+        student_term_grade.current_points_possible = possible
+        student_term_grade.assignments_completed = len(graded)
+        student_term_grade.assignments_total = len(assignments)
+        student_term_grade.current_percentage = (
+            round(percentage, 2) if possible > 0 else None
+        )
+        student_term_grade.current_letter_grade = (
+            calculate_letter_grade(percentage) if possible > 0 else None
+        )
+        student_term_grade.last_calculated = datetime.now(timezone.utc)
 
         # NOTE: No session.commit() here — the caller (grading router)
         # manages the transaction boundary and calls db.commit() after

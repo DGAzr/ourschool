@@ -58,8 +58,6 @@ const ReportsContainer: React.FC = () => {
     setReportCardStudentId,
     reportCardTermId,
     setReportCardTermId,
-    reportCardAsOfDate,
-    setReportCardAsOfDate,
     reportCardLoading,
     availableStudentsForReportCard,
     availableTermsForReportCard,
@@ -152,8 +150,6 @@ const ReportsContainer: React.FC = () => {
               setReportCardStudentId={setReportCardStudentId}
               reportCardTermId={reportCardTermId}
               setReportCardTermId={setReportCardTermId}
-              reportCardAsOfDate={reportCardAsOfDate}
-              setReportCardAsOfDate={setReportCardAsOfDate}
               reportCardLoading={reportCardLoading}
               availableStudentsForReportCard={availableStudentsForReportCard}
               availableTermsForReportCard={availableTermsForReportCard}

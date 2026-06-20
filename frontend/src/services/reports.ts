@@ -128,15 +128,8 @@ export const reportsApi = {
     return response
   },
 
-  getReportCard: async (studentId: number, termId: number, asOfDate?: string): Promise<ReportCard> => {
-    const params = new URLSearchParams()
-    if (asOfDate) {
-      params.append('as_of_date', asOfDate)
-    }
-    
-    const queryString = params.toString()
-    const url = queryString ? `/reports/report-card/${studentId}/${termId}?${queryString}` : `/reports/report-card/${studentId}/${termId}`
-    const response = await api.get(url)
+  getReportCard: async (studentId: number, termId: number): Promise<ReportCard> => {
+    const response = await api.get(`/reports/report-card/${studentId}/${termId}`)
     return response
   },
 
