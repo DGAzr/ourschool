@@ -13,10 +13,12 @@ psycopg==3.3.4  # PostgreSQL adapter (psycopg3)
 python-multipart==0.0.32
 
 # Authentication and security
-# 3.4.0 fixes JWT algorithm-confusion / DoS advisories (CVE-2024-33663/33664)
-python-jose[cryptography]==3.4.0
-passlib[bcrypt]==1.7.4
-bcrypt==4.0.1  # pinned: bcrypt 5.x not yet verified with passlib 1.7.4
+# 3.5.0 fixes JWT algorithm-confusion / DoS advisories (CVE-2024-33663/33664)
+python-jose[cryptography]==3.5.0
+# passlib removed: it was unmaintained (last release 2020) and incompatible with
+# bcrypt>=4.1.  security.py now calls bcrypt directly with explicit 72-byte
+# truncation, preserving backward-compatibility with all existing $2b$ hashes.
+bcrypt==5.0.0
 
 # Data validation and settings
 pydantic[email]==2.13.4
