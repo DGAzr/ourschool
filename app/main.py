@@ -32,8 +32,6 @@ from app.routers.auth import get_current_admin_user
 from app.routers import activity, api_keys, assignment_types, assignments, attendance, auth, backup, integrations, journal, meta, performance, points, reports, subjects, terms, users
 from app.routers import settings as settings_router
 
-# Temporarily disabled students router - functionality moved to users router
-
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -43,7 +41,7 @@ async def lifespan(app: FastAPI):
     logger = get_logger("startup")
     logger.info("OurSchool API starting up", extra={
         "application": "ourschool",
-        "version": "1.0.0-alpha",
+        "version": "1.0.0-beta.1",
         "event": "startup"
     })
     
@@ -59,7 +57,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="OurSchool - Homeschool Tracking System",
     description="A comprehensive homeschool management platform",
-    version="1.0.0",
+    version="1.0.0-beta.1",
     lifespan=lifespan,
     docs_url="/docs" if settings.enable_api_docs else None,
     redoc_url="/redoc" if settings.enable_api_docs else None,

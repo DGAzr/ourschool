@@ -41,10 +41,10 @@ import {
 const OurSchoolMark: React.FC = () => (
   <div className="flex items-center gap-2.5 select-none">
     <div
-      className="w-7 h-7 rounded-lg flex items-center justify-center text-btn-primary-fg text-sm font-bold leading-none"
+      className="w-7 h-7 rounded-lg flex items-center justify-center text-btn-primary-fg"
       style={{ background: 'var(--btn-primary-bg)' }}
     >
-      O
+      <GraduationCap size={16} />
     </div>
     <span className="text-[15px] font-semibold text-ink tracking-[-0.01em]">OurSchool</span>
   </div>

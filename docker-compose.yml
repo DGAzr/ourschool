@@ -60,7 +60,7 @@ services:
       LOG_FORMAT: ${LOG_FORMAT:-json}
 
       # CORS configuration
-      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-http://localhost:4173,http://frontend:4173}
+      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-http://localhost:4173}
     depends_on:
       db:
         condition: service_healthy
@@ -90,16 +90,14 @@ services:
       dockerfile: Dockerfile.frontend
     restart: unless-stopped
     ports:
-      - "${FRONTEND_PORT:-4173}:4173"
+      # Host port 4173 → container port 80 (nginx). Change FRONTEND_PORT to
+      # adjust only the host side; the container always listens on 80.
+      - "${FRONTEND_PORT:-4173}:80"
     depends_on:
       backend:
         condition: service_healthy
-    environment:
-      # Server-side only — used by vite.config.ts proxy target, never inlined into the browser bundle.
-      # Must NOT have the VITE_ prefix or Vite will expose it to the client as import.meta.env.
-      PROXY_TARGET: http://backend:8000
     healthcheck:
-      test: ["CMD", "node", "-e", "require('http').get('http://localhost:4173', r => process.exit(r.statusCode === 200 ? 0 : 1)).on('error', () => process.exit(1))"]
+      test: ["CMD", "wget", "-qO-", "http://localhost:80"]
       interval: 30s
       timeout: 10s
       retries: 3

@@ -32,6 +32,8 @@ bash docker-deploy.sh
 ```
 Point your browser at localhost:4173
 
+> ⚠️ **Change the default credentials immediately after first login.** The seeded passwords (`admin123`, `student123`) are public — they are only a starting point.
+
 ### Screenshots
 ![A screenshot of the default OurSchool Admin Dashboard](/utils/OS_Login.png?raw=true "OurSchool Admin Dashboard")
 
@@ -102,6 +104,8 @@ python seed_data.py
 This creates:
 - Admin user: `admin` / `admin123`
 
+> ⚠️ **Change these credentials immediately after first login.** The seed passwords (`admin123`, `student123`) are public knowledge — they exist only to get you in the door.
+
 7. Start the API server:
 ```bash
 uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
@@ -129,7 +133,7 @@ The application will be available at:
 - API: http://localhost:8000
 - API Documentation: http://localhost:8000/docs (can be disabled with `ENABLE_API_DOCS=false`)
 
-> Note: the Docker deployment serves the frontend on port **4173** (Vite preview), not 3000. Port 3000 applies only to the local `npm run dev` workflow.
+> Note: the Docker deployment serves the frontend via nginx on port **4173** (host) → 80 (container). Port 3000 applies only to the local `npm run dev` workflow.
 
 
 ## API Integration
