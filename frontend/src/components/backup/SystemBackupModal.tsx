@@ -77,80 +77,81 @@ export function SystemBackupModal({ isOpen, onClose, onExport }: SystemBackupMod
   if (!isOpen) return null
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div className="bg-white dark:bg-gray-800 rounded-lg w-full max-w-lg">
-        <div className="flex justify-between items-center p-6 border-b dark:border-gray-700">
-          <div className="flex items-center space-x-2">
-            <Database className="h-6 w-6 text-green-600" />
-            <h2 className="text-xl font-bold text-gray-900 dark:text-gray-100">Create System Backup</h2>
+    <div
+      className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4"
+      onClick={(e) => e.target === e.currentTarget && handleClose()}
+    >
+      <div className="bg-panel border border-line rounded-card-lg shadow-xl w-full max-w-lg flex flex-col">
+        {/* Header */}
+        <div className="flex items-center justify-between px-6 py-4 border-b border-line flex-shrink-0">
+          <div className="flex items-center gap-2.5">
+            <Database className="h-4 w-4 text-accent" />
+            <h2 className="text-[16px] font-semibold text-ink">Create System Backup</h2>
           </div>
-          <button onClick={handleClose} className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded">
-            <X size={20} />
+          <button
+            onClick={handleClose}
+            className="p-1.5 rounded-field text-muted hover:text-ink hover:bg-panel-2 transition-colors"
+          >
+            <X size={16} />
           </button>
         </div>
 
-        <div className="p-6">
+        {/* Body */}
+        <div className="px-6 py-5">
           {error && (
-            <div className="mb-4 p-4 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg flex items-center space-x-2">
-              <AlertTriangle size={16} className="text-red-600" />
-              <p className="text-red-800 dark:text-red-300 text-sm">{error}</p>
+            <div className="flex items-center gap-2 bg-neg-bg border border-neg-fg/20 rounded-card p-3 mb-4 text-[12px] text-neg-fg">
+              <AlertTriangle size={13} className="flex-shrink-0" />
+              {error}
             </div>
           )}
 
           {!done ? (
-            <>
-              {isLoading ? (
-                <div className="text-center py-10">
-                  <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-green-600 mx-auto mb-4" />
-                  <p className="text-gray-600 dark:text-gray-400">Exporting all system data...</p>
+            isLoading ? (
+              <div className="flex flex-col items-center py-10 gap-3">
+                <div className="w-8 h-8 border-2 border-line border-t-accent rounded-full animate-spin" />
+                <p className="text-[13px] text-muted">Exporting all system data…</p>
+              </div>
+            ) : (
+              <>
+                <p className="text-[13px] text-muted mb-5">
+                  Creates a complete backup of all users, subjects, assignments, grades, attendance, and system data.
+                </p>
+                <div className="flex items-start gap-2.5 bg-panel-2 border border-line rounded-card p-4 mb-5 text-[12px] text-muted">
+                  <AlertTriangle size={13} className="flex-shrink-0 mt-0.5 text-amber-500" />
+                  <ul className="space-y-1 list-disc list-inside">
+                    <li>Backups exclude password hashes for security</li>
+                    <li>Store the backup file in a secure location</li>
+                    <li>Recommended: export weekly or before major changes</li>
+                  </ul>
                 </div>
-              ) : (
-                <>
-                  <p className="text-gray-600 dark:text-gray-400 mb-6">
-                    Creates a complete backup of all users, subjects, assignments, grades, attendance, and system data.
-                  </p>
-                  <div className="mb-6 p-4 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg">
-                    <div className="flex items-start space-x-2">
-                      <AlertTriangle size={16} className="text-yellow-600 mt-0.5 flex-shrink-0" />
-                      <ul className="text-sm text-yellow-700 dark:text-yellow-300 space-y-1 list-disc list-inside">
-                        <li>Backups exclude password hashes for security</li>
-                        <li>Store the backup file in a secure location</li>
-                        <li>Recommended: export weekly or before major changes</li>
-                      </ul>
-                    </div>
-                  </div>
-                  <button
-                    onClick={handleExport}
-                    className="w-full bg-green-600 hover:bg-green-700 text-white font-medium py-2 px-4 rounded-lg transition-colors flex items-center justify-center space-x-2"
-                  >
-                    <Download size={16} />
-                    <span>Create System Backup</span>
-                  </button>
-                </>
-              )}
-            </>
+                <button
+                  onClick={handleExport}
+                  className="w-full h-[36px] flex items-center justify-center gap-2 rounded-field text-[13px] font-semibold bg-btn-primary-bg text-btn-primary-fg hover:opacity-90 transition-opacity"
+                >
+                  <Download size={14} />
+                  Create System Backup
+                </button>
+              </>
+            )
           ) : (
             <div>
-              <div className="text-center mb-4">
-                <CheckCircle size={48} className="text-green-500 mx-auto mb-2" />
-                <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100">Backup Created Successfully!</h3>
+              <div className="flex flex-col items-center mb-5">
+                <CheckCircle size={40} className="text-pos-fg mb-2" />
+                <h3 className="text-[15px] font-semibold text-ink">Backup Created Successfully</h3>
               </div>
               {backupData?.system_info && (
-                <div className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg p-4 mb-4">
-                  <h4 className="font-semibold text-green-800 dark:text-green-200 mb-2 text-sm">Backup Summary:</h4>
-                  <div className="grid grid-cols-2 gap-1 text-sm text-green-700 dark:text-green-300">
-                    {Object.entries(backupData.system_info).map(([key, value]) => (
-                      <div key={key}>{key.replace('total_', '').replace(/_/g, ' ')}: {value as number}</div>
-                    ))}
-                  </div>
+                <div className="bg-panel-2 border border-line rounded-card p-4 mb-5 text-[12px] text-muted grid grid-cols-2 gap-1">
+                  {Object.entries(backupData.system_info).map(([key, value]) => (
+                    <div key={key}>{key.replace('total_', '').replace(/_/g, ' ')}: {value as number}</div>
+                  ))}
                 </div>
               )}
               <button
                 onClick={downloadBackup}
-                className="w-full bg-green-600 hover:bg-green-700 text-white font-medium py-2 px-4 rounded-lg transition-colors flex items-center justify-center space-x-2"
+                className="w-full h-[36px] flex items-center justify-center gap-2 rounded-field text-[13px] font-semibold bg-btn-primary-bg text-btn-primary-fg hover:opacity-90 transition-opacity"
               >
-                <Download size={16} />
-                <span>Download Backup File</span>
+                <Download size={14} />
+                Download Backup File
               </button>
             </div>
           )}

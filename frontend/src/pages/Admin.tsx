@@ -16,7 +16,7 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-import React, { useState, useEffect, useCallback } from 'react'
+import React, { useState, useEffect, useCallback, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { useToast } from '../components/ui/Toast'
@@ -31,6 +31,7 @@ import { subjectsApi } from '../services/subjects'
 import { termsApi } from '../services/terms'
 import { usersApi } from '../services/users'
 import { backupApi } from '../services/backup'
+import { SystemBackupModal } from '../components/backup/SystemBackupModal'
 import { type Subject } from '../types/subject'
 import { type Term } from '../types/term'
 import { type User } from '../types'
@@ -168,6 +169,55 @@ const Admin: React.FC = () => {
   const [ledgerLoading, setLedgerLoading] = useState(false)
   const [ledgerPage, setLedgerPage] = useState(1)
   const [ledgerError, setLedgerError] = useState<string | null>(null)
+
+  // ── Backup management ──
+  const [showBackupModal, setShowBackupModal] = useState(false)
+  const [importStep, setImportStep] = useState<'idle' | 'configure' | 'loading' | 'result'>('idle')
+  const [importData, setImportData] = useState<any>(null)
+  const [importOptions, setImportOptions] = useState({ skip_existing_users: true, update_existing_data: false, preserve_ids: false, dry_run: true })
+  const [importResult, setImportResult] = useState<any>(null)
+  const [importError, setImportError] = useState<string | null>(null)
+  const backupFileInputRef = useRef<HTMLInputElement>(null)
+
+  const handleBackupFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0]
+    if (!file) return
+    const reader = new FileReader()
+    reader.onload = (e) => {
+      try {
+        const data = JSON.parse(e.target?.result as string)
+        if (!data.format_version || !data.backup_timestamp) throw new Error('Invalid backup format')
+        setImportData(data)
+        setImportError(null)
+        setImportStep('configure')
+      } catch {
+        setImportError("Failed to parse backup file. Please ensure it's a valid system backup.")
+      }
+    }
+    reader.readAsText(file)
+  }
+
+  const performImport = async () => {
+    if (!importData) return
+    setImportStep('loading')
+    setImportError(null)
+    try {
+      const result = await backupApi.importSystemBackup({ backup_data: importData, import_options: importOptions })
+      setImportResult(result)
+      setImportStep('result')
+    } catch (err: any) {
+      setImportError(err.message || 'Import failed')
+      setImportStep('result')
+    }
+  }
+
+  const resetImport = () => {
+    setImportStep('idle')
+    setImportData(null)
+    setImportResult(null)
+    setImportError(null)
+    if (backupFileInputRef.current) backupFileInputRef.current.value = ''
+  }
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -774,7 +824,7 @@ const Admin: React.FC = () => {
 
           {/* Adjust points modal */}
           {showAdjustModal && selectedStudentPoints && (
-            <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
+            <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-[60] p-4">
               <div className="bg-panel border border-line rounded-card-lg shadow-xl w-full max-w-md overflow-hidden flex flex-col">
                 <div className="flex items-center justify-between px-6 py-4 border-b border-line">
                   <div>
@@ -1373,27 +1423,135 @@ const Admin: React.FC = () => {
         <div>
           <SectionHeader title="Backup & export" desc="Export or restore your complete homeschool data." />
           <div className="space-y-3">
+            {/* Export */}
             <div className="bg-panel border border-line rounded-card p-5">
               <p className="text-[13.5px] font-semibold text-ink mb-1">Export all data</p>
               <p className="text-[12px] text-muted mb-4">Download a complete backup — students, assignments, grades, attendance, and journals — as a single file.</p>
               <button
-                onClick={() => { backupApi.exportSystemBackup(); toast('Export started') }}
+                onClick={() => setShowBackupModal(true)}
                 className="flex items-center gap-2 px-4 py-2 rounded-field text-[13px] font-semibold bg-btn-primary-bg text-btn-primary-fg hover:opacity-90 transition-opacity"
               >
                 <Download size={14} /> Export backup
               </button>
             </div>
+
+            {/* Import */}
             <div className="bg-panel border border-line rounded-card p-5">
               <p className="text-[13.5px] font-semibold text-ink mb-1">Restore from backup</p>
-              <p className="text-[12px] text-muted mb-4">Import a previously exported file. This replaces current data — export first to be safe.</p>
-              <button
-                onClick={() => navigate('/admin/backup')}
-                className="flex items-center gap-2 px-4 py-2 rounded-field text-[13px] font-semibold bg-panel border border-btn-border text-ink-2 hover:bg-panel-2 transition-colors"
-              >
-                <Upload size={14} /> Choose file…
-              </button>
+              <p className="text-[12px] text-muted mb-4">Import a previously exported file. This merges into existing data — export first to be safe.</p>
+
+              {importStep === 'idle' && (
+                <>
+                  {importError && (
+                    <div className="flex items-center gap-2 bg-neg-bg border border-neg-fg/20 rounded-card p-3 mb-4 text-[12px] text-neg-fg">
+                      <AlertTriangle size={13} className="flex-shrink-0" />
+                      {importError}
+                    </div>
+                  )}
+                  <label className="inline-flex items-center gap-2 px-4 py-2 rounded-field text-[13px] font-semibold bg-panel border border-line text-ink hover:bg-panel-2 transition-colors cursor-pointer">
+                    <Upload size={14} /> Choose file…
+                    <input ref={backupFileInputRef} type="file" accept=".json" onChange={handleBackupFileUpload} className="hidden" />
+                  </label>
+                </>
+              )}
+
+              {importStep === 'configure' && importData && (
+                <div className="space-y-4">
+                  {/* Backup summary */}
+                  <div className="bg-panel-2 border border-line rounded-card p-3 text-[12px] text-muted grid grid-cols-2 gap-2">
+                    <span>{importData.system_info?.total_users || 0} users</span>
+                    <span>{importData.system_info?.total_subjects || 0} subjects</span>
+                    <span>{importData.system_info?.total_assignment_templates || 0} templates</span>
+                    <span>Backed up {new Date(importData.backup_timestamp).toLocaleDateString()}</span>
+                    <span className="col-span-2 text-faint">Created by: {importData.created_by}</span>
+                  </div>
+                  {/* Options */}
+                  <div className="space-y-2">
+                    {([
+                      { key: 'dry_run' as const, label: 'Dry run (preview only — no changes made)' },
+                      { key: 'skip_existing_users' as const, label: 'Skip existing users (recommended)' },
+                      { key: 'update_existing_data' as const, label: 'Update existing records' },
+                    ]).map(({ key, label }) => (
+                      <label key={key} className="flex items-center gap-2 cursor-pointer text-[13px] text-ink">
+                        <input
+                          type="checkbox"
+                          checked={importOptions[key]}
+                          onChange={(e) => setImportOptions(prev => ({ ...prev, [key]: e.target.checked }))}
+                          className="h-3.5 w-3.5 accent-[var(--accent)] rounded"
+                        />
+                        {label}
+                      </label>
+                    ))}
+                  </div>
+                  <div className="flex gap-2">
+                    <button onClick={resetImport} className="h-[34px] px-4 rounded-field text-[13px] font-medium border border-line text-muted hover:bg-panel-2 transition-colors">Cancel</button>
+                    <button onClick={performImport} className="h-[34px] px-4 rounded-field text-[13px] font-medium bg-btn-primary-bg text-btn-primary-fg hover:opacity-90 transition-opacity">
+                      {importOptions.dry_run ? 'Preview import' : 'Import data'}
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {importStep === 'loading' && (
+                <div className="flex items-center gap-2 py-4 text-[13px] text-muted">
+                  <div className="w-4 h-4 border-2 border-line border-t-accent rounded-full animate-spin" />
+                  {importOptions.dry_run ? 'Previewing import…' : 'Importing data…'}
+                </div>
+              )}
+
+              {importStep === 'result' && (
+                <div className="space-y-3">
+                  {importError ? (
+                    <div className="flex items-start gap-2 bg-neg-bg border border-neg-fg/20 rounded-card p-4 text-[13px] text-neg-fg">
+                      <AlertTriangle size={14} className="flex-shrink-0 mt-0.5" />
+                      <div><p className="font-semibold mb-1">Import failed</p><p>{importError}</p></div>
+                    </div>
+                  ) : (
+                    <div>
+                      <div className="flex items-center gap-2 text-[13px] font-semibold text-ink mb-3">
+                        <CheckCircle2 size={15} className="text-pos-fg" />
+                        {importResult?.dry_run ? 'Preview complete' : 'Import successful'}
+                      </div>
+                      {importResult?.imported_counts && (
+                        <div className="bg-panel-2 border border-line rounded-card p-3 text-[12px] text-muted grid grid-cols-2 gap-1 mb-3">
+                          {Object.entries(importResult.imported_counts).map(([k, v]) => (
+                            <div key={k}>{importResult.dry_run ? 'Would import' : 'Imported'} {k}: {v as number}</div>
+                          ))}
+                        </div>
+                      )}
+                      {importResult?.warnings?.length > 0 && (
+                        <div className="bg-panel-2 border border-line rounded-card p-3 text-[11px] text-muted mb-3">
+                          {importResult.warnings.slice(0, 3).map((w: string, i: number) => <div key={i}>• {w}</div>)}
+                          {importResult.warnings.length > 3 && <div>…and {importResult.warnings.length - 3} more</div>}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                  <div className="flex gap-2">
+                    <button onClick={resetImport} className="h-[34px] px-4 rounded-field text-[13px] font-medium border border-line text-muted hover:bg-panel-2 transition-colors">
+                      {importResult?.dry_run && !importError ? 'Cancel' : 'Done'}
+                    </button>
+                    {importResult?.dry_run && !importError && (
+                      <button
+                        onClick={() => { setImportOptions(prev => ({ ...prev, dry_run: false })); setImportStep('configure'); setImportResult(null) }}
+                        className="h-[34px] px-4 rounded-field text-[13px] font-medium bg-btn-primary-bg text-btn-primary-fg hover:opacity-90 transition-opacity"
+                      >
+                        Import for real
+                      </button>
+                    )}
+                  </div>
+                </div>
+              )}
             </div>
           </div>
+
+          {showBackupModal && (
+            <SystemBackupModal
+              isOpen={showBackupModal}
+              onClose={() => setShowBackupModal(false)}
+              onExport={() => backupApi.exportSystemBackup()}
+            />
+          )}
         </div>
       )
 
@@ -1402,30 +1560,31 @@ const Admin: React.FC = () => {
   }
 
   return (
-    <div className="flex gap-0 h-[calc(100vh-3.5rem)] -m-7 overflow-hidden">
+    <div className="flex -m-7 min-h-[calc(100vh-3.5rem)]">
       {/* Category rail */}
-      <nav className="w-[230px] flex-shrink-0 bg-panel border-r border-line overflow-y-auto py-4 px-3 no-print">
-        <p className="text-[10.5px] font-semibold text-faintest uppercase tracking-[.08em] px-3 mb-2">Settings</p>
-        {CATS.map(({ key, label, icon: Icon }) => {
-          const active = section === key
-          return (
-            <button
-              key={key}
-              onClick={() => setSection(key)}
-              className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-[9px] text-[13px] font-medium text-left transition-colors duration-100 mb-0.5 ${
-                active ? 'bg-accent-soft text-accent font-semibold' : 'text-ink-2 hover:bg-panel-2 hover:text-ink'
-              }`}
-            >
-              <Icon size={15} className={active ? 'text-accent' : 'text-faint'} />
-              {label}
-            </button>
-          )
-        })}
+      <nav className="w-[230px] flex-none bg-panel-2 border-r border-line py-[22px] px-[14px] no-print">
+        <p className="text-[12px] font-semibold text-faint uppercase tracking-[.08em] px-2 mb-3">Settings</p>
+        <div className="flex flex-col gap-0.5">
+          {CATS.map(({ key, label }) => {
+            const active = section === key
+            return (
+              <button
+                key={key}
+                onClick={() => setSection(key)}
+                className={`w-full text-left px-3 py-[9px] rounded-[9px] text-[13px] transition-colors duration-100 ${
+                  active ? 'bg-accent-soft text-accent font-semibold' : 'text-ink-2 font-medium hover:bg-track hover:text-ink'
+                }`}
+              >
+                {label}
+              </button>
+            )
+          })}
+        </div>
       </nav>
 
       {/* Content panel */}
-      <main className="flex-1 overflow-y-auto p-8 min-w-0">
-        <div className="max-w-[760px]">
+      <main className="flex-1 overflow-y-auto min-w-0">
+        <div className="max-w-[760px] mx-auto px-9 py-[30px] pb-[90px]">
           {loading && section === 'overview' ? (
             <div className="flex items-center gap-2 text-muted text-[13px] py-12">
               <div className="w-4 h-4 border-2 border-line border-t-accent rounded-full animate-spin" />

@@ -338,7 +338,7 @@ const Grading: React.FC = () => {
                                 value={gradeInput}
                                 onChange={e => setGradeInput(e.target.value)}
                                 placeholder="0"
-                                className="w-[88px] h-[46px] bg-field-bg border border-field-border rounded-[10px] font-mono text-[20px] font-semibold text-center text-ink focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent"
+                                className="w-[88px] h-[46px] bg-field-bg border border-field-border rounded-[10px] font-mono text-[20px] font-semibold text-center text-ink focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
                               />
                               <span className="font-mono text-[18px] text-faint">/ {maxPts}</span>
                             </div>

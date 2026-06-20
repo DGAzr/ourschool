@@ -619,15 +619,7 @@ const Journal: React.FC = () => {
       setError(null)
       const raw = await journalApi.getAll(studentId ?? undefined)
       const data: JournalEntryWithAuthor[] = Array.isArray(raw) ? raw : []
-      if (isAdmin) {
-        const unread = data.filter(e => e.needs_response)
-        if (unread.length > 0) {
-          unread.forEach(e => journalApi.markRead(e.id).catch(() => {}))
-        }
-        setEntries(data.map(e => e.needs_response ? { ...e, needs_response: false } : e))
-      } else {
-        setEntries(data)
-      }
+      setEntries(data)
     } catch (err: any) {
       setError(`Failed to load journal entries: ${err.response?.data?.detail || err.message}`)
       setEntries([])
@@ -645,6 +637,17 @@ const Journal: React.FC = () => {
       journalApi.getComposerData().then(setComposerData).catch(() => {})
     }
   }, [selectedStudentId, user])
+
+  useEffect(() => {
+    if (!isAdmin || selectedStudentId === null) return
+    setEntries(prev => {
+      const unread = prev.filter(e => e.student_id === selectedStudentId && e.needs_response)
+      unread.forEach(e => journalApi.markRead(e.id).catch(() => {}))
+      return unread.length > 0
+        ? prev.map(e => e.student_id === selectedStudentId && e.needs_response ? { ...e, needs_response: false } : e)
+        : prev
+    })
+  }, [selectedStudentId, isAdmin])
 
   const handleDelete = async (id: number) => {
     if (!confirm('Are you sure you want to delete this journal entry?')) return
