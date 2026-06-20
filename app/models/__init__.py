@@ -23,6 +23,7 @@ from .assignment import (
     AssignmentType,
     StudentAssignment,
 )
+from .assignment_type import AssignmentTypeConfig
 from .attendance import AttendanceRecord, AttendanceStatus
 from .journal import JournalEntry, JournalReply
 from .subject import Subject

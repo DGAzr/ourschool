@@ -19,6 +19,7 @@
 import { Routes, Route } from 'react-router-dom'
 import { AuthProvider, useAuth } from './contexts/AuthContext'
 import { ThemeProvider } from './contexts/ThemeContext'
+import { AssignmentTypesProvider } from './contexts/AssignmentTypesContext'
 import Layout from './components/Layout'
 import ProtectedRoute from './components/ProtectedRoute'
 import TokenExpiryWarning from './components/TokenExpiryWarning'
@@ -71,6 +72,7 @@ function AppContent() {
   return (
     <ThemeProvider>
       <ToastProvider>
+      <AssignmentTypesProvider>
       <Suspense fallback={<PageLoadingSpinner />}>
         <Routes>
           <Route path="/login" element={<Login />} />
@@ -90,6 +92,7 @@ function AppContent() {
         </Routes>
       </Suspense>
       <TokenExpiryWarning onExtendSession={extendSession} />
+      </AssignmentTypesProvider>
       </ToastProvider>
     </ThemeProvider>
   )

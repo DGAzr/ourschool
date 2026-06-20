@@ -20,6 +20,7 @@ import React, { useState, useEffect, useRef } from 'react'
 import { MoreVertical, Edit, Trash2, Archive, Users, Download, CheckSquare, Square, Clock } from 'lucide-react'
 import { AssignmentTemplate, Subject } from '../../types'
 import { ViewDensity } from '../layouts/CompactListLayout'
+import { useAssignmentTypes } from '../../contexts/AssignmentTypesContext'
 
 interface AssignmentTemplateListItemProps {
   template: AssignmentTemplate
@@ -59,13 +60,7 @@ const AssignmentTemplateListItem: React.FC<AssignmentTemplateListItemProps> = ({
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [showActions])
 
-  const getAssignmentTypeIcon = (type: string) => {
-    const iconMap: Record<string, string> = {
-      homework: '📝', quiz: '❓', test: '📋', project: '🗂️',
-      essay: '📄', lab: '🧪', presentation: '📊', other: '📚'
-    }
-    return iconMap[type] || '📚'
-  }
+  const { getTypeLabel, getTypeIcon } = useAssignmentTypes()
 
   if (viewDensity === 'spacious') return null
 
@@ -88,7 +83,7 @@ const AssignmentTemplateListItem: React.FC<AssignmentTemplateListItemProps> = ({
               </button>
             )}
             <span className={isCompact ? 'text-base' : 'text-lg'}>
-              {getAssignmentTypeIcon(template.assignment_type)}
+              {getTypeIcon(template.assignment_type)}
             </span>
             <h3 className={`font-semibold text-ink truncate ${isCompact ? 'text-[12px]' : 'text-[13px]'}`}>
               {template.name}
@@ -115,7 +110,7 @@ const AssignmentTemplateListItem: React.FC<AssignmentTemplateListItemProps> = ({
               </>
             )}
             <span>·</span>
-            <span className="capitalize">{template.assignment_type}</span>
+            <span>{getTypeLabel(template.assignment_type)}</span>
           </div>
 
           {!isCompact && template.description && (

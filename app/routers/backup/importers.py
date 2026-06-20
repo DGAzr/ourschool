@@ -351,8 +351,10 @@ def _import_assignment_templates(db: Session, templates_data, result, dry_run, a
             continue
 
         if not dry_run:
-            from app.enums import AssignmentType
             import uuid as _uuid
+
+            from app.crud import assignment_types as crud_types
+            from app.schemas.assignment_type import AssignmentTypeCreate
 
             subject_id = _resolve(
                 getattr(template_data, 'subject_external_id', None),
@@ -365,12 +367,25 @@ def _import_assignment_templates(db: Session, templates_data, result, dry_run, a
                 result.warnings.append(f"Template '{template_data.name}' skipped — subject not found")
                 continue
 
+            # Resolve the assignment type, creating it when the backup came from
+            # a family that defined a type we don't have locally.
+            type_key = template_data.assignment_type or "homework"
+            if crud_types.get_by_key(db, type_key) is None:
+                created_type = crud_types.create_assignment_type(
+                    db,
+                    AssignmentTypeCreate(
+                        key=type_key,
+                        name=type_key.replace("_", " ").title(),
+                    ),
+                )
+                type_key = created_type.key
+
             new_template = AssignmentTemplate(
                 external_id=template_data.external_id or str(_uuid.uuid4()),
                 name=template_data.name,
                 description=template_data.description,
                 instructions=template_data.instructions,
-                assignment_type=AssignmentType(template_data.assignment_type),
+                assignment_type=type_key,
                 subject_id=subject_id,
                 max_points=template_data.max_points,
                 estimated_duration_minutes=template_data.estimated_duration_minutes,

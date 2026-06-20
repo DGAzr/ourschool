@@ -34,7 +34,9 @@ class AssignmentTemplateBase(BaseModel):
     name: str = Field(..., min_length=1, max_length=200)
     description: Optional[str] = None
     instructions: Optional[str] = None
-    assignment_type: AssignmentType = AssignmentType.HOMEWORK
+    # Key of an admin-managed assignment type (assignment_types.key). Validated
+    # against the table in the router/CRUD layer where a db session is available.
+    assignment_type: str = Field(default=AssignmentType.HOMEWORK.value, max_length=50)
     subject_id: int
     max_points: int = Field(default=100, ge=1, le=1000)
     estimated_duration_minutes: Optional[int] = Field(None, ge=1)
@@ -53,7 +55,7 @@ class AssignmentTemplateUpdate(BaseModel):
     name: Optional[str] = Field(None, min_length=1, max_length=200)
     description: Optional[str] = None
     instructions: Optional[str] = None
-    assignment_type: Optional[AssignmentType] = None
+    assignment_type: Optional[str] = Field(default=None, max_length=50)
     subject_id: Optional[int] = None
     max_points: Optional[int] = Field(None, ge=1, le=1000)
     estimated_duration_minutes: Optional[int] = Field(None, ge=1)

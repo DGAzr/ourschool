@@ -19,6 +19,7 @@
 import React, { useState, useEffect, useRef } from 'react'
 import { MoreVertical, Edit, Trash2, Archive, Users, Download, CheckSquare, Square, Clock, BookOpen, Calendar } from 'lucide-react'
 import { AssignmentTemplate, Subject } from '../../types'
+import { useAssignmentTypes } from '../../contexts/AssignmentTypesContext'
 
 interface AssignmentTemplatesTableProps {
   templates: AssignmentTemplate[]
@@ -57,13 +58,7 @@ const AssignmentTemplatesTable: React.FC<AssignmentTemplatesTableProps> = ({
 
   const getSubjectById = (id: number) => subjects.find(s => s.id === id)
 
-  const getAssignmentTypeIcon = (type: string) => {
-    const iconMap: Record<string, string> = {
-      homework: '📝', quiz: '❓', test: '📋', project: '🗂️',
-      essay: '📄', lab: '🧪', presentation: '📊', other: '📚'
-    }
-    return iconMap[type] || '📚'
-  }
+  const { getTypeLabel, getTypeIcon } = useAssignmentTypes()
 
   if (templates.length === 0) {
     return (
@@ -119,7 +114,7 @@ const AssignmentTemplatesTable: React.FC<AssignmentTemplatesTableProps> = ({
 
                   <td className="px-5 py-3.5">
                     <div className="flex items-start gap-2">
-                      <span className="text-base mt-0.5">{getAssignmentTypeIcon(template.assignment_type)}</span>
+                      <span className="text-base mt-0.5">{getTypeIcon(template.assignment_type)}</span>
                       <div className="min-w-0">
                         <div className="text-[13px] font-medium text-ink">{template.name}</div>
                         {template.description && (
@@ -142,7 +137,7 @@ const AssignmentTemplatesTable: React.FC<AssignmentTemplatesTableProps> = ({
 
                   <td className="px-5 py-3.5 whitespace-nowrap">
                     <span className="inline-flex px-2 py-0.5 rounded-field text-[11px] font-medium bg-panel-2 text-muted border border-line">
-                      {template.assignment_type.charAt(0).toUpperCase() + template.assignment_type.slice(1)}
+                      {getTypeLabel(template.assignment_type)}
                     </span>
                   </td>
 

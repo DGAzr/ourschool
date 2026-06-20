@@ -28,6 +28,9 @@ import ErrorBoundary from '../components/ErrorBoundary'
 import { settingsApi } from '../services/settings'
 import { pointsApi, type PointsSystemStatus, type AwardPreset, type AdminPointsOverview, type StudentPoints, type PointsLedger } from '../services/points'
 import { subjectsApi } from '../services/subjects'
+import { assignmentTypesApi } from '../services/assignmentTypes'
+import { useAssignmentTypes } from '../contexts/AssignmentTypesContext'
+import { type AssignmentTypeConfig } from '../types/assignment'
 import { termsApi } from '../services/terms'
 import { usersApi } from '../services/users'
 import { backupApi } from '../services/backup'
@@ -94,6 +97,7 @@ const Admin: React.FC = () => {
   const { user } = useAuth()
   const { toast } = useToast()
   const navigate = useNavigate()
+  const { refresh: refreshAssignmentTypes } = useAssignmentTypes()
   const [section, setSection] = useState<SectionKey>('overview')
 
   // ── Attendance settings ──
@@ -107,6 +111,15 @@ const Admin: React.FC = () => {
   const [grades, setGrades] = useState<[string, number][]>(DEFAULT_GRADES)
   const [mastery, setMastery] = useState(false)
   const [savingGrades, setSavingGrades] = useState(false)
+
+  // ── Assignment types & weighting ──
+  const [assignmentTypes, setAssignmentTypes] = useState<AssignmentTypeConfig[]>([])
+  const [typesBaseline, setTypesBaseline] = useState<Record<number, AssignmentTypeConfig>>({})
+  const [savingTypes, setSavingTypes] = useState(false)
+  const [newTypeName, setNewTypeName] = useState('')
+  const [newTypeWeight, setNewTypeWeight] = useState('0')
+  const [newTypeColor, setNewTypeColor] = useState('#3B82F6')
+  const [addingType, setAddingType] = useState(false)
 
   // ── Points ──
   const [pointsStatus, setPointsStatus] = useState<PointsSystemStatus | null>(null)
@@ -222,13 +235,14 @@ const Admin: React.FC = () => {
   const load = useCallback(async () => {
     setLoading(true)
     try {
-      const [grouped, pts, presetData, subs, trms, usrs] = await Promise.allSettled([
+      const [grouped, pts, presetData, subs, trms, usrs, atypes] = await Promise.allSettled([
         settingsApi.getGroupedSettings(),
         pointsApi.getSystemStatus(),
         pointsApi.getPresets(),
         subjectsApi.getAll(),
         termsApi.getAll(),
         usersApi.getAll(),
+        assignmentTypesApi.getAll(),
       ])
       if (grouped.status === 'fulfilled') {
         const days = grouped.value.attendance.required_days_of_instruction
@@ -240,6 +254,10 @@ const Admin: React.FC = () => {
       if (subs.status === 'fulfilled') setSubjects(subs.value)
       if (trms.status === 'fulfilled') setTerms(trms.value)
       if (usrs.status === 'fulfilled') setUsers(usrs.value)
+      if (atypes.status === 'fulfilled') {
+        setAssignmentTypes(atypes.value)
+        setTypesBaseline(Object.fromEntries(atypes.value.map(t => [t.id, t])))
+      }
     } finally {
       setLoading(false)
     }
@@ -338,6 +356,88 @@ const Admin: React.FC = () => {
     await new Promise(r => setTimeout(r, 400))
     setSavingGrades(false)
     toast('Grading scale saved')
+  }
+
+  // ── Assignment-type handlers ────────────────────────────────────────────────
+  const updateTypeField = (id: number, patch: Partial<AssignmentTypeConfig>) => {
+    setAssignmentTypes(prev => prev.map(t => (t.id === id ? { ...t, ...patch } : t)))
+  }
+
+  const typesDirty = assignmentTypes.some(t => {
+    const base = typesBaseline[t.id]
+    return !base || base.name !== t.name || base.color !== t.color ||
+      base.weight !== t.weight || base.is_active !== t.is_active
+  })
+
+  const saveTypes = async () => {
+    const dirty = assignmentTypes.filter(t => {
+      const base = typesBaseline[t.id]
+      return !base || base.name !== t.name || base.color !== t.color ||
+        base.weight !== t.weight || base.is_active !== t.is_active
+    })
+    if (dirty.length === 0) return
+    setSavingTypes(true)
+    try {
+      const updated = await Promise.all(dirty.map(t =>
+        assignmentTypesApi.update(t.id, {
+          name: t.name, color: t.color, weight: t.weight, is_active: t.is_active,
+        })
+      ))
+      setAssignmentTypes(prev => prev.map(t => updated.find(u => u.id === t.id) || t))
+      setTypesBaseline(prev => {
+        const next = { ...prev }
+        updated.forEach(u => { next[u.id] = u })
+        return next
+      })
+      refreshAssignmentTypes()
+      toast('Assignment types saved')
+    } catch (err: any) {
+      toast(err.message || 'Failed to save assignment types', 'danger')
+    } finally {
+      setSavingTypes(false)
+    }
+  }
+
+  const addType = async () => {
+    const name = newTypeName.trim()
+    if (!name) { toast('Enter a type name', 'danger'); return }
+    setAddingType(true)
+    try {
+      const created = await assignmentTypesApi.create({
+        name,
+        color: newTypeColor,
+        weight: parseFloat(newTypeWeight) || 0,
+        display_order: assignmentTypes.length,
+      })
+      setAssignmentTypes(prev => [...prev, created])
+      setTypesBaseline(prev => ({ ...prev, [created.id]: created }))
+      setNewTypeName('')
+      setNewTypeWeight('0')
+      setNewTypeColor('#3B82F6')
+      refreshAssignmentTypes()
+      toast('Assignment type added')
+    } catch (err: any) {
+      toast(err.message || 'Failed to add type', 'danger')
+    } finally {
+      setAddingType(false)
+    }
+  }
+
+  const deleteType = async (t: AssignmentTypeConfig) => {
+    if (t.usage_count > 0) {
+      toast(`"${t.name}" is used by ${t.usage_count} template(s). Deactivate it instead.`, 'danger')
+      return
+    }
+    if (!confirm(`Delete assignment type "${t.name}"?`)) return
+    try {
+      await assignmentTypesApi.delete(t.id)
+      setAssignmentTypes(prev => prev.filter(x => x.id !== t.id))
+      setTypesBaseline(prev => { const n = { ...prev }; delete n[t.id]; return n })
+      refreshAssignmentTypes()
+      toast('Assignment type deleted')
+    } catch (err: any) {
+      toast(err.message || 'Failed to delete type', 'danger')
+    }
   }
 
   // ── Term helpers ──────────────────────────────────────────────────────────
@@ -700,6 +800,120 @@ const Admin: React.FC = () => {
           >
             {savingGrades ? 'Saving…' : 'Save scale'}
           </button>
+
+          {/* Assignment types & weighting */}
+          {(() => {
+            const activeTotal = assignmentTypes
+              .filter(t => t.is_active)
+              .reduce((sum, t) => sum + (Number(t.weight) || 0), 0)
+            return (
+              <div className="mt-8">
+                <div className="flex items-center justify-between mb-1">
+                  <h2 className="text-[18px] font-semibold text-ink tracking-[-0.01em]">Assignment types & weighting</h2>
+                  <button
+                    onClick={saveTypes}
+                    disabled={!typesDirty || savingTypes}
+                    className="px-4 py-2 rounded-field text-[13px] font-semibold bg-btn-primary-bg text-btn-primary-fg hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed transition-opacity"
+                  >
+                    {savingTypes ? 'Saving…' : 'Save changes'}
+                  </button>
+                </div>
+                <p className="mb-4 text-[13px] text-muted">
+                  Define the assignment categories used across the app and how much each counts toward grades.
+                  Weights are relative — a category's share is its weight ÷ the total of all weights.
+                  Leave every weight at 0 to grade purely by points earned.
+                </p>
+
+                <div className="bg-panel border border-line rounded-card p-5">
+                  <div className="flex items-center justify-between mb-3">
+                    <p className="text-[11px] font-semibold text-faint uppercase tracking-[.06em]">Categories</p>
+                    <span className={`text-[12px] font-mono font-semibold ${activeTotal > 0 ? 'text-ink' : 'text-faint'}`}>
+                      Total weight: {activeTotal % 1 === 0 ? activeTotal : activeTotal.toFixed(1)}{activeTotal > 0 ? ' · weighted' : ' · points-only'}
+                    </span>
+                  </div>
+
+                  {assignmentTypes.length === 0 ? (
+                    <p className="text-[13px] text-muted py-4">No assignment types yet. Add one below.</p>
+                  ) : (
+                    <div className="space-y-2">
+                      {assignmentTypes.map(t => {
+                        const share = t.is_active && activeTotal > 0 ? (Number(t.weight) || 0) / activeTotal * 100 : 0
+                        return (
+                          <div key={t.id} className={`flex items-center gap-3 py-1.5 ${t.is_active ? '' : 'opacity-50'}`}>
+                            <input
+                              type="color"
+                              value={t.color}
+                              onChange={e => updateTypeField(t.id, { color: e.target.value })}
+                              className="w-7 h-7 rounded-field border border-field-border bg-field-bg cursor-pointer flex-shrink-0"
+                              title="Category color"
+                            />
+                            <input
+                              type="text"
+                              value={t.name}
+                              onChange={e => updateTypeField(t.id, { name: e.target.value })}
+                              className="flex-1 min-w-0 bg-field-bg border border-field-border text-ink text-[13.5px] rounded-field px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent"
+                            />
+                            <div className="flex items-center gap-1.5">
+                              <input
+                                type="number" min="0" max="100" step="1"
+                                value={t.weight}
+                                onChange={e => updateTypeField(t.id, { weight: Math.max(0, Math.min(100, parseFloat(e.target.value) || 0)) })}
+                                className="w-16 bg-field-bg border border-field-border text-ink font-mono text-[13px] rounded-field px-2.5 py-1.5 focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent"
+                              />
+                              <span className="w-12 text-[11px] text-faint font-mono">{share > 0 ? `${share.toFixed(0)}%` : '—'}</span>
+                            </div>
+                            <span className="w-20 text-[11px] text-faint text-right hidden sm:block">
+                              {t.usage_count > 0 ? `${t.usage_count} in use` : 'unused'}
+                            </span>
+                            <Toggle checked={t.is_active} onChange={v => updateTypeField(t.id, { is_active: v })} />
+                            <button
+                              onClick={() => deleteType(t)}
+                              className="w-7 h-7 flex items-center justify-center rounded-field text-faint hover:text-danger hover:bg-track transition-colors flex-shrink-0"
+                              title={t.usage_count > 0 ? 'In use — deactivate instead' : 'Delete type'}
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
+                        )
+                      })}
+                    </div>
+                  )}
+
+                  {/* Add new type */}
+                  <div className="flex items-center gap-2 mt-4 pt-4 border-t border-line-2">
+                    <input
+                      type="color"
+                      value={newTypeColor}
+                      onChange={e => setNewTypeColor(e.target.value)}
+                      className="w-7 h-7 rounded-field border border-field-border bg-field-bg cursor-pointer flex-shrink-0"
+                      title="Category color"
+                    />
+                    <input
+                      type="text"
+                      placeholder="New category name"
+                      value={newTypeName}
+                      onChange={e => setNewTypeName(e.target.value)}
+                      onKeyDown={e => { if (e.key === 'Enter') addType() }}
+                      className="flex-1 min-w-0 bg-field-bg border border-field-border text-ink text-[13.5px] rounded-field px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent placeholder:text-faintest"
+                    />
+                    <input
+                      type="number" min="0" max="100" placeholder="Wt"
+                      value={newTypeWeight}
+                      onChange={e => setNewTypeWeight(e.target.value)}
+                      className="w-16 bg-field-bg border border-field-border text-ink font-mono text-[13px] rounded-field px-2.5 py-1.5 focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent"
+                    />
+                    <button
+                      onClick={addType}
+                      disabled={addingType}
+                      className="px-3 py-1.5 rounded-field text-[13px] font-semibold bg-btn-primary-bg text-btn-primary-fg hover:opacity-90 disabled:opacity-50 transition-opacity flex items-center gap-1.5"
+                    >
+                      <Plus className="w-3.5 h-3.5" /> Add
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )
+          })()}
         </div>
       )
 

@@ -21,9 +21,12 @@ Centralized grade calculation to prevent divergence between report-card,
 term-grading, and assignment-grading code paths. All report paths compute a
 single canonical grade here:
 
-  * Grades are points-weighted with optional per-assignment-type multipliers.
-    With neutral (all 1.0) weights this reduces to plain points-weighting,
-    i.e. ``sum(earned) / sum(possible)``.
+  * Grades use category-percentage weighting: each assignment type carries a
+    weight (a percentage). The grade is the weighted average of each type's own
+    points-average, using only the types that both have graded work and a
+    positive weight. When no type with graded work has a positive weight the
+    result falls back to plain points-weighting (``sum(earned) / sum(possible)``),
+    which is the neutral default for installs that never configure weights.
   * Term membership is determined by the assignment's effective due date
     (``due_date`` falling back to ``assigned_date``).
 """
@@ -31,30 +34,36 @@ single canonical grade here:
 from typing import Dict, Iterable, Optional, Tuple
 
 
-def _weight_for(type_weights: Dict[str, float], assignment_type) -> float:
-    """Resolve the weight multiplier for an assignment type (default 1.0)."""
+def _type_key(assignment_type) -> str:
+    """Resolve an assignment type to its string key."""
     if assignment_type is None:
-        return 1.0
-    key = getattr(assignment_type, "value", None) or str(assignment_type)
+        return ""
+    return getattr(assignment_type, "value", None) or str(assignment_type)
+
+
+def _weight_for(type_weights: Dict[str, float], assignment_type) -> float:
+    """Resolve the category weight for an assignment type (default 0.0)."""
     try:
-        return float(type_weights.get(key, 1.0))
+        return float(type_weights.get(_type_key(assignment_type), 0.0))
     except (TypeError, ValueError):
-        return 1.0
+        return 0.0
 
 
 def compute_weighted_grade(
     items: Iterable[Tuple[Optional[float], Optional[float], object]],
     type_weights: Optional[Dict[str, float]] = None,
 ) -> Tuple[float, float, float]:
-    """Compute a points-weighted grade with optional per-type weights.
+    """Compute a category-weighted grade from graded assignment items.
 
     Args:
         items: iterable of ``(points_earned, max_points, assignment_type)``.
             Callers should pass only graded items; items with a null
             ``points_earned`` or non-positive ``max_points`` are skipped.
-        type_weights: maps assignment-type value -> weight multiplier. Missing
-            types default to 1.0. When every weight is 1.0 the result is
-            identical to plain points-weighting.
+        type_weights: maps assignment-type key -> category weight (a
+            percentage). Each type's grade contribution is its own
+            points-average scaled by its share of the total active weight.
+            When none of the types present carry a positive weight the result
+            is identical to plain points-weighting.
 
     Returns:
         ``(raw_earned, raw_possible, percentage)`` where ``raw_earned`` and
@@ -64,21 +73,39 @@ def compute_weighted_grade(
     type_weights = type_weights or {}
     raw_earned = 0.0
     raw_possible = 0.0
-    weighted_earned = 0.0
-    weighted_possible = 0.0
+    # Per-type point sums, keyed by type key.
+    per_type: Dict[str, Tuple[float, float]] = {}
 
     for points_earned, max_points, assignment_type in items:
         if points_earned is None or not max_points or max_points <= 0:
             continue
-        weight = _weight_for(type_weights, assignment_type)
         raw_earned += points_earned
         raw_possible += max_points
-        weighted_earned += points_earned * weight
-        weighted_possible += max_points * weight
+        key = _type_key(assignment_type)
+        earned, possible = per_type.get(key, (0.0, 0.0))
+        per_type[key] = (earned + points_earned, possible + max_points)
 
-    percentage = (
-        (weighted_earned / weighted_possible * 100) if weighted_possible > 0 else 0.0
-    )
+    if raw_possible <= 0:
+        return raw_earned, raw_possible, 0.0
+
+    # Category-weighted average over types that have a positive weight.
+    weighted_sum = 0.0
+    weight_total = 0.0
+    for key, (earned, possible) in per_type.items():
+        if possible <= 0:
+            continue
+        weight = _weight_for(type_weights, key)
+        if weight <= 0:
+            continue
+        weighted_sum += (earned / possible) * weight
+        weight_total += weight
+
+    if weight_total > 0:
+        percentage = weighted_sum / weight_total * 100
+    else:
+        # Neutral fallback: plain points-weighting.
+        percentage = raw_earned / raw_possible * 100
+
     return raw_earned, raw_possible, percentage
 
 

@@ -15,22 +15,10 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 """CRUD operations for system settings."""
-import json
 from typing import Dict, List, Optional, Any
 from sqlalchemy.orm import Session
 from app.models.points import SystemSettings
 from app.schemas.settings import SystemSettingCreate, SystemSettingUpdate
-from app.enums import AssignmentType
-
-
-# Key for the per-assignment-type grade weight multipliers (JSON object).
-ASSIGNMENT_TYPE_WEIGHTS_KEY = "grades.type_weights"
-
-# Default weight for every assignment type. Neutral (1.0) means grades behave
-# as plain points-weighting until an admin chooses to weight a type differently.
-DEFAULT_ASSIGNMENT_TYPE_WEIGHTS: Dict[str, float] = {
-    t.value: 1.0 for t in AssignmentType
-}
 
 
 def get_setting(db: Session, setting_key: str) -> Optional[SystemSettings]:
@@ -121,27 +109,26 @@ def get_setting_value(db: Session, setting_key: str, default_value: Any = None, 
 
 
 def get_assignment_type_weights(db: Session) -> Dict[str, float]:
-    """Return the per-assignment-type grade weight multipliers.
+    """Return per-assignment-type grade category weights, keyed by type key.
 
-    Falls back to neutral (all 1.0) when the setting is missing or malformed,
-    and fills in 1.0 for any assignment type not present in the stored value.
+    Weights are sourced from the admin-managed ``assignment_types`` table. When
+    every weight is 0 (the default), grading falls back to plain
+    points-weighting (see ``app.utils.grading.compute_weighted_grade``).
     """
-    weights = dict(DEFAULT_ASSIGNMENT_TYPE_WEIGHTS)
-    setting = get_setting(db, ASSIGNMENT_TYPE_WEIGHTS_KEY)
-    if not setting:
-        return weights
+    # Imported here to avoid a circular import at module load time.
+    from app.models.assignment_type import AssignmentTypeConfig
 
-    try:
-        stored = json.loads(setting.setting_value)
-    except (ValueError, TypeError):
-        return weights
-
-    if isinstance(stored, dict):
-        for key, value in stored.items():
-            try:
-                weights[key] = float(value)
-            except (TypeError, ValueError):
-                continue
+    rows = (
+        db.query(AssignmentTypeConfig)
+        .filter(AssignmentTypeConfig.is_active.is_(True))
+        .all()
+    )
+    weights: Dict[str, float] = {}
+    for row in rows:
+        try:
+            weights[row.key] = float(row.weight or 0.0)
+        except (TypeError, ValueError):
+            weights[row.key] = 0.0
     return weights
 
 
@@ -160,12 +147,6 @@ def initialize_default_settings(db: Session) -> None:
             "setting_value": "true",
             "setting_type": "boolean",
             "description": "Enable or disable the student points system"
-        },
-        {
-            "setting_key": ASSIGNMENT_TYPE_WEIGHTS_KEY,
-            "setting_value": json.dumps(DEFAULT_ASSIGNMENT_TYPE_WEIGHTS),
-            "setting_type": "json",
-            "description": "Per-assignment-type grade weight multipliers. Neutral (1.0) behaves as plain points-weighting."
         }
     ]
 
@@ -173,3 +154,8 @@ def initialize_default_settings(db: Session) -> None:
         existing = get_setting(db, default["setting_key"])
         if not existing:
             create_setting(db, SystemSettingCreate(**default))
+
+    # Seed built-in assignment types on a fresh database.
+    from app.crud.assignment_types import ensure_default_assignment_types
+
+    ensure_default_assignment_types(db)

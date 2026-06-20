@@ -112,7 +112,7 @@ def export_assignment_templates(db: Session) -> List[AssignmentTemplateBackup]:
             name=template.name,
             description=template.description,
             instructions=template.instructions,
-            assignment_type=template.assignment_type.value,
+            assignment_type=template.assignment_type,
             subject_external_id=template.subject.external_id if template.subject else None,
             subject_name=template.subject.name if template.subject else "Unknown",
             max_points=template.max_points,

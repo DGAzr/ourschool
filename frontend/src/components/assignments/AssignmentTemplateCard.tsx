@@ -20,6 +20,7 @@ import React, { useState, useEffect, useRef } from 'react'
 import { Edit, Trash2, Users, Clock, Target, Archive, Download, MoreVertical } from 'lucide-react'
 import { AssignmentTemplate, Subject } from '../../types'
 import { assignmentUtils } from '../../services/assignments'
+import { useAssignmentTypes } from '../../contexts/AssignmentTypesContext'
 import MarkdownRenderer from '../common/MarkdownRenderer'
 
 interface AssignmentTemplateCardProps {
@@ -47,6 +48,7 @@ const AssignmentTemplateCard: React.FC<AssignmentTemplateCardProps> = ({
 }) => {
   const [showActions, setShowActions] = useState(false)
   const actionsRef = useRef<HTMLDivElement>(null)
+  const { getTypeLabel, getTypeIcon } = useAssignmentTypes()
 
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
@@ -75,11 +77,11 @@ const AssignmentTemplateCard: React.FC<AssignmentTemplateCardProps> = ({
                 />
               )}
               <span className="text-base">
-                {assignmentUtils.getAssignmentTypeIcon(template.assignment_type)}
+                {getTypeIcon(template.assignment_type)}
               </span>
               <h3 className="text-[14px] font-semibold text-ink truncate">{template.name}</h3>
             </div>
-            <p className="text-[12px] text-muted">{subject?.name}</p>
+            <p className="text-[12px] text-muted">{subject?.name} · {getTypeLabel(template.assignment_type)}</p>
           </div>
 
           <div className="relative ml-3" ref={actionsRef}>

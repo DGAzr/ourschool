@@ -70,7 +70,6 @@ def _validate_enums(backup_data: Dict[str, Any]) -> List[str]:
     """Check enum-typed fields across collections; return per-record errors."""
     from app.enums import (
         AssignmentStatus,
-        AssignmentType,
         AttendanceStatus,
         TermType,
         UserRole,
@@ -94,7 +93,8 @@ def _validate_enums(backup_data: Dict[str, Any]) -> List[str]:
 
     _check("users", "role", UserRole, "email")
     _check("terms", "type", TermType, "name")
-    _check("assignment_templates", "assignment_type", AssignmentType, "name")
+    # assignment_type is an admin-managed string key, not a fixed enum; the
+    # importer auto-creates any type it doesn't recognise, so nothing to check.
     _check("student_assignments", "status", AssignmentStatus, "student_email")
     _check("attendance_records", "status", AttendanceStatus, "student_email")
 

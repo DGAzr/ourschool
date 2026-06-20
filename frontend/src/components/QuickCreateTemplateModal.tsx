@@ -20,6 +20,7 @@ import React, { useState, useEffect } from 'react'
 import { X } from 'lucide-react'
 import { assignmentsApi } from '../services/assignments'
 import { subjectsApi } from '../services/subjects'
+import { useAssignmentTypes } from '../contexts/AssignmentTypesContext'
 import { Subject, AssignmentTemplateCreate } from '../types'
 
 interface QuickCreateTemplateModalProps {
@@ -36,6 +37,8 @@ const QuickCreateTemplateModal: React.FC<QuickCreateTemplateModalProps> = ({
   onClose,
   onSuccess
 }) => {
+  const { types } = useAssignmentTypes()
+  const activeTypes = types.filter(t => t.is_active)
   const [subjects, setSubjects] = useState<Subject[]>([])
   const [loading, setLoading] = useState(false)
   const [dataLoading, setDataLoading] = useState(true)
@@ -189,15 +192,9 @@ const QuickCreateTemplateModal: React.FC<QuickCreateTemplateModalProps> = ({
                       className={FIELD}
                       disabled={loading}
                     >
-                      <option value="homework">Homework</option>
-                      <option value="project">Project</option>
-                      <option value="test">Test</option>
-                      <option value="quiz">Quiz</option>
-                      <option value="essay">Essay</option>
-                      <option value="presentation">Presentation</option>
-                      <option value="worksheet">Worksheet</option>
-                      <option value="reading">Reading</option>
-                      <option value="practice">Practice</option>
+                      {activeTypes.length
+                        ? activeTypes.map(t => <option key={t.id} value={t.key}>{t.name}</option>)
+                        : <option value="homework">Homework</option>}
                     </select>
                   </div>
                 </div>

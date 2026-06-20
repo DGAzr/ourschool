@@ -56,10 +56,13 @@ class AssignmentTemplate(Base):
     name = Column(String, nullable=False)
     description = Column(Text)
     instructions = Column(Text)
+    # Stores the ``key`` of an app.models.assignment_type.AssignmentTypeConfig
+    # row. Kept as a plain string (rather than a DB enum) so admins can manage
+    # the set of types at runtime.
     assignment_type = Column(
-        Enum(AssignmentType, values_callable=lambda obj: [e.value for e in obj]),
+        String(50),
         nullable=False,
-        default=AssignmentType.HOMEWORK,
+        default=AssignmentType.HOMEWORK.value,
     )
 
     subject_id = Column(Integer, ForeignKey("subjects.id"), nullable=False)

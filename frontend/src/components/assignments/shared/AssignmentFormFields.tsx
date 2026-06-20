@@ -18,6 +18,7 @@
 
 import { Select, Input, TextArea } from '../../ui'
 import { Subject } from '../../../types'
+import { useAssignmentTypes } from '../../../contexts/AssignmentTypesContext'
 
 interface AssignmentFormFieldsProps {
   formData: {
@@ -45,6 +46,22 @@ const AssignmentFormFields: React.FC<AssignmentFormFieldsProps> = ({
   showAllFields = true,
   disabled = false
 }) => {
+  const { types, getTypeIcon, getTypeLabel } = useAssignmentTypes()
+
+  // Offer active types; keep the current value selectable even if it is
+  // inactive so editing an existing template never silently loses its type.
+  const currentType = formData.assignment_type
+  const activeTypes = types.filter(t => t.is_active)
+  const typeOptions = [
+    ...activeTypes.map(t => ({
+      value: t.key,
+      label: `${getTypeIcon(t.key)} ${t.name}`,
+    })),
+    ...(currentType && !activeTypes.some(t => t.key === currentType)
+      ? [{ value: currentType, label: `${getTypeIcon(currentType)} ${getTypeLabel(currentType)}` }]
+      : []),
+  ]
+
   return (
     <div className="space-y-6">
       {/* Basic Information */}
@@ -80,17 +97,7 @@ const AssignmentFormFields: React.FC<AssignmentFormFieldsProps> = ({
           value={formData.assignment_type || 'homework'}
           onChange={(e) => onUpdate('assignment_type', e.target.value)}
           disabled={disabled}
-          options={[
-            { value: 'homework', label: '📝 Homework' },
-            { value: 'project', label: '🏗️ Project' },
-            { value: 'test', label: '📊 Test' },
-            { value: 'quiz', label: '❓ Quiz' },
-            { value: 'essay', label: '✍️ Essay' },
-            { value: 'presentation', label: '🎤 Presentation' },
-            { value: 'worksheet', label: '📄 Worksheet' },
-            { value: 'reading', label: '📚 Reading' },
-            { value: 'practice', label: '🎯 Practice' }
-          ]}
+          options={typeOptions}
         />
 
       </div>

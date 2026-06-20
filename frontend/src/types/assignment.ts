@@ -20,12 +20,46 @@
  * Assignment and assessment related types
  */
 
+/**
+ * Admin-managed assignment type / grade-book category.
+ * `weight` is a category percentage (0-100).
+ */
+export interface AssignmentTypeConfig {
+  id: number
+  key: string
+  name: string
+  color: string
+  weight: number
+  is_active: boolean
+  display_order: number
+  usage_count: number
+  created_at?: string
+  updated_at?: string
+}
+
+export interface AssignmentTypeCreate {
+  name: string
+  color?: string
+  weight?: number
+  is_active?: boolean
+  display_order?: number
+  key?: string
+}
+
+export interface AssignmentTypeUpdate {
+  name?: string
+  color?: string
+  weight?: number
+  is_active?: boolean
+  display_order?: number
+}
+
 export interface AssignmentTemplate {
   id: number
   name: string
   description?: string
   instructions?: string
-  assignment_type: 'homework' | 'project' | 'test' | 'quiz' | 'essay' | 'presentation' | 'worksheet' | 'reading' | 'practice'
+  assignment_type: string
   subject_id: number
   max_points: number
   estimated_duration_minutes?: number
@@ -73,7 +107,7 @@ export interface AssignmentTemplateCreate {
   name: string
   description?: string
   instructions?: string
-  assignment_type: 'homework' | 'project' | 'test' | 'quiz' | 'essay' | 'presentation' | 'worksheet' | 'reading' | 'practice'
+  assignment_type: string
   subject_id: number
   max_points: number
   estimated_duration_minutes?: number
@@ -86,7 +120,7 @@ export interface AssignmentTemplateUpdate {
   name?: string
   description?: string
   instructions?: string
-  assignment_type?: 'homework' | 'project' | 'test' | 'quiz' | 'essay' | 'presentation' | 'worksheet' | 'reading' | 'practice'
+  assignment_type?: string
   subject_id?: number
   max_points?: number
   estimated_duration_minutes?: number

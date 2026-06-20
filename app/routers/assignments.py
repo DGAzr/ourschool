@@ -30,6 +30,7 @@ from app.models.subject import Subject
 from app.models.term import Term
 from app.models.user import User, UserRole
 from app.routers.auth import get_current_active_user
+from app.crud import assignment_types as crud_types
 from app.crud import points as points_crud
 from app.schemas.assignment import (
     AssignmentAssignmentRequest,
@@ -51,6 +52,16 @@ from app.schemas.assignment import (
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
+
+def _validate_assignment_type(db: Session, key: str) -> None:
+    """Reject template writes that reference an unknown/inactive type key."""
+    type_row = crud_types.get_by_key(db, key)
+    if type_row is None or not type_row.is_active:
+        raise HTTPException(
+            status_code=400, detail=f"Unknown assignment type '{key}'"
+        )
+
+
 # Assignment Template Management
 
 
@@ -71,6 +82,8 @@ def create_assignment_template(
     subject = db.query(Subject).filter(Subject.id == template.subject_id).first()
     if not subject:
         raise HTTPException(status_code=404, detail="Subject not found")
+
+    _validate_assignment_type(db, template.assignment_type)
 
     db_template = AssignmentTemplate(**template.dict(), created_by=current_user.id)
     db.add(db_template)
@@ -200,6 +213,8 @@ def update_assignment_template(
             raise HTTPException(status_code=404, detail="Subject not found")
 
     update_data = template_update.dict(exclude_unset=True)
+    if update_data.get("assignment_type") is not None:
+        _validate_assignment_type(db, update_data["assignment_type"])
     for field, value in update_data.items():
         setattr(template, field, value)
 
@@ -1397,7 +1412,7 @@ def export_assignment_template(
         name=template.name,
         description=template.description,
         instructions=template.instructions,
-        assignment_type=template.assignment_type.value,
+        assignment_type=template.assignment_type,
         subject_name=template.subject.name,
         max_points=template.max_points,
         estimated_duration_minutes=template.estimated_duration_minutes,
@@ -1427,10 +1442,23 @@ def import_assignment_template(
         )
     
     from datetime import datetime
-    from app.enums import AssignmentType
-    
+    from app.schemas.assignment_type import AssignmentTypeCreate
+
     try:
         assignment_data = import_request.assignment_data
+
+        # Resolve the imported assignment type to a local type, creating it on
+        # the fly when the source family used a type we don't have yet.
+        imported_type_key = assignment_data.assignment_type or "homework"
+        if crud_types.get_by_key(db, imported_type_key) is None:
+            created_type = crud_types.create_assignment_type(
+                db,
+                AssignmentTypeCreate(
+                    key=imported_type_key,
+                    name=imported_type_key.replace("_", " ").title(),
+                ),
+            )
+            imported_type_key = created_type.key
         
         # Handle subject mapping
         subject_id = import_request.target_subject_id
@@ -1455,7 +1483,7 @@ def import_assignment_template(
             "name": assignment_data.name,
             "description": assignment_data.description,
             "instructions": assignment_data.instructions,
-            "assignment_type": AssignmentType(assignment_data.assignment_type),
+            "assignment_type": imported_type_key,
             "subject_id": subject_id,
             "max_points": assignment_data.max_points,
             "estimated_duration_minutes": assignment_data.estimated_duration_minutes,
@@ -1532,7 +1560,7 @@ def bulk_export_assignment_templates(
             name=template.name,
             description=template.description,
             instructions=template.instructions,
-            assignment_type=template.assignment_type.value,
+            assignment_type=template.assignment_type,
             subject_name=template.subject.name,
             max_points=template.max_points,
             estimated_duration_minutes=template.estimated_duration_minutes,

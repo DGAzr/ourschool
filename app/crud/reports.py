@@ -830,7 +830,7 @@ def get_assignment_report(
                 template_id=data.template_id,
                 assignment_name=data.assignment_name,
                 assignment_type=(
-                    data.assignment_type.value if data.assignment_type else "Unknown"
+                    data.assignment_type if data.assignment_type else "Unknown"
                 ),
                 student_id=data.student_id,
                 student_name=data.student_name,
