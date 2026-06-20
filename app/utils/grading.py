@@ -31,7 +31,7 @@ single canonical grade here:
     (``due_date`` falling back to ``assigned_date``).
 """
 
-from typing import Dict, Iterable, Optional, Tuple
+from typing import Dict, Iterable, List, Optional, Tuple
 
 
 def _type_key(assignment_type) -> str:
@@ -130,39 +130,28 @@ def term_membership_filter(term):
     return (effective >= term.start_date) & (effective <= term.end_date)
 
 
-def calculate_letter_grade(percentage: float) -> str:
-    """Calculate letter grade from percentage (A+/A/A- scale).
-    
-    Uses a 13-band scale with plus/minus granularity.
-    
+_DEFAULT_SCALE: List[Tuple[str, int]] = [
+    ("A+", 97), ("A", 93), ("A-", 90),
+    ("B+", 87), ("B", 83), ("B-", 80),
+    ("C+", 77), ("C", 73), ("C-", 70),
+    ("D+", 67), ("D", 63), ("D-", 60),
+    ("F", 0),
+]
+
+
+def calculate_letter_grade(
+    percentage: float,
+    scale: Optional[List[Tuple[str, int]]] = None,
+) -> str:
+    """Calculate letter grade from percentage using the configured scale.
+
     Args:
-        percentage: Grade percentage (0-100)
-        
-    Returns:
-        Letter grade string (e.g. "A+", "B-", "F")
+        percentage: Grade percentage (0–100).
+        scale: Ordered list of (letter, min_percent) pairs, highest first.
+               Defaults to the built-in A+/A/A- 13-band scale.
     """
-    if percentage >= 97:
-        return "A+"
-    if percentage >= 93:
-        return "A"
-    if percentage >= 90:
-        return "A-"
-    if percentage >= 87:
-        return "B+"
-    if percentage >= 83:
-        return "B"
-    if percentage >= 80:
-        return "B-"
-    if percentage >= 77:
-        return "C+"
-    if percentage >= 73:
-        return "C"
-    if percentage >= 70:
-        return "C-"
-    if percentage >= 67:
-        return "D+"
-    if percentage >= 63:
-        return "D"
-    if percentage >= 60:
-        return "D-"
-    return "F"
+    bands = scale if scale is not None else _DEFAULT_SCALE
+    for letter, min_pct in bands:
+        if percentage >= min_pct:
+            return letter
+    return bands[-1][0] if bands else "F"

@@ -31,6 +31,7 @@ export interface PointTransaction {
   created_at: string
   student_name?: string
   admin_name?: string
+  assignment_type_key?: string
 }
 
 export interface StudentPoints {

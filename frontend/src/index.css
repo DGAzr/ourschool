@@ -42,10 +42,19 @@
   --btn-primary-bg: #211F1B;
   --btn-primary-fg: #FFFFFF;
 
+  /* New semantic tokens */
+  --danger-soft: #FBEEEC;
+  --danger-line: #E8CBC6;
+  --warn:        #B0762F;
+  --warn-soft:   #FAF1E4;
+  --warn-line:   #EBD9BD;
+  --pos:         #4E8D6E;
+  --pos-soft:    #E3EFE7;
+
   /* Shadows */
   --shadow:    rgba(33,31,27,.14);
-  --shadow-lg: rgba(33,31,27,.28);
-  --overlay:   rgba(33,31,27,.40);
+  --shadow-lg: rgba(33,31,27,.30);
+  --overlay:   rgba(33,31,27,.34);
 
   /* Status fg/bg pairs */
   --pos-fg:    #4E8D6E;  --pos-bg:    #E3EFE7;
@@ -91,8 +100,16 @@
   --btn-primary-bg: #EFEDE6;
   --btn-primary-fg: #1A1916;
 
+  --danger-soft: #2E1E1A;
+  --danger-line: #4A322B;
+  --warn:        #D2A158;
+  --warn-soft:   #2C2519;
+  --warn-line:   #463A26;
+  --pos:         #82C29B;
+  --pos-soft:    #1E2C23;
+
   --shadow:    rgba(0,0,0,.5);
-  --shadow-lg: rgba(0,0,0,.6);
+  --shadow-lg: rgba(0,0,0,.62);
   --overlay:   rgba(8,7,6,.62);
 
   --pos-fg:    #82C29B;  --pos-bg:    #1E2C23;
@@ -137,6 +154,12 @@ body {
 .animate-slide-up { animation: slideUp .2s ease both; }
 .animate-fade-in  { animation: fadeIn  .2s ease both; }
 .animate-pop      { animation: pop     .14s cubic-bezier(.2,.9,.3,1) both; }
+
+@keyframes modalIn {
+  from { transform: translateY(9px) scale(.99); }
+  to   { transform: none; }
+}
+.animate-modal-in { animation: modalIn .22s cubic-bezier(.2, .8, .2, 1); }
 
 /* ── Scrollbar ─────────────────────────────────────────────────────── */
 ::-webkit-scrollbar       { width: 6px; height: 6px; }

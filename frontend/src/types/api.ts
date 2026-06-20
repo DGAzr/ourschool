@@ -52,6 +52,7 @@ export interface JournalEntry {
   created_at: string
   updated_at: string
   mood?: string
+  icon?: string
   tags?: string[]
   win?: string
   goals?: JournalGoal[]
@@ -74,6 +75,7 @@ export interface JournalEntryCreate {
   entry_date?: string
   student_id?: number
   mood?: string
+  icon?: string
   tags?: string[]
   win?: string
   goals?: JournalGoal[]
@@ -84,6 +86,7 @@ export interface JournalEntryUpdate {
   content?: string
   entry_date?: string
   mood?: string
+  icon?: string
   tags?: string[]
   win?: string
   goals?: JournalGoal[]
@@ -91,7 +94,7 @@ export interface JournalEntryUpdate {
 
 export interface JournalComposerData {
   streak: number
-  subjects: Array<{ id: number; name: string; color: string }>
+  subjects: Array<{ id: number; name: string; color: string; icon?: string }>
   points_today: number | null
   points_per_entry: number | null
 }

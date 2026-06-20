@@ -251,7 +251,8 @@ def _import_subjects(db: Session, subjects_data, result, dry_run):
                 external_id=subject_data.external_id or str(_uuid.uuid4()),
                 name=subject_data.name,
                 description=subject_data.description,
-                color=subject_data.color
+                color=subject_data.color,
+                icon=getattr(subject_data, 'icon', None),
             )
             db.add(new_subject)
             db.flush()
@@ -387,6 +388,7 @@ def _import_assignment_templates(db: Session, templates_data, result, dry_run, a
                 instructions=template_data.instructions,
                 assignment_type=type_key,
                 subject_id=subject_id,
+                icon=getattr(template_data, 'icon', None),
                 max_points=template_data.max_points,
                 estimated_duration_minutes=template_data.estimated_duration_minutes,
                 prerequisites=template_data.prerequisites,

@@ -26,18 +26,19 @@ from app.models.assignment_type import AssignmentTypeConfig
 from app.schemas.assignment_type import AssignmentTypeCreate, AssignmentTypeUpdate
 
 
-# Default categories seeded on a fresh database (key, name, color). Weights
+# Default categories seeded on a fresh database (key, name, color, icon). Weights
 # start at 0 so grading behaves as plain points-weighting until configured.
+# Icons are lucide icon names stored as strings.
 DEFAULT_ASSIGNMENT_TYPES = [
-    ("homework", "Homework", "#3B82F6"),
-    ("project", "Project", "#8B5CF6"),
-    ("test", "Test", "#EF4444"),
-    ("quiz", "Quiz", "#F59E0B"),
-    ("essay", "Essay", "#10B981"),
-    ("presentation", "Presentation", "#EC4899"),
-    ("worksheet", "Worksheet", "#6366F1"),
-    ("reading", "Reading", "#14B8A6"),
-    ("practice", "Practice", "#84CC16"),
+    ("homework", "Homework", "#3B82F6", "pencil-line"),
+    ("project", "Project", "#8B5CF6", "hammer"),
+    ("test", "Test", "#EF4444", "bar-chart-3"),
+    ("quiz", "Quiz", "#F59E0B", "help-circle"),
+    ("essay", "Essay", "#10B981", "pen-tool"),
+    ("presentation", "Presentation", "#EC4899", "presentation"),
+    ("worksheet", "Worksheet", "#6366F1", "file-text"),
+    ("reading", "Reading", "#14B8A6", "book-open"),
+    ("practice", "Practice", "#84CC16", "target"),
 ]
 
 
@@ -49,10 +50,10 @@ def ensure_default_assignment_types(db: Session) -> None:
     """
     if db.query(AssignmentTypeConfig.id).first() is not None:
         return
-    for idx, (key, name, color) in enumerate(DEFAULT_ASSIGNMENT_TYPES):
+    for idx, (key, name, color, icon) in enumerate(DEFAULT_ASSIGNMENT_TYPES):
         db.add(
             AssignmentTypeConfig(
-                key=key, name=name, color=color, weight=0.0,
+                key=key, name=name, color=color, icon=icon, weight=0.0,
                 is_active=True, display_order=idx,
             )
         )
@@ -126,6 +127,7 @@ def create_assignment_type(
         key=key,
         name=payload.name,
         color=payload.color,
+        icon=payload.icon,
         weight=payload.weight,
         is_active=payload.is_active,
         display_order=payload.display_order,

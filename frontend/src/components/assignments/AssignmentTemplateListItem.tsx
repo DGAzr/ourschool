@@ -21,6 +21,7 @@ import { MoreVertical, Edit, Trash2, Archive, Users, Download, CheckSquare, Squa
 import { AssignmentTemplate, Subject } from '../../types'
 import { ViewDensity } from '../layouts/CompactListLayout'
 import { useAssignmentTypes } from '../../contexts/AssignmentTypesContext'
+import Icon from '../ui/Icon/Icon'
 
 interface AssignmentTemplateListItemProps {
   template: AssignmentTemplate
@@ -62,6 +63,14 @@ const AssignmentTemplateListItem: React.FC<AssignmentTemplateListItemProps> = ({
 
   const { getTypeLabel, getTypeIcon } = useAssignmentTypes()
 
+  // Resolved icon: template override → type icon → subject icon → (Icon's built-in fallback)
+  const resolvedIconName =
+    template.icon ??
+    getTypeIcon(template.assignment_type) ??
+    subject?.icon ??
+    undefined
+  const resolvedColor = subject?.color ?? 'var(--muted)'
+
   if (viewDensity === 'spacious') return null
 
   const isCompact = viewDensity === 'compact'
@@ -82,9 +91,11 @@ const AssignmentTemplateListItem: React.FC<AssignmentTemplateListItemProps> = ({
                   : <Square className="h-3.5 w-3.5" />}
               </button>
             )}
-            <span className={isCompact ? 'text-base' : 'text-lg'}>
-              {getTypeIcon(template.assignment_type)}
-            </span>
+            <Icon
+              name={resolvedIconName}
+              size={isCompact ? 14 : 16}
+              color={resolvedColor}
+            />
             <h3 className={`font-semibold text-ink truncate ${isCompact ? 'text-[12px]' : 'text-[13px]'}`}>
               {template.name}
             </h3>

@@ -97,6 +97,7 @@ def _entry_to_response(entry: JournalEntry, current_user: User, db: Session, str
         created_at=entry.created_at,
         updated_at=entry.updated_at,
         mood=entry.mood,
+        icon=entry.icon,
         tags=entry.tags or [],
         win=entry.win,
         goals=entry.goals or [],
@@ -176,6 +177,7 @@ async def create_journal_entry(
         content=entry_data.content,
         entry_date=entry_data.entry_date or datetime.now(timezone.utc),
         mood=entry_data.mood,
+        icon=entry_data.icon,
         tags=entry_data.tags or [],
         win=entry_data.win,
         goals=entry_data.goals or [],
@@ -229,7 +231,7 @@ async def update_journal_entry(
     if current_user.role == UserRole.STUDENT and entry.author_id != current_user.id:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You can only edit your own journal entries")
 
-    for field in ['title', 'content', 'entry_date', 'mood', 'tags', 'win', 'goals']:
+    for field in ['title', 'content', 'entry_date', 'mood', 'icon', 'tags', 'win', 'goals']:
         val = getattr(entry_data, field)
         if val is not None:
             setattr(entry, field, val)

@@ -19,7 +19,6 @@
 import React, { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
-import { X } from 'lucide-react'
 import { reportsApi } from '../services/reports'
 import { subjectsApi } from '../services/subjects'
 import { pointsApi, type StudentPoints, type AwardPreset } from '../services/points'
@@ -29,6 +28,8 @@ import { AdminReport, StudentReport, Term } from '../types'
 import { Subject } from '../types/subject'
 import { usePageLayout } from '../components/layouts'
 import { StatTile } from '../components/ui'
+import Modal from '../components/ui/Modal'
+import Button from '../components/ui/Button'
 import BulkAttendanceModal from '../components/BulkAttendanceModal'
 import QuickCreateTemplateModal from '../components/QuickCreateTemplateModal'
 import AssignmentDetailModal from '../components/assignments/AssignmentDetailModal'
@@ -115,45 +116,52 @@ const QuickAwardModal: React.FC<QuickAwardModalProps> = ({ onClose, onSuccess })
   const LABEL = 'block text-[12px] font-semibold text-muted uppercase tracking-wide mb-1.5'
 
   return (
-    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
-      <div className="bg-panel border border-line rounded-card-lg shadow-xl w-full max-w-md overflow-hidden flex flex-col">
+    <Modal
+      isOpen={true}
+      onClose={onClose}
+      title="Quick Award Points"
+      subtitle="Manually award points to a student"
+      size="sm"
+      footer={
+        <>
+          <Button variant="secondary" onClick={onClose} disabled={loading}>Cancel</Button>
+          <Button
+            variant="primary"
+            loading={loading}
+            disabled={loading || loadingStudents}
+            onClick={() => {
+              const form = document.getElementById('quick-award-form') as HTMLFormElement
+              form?.requestSubmit()
+            }}
+          >
+            Award Points
+          </Button>
+        </>
+      }
+    >
+      <form id="quick-award-form" onSubmit={handleSubmit} className="space-y-5">
+        {error && (
+          <div className="bg-neg-bg text-neg-fg px-4 py-3 rounded-field text-[13px]">{error}</div>
+        )}
 
-        {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-line">
-          <div>
-            <h3 className="text-[15px] font-semibold text-ink">Quick Award Points</h3>
-            <p className="text-[12px] text-muted mt-0.5">Manually award points to a student</p>
-          </div>
-          <button onClick={onClose} className="w-7 h-7 flex items-center justify-center rounded-full text-faint hover:text-ink hover:bg-track transition-colors">
-            <X className="w-4 h-4" />
-          </button>
+        <div>
+          <label className={LABEL}>Student <span className="text-neg-fg normal-case">*</span></label>
+          {loadingStudents ? (
+            <div className="h-[38px] bg-track rounded-field animate-pulse" />
+          ) : (
+            <select
+              value={selectedStudentId}
+              onChange={e => setSelectedStudentId(e.target.value)}
+              className={FIELD}
+              required
+            >
+              <option value="">Choose a student…</option>
+              {students.map(s => (
+                <option key={s.student_id} value={s.student_id}>{s.student_name}</option>
+              ))}
+            </select>
+          )}
         </div>
-
-        <form onSubmit={handleSubmit} className="flex flex-col">
-          <div className="px-6 py-5 space-y-5">
-
-            {error && (
-              <div className="bg-neg-bg text-neg-fg px-4 py-3 rounded-field text-[13px]">{error}</div>
-            )}
-
-            <div>
-              <label className={LABEL}>Student <span className="text-neg-fg normal-case">*</span></label>
-              {loadingStudents ? (
-                <div className="h-[38px] bg-track rounded-field animate-pulse" />
-              ) : (
-                <select
-                  value={selectedStudentId}
-                  onChange={e => setSelectedStudentId(e.target.value)}
-                  className={FIELD}
-                  required
-                >
-                  <option value="">Choose a student…</option>
-                  {students.map(s => (
-                    <option key={s.student_id} value={s.student_id}>{s.student_name}</option>
-                  ))}
-                </select>
-              )}
-            </div>
 
             <div>
               <label className={LABEL}>Points to Award <span className="text-neg-fg normal-case">*</span></label>
@@ -194,34 +202,8 @@ const QuickAwardModal: React.FC<QuickAwardModalProps> = ({ onClose, onSuccess })
                 required
               />
             </div>
-          </div>
-
-          {/* Footer */}
-          <div className="flex items-center justify-end gap-2 px-6 py-4 border-t border-line bg-panel-2">
-            <button
-              type="button"
-              onClick={onClose}
-              disabled={loading}
-              className="h-[34px] px-4 text-[13px] font-semibold text-muted hover:text-ink transition-colors disabled:opacity-50"
-            >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              disabled={loading || loadingStudents}
-              className="h-[34px] px-4 rounded-field bg-btn-primary-bg text-btn-primary-fg text-[13.5px] font-semibold hover:opacity-90 transition-opacity disabled:opacity-40 flex items-center gap-2"
-            >
-              {loading ? (
-                <>
-                  <span className="w-3.5 h-3.5 border-2 border-current border-t-transparent rounded-full animate-spin" />
-                  Awarding…
-                </>
-              ) : 'Award Points'}
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
+      </form>
+    </Modal>
   )
 }
 

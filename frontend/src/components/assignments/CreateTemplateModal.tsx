@@ -112,7 +112,7 @@ const CreateTemplateModal: React.FC<CreateTemplateModalProps> = ({
       onClose={onClose}
       title="Create Assignment"
       subtitle="Create a reusable assignment template that can be assigned to multiple students"
-      size="xl"
+      size="lg"
       footer={
         <AssignmentModalFooter
           onCancel={onClose}

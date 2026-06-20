@@ -17,10 +17,11 @@
  */
 
 import React, { useState, useEffect } from 'react'
-import { X } from 'lucide-react'
 import { assignmentsApi } from '../../services/assignments'
 import { subjectsApi } from '../../services/subjects'
 import { Subject, User } from '../../types'
+import Modal from '../ui/Modal'
+import Button from '../ui/Button'
 
 interface QuickAssignModalProps {
   isOpen: boolean
@@ -58,11 +59,6 @@ const QuickAssignModal: React.FC<QuickAssignModalProps> = ({ isOpen, onClose, on
       setError(null)
     }
   }, [isOpen])
-
-  useEffect(() => {
-    const handleEscape = (e: KeyboardEvent) => { if (e.key === 'Escape' && isOpen) onClose() }
-    if (isOpen) { document.addEventListener('keydown', handleEscape); return () => document.removeEventListener('keydown', handleEscape) }
-  }, [isOpen, onClose])
 
   const loadData = async () => {
     try {
@@ -125,202 +121,181 @@ const QuickAssignModal: React.FC<QuickAssignModalProps> = ({ isOpen, onClose, on
     }
   }
 
-  if (!isOpen) return null
-
   return (
-    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4">
-      <div className="bg-panel border border-line rounded-card-lg shadow-xl w-full max-w-lg max-h-[90vh] overflow-hidden flex flex-col">
-
-        {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-line">
-          <div>
-            <h3 className="text-[15px] font-semibold text-ink">Quick Assign</h3>
-            <p className="text-[12px] text-muted mt-0.5">Create and assign in one step</p>
-          </div>
-          <button onClick={onClose} className="w-7 h-7 flex items-center justify-center rounded-full text-faint hover:text-ink hover:bg-track transition-colors">
-            <X className="w-4 h-4" />
-          </button>
-        </div>
-
-        <form onSubmit={handleSubmit} className="flex flex-col flex-1 overflow-hidden">
-          <div className="flex-1 overflow-y-auto px-6 py-5 space-y-5">
-
-            {error && (
-              <div className="bg-neg-bg text-neg-fg px-4 py-3 rounded-field text-[13px] leading-relaxed">
-                {error === 'NO_ACTIVE_TERM' ? (
-                  <>
-                    <span className="font-semibold">No active term.</span>{' '}
-                    Assignments require an active school term. Go to{' '}
-                    <a href="/settings" className="underline font-semibold hover:opacity-80" onClick={onClose}>
-                      Settings → Terms
-                    </a>{' '}
-                    to set one.
-                  </>
-                ) : error}
-              </div>
-            )}
-
-            {dataLoading ? (
-              <div className="flex flex-col items-center justify-center py-12 gap-3">
-                <div className="w-6 h-6 border-2 border-accent border-t-transparent rounded-full animate-spin" />
-                <p className="text-[13px] text-faint">Loading…</p>
-              </div>
-            ) : (
+    <Modal
+      isOpen={isOpen}
+      onClose={onClose}
+      title="Quick Assign"
+      subtitle="Create and assign in one step"
+      size="md"
+      footer={
+        <>
+          <Button variant="secondary" onClick={onClose} disabled={loading}>Cancel</Button>
+          <Button
+            variant="primary"
+            loading={loading}
+            disabled={loading || dataLoading}
+            onClick={() => {
+              const form = document.getElementById('quick-assign-form') as HTMLFormElement
+              form?.requestSubmit()
+            }}
+          >
+            Create & Assign
+          </Button>
+        </>
+      }
+    >
+      <form id="quick-assign-form" onSubmit={handleSubmit} className="space-y-5">
+        {error && (
+          <div className="bg-neg-bg text-neg-fg px-4 py-3 rounded-field text-[13px] leading-relaxed">
+            {error === 'NO_ACTIVE_TERM' ? (
               <>
-                {/* Name */}
-                <div>
-                  <label className={LABEL}>Assignment Name <span className="text-neg-fg normal-case">*</span></label>
-                  <input
-                    type="text"
-                    value={form.name}
-                    onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
-                    className={FIELD}
-                    placeholder="e.g., Chapter 5 Review"
-                    disabled={loading}
-                    autoFocus
-                  />
-                </div>
-
-                {/* Subject + Type */}
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className={LABEL}>Subject <span className="text-neg-fg normal-case">*</span></label>
-                    <select
-                      value={form.subject_id}
-                      onChange={e => setForm(f => ({ ...f, subject_id: parseInt(e.target.value) }))}
-                      className={FIELD}
-                      disabled={loading}
-                    >
-                      <option value={0}>Select…</option>
-                      {subjects.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-                    </select>
-                  </div>
-                  <div>
-                    <label className={LABEL}>Type</label>
-                    <select
-                      value={form.assignment_type}
-                      onChange={e => setForm(f => ({ ...f, assignment_type: e.target.value }))}
-                      className={FIELD}
-                      disabled={loading}
-                    >
-                      <option value="homework">Homework</option>
-                      <option value="project">Project</option>
-                      <option value="test">Test</option>
-                      <option value="quiz">Quiz</option>
-                      <option value="essay">Essay</option>
-                      <option value="worksheet">Worksheet</option>
-                      <option value="reading">Reading</option>
-                      <option value="practice">Practice</option>
-                    </select>
-                  </div>
-                </div>
-
-                {/* Points + Assignment Date + Due Date */}
-                <div className="grid grid-cols-3 gap-3">
-                  <div>
-                    <label className={LABEL}>Max Points</label>
-                    <input
-                      type="number"
-                      min={1}
-                      value={form.max_points}
-                      onChange={e => setForm(f => ({ ...f, max_points: parseInt(e.target.value) || 100 }))}
-                      className={FIELD}
-                      disabled={loading}
-                    />
-                  </div>
-                  <div>
-                    <label className={LABEL}>Assignment Date</label>
-                    <input
-                      type="date"
-                      value={form.assigned_date}
-                      onChange={e => setForm(f => ({ ...f, assigned_date: e.target.value }))}
-                      className={FIELD}
-                      disabled={loading}
-                    />
-                  </div>
-                  <div>
-                    <label className={LABEL}>Due Date</label>
-                    <input
-                      type="date"
-                      value={form.due_date}
-                      onChange={e => setForm(f => ({ ...f, due_date: e.target.value }))}
-                      className={FIELD}
-                      disabled={loading}
-                    />
-                  </div>
-                </div>
-
-                {/* Students */}
-                <div>
-                  <div className="flex items-center justify-between mb-1.5">
-                    <label className={LABEL + ' mb-0'}>
-                      Students <span className="text-neg-fg normal-case">*</span>
-                    </label>
-                    {students.length > 1 && (
-                      <button
-                        type="button"
-                        onClick={toggleAll}
-                        className="text-[12px] font-medium text-accent hover:opacity-80 transition-opacity"
-                      >
-                        {selectedStudents.length === students.length ? 'Deselect all' : 'Select all'}
-                      </button>
-                    )}
-                  </div>
-                  <div className="border border-field-border rounded-field overflow-hidden max-h-44 overflow-y-auto divide-y divide-line">
-                    {students.length === 0 ? (
-                      <p className="px-3 py-2.5 text-[13px] text-faint">No students found</p>
-                    ) : students.map(student => (
-                      <label
-                        key={student.id}
-                        className="flex items-center gap-3 px-3 py-2.5 cursor-pointer hover:bg-track transition-colors"
-                      >
-                        <input
-                          type="checkbox"
-                          checked={selectedStudents.includes(student.id)}
-                          onChange={() => toggleStudent(student.id)}
-                          className="w-4 h-4 rounded accent-[var(--accent)]"
-                          disabled={loading}
-                        />
-                        <span className="text-[13.5px] text-ink">
-                          {student.first_name} {student.last_name}
-                        </span>
-                      </label>
-                    ))}
-                  </div>
-                  {selectedStudents.length > 0 && (
-                    <p className="text-[11.5px] text-muted mt-1.5">{selectedStudents.length} student{selectedStudents.length !== 1 ? 's' : ''} selected</p>
-                  )}
-                </div>
+                <span className="font-semibold">No active term.</span>{' '}
+                Assignments require an active school term. Go to{' '}
+                <a href="/settings" className="underline font-semibold hover:opacity-80" onClick={onClose}>
+                  Settings → Terms
+                </a>{' '}
+                to set one.
               </>
-            )}
+            ) : error}
           </div>
+        )}
 
-          {/* Footer */}
-          <div className="flex items-center justify-end gap-2 px-6 py-4 border-t border-line bg-panel-2">
-            <button
-              type="button"
-              onClick={onClose}
-              disabled={loading}
-              className="h-[34px] px-4 text-[13px] font-semibold text-muted hover:text-ink transition-colors disabled:opacity-50"
-            >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              disabled={loading || dataLoading}
-              className="h-[34px] px-4 rounded-field bg-btn-primary-bg text-btn-primary-fg text-[13.5px] font-semibold hover:opacity-90 transition-opacity disabled:opacity-40 flex items-center gap-2"
-            >
-              {loading ? (
-                <>
-                  <span className="w-3.5 h-3.5 border-2 border-current border-t-transparent rounded-full animate-spin" />
-                  Creating…
-                </>
-              ) : 'Create & Assign'}
-            </button>
+        {dataLoading ? (
+          <div className="flex flex-col items-center justify-center py-12 gap-3">
+            <div className="w-6 h-6 border-2 border-accent border-t-transparent rounded-full animate-spin" />
+            <p className="text-[13px] text-faint">Loading…</p>
           </div>
-        </form>
-      </div>
-    </div>
+        ) : (
+          <>
+            {/* Name */}
+            <div>
+              <label className={LABEL}>Assignment Name <span className="text-neg-fg normal-case">*</span></label>
+              <input
+                type="text"
+                value={form.name}
+                onChange={e => setForm(f => ({ ...f, name: e.target.value }))}
+                className={FIELD}
+                placeholder="e.g., Chapter 5 Review"
+                disabled={loading}
+                autoFocus
+              />
+            </div>
+
+            {/* Subject + Type */}
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className={LABEL}>Subject <span className="text-neg-fg normal-case">*</span></label>
+                <select
+                  value={form.subject_id}
+                  onChange={e => setForm(f => ({ ...f, subject_id: parseInt(e.target.value) }))}
+                  className={FIELD}
+                  disabled={loading}
+                >
+                  <option value={0}>Select…</option>
+                  {subjects.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                </select>
+              </div>
+              <div>
+                <label className={LABEL}>Type</label>
+                <select
+                  value={form.assignment_type}
+                  onChange={e => setForm(f => ({ ...f, assignment_type: e.target.value }))}
+                  className={FIELD}
+                  disabled={loading}
+                >
+                  <option value="homework">Homework</option>
+                  <option value="project">Project</option>
+                  <option value="test">Test</option>
+                  <option value="quiz">Quiz</option>
+                  <option value="essay">Essay</option>
+                  <option value="worksheet">Worksheet</option>
+                  <option value="reading">Reading</option>
+                  <option value="practice">Practice</option>
+                </select>
+              </div>
+            </div>
+
+            {/* Points + Assignment Date + Due Date */}
+            <div className="grid grid-cols-3 gap-3">
+              <div>
+                <label className={LABEL}>Max Points</label>
+                <input
+                  type="number"
+                  min={1}
+                  value={form.max_points}
+                  onChange={e => setForm(f => ({ ...f, max_points: parseInt(e.target.value) || 100 }))}
+                  className={FIELD}
+                  disabled={loading}
+                />
+              </div>
+              <div>
+                <label className={LABEL}>Assignment Date</label>
+                <input
+                  type="date"
+                  value={form.assigned_date}
+                  onChange={e => setForm(f => ({ ...f, assigned_date: e.target.value }))}
+                  className={FIELD}
+                  disabled={loading}
+                />
+              </div>
+              <div>
+                <label className={LABEL}>Due Date</label>
+                <input
+                  type="date"
+                  value={form.due_date}
+                  onChange={e => setForm(f => ({ ...f, due_date: e.target.value }))}
+                  className={FIELD}
+                  disabled={loading}
+                />
+              </div>
+            </div>
+
+            {/* Students */}
+            <div>
+              <div className="flex items-center justify-between mb-1.5">
+                <label className={LABEL + ' mb-0'}>
+                  Students <span className="text-neg-fg normal-case">*</span>
+                </label>
+                {students.length > 1 && (
+                  <button
+                    type="button"
+                    onClick={toggleAll}
+                    className="text-[12px] font-medium text-accent hover:opacity-80 transition-opacity"
+                  >
+                    {selectedStudents.length === students.length ? 'Deselect all' : 'Select all'}
+                  </button>
+                )}
+              </div>
+              <div className="border border-field-border rounded-field overflow-hidden max-h-44 overflow-y-auto divide-y divide-line">
+                {students.length === 0 ? (
+                  <p className="px-3 py-2.5 text-[13px] text-faint">No students found</p>
+                ) : students.map(student => (
+                  <label
+                    key={student.id}
+                    className="flex items-center gap-3 px-3 py-2.5 cursor-pointer hover:bg-track transition-colors"
+                  >
+                    <input
+                      type="checkbox"
+                      checked={selectedStudents.includes(student.id)}
+                      onChange={() => toggleStudent(student.id)}
+                      className="w-4 h-4 rounded accent-[var(--accent)]"
+                      disabled={loading}
+                    />
+                    <span className="text-[13.5px] text-ink">
+                      {student.first_name} {student.last_name}
+                    </span>
+                  </label>
+                ))}
+              </div>
+              {selectedStudents.length > 0 && (
+                <p className="text-[11.5px] text-muted mt-1.5">{selectedStudents.length} student{selectedStudents.length !== 1 ? 's' : ''} selected</p>
+              )}
+            </div>
+          </>
+        )}
+      </form>
+    </Modal>
   )
 }
 

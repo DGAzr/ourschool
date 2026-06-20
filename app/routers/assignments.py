@@ -626,7 +626,8 @@ def grade_student_assignment(
     # Assign letter grade if not provided
     if not grade_data.letter_grade and percentage is not None:
         from app.crud.reports import calculate_letter_grade
-        assignment.letter_grade = calculate_letter_grade(percentage)
+        from app.crud.settings import get_grade_scale
+        assignment.letter_grade = calculate_letter_grade(percentage, get_grade_scale(db))
     else:
         assignment.letter_grade = grade_data.letter_grade
 
@@ -711,7 +712,8 @@ def bulk_grade_assignments(
                 percentage = assignment.calculate_percentage_grade()
                 if percentage is not None:
                     from app.crud.reports import calculate_letter_grade
-                    assignment.letter_grade = calculate_letter_grade(percentage)
+                    from app.crud.settings import get_grade_scale
+                    assignment.letter_grade = calculate_letter_grade(percentage, get_grade_scale(db))
 
                 assignment.update_status()
                 assignment.update_term_grade(db)

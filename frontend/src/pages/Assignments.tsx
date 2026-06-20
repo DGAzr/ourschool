@@ -16,7 +16,7 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { useAuth } from '../contexts/AuthContext'
 import { assignmentsApi } from '../services/assignments'
 
@@ -25,7 +25,8 @@ import { useAssignments } from '../hooks/useAssignments'
 import { useAssignmentFilters } from '../hooks/useAssignmentFilters'
 
 // Components
-import { SegmentedControl, Pill, SubjectDot, statusToPillVariant } from '../components/ui'
+import { SubjectDot, Icon } from '../components/ui'
+import ConfirmDialog from '../components/ui/ConfirmDialog'
 import StudentAssignmentCard from '../components/assignments/StudentAssignmentCard'
 import CreateTemplateModal from '../components/assignments/CreateTemplateModal'
 import EditTemplateModal from '../components/assignments/EditTemplateModal'
@@ -56,11 +57,22 @@ const Assignments: React.FC = () => {
   const [assigningTemplate, setAssigningTemplate] = useState<AssignmentTemplate | null>(null)
   const [deletingTemplate, setDeletingTemplate] = useState<AssignmentTemplate | null>(null)
   const [archivingTemplate, setArchivingTemplate] = useState<AssignmentTemplate | null>(null)
+  const [deletingLoading, setDeletingLoading] = useState(false)
+  const [archivingLoading, setArchivingLoading] = useState(false)
   const [exportingTemplate, setExportingTemplate] = useState<AssignmentTemplate | null>(null)
   const [submittingAssignment, setSubmittingAssignment] = useState<StudentAssignment | null>(null)
   const [selectedTemplates, setSelectedTemplates] = useState<Set<number>>(new Set())
-  const [templateView, setTemplateView] = useState<'shelves' | 'table' | 'cards'>('shelves')
+  const [collapsedShelves, setCollapsedShelves] = useState<Set<string>>(() => {
+    try {
+      const raw = localStorage.getItem('assignments.collapsedShelves')
+      return new Set<string>(raw ? JSON.parse(raw) : [])
+    } catch { return new Set() }
+  })
   const [menuOpenId, setMenuOpenId] = useState<number | null>(null)
+
+  useEffect(() => {
+    localStorage.setItem('assignments.collapsedShelves', JSON.stringify([...collapsedShelves]))
+  }, [collapsedShelves])
 
   // Filters
   const {
@@ -159,10 +171,31 @@ const Assignments: React.FC = () => {
     setSelectedTemplates(newSelected)
   }
 
+  const toggleShelf = (key: string) => {
+    const next = new Set(collapsedShelves)
+    if (next.has(key)) {
+      next.delete(key)
+    } else {
+      next.add(key)
+    }
+    setCollapsedShelves(next)
+  }
+
+  const toggleShelfSelection = (templateIds: number[], allSelected: boolean) => {
+    const next = new Set(selectedTemplates)
+    if (allSelected) {
+      templateIds.forEach(id => next.delete(id))
+    } else {
+      templateIds.forEach(id => next.add(id))
+    }
+    setSelectedTemplates(next)
+  }
+
   const confirmDelete = async () => {
     if (!deletingTemplate) return
 
     try {
+      setDeletingLoading(true)
       await assignmentsApi.delete(deletingTemplate.id)
       setTemplates(templates.filter(t => t.id !== deletingTemplate.id))
       setShowDeleteConfirm(false)
@@ -172,17 +205,21 @@ const Assignments: React.FC = () => {
       setError(errorMessage)
       setShowDeleteConfirm(false)
       setDeletingTemplate(null)
+    } finally {
+      setDeletingLoading(false)
     }
   }
 
   const confirmArchive = async () => {
     if (!archivingTemplate) return
     try {
+      setArchivingLoading(true)
       await assignmentsApi.archiveTemplate(archivingTemplate.id)
       refetch()
     } catch (err) {
       setError('Failed to archive template')
     } finally {
+      setArchivingLoading(false)
       setShowArchiveConfirm(false)
       setArchivingTemplate(null)
     }
@@ -268,13 +305,13 @@ const Assignments: React.FC = () => {
   /* ── derived data ── */
   // Group templates by subject for Shelves view
   const templateGroups = (() => {
-    const groups: { subjectId: number | null; name: string; color: string; templates: typeof filteredTemplates }[] = []
+    const groups: { subjectId: number | null; name: string; color: string; icon?: string | null; templates: typeof filteredTemplates }[] = []
     const seen = new Map<string, typeof groups[0]>()
     for (const t of filteredTemplates) {
       const sub = getSubjectById(t.subject_id ?? 0)
       const key = sub ? String(sub.id) : 'none'
       if (!seen.has(key)) {
-        const g = { subjectId: sub?.id ?? null, name: sub?.name ?? 'No Subject', color: (sub as any)?.color ?? '#8B7355', templates: [] as typeof filteredTemplates }
+        const g = { subjectId: sub?.id ?? null, name: sub?.name ?? 'No Subject', color: (sub as any)?.color ?? '#8B7355', icon: sub?.icon, templates: [] as typeof filteredTemplates }
         seen.set(key, g)
         groups.push(g)
       }
@@ -384,36 +421,55 @@ const Assignments: React.FC = () => {
               <option value="">All Types</option>
               {Object.entries(TYPE_LABELS).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
             </select>
-            <div className="ml-auto">
-              <SegmentedControl
-                segments={[
-                  { value: 'shelves', label: 'Shelves' },
-                  { value: 'table', label: 'Table' },
-                  { value: 'cards', label: 'Cards' },
-                ]}
-                value={templateView}
-                onChange={setTemplateView}
-              />
-            </div>
           </div>
 
           {/* ── Shelves view ── */}
-          {templateView === 'shelves' && (
-            <div className="bg-panel border border-line rounded-card overflow-hidden">
-              {templateGroups.length === 0 ? (
-                <div className="py-14 text-center">
-                  <p className="text-[15px] font-semibold text-ink-2 mb-1">No templates match your filters</p>
-                  <p className="text-[13px] text-faint">Try clearing search, subject, or type.</p>
-                </div>
-              ) : templateGroups.map((group, gi) => (
-                <div key={group.subjectId ?? 'none'}>
-                  {/* Subject header */}
-                  <div className="flex items-center gap-2.5 px-4 py-2.5 bg-panel-2 border-b border-line-3">
-                    <SubjectDot color={group.color} size={10} />
+          <div className="bg-panel border border-line rounded-card overflow-hidden">
+            {templateGroups.length === 0 ? (
+              <div className="py-14 text-center">
+                <p className="text-[15px] font-semibold text-ink-2 mb-1">No templates match your filters</p>
+                <p className="text-[13px] text-faint">Try clearing search, subject, or type.</p>
+              </div>
+            ) : templateGroups.map((group, gi) => {
+              const shelfKey = group.subjectId != null ? String(group.subjectId) : 'none'
+              const isCollapsed = collapsedShelves.has(shelfKey)
+              const shelfIds = group.templates.map(t => t.id)
+              const allSelected = shelfIds.length > 0 && shelfIds.every(id => selectedTemplates.has(id))
+              return (
+                <div key={shelfKey}>
+                  {/* Subject header — click to collapse/expand */}
+                  <button
+                    onClick={() => toggleShelf(shelfKey)}
+                    className="w-full flex items-center gap-2.5 px-4 py-2.5 bg-panel-2 border-b border-line-3 text-left hover:bg-faintest/30 transition-colors"
+                  >
+                    {/* Per-shelf select-all checkbox */}
+                    <span
+                      role="checkbox"
+                      aria-checked={allSelected}
+                      onClick={e => { e.stopPropagation(); toggleShelfSelection(shelfIds, allSelected) }}
+                      className={`w-4 h-4 rounded border flex-none flex items-center justify-center transition-colors cursor-pointer ${
+                        allSelected ? 'bg-accent border-accent text-white' : 'border-check-border bg-field-bg'
+                      }`}
+                    >
+                      {allSelected && (
+                        <svg width="9" height="7" fill="none" viewBox="0 0 9 7"><path d="M1 3.5 3.5 6 8 1" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" /></svg>
+                      )}
+                    </span>
+                    {group.icon
+                      ? <Icon name={group.icon} color={group.color} size={15} className="flex-shrink-0" />
+                      : <SubjectDot color={group.color} size={10} />
+                    }
                     <span className="font-bold text-[13.5px] tracking-[-0.01em] text-ink">{group.name}</span>
                     <span className="font-mono text-[11.5px] text-faint">{group.templates.length}</span>
-                  </div>
-                  {group.templates.map((template, ri) => (
+                    {/* Collapse chevron */}
+                    <svg
+                      className={`ml-auto text-faint transition-transform duration-150 ${isCollapsed ? '-rotate-90' : ''}`}
+                      width="12" height="12" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5"
+                    >
+                      <path d="M19 9l-7 7-7-7" strokeLinecap="round" strokeLinejoin="round" />
+                    </svg>
+                  </button>
+                  {!isCollapsed && group.templates.map((template, ri) => (
                     <div
                       key={template.id}
                       className={`relative flex items-center gap-3 px-4 py-3.5 group ${
@@ -491,138 +547,9 @@ const Assignments: React.FC = () => {
                     </div>
                   ))}
                 </div>
-              ))}
-            </div>
-          )}
-
-          {/* ── Table view ── */}
-          {templateView === 'table' && (
-            <div className="bg-panel border border-line rounded-card overflow-hidden">
-              <table className="w-full border-collapse text-[13.5px]">
-                <thead>
-                  <tr className="bg-panel-2 border-b border-line">
-                    <th className="w-[42px] pl-4 py-2.5 text-left">
-                      <button
-                        onClick={() => {
-                          if (selectedTemplates.size === filteredTemplates.length) {
-                            setSelectedTemplates(new Set())
-                          } else {
-                            setSelectedTemplates(new Set(filteredTemplates.map(t => t.id)))
-                          }
-                        }}
-                        className={`w-4 h-4 rounded border flex items-center justify-center transition-colors ${
-                          selectedTemplates.size === filteredTemplates.length && filteredTemplates.length > 0
-                            ? 'bg-accent border-accent text-white'
-                            : 'border-check-border bg-field-bg'
-                        }`}
-                      >
-                        {selectedTemplates.size === filteredTemplates.length && filteredTemplates.length > 0 && (
-                          <svg width="9" height="7" fill="none" viewBox="0 0 9 7"><path d="M1 3.5 3.5 6 8 1" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" /></svg>
-                        )}
-                      </button>
-                    </th>
-                    {['Template', 'Subject', 'Type', 'Points', 'Time', 'Assigned'].map(h => (
-                      <th key={h} className="px-3 py-2.5 text-left text-[11px] font-semibold text-faint uppercase tracking-[.05em]">{h}</th>
-                    ))}
-                    <th className="w-[120px] px-4 py-2.5" />
-                  </tr>
-                </thead>
-                <tbody>
-                  {filteredTemplates.length === 0 ? (
-                    <tr><td colSpan={8} className="py-14 text-center text-[13px] text-faint">No templates match your filters</td></tr>
-                  ) : filteredTemplates.map(template => {
-                    const sub = getSubjectById(template.subject_id ?? 0)
-                    return (
-                      <tr key={template.id} className="group border-b border-line-2 hover:bg-faintest/40 transition-colors">
-                        <td className="pl-4 py-3 align-middle">
-                          <button
-                            onClick={() => toggleTemplateSelection(template.id)}
-                            className={`w-4 h-4 rounded border flex items-center justify-center transition-colors ${
-                              selectedTemplates.has(template.id) ? 'bg-accent border-accent text-white' : 'border-check-border bg-field-bg'
-                            }`}
-                          >
-                            {selectedTemplates.has(template.id) && (
-                              <svg width="9" height="7" fill="none" viewBox="0 0 9 7"><path d="M1 3.5 3.5 6 8 1" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" /></svg>
-                            )}
-                          </button>
-                        </td>
-                        <td className="px-3 py-3 align-middle">
-                          <div className="font-semibold text-ink tracking-[-0.01em]">{template.name}</div>
-                          {template.description && <div className="text-[12px] text-faint mt-0.5 truncate max-w-[300px]">{template.description}</div>}
-                        </td>
-                        <td className="px-3 py-3 align-middle">
-                          <div className="flex items-center gap-2">
-                            <SubjectDot color={(sub as any)?.color ?? '#8B7355'} size={9} />
-                            <span className="text-ink-2">{sub?.name ?? '—'}</span>
-                          </div>
-                        </td>
-                        <td className="px-3 py-3 align-middle">
-                          <span className="inline-block px-2.5 py-[3px] rounded-pill bg-track text-ink-2 text-[11.5px] font-semibold">
-                            {TYPE_LABELS[template.assignment_type] ?? template.assignment_type}
-                          </span>
-                        </td>
-                        <td className="px-3 py-3 align-middle text-right font-mono tabular-nums text-ink-2">{template.max_points ?? '—'}</td>
-                        <td className="px-3 py-3 align-middle text-right font-mono tabular-nums text-muted">{template.estimated_duration_minutes ? `${template.estimated_duration_minutes}m` : '—'}</td>
-                        <td className="px-3 py-3 align-middle">
-                          {(template.total_assigned ?? 0) > 0 ? (
-                            <span className="px-1.5 py-0.5 rounded bg-accent-soft text-accent text-[11px] font-mono font-semibold">{template.total_assigned}</span>
-                          ) : <span className="text-faintest text-[12px]">—</span>}
-                        </td>
-                        <td className="px-4 py-3 align-middle text-right">
-                          <div className="flex justify-end gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
-                            <button onClick={() => handleAssignTemplate(template)} className="h-[28px] px-2.5 border border-btn-border bg-panel rounded-[7px] text-[12px] font-semibold text-ink hover:bg-track transition-colors">Assign</button>
-                            <button onClick={() => handleEditTemplate(template)} className="h-[28px] px-2.5 border border-btn-border bg-panel rounded-[7px] text-[12px] font-semibold text-ink hover:bg-track transition-colors">Edit</button>
-                            <button onClick={() => handleDeleteTemplate(template)} className="h-[28px] px-2.5 border border-btn-border bg-panel rounded-[7px] text-[12px] font-semibold text-danger hover:bg-neg-bg transition-colors">Del</button>
-                          </div>
-                        </td>
-                      </tr>
-                    )
-                  })}
-                </tbody>
-              </table>
-            </div>
-          )}
-
-          {/* ── Cards view ── */}
-          {templateView === 'cards' && (
-            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
-              {filteredTemplates.length === 0 ? (
-                <div className="col-span-full py-14 text-center">
-                  <p className="text-[15px] font-semibold text-ink-2 mb-1">No templates match your filters</p>
-                  <p className="text-[13px] text-faint">Try clearing search, subject, or type.</p>
-                </div>
-              ) : filteredTemplates.map(template => {
-                const sub = getSubjectById(template.subject_id ?? 0)
-                return (
-                  <div key={template.id} className="bg-panel border border-line rounded-card p-4 shadow-card hover:shadow-float transition-shadow group">
-                    <div className="flex items-start justify-between gap-2 mb-2">
-                      <div className="flex items-center gap-2 min-w-0">
-                        <SubjectDot color={(sub as any)?.color ?? '#8B7355'} size={8} />
-                        <span className="text-[11.5px] text-muted truncate">{sub?.name ?? 'No subject'}</span>
-                      </div>
-                      <Pill variant={statusToPillVariant(template.assignment_type)}>
-                        {TYPE_LABELS[template.assignment_type] ?? template.assignment_type}
-                      </Pill>
-                    </div>
-                    <h3 className="font-semibold text-[14px] text-ink tracking-[-0.01em] mb-1">{template.name}</h3>
-                    {template.description && (
-                      <p className="text-[12.5px] text-faint line-clamp-2 mb-3">{template.description}</p>
-                    )}
-                    <div className="flex items-center justify-between mt-3 pt-3 border-t border-line-2">
-                      <div className="flex items-center gap-3 text-[12px] text-muted font-mono tabular-nums">
-                        <span>{template.max_points ?? '—'} pts</span>
-                        {template.estimated_duration_minutes && <span>{template.estimated_duration_minutes}m</span>}
-                      </div>
-                      <div className="flex gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
-                        <button onClick={() => handleAssignTemplate(template)} className="h-[28px] px-2.5 border border-btn-border bg-panel rounded-[7px] text-[12px] font-semibold text-ink hover:bg-track transition-colors">Assign</button>
-                        <button onClick={() => handleEditTemplate(template)} className="h-[28px] px-2.5 border border-btn-border bg-panel rounded-[7px] text-[12px] font-semibold text-ink hover:bg-track transition-colors">Edit</button>
-                      </div>
-                    </div>
-                  </div>
-                )
-              })}
-            </div>
-          )}
+              )
+            })}
+          </div>
         </>
       )}
 
@@ -738,82 +665,32 @@ const Assignments: React.FC = () => {
         />
       )}
 
-      {/* Enhanced Delete Confirmation Modal */}
-      {showDeleteConfirm && deletingTemplate && (
-        <div className="fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-xl p-6 w-full max-w-md border border-gray-200 dark:border-gray-700">
-            <div className="flex items-center mb-4">
-              <div className="flex-shrink-0 w-10 h-10 bg-red-100 dark:bg-red-900 rounded-full flex items-center justify-center">
-                <svg className="h-5 w-5 text-red-600 dark:text-red-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z" />
-                </svg>
-              </div>
-              <h3 className="ml-3 text-lg font-semibold text-gray-900 dark:text-gray-100">Delete Assignment Template</h3>
-            </div>
-            <p className="text-sm text-gray-600 dark:text-gray-400 mb-6">
-              Are you sure you want to delete <span className="font-semibold">"{deletingTemplate.name}"</span>? This action cannot be undone.
-              {deletingTemplate.total_assigned && deletingTemplate.total_assigned > 0 && (
-                <span className="block mt-3 p-3 bg-red-50 dark:bg-red-900 border border-red-200 dark:border-red-700 rounded-lg text-red-700 dark:text-red-200 font-medium">
-                  ⚠️ Warning: This template is currently assigned to {deletingTemplate.total_assigned} student(s).
-                </span>
-              )}
-            </p>
-            <div className="flex justify-end space-x-3">
-              <button
-                onClick={() => {
-                  setShowDeleteConfirm(false)
-                  setDeletingTemplate(null)
-                }}
-                className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={confirmDelete}
-                className="px-4 py-2 text-sm font-medium text-white bg-red-600 rounded-lg hover:bg-red-700 shadow-sm hover:shadow-md transition-all duration-200"
-              >
-                Delete Template
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* Delete Confirmation */}
+      <ConfirmDialog
+        isOpen={showDeleteConfirm && !!deletingTemplate}
+        onClose={() => { setShowDeleteConfirm(false); setDeletingTemplate(null) }}
+        onConfirm={confirmDelete}
+        tone="danger"
+        title="Delete assignment template"
+        message={<>Are you sure you want to delete <strong className="text-ink">"{deletingTemplate?.name}"</strong>? This action cannot be undone.</>}
+        note={deletingTemplate?.total_assigned && deletingTemplate.total_assigned > 0
+          ? <>This template is currently assigned to <strong className="text-danger">{deletingTemplate.total_assigned} student{deletingTemplate.total_assigned !== 1 ? 's' : ''}</strong>. Their existing assignments will be removed too.</>
+          : undefined}
+        confirmLabel="Delete template"
+        loading={deletingLoading}
+      />
 
-      {/* Enhanced Archive Confirmation Modal */}
-      {showArchiveConfirm && archivingTemplate && (
-        <div className="fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-xl p-6 w-full max-w-md border border-gray-200 dark:border-gray-700">
-            <div className="flex items-center mb-4">
-              <div className="flex-shrink-0 w-10 h-10 bg-yellow-100 dark:bg-yellow-900 rounded-full flex items-center justify-center">
-                <svg className="h-5 w-5 text-yellow-600 dark:text-yellow-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 8l6 6 6-6" />
-                </svg>
-              </div>
-              <h3 className="ml-3 text-lg font-semibold text-gray-900 dark:text-gray-100">Archive Assignment Template</h3>
-            </div>
-            <p className="text-sm text-gray-600 dark:text-gray-400 mb-6">
-              Are you sure you want to archive <span className="font-semibold">"{archivingTemplate.name}"</span>? This will hide it from the assignment creation list but preserve existing assignments.
-            </p>
-            <div className="flex justify-end space-x-3">
-              <button
-                onClick={() => {
-                  setShowArchiveConfirm(false)
-                  setArchivingTemplate(null)
-                }}
-                className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={confirmArchive}
-                className="px-4 py-2 text-sm font-medium text-white bg-yellow-600 rounded-lg hover:bg-yellow-700 shadow-sm hover:shadow-md transition-all duration-200"
-              >
-                Archive Template
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* Archive Confirmation */}
+      <ConfirmDialog
+        isOpen={showArchiveConfirm && !!archivingTemplate}
+        onClose={() => { setShowArchiveConfirm(false); setArchivingTemplate(null) }}
+        onConfirm={confirmArchive}
+        tone="warn"
+        title="Archive assignment template"
+        message={<>Archive <strong className="text-ink">"{archivingTemplate?.name}"</strong>? It will be hidden from the assignment-creation list, but existing assignments are preserved.</>}
+        confirmLabel="Archive template"
+        loading={archivingLoading}
+      />
 
       {/* Export Modal */}
       {showExportModal && (

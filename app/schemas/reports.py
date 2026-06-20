@@ -98,11 +98,49 @@ class StudentProgress(BaseModel):
     last_activity_date: Optional[str] = None
     subjects: List[SubjectPerformance] = []
     subject_grades: List[SubjectPerformance] = []  # Alias for subjects
+    grade_series: List[float] = []
+    trend: int = 0
+    journal_summary: str = ""
 
     class Config:
         """Pydantic configuration."""
 
         orm_mode = True
+
+
+class MetricTrend(BaseModel):
+    """Schema for a single KPI card with sparkline and delta."""
+
+    label: str
+    value: str
+    series: List[float]
+    delta: str
+    delta_positive: bool
+
+
+class SubjectAverage(BaseModel):
+    """Schema for a subject average in the overview subject bar list."""
+
+    subject_id: int
+    subject_name: str
+    subject_color: str
+    percentage: float
+    letter_grade: str
+    flagged: bool
+
+
+class StudentGlanceRow(BaseModel):
+    """Schema for a row in the 'Students at a glance' overview table."""
+
+    student_id: int
+    name: str
+    grade: float
+    letter: str
+    trend: int
+    completion: float
+    attendance_rate: Optional[float] = None
+    effort: str
+    status: str
 
 
 class StudentReport(BaseModel):
@@ -114,6 +152,9 @@ class StudentReport(BaseModel):
     pending_grades: int
     average_grade: float
     current_term_grade: float
+    grade_series: List[float] = []
+    journal_summary: str = ""
+    trend: int = 0
 
     class Config:
         """Pydantic configuration."""
@@ -130,6 +171,10 @@ class AdminReport(BaseModel):
     average_grade: float
     total_assignments: int
     completed_assignments: int
+    kpis: List[MetricTrend] = []
+    class_average_series: List[float] = []
+    subject_averages: List[SubjectAverage] = []
+    students_glance: List[StudentGlanceRow] = []
 
     class Config:
         """Pydantic configuration."""

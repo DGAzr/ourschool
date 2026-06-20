@@ -16,138 +16,166 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-import React, { ReactNode, useEffect } from 'react'
-import { MODAL_SIZES } from '../../../constants'
+import React, { ReactNode, useEffect, useRef } from 'react'
+import { X } from 'lucide-react'
 
 /**
- * Props for the Modal component
+ * The single modal size scale. sm 420 / md 520 / lg 640.
+ * (Replaces the ad-hoc max-w-md / lg / 2xl picked per modal.)
  */
+const SIZE: Record<'sm' | 'md' | 'lg', string> = {
+  sm: 'max-w-[420px]',
+  md: 'max-w-[520px]',
+  lg: 'max-w-[640px]',
+}
+
+export type ModalIconVariant = 'accent' | 'danger' | 'warn' | 'pos' | 'dark'
+
+const ICON_TILE: Record<ModalIconVariant, string> = {
+  accent: 'bg-accent-soft text-accent',
+  danger: 'bg-danger-soft text-danger',
+  warn: 'bg-warn-soft text-warn',
+  pos: 'bg-pos-soft text-pos',
+  dark: 'bg-btn-primary-bg text-btn-primary-fg',
+}
+
 interface ModalProps {
-  /** Whether the modal is currently open and visible */
+  /** Whether the modal is open and visible */
   isOpen: boolean
-  /** Callback function called when the modal should be closed */
+  /** Called when the modal requests to close (ESC, scrim click, close button) */
   onClose: () => void
-  /** Optional title to display in the modal header */
+  /** Title shown in the header */
   title?: string
-  /** Size variant of the modal @default 'lg' */
-  size?: keyof typeof MODAL_SIZES
-  /** Content to display inside the modal */
+  /** Optional second line under the title */
+  subtitle?: string
+  /** Optional leading icon glyph (a lucide icon element) */
+  icon?: ReactNode
+  /** Tint for the icon tile @default 'accent' */
+  iconVariant?: ModalIconVariant
+  /** Width token @default 'md' */
+  size?: 'sm' | 'md' | 'lg'
+  /** Body content */
   children: ReactNode
-  /** Whether to show the X close button in the header @default true */
+  /** Right-aligned footer actions (usually <Button>s). Omit for footer-less modals. */
+  footer?: ReactNode
+  /** Show the header X button @default true */
   showCloseButton?: boolean
-  /** Whether clicking the overlay should close the modal @default true */
+  /** Close when the scrim is clicked @default true */
   closeOnOverlayClick?: boolean
 }
 
 /**
- * A flexible modal dialog component with overlay, keyboard navigation, and accessibility features.
- * 
- * Features:
- * - Keyboard navigation (ESC to close)
- * - Click outside to close (configurable)
- * - Body scroll lock when open
- * - Multiple size variants
- * - Accessible focus management
- * 
- * @component
- * @example
- * ```tsx
- * const [isOpen, setIsOpen] = useState(false)
- * 
- * <Modal 
- *   isOpen={isOpen} 
- *   onClose={() => setIsOpen(false)}
- *   title="Confirm Action"
- *   size="md"
- * >
- *   <p>Are you sure you want to proceed?</p>
- *   <div className="flex gap-2 mt-4">
- *     <Button onClick={() => setIsOpen(false)}>Cancel</Button>
- *     <Button variant="danger" onClick={handleConfirm}>Confirm</Button>
- *   </div>
- * </Modal>
- * ```
+ * The unified OurSchool modal shell.
+ *
+ * One scrim (bg-overlay + 2px blur), one radius (14px), one shadow, one header layout,
+ * one close button, one footer, and a transform-only entrance animation.
+ *
+ * Every dialog in the app is built on this — form modals pass fields as `children` and
+ * actions as `footer`; ConfirmDialog wraps this with size="sm" + an icon tile.
  */
 const Modal: React.FC<ModalProps> = ({
   isOpen,
   onClose,
   title,
-  size = 'lg',
+  subtitle,
+  icon,
+  iconVariant = 'accent',
+  size = 'md',
   children,
+  footer,
   showCloseButton = true,
-  closeOnOverlayClick = true
+  closeOnOverlayClick = true,
 }) => {
-  /**
-   * Effect to handle keyboard navigation and body scroll lock
-   * Sets up ESC key listener and prevents body scrolling when modal is open
-   */
+  const panelRef = useRef<HTMLDivElement>(null)
+  const lastFocused = useRef<HTMLElement | null>(null)
+
+  // ESC to close + body scroll lock
   useEffect(() => {
-    const handleEscape = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        onClose()
-      }
+    if (!isOpen) return
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose()
     }
-
-    if (isOpen) {
-      document.addEventListener('keydown', handleEscape)
-      // Prevent body scroll when modal is open
-      document.body.style.overflow = 'hidden'
-    }
-
+    document.addEventListener('keydown', onKey)
+    const prevOverflow = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
     return () => {
-      document.removeEventListener('keydown', handleEscape)
-      document.body.style.overflow = 'unset'
+      document.removeEventListener('keydown', onKey)
+      document.body.style.overflow = prevOverflow
     }
   }, [isOpen, onClose])
 
+  // Focus management: focus first field on open, restore on close
+  useEffect(() => {
+    if (!isOpen) return
+    lastFocused.current = document.activeElement as HTMLElement
+    const t = setTimeout(() => {
+      const first = panelRef.current?.querySelector<HTMLElement>(
+        'input, select, textarea, button, [tabindex]:not([tabindex="-1"])'
+      )
+      first?.focus()
+    }, 60)
+    return () => {
+      clearTimeout(t)
+      lastFocused.current?.focus?.()
+    }
+  }, [isOpen])
+
   if (!isOpen) return null
 
-  /**
-   * Handles clicks on the modal overlay
-   * Closes modal if click is on overlay (not content) and closeOnOverlayClick is enabled
-   */
-  const handleOverlayClick = (e: React.MouseEvent) => {
-    if (e.target === e.currentTarget && closeOnOverlayClick) {
-      onClose()
-    }
+  const handleScrim = (e: React.MouseEvent) => {
+    if (e.target === e.currentTarget && closeOnOverlayClick) onClose()
   }
 
+  const hasHeader = !!(title || icon || showCloseButton)
+
   return (
-    <div className="fixed inset-0 bg-overlay flex items-center justify-center z-50 p-4">
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-overlay backdrop-blur-[2px]"
+      onClick={handleScrim}
+    >
       <div
-        className="fixed inset-0"
-        onClick={handleOverlayClick}
-        aria-hidden="true"
-      />
-      <div
-        className={`bg-panel border border-line rounded-card ${MODAL_SIZES[size]} w-full max-h-[90vh] overflow-y-auto relative z-10 shadow-float`}
+        ref={panelRef}
         role="dialog"
         aria-modal="true"
-        aria-labelledby={title ? 'modal-title' : undefined}
+        aria-label={title}
+        className={`relative z-10 w-full ${SIZE[size]} max-h-[88vh] flex flex-col bg-panel border border-line rounded-[14px] shadow-[0_28px_70px_var(--shadow-lg)] overflow-hidden animate-modal-in motion-reduce:animate-none`}
       >
-        {(title || showCloseButton) && (
-          <div className="flex items-center justify-between px-6 py-4 border-b border-line">
-            {title && (
-              <h3 id="modal-title" className="text-[16px] font-semibold text-ink tracking-[-0.01em]">
-                {title}
-              </h3>
+        {hasHeader && (
+          <div className="flex items-start gap-3 px-5 py-4 border-b border-line-2 flex-shrink-0">
+            {icon && (
+              <span
+                className={`flex-shrink-0 w-[30px] h-[30px] rounded-lg flex items-center justify-center ${ICON_TILE[iconVariant]}`}
+              >
+                {icon}
+              </span>
             )}
+            <div className="flex-1 min-w-0">
+              {title && (
+                <h3 className="text-[15.5px] font-semibold text-ink tracking-[-0.01em] leading-tight">
+                  {title}
+                </h3>
+              )}
+              {subtitle && <p className="text-[12.5px] text-muted mt-0.5">{subtitle}</p>}
+            </div>
             {showCloseButton && (
               <button
                 onClick={onClose}
-                className="text-faint hover:text-ink-2 transition-colors ml-auto"
-                aria-label="Close modal"
+                aria-label="Close"
+                className="flex-shrink-0 w-[30px] h-[30px] rounded-lg flex items-center justify-center text-muted hover:bg-line-2 hover:text-ink transition-colors"
               >
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
+                <X size={15} />
               </button>
             )}
           </div>
         )}
-        <div className="p-6">
-          {children}
-        </div>
+
+        <div className="flex-1 min-h-0 overflow-y-auto px-5 py-[18px]">{children}</div>
+
+        {footer && (
+          <div className="flex items-center justify-end gap-2.5 px-5 py-[14px] border-t border-line-2 bg-panel-2 flex-shrink-0">
+            {footer}
+          </div>
+        )}
       </div>
     </div>
   )

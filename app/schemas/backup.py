@@ -45,6 +45,7 @@ class SubjectBackup(BaseModel):
     name: str
     description: Optional[str] = None
     color: str = "#3B82F6"
+    icon: Optional[str] = None
 
 
 class AssignmentTemplateBackup(BaseModel):
@@ -56,6 +57,7 @@ class AssignmentTemplateBackup(BaseModel):
     assignment_type: str
     subject_external_id: Optional[str] = None  # Preferred resolution key (format 2.0)
     subject_name: str  # Fallback resolution key (all versions)
+    icon: Optional[str] = None
     max_points: int = 100
     estimated_duration_minutes: Optional[int] = None
     prerequisites: Optional[str] = None

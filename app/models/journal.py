@@ -39,6 +39,7 @@ class JournalEntry(Base):
 
     # Rich fields
     mood = Column(String(20), nullable=True)
+    icon = Column(String(50), nullable=True)  # Optional lucide icon name
     tags = Column(JSON, nullable=True, default=list)
     win = Column(Text, nullable=True)
     goals = Column(JSON, nullable=True, default=list)

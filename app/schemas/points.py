@@ -71,10 +71,11 @@ class PointTransaction(PointTransactionBase):
     student_id: int
     admin_id: Optional[int] = None
     created_at: datetime
-    
+
     # Related data
     student_name: Optional[str] = None
     admin_name: Optional[str] = None
+    assignment_type_key: Optional[str] = None
 
     class Config:
         from_attributes = True

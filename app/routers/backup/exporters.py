@@ -74,7 +74,8 @@ def export_subjects(db: Session) -> List[SubjectBackup]:
             external_id=subject.external_id,
             name=subject.name,
             description=subject.description,
-            color=subject.color
+            color=subject.color,
+            icon=subject.icon,
         ))
     return subjects_data
 
@@ -115,6 +116,7 @@ def export_assignment_templates(db: Session) -> List[AssignmentTemplateBackup]:
             assignment_type=template.assignment_type,
             subject_external_id=template.subject.external_id if template.subject else None,
             subject_name=template.subject.name if template.subject else "Unknown",
+            icon=template.icon,
             max_points=template.max_points,
             estimated_duration_minutes=template.estimated_duration_minutes,
             prerequisites=template.prerequisites,

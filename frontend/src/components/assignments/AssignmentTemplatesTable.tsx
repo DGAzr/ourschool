@@ -18,6 +18,7 @@
 
 import React, { useState, useEffect, useRef } from 'react'
 import { MoreVertical, Edit, Trash2, Archive, Users, Download, CheckSquare, Square, Clock, BookOpen, Calendar } from 'lucide-react'
+import Icon from '../ui/Icon/Icon'
 import { AssignmentTemplate, Subject } from '../../types'
 import { useAssignmentTypes } from '../../contexts/AssignmentTypesContext'
 
@@ -99,6 +100,12 @@ const AssignmentTemplatesTable: React.FC<AssignmentTemplatesTableProps> = ({
           <tbody className="divide-y divide-line">
             {templates.map((template) => {
               const subject = getSubjectById(template.subject_id)
+              const resolvedIconName =
+                template.icon ??
+                getTypeIcon(template.assignment_type) ??
+                subject?.icon ??
+                undefined
+              const resolvedColor = subject?.color ?? 'var(--muted)'
               return (
                 <tr key={template.id} className="hover:bg-panel-2 transition-colors">
                   <td className="px-5 py-3.5">
@@ -114,7 +121,7 @@ const AssignmentTemplatesTable: React.FC<AssignmentTemplatesTableProps> = ({
 
                   <td className="px-5 py-3.5">
                     <div className="flex items-start gap-2">
-                      <span className="text-base mt-0.5">{getTypeIcon(template.assignment_type)}</span>
+                      <Icon name={resolvedIconName} size={16} color={resolvedColor} className="mt-0.5 flex-shrink-0" />
                       <div className="min-w-0">
                         <div className="text-[13px] font-medium text-ink">{template.name}</div>
                         {template.description && (

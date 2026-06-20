@@ -21,6 +21,7 @@ export interface Subject {
   name: string
   description?: string
   color: string
+  icon?: string
   created_at: string
 }
 
@@ -28,10 +29,12 @@ export interface SubjectCreate {
   name: string
   description?: string
   color?: string
+  icon?: string
 }
 
 export interface SubjectUpdate {
   name?: string
   description?: string
   color?: string
+  icon?: string
 }

@@ -138,6 +138,8 @@ class TermGradingService:
 
         students = students_query.all()
         results = {"grades_calculated": 0, "students_processed": 0}
+        from app.crud.settings import get_grade_scale
+        grade_scale = get_grade_scale(db)
 
         for student in students:
             results["students_processed"] += 1
@@ -186,7 +188,7 @@ class TermGradingService:
 
                 current_percentage = percentage if total_points_possible > 0 else None
                 letter_grade = (
-                    calculate_letter_grade(current_percentage)
+                    calculate_letter_grade(current_percentage, grade_scale)
                     if current_percentage is not None
                     else None
                 )
@@ -224,16 +226,18 @@ class TermGradingService:
         return results
 
     @staticmethod
-    def _calculate_letter_grade(percentage: Optional[float]) -> Optional[str]:
-        """Convert percentage to letter grade using standard scale."""
+    def _calculate_letter_grade(percentage: Optional[float], scale=None) -> Optional[str]:
+        """Convert percentage to letter grade using the configured scale."""
         if percentage is None:
             return None
         from app.utils.grading import calculate_letter_grade
-        return calculate_letter_grade(percentage)
+        return calculate_letter_grade(percentage, scale)
 
     @staticmethod
     def get_term_grade_report(db: Session, term_id: int) -> Dict:
         """Generate a comprehensive grade report for a term."""
+        from app.crud.settings import get_grade_scale
+        grade_scale = get_grade_scale(db)
         term = db.query(Term).filter(Term.id == term_id).first()
         if not term:
             return {"error": "Term not found"}
@@ -287,7 +291,7 @@ class TermGradingService:
                 ) * 100
                 student_data["overall_letter_grade"] = (
                     TermGradingService._calculate_letter_grade(
-                        student_data["overall_percentage"]
+                        student_data["overall_percentage"], grade_scale
                     )
                 )
 
@@ -301,6 +305,8 @@ class TermGradingService:
     @staticmethod
     def get_student_term_report(db: Session, term_id: int, student_id: int) -> Dict:
         """Generate a detailed report for a specific student in a term."""
+        from app.crud.settings import get_grade_scale
+        grade_scale = get_grade_scale(db)
         term = db.query(Term).filter(Term.id == term_id).first()
         student = db.query(User).filter(User.id == student_id).first()
 
@@ -359,7 +365,7 @@ class TermGradingService:
         if total_points_possible > 0:
             overall_percentage = (total_points_earned / total_points_possible) * 100
             overall_letter_grade = TermGradingService._calculate_letter_grade(
-                overall_percentage
+                overall_percentage, grade_scale
             )
 
         return {

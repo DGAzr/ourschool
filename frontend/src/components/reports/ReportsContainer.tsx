@@ -17,7 +17,7 @@
  */
 
 import { useAuth } from '../../contexts/AuthContext'
-import { useReportsData } from './hooks/useReportsData'
+import { useReportsData, ReportView } from './hooks/useReportsData'
 import ReportsNavigation from './shared/ReportsNavigation'
 import OverviewReport from './overview/OverviewReport'
 import TermReport from './terms/TermReport'
@@ -25,11 +25,22 @@ import AttendanceReport from './attendance/AttendanceReport'
 import AssignmentReport from './assignments/AssignmentReport'
 import StudentsReport from './students/StudentsReport'
 import ReportCard from './reportcard/ReportCard'
+import { AdminReport, StudentReport } from '../../types'
+
+const VIEW_TITLES: Record<ReportView, string> = {
+  overview: 'Overview',
+  students: 'Student Progress',
+  attendance: 'Attendance',
+  assignments: 'Assignments',
+  terms: 'Terms',
+  subjects: 'Subjects',
+  reportcard: 'Report Cards',
+}
 
 const ReportsContainer: React.FC = () => {
   const { user } = useAuth()
   const isAdmin = user?.role === 'admin'
-  
+
   const {
     loading,
     error,
@@ -64,8 +75,17 @@ const ReportsContainer: React.FC = () => {
     generateReportCard,
     terms,
     selectedTermId,
-    setSelectedTermId
+    setSelectedTermId,
   } = useReportsData()
+
+  const handleExport = () => {
+    if (selectedView === 'reportcard') {
+      window.print()
+    } else if (selectedView === 'attendance') {
+      // Trigger the download from the Attendance view via a custom event
+      document.dispatchEvent(new CustomEvent('reports:export'))
+    }
+  }
 
   if (error) {
     return (
@@ -77,6 +97,79 @@ const ReportsContainer: React.FC = () => {
 
   return (
     <div>
+      {/* Header — matches prototype: eyebrow + title + term select + Export */}
+      <div className="no-print flex items-flex-end justify-between gap-5 mb-5">
+        <div>
+          <div
+            style={{
+              fontSize: 12,
+              fontWeight: 600,
+              letterSpacing: '.08em',
+              textTransform: 'uppercase',
+              color: 'var(--faint)',
+              marginBottom: 6,
+            }}
+          >
+            Reports
+          </div>
+          <h1
+            style={{
+              margin: 0,
+              fontSize: 27,
+              fontWeight: 700,
+              letterSpacing: '-.02em',
+              color: 'var(--ink)',
+            }}
+          >
+            {VIEW_TITLES[selectedView]}
+          </h1>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          {/* Term filter — shown on all views except attendance/reportcard which have their own controls */}
+          {selectedView !== 'attendance' && selectedView !== 'reportcard' && terms.length > 0 && (
+            <select
+              value={selectedTermId ?? ''}
+              onChange={(e) => setSelectedTermId(e.target.value ? Number(e.target.value) : null)}
+              style={{
+                height: 36,
+                padding: '0 30px 0 12px',
+                border: '1px solid var(--field-border)',
+                background: 'var(--field-bg)',
+                borderRadius: 9,
+                fontSize: 13,
+                fontFamily: 'inherit',
+                color: 'var(--ink-2)',
+                cursor: 'pointer',
+                outline: 'none',
+              }}
+            >
+              <option value="">Current term</option>
+              {terms.map((t) => (
+                <option key={t.id} value={t.id}>
+                  {t.name} ({t.academic_year})
+                </option>
+              ))}
+            </select>
+          )}
+          <button
+            onClick={handleExport}
+            style={{
+              height: 36,
+              padding: '0 14px',
+              border: '1px solid var(--btn-border)',
+              background: 'var(--panel)',
+              borderRadius: 9,
+              fontSize: 13,
+              fontWeight: 600,
+              color: 'var(--ink-2)',
+              cursor: 'pointer',
+            }}
+          >
+            Export
+          </button>
+        </div>
+      </div>
+
       <ReportsNavigation
         selectedView={selectedView}
         onViewChange={setSelectedView}
@@ -94,17 +187,15 @@ const ReportsContainer: React.FC = () => {
         <>
           {selectedView === 'overview' && (
             <OverviewReport
-              data={overviewData}
+              data={overviewData as AdminReport | StudentReport | null}
               isAdmin={isAdmin}
               loading={loading}
+              onSelectStudent={(_id) => { setSelectedView('students') }}
             />
           )}
 
           {selectedView === 'terms' && !isAdmin && (
-            <TermReport
-              termGrades={termGrades}
-              loading={loading}
-            />
+            <TermReport termGrades={termGrades} loading={loading} />
           )}
 
           {selectedView === 'attendance' && (

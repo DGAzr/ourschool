@@ -29,6 +29,7 @@ export interface AssignmentTypeConfig {
   key: string
   name: string
   color: string
+  icon?: string
   weight: number
   is_active: boolean
   display_order: number
@@ -40,6 +41,7 @@ export interface AssignmentTypeConfig {
 export interface AssignmentTypeCreate {
   name: string
   color?: string
+  icon?: string
   weight?: number
   is_active?: boolean
   display_order?: number
@@ -49,6 +51,7 @@ export interface AssignmentTypeCreate {
 export interface AssignmentTypeUpdate {
   name?: string
   color?: string
+  icon?: string
   weight?: number
   is_active?: boolean
   display_order?: number
@@ -61,6 +64,7 @@ export interface AssignmentTemplate {
   instructions?: string
   assignment_type: string
   subject_id: number
+  icon?: string
   max_points: number
   estimated_duration_minutes?: number
   prerequisites?: string
@@ -109,6 +113,7 @@ export interface AssignmentTemplateCreate {
   instructions?: string
   assignment_type: string
   subject_id: number
+  icon?: string | null
   max_points: number
   estimated_duration_minutes?: number
   prerequisites?: string
@@ -122,6 +127,7 @@ export interface AssignmentTemplateUpdate {
   instructions?: string
   assignment_type?: string
   subject_id?: number
+  icon?: string | null
   max_points?: number
   estimated_duration_minutes?: number
   prerequisites?: string

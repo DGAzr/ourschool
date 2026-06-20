@@ -20,6 +20,8 @@ import React, { useState } from 'react'
 import { assignmentsApi } from '../../services/assignments'
 import { StudentAssignment, User as UserType } from '../../types'
 import { formatDateOnly } from '../../utils/formatters'
+import Modal from '../ui/Modal'
+import Button from '../ui/Button'
 
 interface EditAssignmentModalProps {
   assignment: StudentAssignment
@@ -28,15 +30,14 @@ interface EditAssignmentModalProps {
   onSuccess: () => void
 }
 
-const EditAssignmentModal: React.FC<EditAssignmentModalProps> = ({ 
-  assignment, 
-  student, 
-  onClose, 
-  onSuccess 
+const EditAssignmentModal: React.FC<EditAssignmentModalProps> = ({
+  assignment,
+  student,
+  onClose,
+  onSuccess
 }) => {
   const formatDateForInput = (dateString: string) => {
     if (!dateString) return ''
-    // Handle both 'YYYY-MM-DD' and 'YYYY-MM-DDTHH:mm:ss' formats
     return dateString.split('T')[0]
   }
 
@@ -51,7 +52,7 @@ const EditAssignmentModal: React.FC<EditAssignmentModalProps> = ({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    
+
     if (customMaxPoints !== undefined && customMaxPoints <= 0) {
       setError('Custom max points must be greater than 0')
       return
@@ -60,7 +61,7 @@ const EditAssignmentModal: React.FC<EditAssignmentModalProps> = ({
     try {
       setLoading(true)
       setError(null)
-      
+
       await assignmentsApi.updateStudentAssignment(assignment.id, {
         due_date: dueDate || undefined,
         extended_due_date: extendedDueDate || undefined,
@@ -69,7 +70,7 @@ const EditAssignmentModal: React.FC<EditAssignmentModalProps> = ({
         custom_max_points: customMaxPoints || undefined,
         student_notes: studentNotes || undefined
       })
-      
+
       onSuccess()
     } catch (err: any) {
       setError(err.message || 'Failed to update assignment')
@@ -78,99 +79,98 @@ const EditAssignmentModal: React.FC<EditAssignmentModalProps> = ({
     }
   }
 
-
-
   const FIELD = 'bg-field-bg border border-field-border rounded-field px-3 py-2 text-[13px] text-ink focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent w-full'
   const LABEL = 'block text-[11px] font-semibold text-muted uppercase tracking-wide mb-1.5'
 
   return (
-    <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
-      <div className="bg-panel border border-line rounded-card-lg shadow-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto">
-        <form onSubmit={handleSubmit}>
-          <div className="px-6 py-4 border-b border-line">
-            <h3 className="text-[15px] font-semibold text-ink">Edit Assignment</h3>
-            <p className="text-[13px] text-muted mt-0.5">{assignment.template?.name} — {student?.first_name} {student?.last_name}</p>
-          </div>
+    <Modal
+      isOpen={true}
+      onClose={onClose}
+      title="Edit Assignment"
+      subtitle={`${assignment.template?.name} — ${student?.first_name} ${student?.last_name}`}
+      size="md"
+      footer={
+        <>
+          <Button variant="secondary" onClick={onClose} disabled={loading}>Cancel</Button>
+          <Button
+            variant="primary"
+            loading={loading}
+            onClick={() => {
+              const form = document.getElementById('edit-assignment-form') as HTMLFormElement
+              form?.requestSubmit()
+            }}
+          >
+            Save Changes
+          </Button>
+        </>
+      }
+    >
+      <form id="edit-assignment-form" onSubmit={handleSubmit} className="space-y-5">
+        {error && (
+          <div className="bg-danger-soft border border-danger-line text-danger rounded-field px-4 py-3 text-[13px]">{error}</div>
+        )}
 
-          <div className="px-6 py-5 space-y-5">
-            {error && (
-              <div className="bg-neg-bg border border-neg-fg/20 text-neg-fg px-4 py-3 rounded-field text-[13px]">{error}</div>
+        <div className="bg-panel-2 border border-line rounded-[11px] p-4">
+          <p className="text-[11px] font-semibold text-muted uppercase tracking-wide mb-2">Current Status</p>
+          <div className="grid grid-cols-2 gap-3 text-[13px]">
+            <div><span className="text-muted">Status:</span><span className="ml-2 text-ink capitalize">{assignment.status.replace('_', ' ')}</span></div>
+            <div><span className="text-muted">Assigned:</span><span className="ml-2 text-ink">{formatDateOnly(assignment.assigned_date, { month: 'short', day: 'numeric', year: 'numeric' })}</span></div>
+            {assignment.is_graded && (
+              <>
+                <div><span className="text-muted">Points:</span><span className="ml-2 text-ink">{assignment.points_earned || 0} / {assignment.custom_max_points || assignment.template?.max_points || 0}</span></div>
+                <div><span className="text-muted">Grade:</span><span className="ml-2 text-ink">{assignment.letter_grade || 'N/A'}</span></div>
+              </>
             )}
-
-            <div className="bg-panel-2 border border-line rounded-field p-4">
-              <p className="text-[11px] font-semibold text-muted uppercase tracking-wide mb-2">Current Status</p>
-              <div className="grid grid-cols-2 gap-3 text-[13px]">
-                <div><span className="text-muted">Status:</span><span className="ml-2 text-ink capitalize">{assignment.status.replace('_', ' ')}</span></div>
-                <div><span className="text-muted">Assigned:</span><span className="ml-2 text-ink">{formatDateOnly(assignment.assigned_date, { month: 'short', day: 'numeric', year: 'numeric' })}</span></div>
-                {assignment.is_graded && (
-                  <>
-                    <div><span className="text-muted">Points:</span><span className="ml-2 text-ink">{assignment.points_earned || 0} / {assignment.custom_max_points || assignment.template?.max_points || 0}</span></div>
-                    <div><span className="text-muted">Grade:</span><span className="ml-2 text-ink">{assignment.letter_grade || 'N/A'}</span></div>
-                  </>
-                )}
-              </div>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div>
-                <label className={LABEL}>Assign Date</label>
-                <input type="date" value={formatDateForInput(assignedDate)} onChange={(e) => setAssignedDate(e.target.value)} className={FIELD} />
-              </div>
-              <div>
-                <label className={LABEL}>Due Date</label>
-                <input type="date" value={formatDateForInput(dueDate)} onChange={(e) => setDueDate(e.target.value)} className={FIELD} />
-              </div>
-              <div>
-                <label className={LABEL}>Extended Due Date</label>
-                <input type="date" value={formatDateForInput(extendedDueDate)} onChange={(e) => setExtendedDueDate(e.target.value)} className={FIELD} />
-                <p className="text-[11px] text-faint mt-1">Optional extension for this student</p>
-              </div>
-            </div>
-
-            <div>
-              <label className={LABEL}>Custom Max Points</label>
-              <input type="number" min="1" max="1000" value={customMaxPoints || ''}
-                onChange={(e) => setCustomMaxPoints(e.target.value ? parseInt(e.target.value) : undefined)}
-                placeholder={`Default: ${assignment.template?.max_points || 'Not set'}`} className={FIELD} />
-              <p className="text-[11px] text-faint mt-1">Override the default max points for this specific assignment</p>
-            </div>
-
-            <div>
-              <label className={LABEL}>Custom Instructions</label>
-              <textarea value={customInstructions} onChange={(e) => setCustomInstructions(e.target.value)}
-                rows={3} className={FIELD} placeholder="Any specific instructions for this assignment..." />
-            </div>
-
-            <div>
-              <label className={LABEL}>Student Notes</label>
-              <textarea value={studentNotes} onChange={(e) => setStudentNotes(e.target.value)}
-                rows={3} className={FIELD} placeholder="Notes visible to the student about this assignment..." />
-            </div>
-
-            <div>
-              <p className="text-[11px] font-semibold text-muted uppercase tracking-wide mb-2">Template Information</p>
-              <div className="bg-panel-2 border border-line rounded-field p-3 text-[13px] text-muted space-y-1">
-                <p><strong className="text-ink">Template:</strong> {assignment.template?.name}</p>
-                {assignment.template?.description && <p><strong className="text-ink">Description:</strong> {assignment.template.description}</p>}
-                <p><strong className="text-ink">Type:</strong> {assignment.template?.assignment_type}</p>
-                <p><strong className="text-ink">Default Points:</strong> {assignment.template?.max_points}</p>
-              </div>
-            </div>
           </div>
+        </div>
 
-          <div className="px-6 py-4 border-t border-line flex justify-end gap-3">
-            <button type="button" onClick={onClose} disabled={loading}
-              className="px-4 py-2 text-[13px] font-medium text-ink border border-btn-border bg-panel rounded-field hover:bg-track disabled:opacity-50">
-              Cancel
-            </button>
-            <button type="submit" disabled={loading}
-              className="px-4 py-2 text-[13px] font-semibold bg-btn-primary-bg text-btn-primary-fg rounded-field hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed">
-              {loading ? 'Saving…' : 'Save Changes'}
-            </button>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <div>
+            <label className={LABEL}>Assign Date</label>
+            <input type="date" value={formatDateForInput(assignedDate)} onChange={(e) => setAssignedDate(e.target.value)} className={FIELD} />
           </div>
-        </form>
-      </div>
-    </div>
+          <div>
+            <label className={LABEL}>Due Date</label>
+            <input type="date" value={formatDateForInput(dueDate)} onChange={(e) => setDueDate(e.target.value)} className={FIELD} />
+          </div>
+          <div>
+            <label className={LABEL}>Extended Due Date</label>
+            <input type="date" value={formatDateForInput(extendedDueDate)} onChange={(e) => setExtendedDueDate(e.target.value)} className={FIELD} />
+            <p className="text-[11px] text-faint mt-1">Optional extension for this student</p>
+          </div>
+        </div>
+
+        <div>
+          <label className={LABEL}>Custom Max Points</label>
+          <input type="number" min="1" max="1000" value={customMaxPoints || ''}
+            onChange={(e) => setCustomMaxPoints(e.target.value ? parseInt(e.target.value) : undefined)}
+            placeholder={`Default: ${assignment.template?.max_points || 'Not set'}`} className={FIELD} />
+          <p className="text-[11px] text-faint mt-1">Override the default max points for this specific assignment</p>
+        </div>
+
+        <div>
+          <label className={LABEL}>Custom Instructions</label>
+          <textarea value={customInstructions} onChange={(e) => setCustomInstructions(e.target.value)}
+            rows={3} className={FIELD} placeholder="Any specific instructions for this assignment..." />
+        </div>
+
+        <div>
+          <label className={LABEL}>Student Notes</label>
+          <textarea value={studentNotes} onChange={(e) => setStudentNotes(e.target.value)}
+            rows={3} className={FIELD} placeholder="Notes visible to the student about this assignment..." />
+        </div>
+
+        <div>
+          <p className="text-[11px] font-semibold text-muted uppercase tracking-wide mb-2">Template Information</p>
+          <div className="bg-panel-2 border border-line rounded-field p-3 text-[13px] text-muted space-y-1">
+            <p><strong className="text-ink">Template:</strong> {assignment.template?.name}</p>
+            {assignment.template?.description && <p><strong className="text-ink">Description:</strong> {assignment.template.description}</p>}
+            <p><strong className="text-ink">Type:</strong> {assignment.template?.assignment_type}</p>
+            <p><strong className="text-ink">Default Points:</strong> {assignment.template?.max_points}</p>
+          </div>
+        </div>
+      </form>
+    </Modal>
   )
 }
 

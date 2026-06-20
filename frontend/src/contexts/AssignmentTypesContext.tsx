@@ -21,12 +21,8 @@ import { assignmentTypesApi } from '../services/assignmentTypes'
 import { type AssignmentTypeConfig } from '../types/assignment'
 import { useAuth } from './AuthContext'
 
-// Emoji garnish for the built-in type keys; custom types fall back to a generic
-// icon. Kept here so every consumer (cards, tables, list items) is consistent.
-const TYPE_EMOJI: Record<string, string> = {
-  homework: '📝', project: '🏗️', test: '📊', quiz: '❓', essay: '✍️',
-  presentation: '🎤', worksheet: '📄', reading: '📚', practice: '🎯',
-}
+/** Default icon name used when a type has no configured icon. */
+const DEFAULT_TYPE_ICON = 'clipboard-check'
 
 const prettifyKey = (key: string) =>
   key
@@ -40,7 +36,7 @@ interface AssignmentTypesContextValue {
   byKey: Record<string, AssignmentTypeConfig>
   /** Display name for a type key, falling back to a prettified key. */
   getTypeLabel: (key?: string | null) => string
-  /** Emoji icon for a type key. */
+  /** Lucide icon name for a type key (e.g. "book-open"). Falls back to a default. */
   getTypeIcon: (key?: string | null) => string
   /** Configured color for a type key, or undefined when unknown. */
   getTypeColor: (key?: string | null) => string | undefined
@@ -78,7 +74,7 @@ export const AssignmentTypesProvider: React.FC<{ children: ReactNode }> = ({ chi
     types,
     byKey,
     getTypeLabel: (key) => (key ? byKey[key]?.name ?? prettifyKey(key) : ''),
-    getTypeIcon: (key) => (key ? TYPE_EMOJI[key] ?? '📋' : '📋'),
+    getTypeIcon: (key) => (key ? (byKey[key]?.icon ?? DEFAULT_TYPE_ICON) : DEFAULT_TYPE_ICON),
     getTypeColor: (key) => (key ? byKey[key]?.color : undefined),
     refresh,
   }), [types, byKey, refresh])

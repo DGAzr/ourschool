@@ -38,6 +38,8 @@ class AssignmentTemplateBase(BaseModel):
     # against the table in the router/CRUD layer where a db session is available.
     assignment_type: str = Field(default=AssignmentType.HOMEWORK.value, max_length=50)
     subject_id: int
+    # Optional icon override (lucide icon name). Falls back to type icon then subject icon.
+    icon: Optional[str] = Field(default=None, max_length=50)
     max_points: int = Field(default=100, ge=1, le=1000)
     estimated_duration_minutes: Optional[int] = Field(None, ge=1)
     prerequisites: Optional[str] = None
@@ -57,6 +59,7 @@ class AssignmentTemplateUpdate(BaseModel):
     instructions: Optional[str] = None
     assignment_type: Optional[str] = Field(default=None, max_length=50)
     subject_id: Optional[int] = None
+    icon: Optional[str] = Field(default=None, max_length=50)
     max_points: Optional[int] = Field(None, ge=1, le=1000)
     estimated_duration_minutes: Optional[int] = Field(None, ge=1)
     prerequisites: Optional[str] = None
@@ -285,6 +288,7 @@ class AssignmentTemplateExport(BaseModel):
     instructions: Optional[str] = None
     assignment_type: str
     subject_name: str  # Export with subject name instead of ID
+    icon: Optional[str] = None
     max_points: int
     estimated_duration_minutes: Optional[int] = None
     prerequisites: Optional[str] = None

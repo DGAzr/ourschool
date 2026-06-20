@@ -96,7 +96,8 @@ def grade_assignment_via_api(
     # the rest of the app (avoids divergent grade boundaries).
     if not grade_data.letter_grade and percentage is not None:
         from app.crud.reports import calculate_letter_grade
-        assignment.letter_grade = calculate_letter_grade(percentage)
+        from app.crud.settings import get_grade_scale
+        assignment.letter_grade = calculate_letter_grade(percentage, get_grade_scale(db))
     else:
         assignment.letter_grade = grade_data.letter_grade
 

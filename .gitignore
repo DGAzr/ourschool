@@ -75,3 +75,6 @@ Thumbs.db
 .claude/
 
 OurSchool.sh
+
+# Local Docker overrides
+docker-compose.override.yml

@@ -40,6 +40,13 @@ export default {
         'accent-line':'var(--accent-line)',
         /* Functional */
         danger:       'var(--danger)',
+        'danger-soft':'var(--danger-soft)',
+        'danger-line':'var(--danger-line)',
+        warn:         'var(--warn)',
+        'warn-soft':  'var(--warn-soft)',
+        'warn-line':  'var(--warn-line)',
+        pos:          'var(--pos)',
+        'pos-soft':   'var(--pos-soft)',
         'nav-active': 'var(--nav-active)',
         /* Buttons */
         'btn-primary-bg':'var(--btn-primary-bg)',

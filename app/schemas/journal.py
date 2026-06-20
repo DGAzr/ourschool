@@ -39,6 +39,7 @@ class JournalEntryBase(BaseModel):
     content: str
     entry_date: Optional[datetime] = None
     mood: Optional[str] = None
+    icon: Optional[str] = None
     tags: Optional[List[str]] = None
     win: Optional[str] = None
     goals: Optional[List[Dict[str, Any]]] = None
@@ -57,6 +58,7 @@ class JournalEntryUpdate(BaseModel):
     content: Optional[str] = None
     entry_date: Optional[datetime] = None
     mood: Optional[str] = None
+    icon: Optional[str] = None
     tags: Optional[List[str]] = None
     win: Optional[str] = None
     goals: Optional[List[Dict[str, Any]]] = None

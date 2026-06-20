@@ -232,20 +232,20 @@ def get_student_points(db: Session, student_id: int) -> Optional[StudentPoints]:
 
 
 def get_student_points_ledger(
-    db: Session, 
-    student_id: int, 
-    page: int = 1, 
-    per_page: int = 20
+    db: Session,
+    student_id: int,
+    page: int = 1,
+    per_page: int = 20,
 ) -> Tuple[StudentPoints, List[PointTransaction], int]:
     """Get student points and paginated transaction history."""
+    from app.models.assignment import StudentAssignment, AssignmentTemplate
+
     student_points = get_or_create_student_points(db, student_id)
-    
-    # Get total count for pagination
+
     total_transactions = db.query(PointTransaction).filter(
         PointTransaction.student_id == student_id
     ).count()
-    
-    # Get paginated transactions
+
     transactions = db.query(PointTransaction).options(
         joinedload(PointTransaction.admin)
     ).filter(
@@ -253,9 +253,27 @@ def get_student_points_ledger(
     ).order_by(desc(PointTransaction.created_at)).offset(
         (page - 1) * per_page
     ).limit(per_page).all()
-    
+
+    # Attach assignment_type_key for assignment transactions so the frontend
+    # can render the correct icon without an extra round-trip.
+    assignment_ids = [
+        t.source_id for t in transactions
+        if t.transaction_type == "assignment" and t.source_id is not None
+    ]
+    if assignment_ids:
+        rows = (
+            db.query(StudentAssignment.id, AssignmentTemplate.assignment_type)
+            .join(AssignmentTemplate, StudentAssignment.template_id == AssignmentTemplate.id)
+            .filter(StudentAssignment.id.in_(assignment_ids))
+            .all()
+        )
+        type_by_assignment = {row[0]: row[1] for row in rows}
+        for t in transactions:
+            if t.transaction_type == "assignment" and t.source_id in type_by_assignment:
+                t.assignment_type_key = type_by_assignment[t.source_id]
+
     total_pages = (total_transactions + per_page - 1) // per_page
-    
+
     return student_points, transactions, total_pages
 
 

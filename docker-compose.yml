@@ -95,8 +95,9 @@ services:
       backend:
         condition: service_healthy
     environment:
-      # Used by vite preview proxy to reach the backend service internally
-      VITE_API_BASE_URL: http://backend:8000
+      # Server-side only — used by vite.config.ts proxy target, never inlined into the browser bundle.
+      # Must NOT have the VITE_ prefix or Vite will expose it to the client as import.meta.env.
+      PROXY_TARGET: http://backend:8000
     healthcheck:
       test: ["CMD", "node", "-e", "require('http').get('http://localhost:4173', r => process.exit(r.statusCode === 200 ? 0 : 1)).on('error', () => process.exit(1))"]
       interval: 30s

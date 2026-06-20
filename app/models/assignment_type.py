@@ -43,6 +43,7 @@ class AssignmentTypeConfig(Base):
     key = Column(String(50), unique=True, nullable=False, index=True)
     name = Column(String(100), nullable=False)
     color = Column(String(20), nullable=False, default="#3B82F6")
+    icon = Column(String(50), nullable=True)
     # Grade-book category weight as a percentage (0-100). When every type that
     # has graded work carries a 0 weight, grading falls back to plain
     # points-weighting (see app.utils.grading.compute_weighted_grade).

@@ -27,6 +27,7 @@ class SubjectBase(BaseModel):
     name: str
     description: Optional[str] = None
     color: str = "#3B82F6"
+    icon: Optional[str] = None
 
 
 class SubjectCreate(SubjectBase):
@@ -39,6 +40,7 @@ class SubjectUpdate(BaseModel):
     name: Optional[str] = None
     description: Optional[str] = None
     color: Optional[str] = None
+    icon: Optional[str] = None
 
 
 class Subject(SubjectBase):

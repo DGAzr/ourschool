@@ -19,9 +19,8 @@
 import React, { useState } from 'react'
 import { StudentProgress } from '../../../types'
 import { Term } from '../../../types/term'
-import { formatAttendanceRate } from '../../../utils/formatters'
-import ReportHeader from '../shared/ReportHeader'
-import { StatTile, Select } from '../../ui'
+import TrendChart from '../shared/TrendChart'
+import { trendInfo, gradeColor, barColor, letter } from '../shared/gradeColors'
 
 interface StudentsReportProps {
   studentProgress: StudentProgress[]
@@ -31,19 +30,17 @@ interface StudentsReportProps {
   onTermChange?: (termId: number) => void
 }
 
-const gradeColor = (p: number) =>
-  p >= 90 ? 'text-pos-fg' : p >= 80 ? 'text-info-fg' : p >= 70 ? 'text-sub-fg' : 'text-neg-fg'
-const gradeBg = (p: number) =>
-  p >= 90 ? 'bg-pos-bg text-pos-fg' : p >= 80 ? 'bg-info-bg text-info-fg' : p >= 70 ? 'bg-sub-bg text-sub-fg' : 'bg-neg-bg text-neg-fg'
-
-const StudentsReport: React.FC<StudentsReportProps> = ({ studentProgress, terms, loading, selectedTermId, onTermChange }) => {
+const StudentsReport: React.FC<StudentsReportProps> = ({
+  studentProgress,
+  loading,
+}) => {
   const [selectedStudentId, setSelectedStudentId] = useState<number | null>(
-    studentProgress.length > 0 ? studentProgress[0].student_id : null
+    studentProgress.length > 0 ? studentProgress[0].student_id : null,
   )
 
-  const selectedStudent = selectedStudentId
-    ? studentProgress.find(s => s.student_id === selectedStudentId)
-    : null
+  const sel = selectedStudentId
+    ? studentProgress.find((s) => s.student_id === selectedStudentId)
+    : studentProgress[0] ?? null
 
   if (loading) {
     return (
@@ -58,165 +55,313 @@ const StudentsReport: React.FC<StudentsReportProps> = ({ studentProgress, terms,
 
   if (studentProgress.length === 0) {
     return (
-      <>
-        <ReportHeader title="Student Progress" subtitle="Detailed per-student academic performance and subject breakdown." />
-        <div className="py-16 text-center bg-panel border border-line rounded-card">
-          <p className="text-[15px] font-semibold text-ink-2 mb-1">No student data yet</p>
-          <p className="text-[13px] text-muted">Progress reports will appear once students are enrolled and assignments are completed.</p>
-        </div>
-      </>
+      <div className="py-16 text-center bg-panel border border-line rounded-card">
+        <p className="text-[15px] font-semibold text-ink-2 mb-1">No student data yet</p>
+        <p className="text-[13px] text-muted">
+          Progress reports will appear once students are enrolled and assignments are completed.
+        </p>
+      </div>
     )
   }
 
-  const studentOptions = studentProgress.map(s => ({
-    value: String(s.student_id),
-    label: s.first_name && s.last_name ? `${s.first_name} ${s.last_name}` : s.student_name,
-  }))
-  const termOptions = [
-    { value: '', label: 'Current term' },
-    ...terms.map(t => ({ value: String(t.id), label: `${t.name} (${t.academic_year})` })),
-  ]
+  const displayName = (s: StudentProgress) =>
+    s.first_name && s.last_name ? `${s.first_name} ${s.last_name}` : s.student_name
+  const initials = (name: string) =>
+    name
+      .split(' ')
+      .map((n) => n[0])
+      .slice(0, 2)
+      .join('')
 
-  const grade = selectedStudent ? (selectedStudent.overall_grade || selectedStudent.average_grade || 0) : 0
-  const overallLetter = selectedStudent?.overall_letter_grade ?? ''
-  const subjects = selectedStudent ? (selectedStudent.subject_grades || selectedStudent.subjects || []) : []
-  const displayName = selectedStudent
-    ? (selectedStudent.first_name && selectedStudent.last_name
-        ? `${selectedStudent.first_name} ${selectedStudent.last_name}`
-        : selectedStudent.student_name)
-    : ''
-  const initials = displayName.split(' ').map((n: string) => n[0]).slice(0, 2).join('')
+  const grade = sel
+    ? Math.round(sel.overall_grade ?? sel.average_grade ?? 0)
+    : 0
+  const subjects = sel ? (sel.subject_grades ?? sel.subjects ?? []) : []
+  const ti = trendInfo(sel?.trend ?? 0)
 
   return (
-    <div className="space-y-5">
-      <ReportHeader title="Student Progress" subtitle="Detailed per-student academic performance and subject breakdown." />
-
-      {/* Selectors */}
-      <div className="bg-panel border border-line rounded-card p-5">
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <Select
-            label="Student"
-            value={String(selectedStudentId || '')}
-            onChange={e => setSelectedStudentId(Number(e.target.value) || null)}
-            options={studentOptions}
-          />
-          <Select
-            label="Academic Term"
-            value={String(selectedTermId || '')}
-            onChange={e => onTermChange?.(Number(e.target.value))}
-            options={termOptions}
-          />
-        </div>
+    <div style={{ display: 'flex', gap: 18, alignItems: 'flex-start' }}>
+      {/* Roster picker */}
+      <div style={{ flexShrink: 0, width: 212, display: 'flex', flexDirection: 'column', gap: 7 }}>
+        {studentProgress.map((p) => {
+          const isSelected = p.student_id === (sel?.student_id ?? -1)
+          const name = displayName(p)
+          const ptGrade = Math.round(p.overall_grade ?? p.average_grade ?? 0)
+          const pTi = trendInfo(p.trend ?? 0)
+          return (
+            <button
+              key={p.student_id}
+              onClick={() => setSelectedStudentId(p.student_id)}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                gap: 8,
+                width: '100%',
+                textAlign: 'left',
+                border: `1px solid ${isSelected ? 'var(--accent)' : 'var(--line)'}`,
+                background: isSelected ? 'var(--accent-soft)' : 'var(--panel)',
+                borderRadius: 11,
+                padding: '10px 12px',
+                cursor: 'pointer',
+                fontFamily: 'inherit',
+                color: 'var(--ink)',
+              }}
+            >
+              <span style={{ display: 'flex', alignItems: 'center', gap: 9, minWidth: 0 }}>
+                <span
+                  style={{
+                    width: 28,
+                    height: 28,
+                    borderRadius: '9999px',
+                    flexShrink: 0,
+                    background: 'var(--track)',
+                    color: 'var(--muted)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    fontSize: 11,
+                    fontWeight: 600,
+                  }}
+                >
+                  {initials(name)}
+                </span>
+                <span
+                  style={{
+                    fontWeight: 600,
+                    fontSize: 13.5,
+                    whiteSpace: 'nowrap',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    color: 'var(--ink)',
+                  }}
+                >
+                  {name}
+                </span>
+              </span>
+              <span style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
+                <span
+                  style={{
+                    fontFamily: "'JetBrains Mono', monospace",
+                    fontSize: 12,
+                    color: 'var(--ink-2)',
+                  }}
+                >
+                  {ptGrade}%
+                </span>
+                <span style={{ color: pTi.color, fontSize: 12 }}>{pTi.arrow}</span>
+              </span>
+            </button>
+          )
+        })}
       </div>
 
-      {selectedStudent ? (
-        <>
+      {/* Detail panel */}
+      {sel ? (
+        <div style={{ flex: 1, minWidth: 0 }}>
           {/* Student header */}
-          <div className="bg-panel border border-line rounded-card p-5">
-            <div className="flex items-center gap-4 mb-5">
-              <div className="w-12 h-12 rounded-full bg-accent-soft border border-accent-line flex items-center justify-center flex-none">
-                <span className="text-[13px] font-bold text-accent">{initials}</span>
-              </div>
-              <div>
-                <h2 className="text-[18px] font-bold text-ink tracking-[-0.01em]">{displayName}</h2>
-                <p className="text-[13px] text-muted">
-                  {selectedStudent.grade_level ? `Grade ${selectedStudent.grade_level}` : 'Grade not set'}
-                  {selectedStudent.email ? ` · ${selectedStudent.email}` : ''}
-                </p>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 18 }}>
+            <span
+              style={{
+                width: 48,
+                height: 48,
+                borderRadius: '9999px',
+                background: 'var(--track)',
+                color: 'var(--muted)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                fontWeight: 600,
+                fontSize: 16,
+                flexShrink: 0,
+              }}
+            >
+              {initials(displayName(sel))}
+            </span>
+            <div>
+              <h2
+                style={{
+                  margin: 0,
+                  fontSize: 21,
+                  fontWeight: 700,
+                  letterSpacing: '-.01em',
+                  color: 'var(--ink)',
+                }}
+              >
+                {displayName(sel)}
+              </h2>
+              <div style={{ fontSize: 13, color: 'var(--muted)', marginTop: 2 }}>
+                {sel.grade_level ? `Grade ${sel.grade_level}` : 'Grade not set'}
+                {sel.email ? ` · ${sel.email}` : ''}
               </div>
             </div>
-
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-              <StatTile label="Overall Grade" value={`${grade.toFixed(1)}%`} sub={overallLetter} accent={grade >= 80} />
-              <StatTile label="Assignments" value={`${selectedStudent.completed_assignments} / ${selectedStudent.total_assignments}`} sub="completed" />
-              <StatTile label="Completion" value={`${(selectedStudent.completion_rate || (selectedStudent.total_assignments ? selectedStudent.completed_assignments / selectedStudent.total_assignments * 100 : 0)).toFixed(1)}%`} />
-              <StatTile label="Attendance" value={formatAttendanceRate(selectedStudent.attendance_rate)} />
+            <div style={{ marginLeft: 'auto', textAlign: 'right' }}>
+              <div
+                style={{
+                  fontFamily: "'JetBrains Mono', monospace",
+                  fontSize: 30,
+                  fontWeight: 600,
+                  color: gradeColor(grade),
+                  lineHeight: 1,
+                }}
+              >
+                {grade}%
+              </div>
+              <div style={{ fontSize: 12, color: ti.color, fontWeight: 600, marginTop: 3 }}>
+                {ti.arrow} {ti.text === 'steady' ? 'steady' : `${ti.text} pts`}
+              </div>
             </div>
-
-            {selectedStudent.last_activity_date && (
-              <p className="mt-4 text-[12.5px] text-faint border-t border-line-2 pt-3">
-                Last activity: {new Date(selectedStudent.last_activity_date).toLocaleDateString()}
-              </p>
-            )}
           </div>
 
-          {/* Subject breakdown */}
-          {subjects.length > 0 && (
-            <div className="overflow-x-auto rounded-card border border-line">
-              <table className="min-w-full divide-y divide-line">
-                <thead className="bg-panel-2">
-                  <tr>
-                    {['Subject', 'Assignments', 'Points', 'Grade', 'Trend'].map(h => (
-                      <th key={h} className="px-5 py-3 text-left text-[11px] font-semibold text-faint uppercase tracking-[.06em]">{h}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody className="bg-panel divide-y divide-line">
-                  {subjects.map((subject: any) => {
-                    const completion = subject.total_assignments > 0
-                      ? (subject.completed_assignments / subject.total_assignments * 100) : 0
-                    const trendDir = subject.trend_data && subject.trend_data.length >= 2
-                      ? subject.trend_data[subject.trend_data.length - 1].average_grade - subject.trend_data[0].average_grade
-                      : 0
-                    return (
-                      <tr key={subject.subject_id} className="hover:bg-panel-2 transition-colors">
-                        <td className="px-5 py-3.5 whitespace-nowrap">
-                          <div className="flex items-center gap-2.5">
-                            <span className="w-2.5 h-2.5 rounded-full flex-none" style={{ background: subject.subject_color || 'var(--accent)' }} />
-                            <div>
-                              <p className="text-[13.5px] font-semibold text-ink">{subject.subject_name}</p>
-                              <p className="text-[11.5px] text-faint">{completion.toFixed(0)}% complete</p>
-                            </div>
-                          </div>
-                        </td>
-                        <td className="px-5 py-3.5 whitespace-nowrap text-[13.5px] font-mono text-ink-2">
-                          {subject.completed_assignments} / {subject.total_assignments}
-                        </td>
-                        <td className="px-5 py-3.5 whitespace-nowrap text-[13.5px] font-mono text-ink-2">
-                          {subject.points_earned != null && subject.points_possible != null
-                            ? `${Math.round(subject.points_earned)} / ${Math.round(subject.points_possible)}`
-                            : `${subject.average_percentage.toFixed(1)}%`}
-                        </td>
-                        <td className="px-5 py-3.5 whitespace-nowrap">
-                          <div className="flex items-center gap-2">
-                            <span className={`font-mono font-bold text-[15px] ${gradeColor(subject.average_percentage)}`}>
-                              {subject.average_percentage.toFixed(1)}%
-                            </span>
-                            <span className={`text-[11px] font-bold px-1.5 py-0.5 rounded-pill ${gradeBg(subject.average_percentage)}`}>
-                              {subject.letter_grade}
-                            </span>
-                          </div>
-                        </td>
-                        <td className="px-5 py-3.5 whitespace-nowrap">
-                          <div className="flex items-end gap-0.5 h-7">
-                            {subject.trend_data && subject.trend_data.length > 0 ? (
-                              subject.trend_data.map((pt: any, i: number) => (
-                                <div key={i} className="w-2 rounded-sm" style={{
-                                  height: `${Math.max(8, (pt.average_grade / 100) * 28)}px`,
-                                  background: trendDir > 5 ? 'var(--pos-fg)' : trendDir < -5 ? 'var(--neg-fg)' : 'var(--accent)',
-                                  opacity: 0.7,
-                                }} />
-                              ))
-                            ) : (
-                              <div className="w-2 rounded-sm" style={{
-                                height: `${Math.max(8, (subject.average_percentage / 100) * 28)}px`,
-                                background: 'var(--accent)', opacity: 0.7,
-                              }} />
-                            )}
-                          </div>
-                        </td>
-                      </tr>
-                    )
-                  })}
-                </tbody>
-              </table>
+          {/* Stat tiles */}
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 12, marginBottom: 16 }}>
+            {[
+              { value: `${Math.round(sel.completion_rate ?? 0)}%`, label: 'Completion', color: 'var(--ink)' },
+              {
+                value: sel.attendance_rate != null ? `${Math.round(sel.attendance_rate)}%` : '—',
+                label: 'Attendance',
+                color: 'var(--ink)',
+              },
+              { value: letter(grade), label: 'Letter grade', color: gradeColor(grade) },
+              {
+                value: (sel.trend ?? 0) > 0 ? `+${sel.trend}` : String(sel.trend ?? 0),
+                label: 'Trend (pts)',
+                color: ti.color,
+              },
+            ].map((t, i) => (
+              <div
+                key={i}
+                className="bg-panel border border-line rounded-card"
+                style={{ padding: '13px 15px' }}
+              >
+                <div
+                  style={{
+                    fontFamily: "'JetBrains Mono', monospace",
+                    fontSize: 19,
+                    fontWeight: 600,
+                    color: t.color,
+                  }}
+                >
+                  {t.value}
+                </div>
+                <div style={{ fontSize: 11.5, color: 'var(--muted)', marginTop: 4 }}>{t.label}</div>
+              </div>
+            ))}
+          </div>
+
+          {/* Trend chart + subject bars */}
+          <div style={{ display: 'grid', gridTemplateColumns: '1.4fr 1fr', gap: 16, marginBottom: 16 }}>
+            <div className="bg-panel border border-line rounded-card" style={{ padding: '18px 20px' }}>
+              <h3 style={{ margin: '0 0 4px', fontSize: 15, fontWeight: 600, color: 'var(--ink)' }}>
+                Grade trend
+              </h3>
+              <TrendChart series={sel.grade_series ?? []} height={150} />
             </div>
-          )}
-        </>
+
+            <div className="bg-panel border border-line rounded-card" style={{ padding: '18px 20px' }}>
+              <h3 style={{ margin: '0 0 14px', fontSize: 15, fontWeight: 600, color: 'var(--ink)' }}>
+                By subject
+              </h3>
+              {subjects.map((b) => (
+                <div key={b.subject_id} style={{ marginBottom: 10 }}>
+                  <div
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      fontSize: 12,
+                      marginBottom: 4,
+                    }}
+                  >
+                    <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <span
+                        style={{
+                          width: 7,
+                          height: 7,
+                          borderRadius: '9999px',
+                          background: b.subject_color || 'var(--accent)',
+                          display: 'inline-block',
+                        }}
+                      />
+                      <span style={{ color: 'var(--ink-2)', whiteSpace: 'nowrap' }}>
+                        {b.subject_name}
+                      </span>
+                    </span>
+                    <span
+                      style={{
+                        fontFamily: "'JetBrains Mono', monospace",
+                        color: 'var(--ink)',
+                        fontWeight: 600,
+                      }}
+                    >
+                      {Math.round(b.average_percentage)}%
+                    </span>
+                  </div>
+                  <div
+                    style={{
+                      height: 6,
+                      borderRadius: '9999px',
+                      background: 'var(--track)',
+                      overflow: 'hidden',
+                    }}
+                  >
+                    <div
+                      style={{
+                        height: '100%',
+                        borderRadius: '9999px',
+                        width: `${b.average_percentage}%`,
+                        background: barColor(b.average_percentage),
+                      }}
+                    />
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Effort signals */}
+          <div
+            style={{
+              background: 'var(--accent-soft)',
+              border: '1px solid var(--accent-line)',
+              borderRadius: 12,
+              padding: '13px 17px',
+              marginBottom: 16,
+              display: 'flex',
+              gap: 24,
+              flexWrap: 'wrap',
+            }}
+          >
+            <div>
+              <span
+                style={{
+                  fontSize: 11,
+                  textTransform: 'uppercase',
+                  letterSpacing: '.05em',
+                  color: 'var(--accent)',
+                  fontWeight: 700,
+                }}
+              >
+                Effort signals
+              </span>
+            </div>
+            <div style={{ fontSize: 13, color: 'var(--ink-2)' }}>
+              📓 {sel.journal_summary || 'No journal entries yet'}
+            </div>
+            <div style={{ fontSize: 13, color: 'var(--ink-2)' }}>
+              🗓{' '}
+              {sel.attendance_rate != null
+                ? `${Math.round(sel.attendance_rate)}% attendance this term`
+                : 'No attendance data'}
+            </div>
+          </div>
+        </div>
       ) : (
-        <div className="py-16 text-center bg-panel border border-line rounded-card">
+        <div className="flex-1 py-16 text-center bg-panel border border-line rounded-card">
           <p className="text-[15px] font-semibold text-ink-2 mb-1">Select a student</p>
-          <p className="text-[13px] text-muted">Choose a student above to view their detailed progress.</p>
+          <p className="text-[13px] text-muted">
+            Choose a student from the list to view their progress.
+          </p>
         </div>
       )}
     </div>

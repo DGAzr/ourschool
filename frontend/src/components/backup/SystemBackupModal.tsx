@@ -16,8 +16,10 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-import { useState, useEffect } from 'react'
-import { X, Download, AlertTriangle, CheckCircle, Database } from 'lucide-react'
+import { useState } from 'react'
+import { Download, AlertTriangle, CheckCircle, Database } from 'lucide-react'
+import Modal from '../ui/Modal'
+import Button from '../ui/Button'
 
 interface SystemBackupModalProps {
   isOpen: boolean
@@ -30,14 +32,6 @@ export function SystemBackupModal({ isOpen, onClose, onExport }: SystemBackupMod
   const [backupData, setBackupData] = useState<any>(null)
   const [error, setError] = useState<string | null>(null)
   const [done, setDone] = useState(false)
-
-  useEffect(() => {
-    const handleEscape = (e: KeyboardEvent) => { if (e.key === 'Escape') handleClose() }
-    if (isOpen) {
-      document.addEventListener('keydown', handleEscape)
-      return () => document.removeEventListener('keydown', handleEscape)
-    }
-  }, [isOpen])
 
   const handleExport = async () => {
     setIsLoading(true)
@@ -74,89 +68,86 @@ export function SystemBackupModal({ isOpen, onClose, onExport }: SystemBackupMod
     onClose()
   }
 
-  if (!isOpen) return null
+  const getFooter = () => {
+    if (!done) {
+      return (
+        <>
+          <Button variant="secondary" onClick={handleClose} disabled={isLoading}>Cancel</Button>
+          {!isLoading && (
+            <Button variant="primary" onClick={handleExport}>
+              <Download size={14} />
+              Create System Backup
+            </Button>
+          )}
+        </>
+      )
+    }
+    return (
+      <>
+        <Button variant="secondary" onClick={handleClose}>Close</Button>
+        <Button variant="primary" onClick={downloadBackup}>
+          <Download size={14} />
+          Download Backup File
+        </Button>
+      </>
+    )
+  }
 
   return (
-    <div
-      className="fixed inset-0 bg-black/40 flex items-center justify-center z-50 p-4"
-      onClick={(e) => e.target === e.currentTarget && handleClose()}
+    <Modal
+      isOpen={isOpen}
+      onClose={handleClose}
+      title="Create System Backup"
+      icon={<Database size={15} />}
+      iconVariant="accent"
+      size="md"
+      footer={getFooter()}
     >
-      <div className="bg-panel border border-line rounded-card-lg shadow-xl w-full max-w-lg flex flex-col">
-        {/* Header */}
-        <div className="flex items-center justify-between px-6 py-4 border-b border-line flex-shrink-0">
-          <div className="flex items-center gap-2.5">
-            <Database className="h-4 w-4 text-accent" />
-            <h2 className="text-[16px] font-semibold text-ink">Create System Backup</h2>
+      <div className="space-y-5">
+        {error && (
+          <div className="flex items-center gap-2 bg-danger-soft border border-danger-line rounded-[11px] p-3 text-[12px] text-danger">
+            <AlertTriangle size={13} className="flex-shrink-0" />
+            {error}
           </div>
-          <button
-            onClick={handleClose}
-            className="p-1.5 rounded-field text-muted hover:text-ink hover:bg-panel-2 transition-colors"
-          >
-            <X size={16} />
-          </button>
-        </div>
+        )}
 
-        {/* Body */}
-        <div className="px-6 py-5">
-          {error && (
-            <div className="flex items-center gap-2 bg-neg-bg border border-neg-fg/20 rounded-card p-3 mb-4 text-[12px] text-neg-fg">
-              <AlertTriangle size={13} className="flex-shrink-0" />
-              {error}
+        {!done ? (
+          isLoading ? (
+            <div className="flex flex-col items-center py-10 gap-3">
+              <div className="w-8 h-8 border-2 border-line border-t-accent rounded-full animate-spin" />
+              <p className="text-[13px] text-muted">Exporting all system data…</p>
             </div>
-          )}
-
-          {!done ? (
-            isLoading ? (
-              <div className="flex flex-col items-center py-10 gap-3">
-                <div className="w-8 h-8 border-2 border-line border-t-accent rounded-full animate-spin" />
-                <p className="text-[13px] text-muted">Exporting all system data…</p>
-              </div>
-            ) : (
-              <>
-                <p className="text-[13px] text-muted mb-5">
-                  Creates a complete backup of all users, subjects, assignments, grades, attendance, and system data.
-                </p>
-                <div className="flex items-start gap-2.5 bg-panel-2 border border-line rounded-card p-4 mb-5 text-[12px] text-muted">
-                  <AlertTriangle size={13} className="flex-shrink-0 mt-0.5 text-amber-500" />
-                  <ul className="space-y-1 list-disc list-inside">
-                    <li>Backups exclude password hashes for security</li>
-                    <li>Store the backup file in a secure location</li>
-                    <li>Recommended: export weekly or before major changes</li>
-                  </ul>
-                </div>
-                <button
-                  onClick={handleExport}
-                  className="w-full h-[36px] flex items-center justify-center gap-2 rounded-field text-[13px] font-semibold bg-btn-primary-bg text-btn-primary-fg hover:opacity-90 transition-opacity"
-                >
-                  <Download size={14} />
-                  Create System Backup
-                </button>
-              </>
-            )
           ) : (
-            <div>
-              <div className="flex flex-col items-center mb-5">
-                <CheckCircle size={40} className="text-pos-fg mb-2" />
-                <h3 className="text-[15px] font-semibold text-ink">Backup Created Successfully</h3>
+            <>
+              <p className="text-[13px] text-muted">
+                Creates a complete backup of all users, subjects, assignments, grades, attendance, and system data.
+              </p>
+              <div className="flex items-start gap-2.5 bg-warn-soft border border-warn-line rounded-[11px] p-4 text-[12px] text-muted">
+                <AlertTriangle size={13} className="flex-shrink-0 mt-0.5 text-warn" />
+                <ul className="space-y-1 list-disc list-inside">
+                  <li>Backups exclude password hashes for security</li>
+                  <li>Store the backup file in a secure location</li>
+                  <li>Recommended: export weekly or before major changes</li>
+                </ul>
               </div>
-              {backupData?.system_info && (
-                <div className="bg-panel-2 border border-line rounded-card p-4 mb-5 text-[12px] text-muted grid grid-cols-2 gap-1">
-                  {Object.entries(backupData.system_info).map(([key, value]) => (
-                    <div key={key}>{key.replace('total_', '').replace(/_/g, ' ')}: {value as number}</div>
-                  ))}
-                </div>
-              )}
-              <button
-                onClick={downloadBackup}
-                className="w-full h-[36px] flex items-center justify-center gap-2 rounded-field text-[13px] font-semibold bg-btn-primary-bg text-btn-primary-fg hover:opacity-90 transition-opacity"
-              >
-                <Download size={14} />
-                Download Backup File
-              </button>
+            </>
+          )
+        ) : (
+          <>
+            <div className="flex flex-col items-center">
+              <CheckCircle size={40} className="text-pos-fg mb-2" />
+              <h3 className="text-[15px] font-semibold text-ink">Backup Created Successfully</h3>
             </div>
-          )}
-        </div>
+            {backupData?.system_info && (
+              <div className="bg-panel-2 border border-line rounded-[11px] p-4 text-[12px] text-muted grid grid-cols-2 gap-1">
+                {Object.entries(backupData.system_info).map(([key, value]) => (
+                  <div key={key}>{key.replace('total_', '').replace(/_/g, ' ')}: {value as number}</div>
+                ))}
+              </div>
+            )}
+          </>
+        )}
       </div>
-    </div>
+    </Modal>
   )
 }

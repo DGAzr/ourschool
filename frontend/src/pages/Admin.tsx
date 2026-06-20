@@ -21,11 +21,11 @@ import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { useToast } from '../components/ui/Toast'
 import Toggle from '../components/ui/Toggle'
-import { Button, Input, Select, SegmentedControl, Pill } from '../components/ui'
+import { Button, Input, Select, SegmentedControl, Pill, IconPickerButton, Icon } from '../components/ui'
 import { useAPIKeys } from '../hooks/useAPIKeys'
 import { APIKeyTable, CreateAPIKeyModal } from '../components/api-keys'
 import ErrorBoundary from '../components/ErrorBoundary'
-import { settingsApi } from '../services/settings'
+import { settingsApi, type GradeBand } from '../services/settings'
 import { pointsApi, type PointsSystemStatus, type AwardPreset, type AdminPointsOverview, type StudentPoints, type PointsLedger } from '../services/points'
 import { subjectsApi } from '../services/subjects'
 import { assignmentTypesApi } from '../services/assignmentTypes'
@@ -43,7 +43,7 @@ import { type TermCreate } from '../types'
 import {
   LayoutDashboard, Calendar, BookOpen, Coins, BookMarked, Tag, Users,
   Key, HardDrive, AlertTriangle, Plus,
-  Download, Upload, Edit2, Trash2, CheckCircle2, FileText, X, Palette,
+  Download, Upload, Edit2, Trash2, CheckCircle2, FileText, X,
 } from 'lucide-react'
 
 // ── Category rail ──────────────────────────────────────────────────────────
@@ -81,8 +81,11 @@ const SettingRow: React.FC<{ label: string; desc?: string; children: React.React
 
 // ── Grade bands ────────────────────────────────────────────────────────────
 const DEFAULT_GRADES: [string, number][] = [
-  ['A', 93], ['A-', 90], ['B+', 87], ['B', 83], ['B-', 80],
-  ['C+', 77], ['C', 73], ['C-', 70], ['D', 60], ['F', 0],
+  ['A+', 97], ['A', 93], ['A-', 90],
+  ['B+', 87], ['B', 83], ['B-', 80],
+  ['C+', 77], ['C', 73], ['C-', 70],
+  ['D+', 67], ['D', 63], ['D-', 60],
+  ['F', 0],
 ]
 
 function gradeColor(pct: number) {
@@ -119,6 +122,7 @@ const Admin: React.FC = () => {
   const [newTypeName, setNewTypeName] = useState('')
   const [newTypeWeight, setNewTypeWeight] = useState('0')
   const [newTypeColor, setNewTypeColor] = useState('#3B82F6')
+  const [newTypeIcon, setNewTypeIcon] = useState<string | undefined>(undefined)
   const [addingType, setAddingType] = useState(false)
 
   // ── Points ──
@@ -148,7 +152,7 @@ const Admin: React.FC = () => {
   // ── Subject management ──
   const [showSubjectForm, setShowSubjectForm] = useState(false)
   const [editingSubject, setEditingSubject] = useState<Subject | null>(null)
-  const [subjectForm, setSubjectForm] = useState({ name: '', description: '', color: '#3B82F6' })
+  const [subjectForm, setSubjectForm] = useState({ name: '', description: '', color: '#3B82F6', icon: undefined as string | undefined })
   const [subjectError, setSubjectError] = useState<string | null>(null)
 
   // ── User management ──
@@ -248,6 +252,10 @@ const Admin: React.FC = () => {
         const days = grouped.value.attendance.required_days_of_instruction
         setRequiredDays(days)
         setRequiredDaysDraft(String(days))
+        const scale = grouped.value.grading?.scale
+        if (scale && scale.length > 0) {
+          setGrades(scale.map((b: GradeBand) => [b.letter, b.min_percent] as [string, number]))
+        }
       }
       if (pts.status === 'fulfilled') setPointsStatus(pts.value)
       if (presetData.status === 'fulfilled') setPresets(presetData.value)
@@ -353,9 +361,14 @@ const Admin: React.FC = () => {
 
   const saveGradeScale = async () => {
     setSavingGrades(true)
-    await new Promise(r => setTimeout(r, 400))
-    setSavingGrades(false)
-    toast('Grading scale saved')
+    try {
+      await settingsApi.updateGradeScale(grades.map(([letter, min_percent]) => ({ letter, min_percent })))
+      toast('Grading scale saved')
+    } catch {
+      toast('Failed to save grading scale', 'danger')
+    } finally {
+      setSavingGrades(false)
+    }
   }
 
   // ── Assignment-type handlers ────────────────────────────────────────────────
@@ -366,6 +379,7 @@ const Admin: React.FC = () => {
   const typesDirty = assignmentTypes.some(t => {
     const base = typesBaseline[t.id]
     return !base || base.name !== t.name || base.color !== t.color ||
+      base.icon !== t.icon ||
       base.weight !== t.weight || base.is_active !== t.is_active
   })
 
@@ -373,6 +387,7 @@ const Admin: React.FC = () => {
     const dirty = assignmentTypes.filter(t => {
       const base = typesBaseline[t.id]
       return !base || base.name !== t.name || base.color !== t.color ||
+        base.icon !== t.icon ||
         base.weight !== t.weight || base.is_active !== t.is_active
     })
     if (dirty.length === 0) return
@@ -380,7 +395,7 @@ const Admin: React.FC = () => {
     try {
       const updated = await Promise.all(dirty.map(t =>
         assignmentTypesApi.update(t.id, {
-          name: t.name, color: t.color, weight: t.weight, is_active: t.is_active,
+          name: t.name, color: t.color, icon: t.icon, weight: t.weight, is_active: t.is_active,
         })
       ))
       setAssignmentTypes(prev => prev.map(t => updated.find(u => u.id === t.id) || t))
@@ -406,6 +421,7 @@ const Admin: React.FC = () => {
       const created = await assignmentTypesApi.create({
         name,
         color: newTypeColor,
+        icon: newTypeIcon,
         weight: parseFloat(newTypeWeight) || 0,
         display_order: assignmentTypes.length,
       })
@@ -414,6 +430,7 @@ const Admin: React.FC = () => {
       setNewTypeName('')
       setNewTypeWeight('0')
       setNewTypeColor('#3B82F6')
+      setNewTypeIcon(undefined)
       refreshAssignmentTypes()
       toast('Assignment type added')
     } catch (err: any) {
@@ -525,8 +542,8 @@ const Admin: React.FC = () => {
   }
 
   // ── Subject handlers ──────────────────────────────────────────────────────
-  const resetSubjectForm = () => { setSubjectForm({ name: '', description: '', color: '#3B82F6' }); setEditingSubject(null); setShowSubjectForm(false); setSubjectError(null) }
-  const openSubjectEdit = (s: Subject) => { setEditingSubject(s); setSubjectForm({ name: s.name, description: s.description || '', color: s.color }); setShowSubjectForm(true) }
+  const resetSubjectForm = () => { setSubjectForm({ name: '', description: '', color: '#3B82F6', icon: undefined }); setEditingSubject(null); setShowSubjectForm(false); setSubjectError(null) }
+  const openSubjectEdit = (s: Subject) => { setEditingSubject(s); setSubjectForm({ name: s.name, description: s.description || '', color: s.color, icon: s.icon ?? undefined }); setShowSubjectForm(true) }
 
   const handleSubjectSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -847,6 +864,11 @@ const Admin: React.FC = () => {
                               className="w-7 h-7 rounded-field border border-field-border bg-field-bg cursor-pointer flex-shrink-0"
                               title="Category color"
                             />
+                            <IconPickerButton
+                              value={t.icon}
+                              color={t.color}
+                              onSelect={name => updateTypeField(t.id, { icon: name ?? undefined })}
+                            />
                             <input
                               type="text"
                               value={t.name}
@@ -887,6 +909,11 @@ const Admin: React.FC = () => {
                       onChange={e => setNewTypeColor(e.target.value)}
                       className="w-7 h-7 rounded-field border border-field-border bg-field-bg cursor-pointer flex-shrink-0"
                       title="Category color"
+                    />
+                    <IconPickerButton
+                      value={newTypeIcon}
+                      color={newTypeColor}
+                      onSelect={name => setNewTypeIcon(name ?? undefined)}
                     />
                     <input
                       type="text"
@@ -1405,7 +1432,7 @@ const Admin: React.FC = () => {
                     <div className="p-4 flex items-center justify-between">
                       <div className="flex items-center gap-3 min-w-0">
                         <div className="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0" style={{ backgroundColor: s.color + '22' }}>
-                          <Palette className="w-4 h-4" style={{ color: s.color }} />
+                          <Icon name={s.icon} size={16} color={s.color} />
                         </div>
                         <div className="min-w-0">
                           <p className="text-[13.5px] font-semibold text-ink truncate">{s.name}</p>
@@ -1447,6 +1474,19 @@ const Admin: React.FC = () => {
                         <div className="flex items-center gap-3">
                           <input type="color" value={subjectForm.color} onChange={e => setSubjectForm(p => ({ ...p, color: e.target.value }))} className="h-9 w-16 rounded-field border border-field-border cursor-pointer bg-field-bg p-0.5" />
                           <input type="text" value={subjectForm.color} onChange={e => setSubjectForm(p => ({ ...p, color: e.target.value }))} className={SF} placeholder="#3B82F6" />
+                        </div>
+                      </div>
+                      <div>
+                        <label className={SL}>Icon</label>
+                        <div className="flex items-center gap-3">
+                          <IconPickerButton
+                            value={subjectForm.icon}
+                            color={subjectForm.color}
+                            onSelect={name => setSubjectForm(p => ({ ...p, icon: name ?? undefined }))}
+                          />
+                          {subjectForm.icon && (
+                            <span className="text-[12px] text-muted">{subjectForm.icon}</span>
+                          )}
                         </div>
                       </div>
                     </div>

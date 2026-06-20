@@ -18,6 +18,7 @@
 
 import React, { useState, useEffect, useRef } from 'react'
 import { Edit, Trash2, Users, Clock, Target, Archive, Download, MoreVertical } from 'lucide-react'
+import Icon from '../ui/Icon/Icon'
 import { AssignmentTemplate, Subject } from '../../types'
 import { assignmentUtils } from '../../services/assignments'
 import { useAssignmentTypes } from '../../contexts/AssignmentTypesContext'
@@ -50,6 +51,15 @@ const AssignmentTemplateCard: React.FC<AssignmentTemplateCardProps> = ({
   const actionsRef = useRef<HTMLDivElement>(null)
   const { getTypeLabel, getTypeIcon } = useAssignmentTypes()
 
+  // Resolved icon: template override → type icon → subject icon → (Icon's built-in fallback)
+  const resolvedIconName =
+    template.icon ??
+    getTypeIcon(template.assignment_type) ??
+    subject?.icon ??
+    undefined
+  // Resolved color for icon tinting: subject color first, then a neutral token
+  const resolvedColor = subject?.color ?? 'var(--muted)'
+
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (actionsRef.current && !actionsRef.current.contains(event.target as Node)) {
@@ -76,9 +86,7 @@ const AssignmentTemplateCard: React.FC<AssignmentTemplateCardProps> = ({
                   className="h-3.5 w-3.5 accent-[var(--accent)] rounded"
                 />
               )}
-              <span className="text-base">
-                {getTypeIcon(template.assignment_type)}
-              </span>
+              <Icon name={resolvedIconName} size={16} color={resolvedColor} />
               <h3 className="text-[14px] font-semibold text-ink truncate">{template.name}</h3>
             </div>
             <p className="text-[12px] text-muted">{subject?.name} · {getTypeLabel(template.assignment_type)}</p>

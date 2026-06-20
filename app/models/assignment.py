@@ -75,6 +75,10 @@ class AssignmentTemplate(Base):
     prerequisites = Column(Text)  # What students should know first
     materials_needed = Column(Text)  # Required materials/resources
 
+    # Optional per-template icon override (lucide icon name, e.g. "book-open").
+    # When unset consumers fall back to the assignment type's icon, then the subject's.
+    icon = Column(String(50), nullable=True)
+
     # Export/Import capabilities
     is_exportable = Column(Boolean, default=True)
     export_data = Column(Text)  # JSON string for export/import

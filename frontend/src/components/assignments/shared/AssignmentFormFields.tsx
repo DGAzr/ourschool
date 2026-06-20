@@ -16,7 +16,8 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-import { Select, Input, TextArea } from '../../ui'
+import React from 'react'
+import { Input, TextArea, IconPickerButton, IconSelect } from '../../ui'
 import { Subject } from '../../../types'
 import { useAssignmentTypes } from '../../../contexts/AssignmentTypesContext'
 
@@ -27,6 +28,7 @@ interface AssignmentFormFieldsProps {
     instructions?: string
     assignment_type?: string
     subject_id?: number
+    icon?: string | null
     max_points?: number
     estimated_duration_minutes?: number
     prerequisites?: string
@@ -46,7 +48,11 @@ const AssignmentFormFields: React.FC<AssignmentFormFieldsProps> = ({
   showAllFields = true,
   disabled = false
 }) => {
-  const { types, getTypeIcon, getTypeLabel } = useAssignmentTypes()
+  const { types, getTypeLabel, getTypeIcon } = useAssignmentTypes()
+
+  // Color for icon preview: use the selected subject's color, falling back to accent
+  const selectedSubject = subjects.find(s => s.id === formData.subject_id)
+  const iconPreviewColor = selectedSubject?.color ?? 'var(--accent)'
 
   // Offer active types; keep the current value selectable even if it is
   // inactive so editing an existing template never silently loses its type.
@@ -55,10 +61,12 @@ const AssignmentFormFields: React.FC<AssignmentFormFieldsProps> = ({
   const typeOptions = [
     ...activeTypes.map(t => ({
       value: t.key,
-      label: `${getTypeIcon(t.key)} ${t.name}`,
+      label: t.name,
+      icon: t.icon ?? getTypeIcon(t.key),
+      iconColor: 'var(--accent)',
     })),
     ...(currentType && !activeTypes.some(t => t.key === currentType)
-      ? [{ value: currentType, label: `${getTypeIcon(currentType)} ${getTypeLabel(currentType)}` }]
+      ? [{ value: currentType, label: getTypeLabel(currentType), icon: getTypeIcon(currentType), iconColor: 'var(--accent)' }]
       : []),
   ]
 
@@ -77,29 +85,49 @@ const AssignmentFormFields: React.FC<AssignmentFormFieldsProps> = ({
           />
         </div>
 
-        <Select
+        <IconSelect
           label="Subject"
           value={formData.subject_id || 0}
-          onChange={(e) => onUpdate('subject_id', parseInt(e.target.value))}
+          onChange={(v) => onUpdate('subject_id', Number(v))}
           required
           disabled={disabled || !subjects.length}
           options={[
             { value: 0, label: !subjects.length ? 'Loading subjects...' : 'Select a subject' },
             ...subjects.map(subject => ({
               value: subject.id,
-              label: subject.name
+              label: subject.name,
+              icon: subject.icon,
+              iconColor: subject.color,
             }))
           ]}
         />
 
-        <Select
+        <IconSelect
           label="Assignment Type"
           value={formData.assignment_type || 'homework'}
-          onChange={(e) => onUpdate('assignment_type', e.target.value)}
+          onChange={(v) => onUpdate('assignment_type', String(v))}
           disabled={disabled}
           options={typeOptions}
         />
 
+      </div>
+
+      {/* Icon override */}
+      <div>
+        <label className="block text-[12.5px] font-semibold text-muted uppercase tracking-wide mb-1.5">
+          Icon <span className="font-normal normal-case text-faint">(optional — defaults to the assignment type icon)</span>
+        </label>
+        <div className="flex items-center gap-3">
+          <IconPickerButton
+            value={formData.icon}
+            color={iconPreviewColor}
+            onSelect={name => onUpdate('icon', name)}
+            className={disabled ? 'pointer-events-none opacity-50' : ''}
+          />
+          {formData.icon && (
+            <span className="text-[12px] text-muted">{formData.icon}</span>
+          )}
+        </div>
       </div>
 
       {/* Grading and Time */}
