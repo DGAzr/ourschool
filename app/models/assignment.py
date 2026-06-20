@@ -26,6 +26,7 @@ from sqlalchemy import (
     Enum,
     Float,
     ForeignKey,
+    Index,
     Integer,
     String,
     Text,
@@ -45,6 +46,10 @@ class AssignmentTemplate(Base):
     """
 
     __tablename__ = "assignment_templates"
+
+    __table_args__ = (
+        Index("idx_assignment_templates_subject_id", "subject_id"),
+    )
 
     id = Column(Integer, primary_key=True, index=True)
     external_id = Column(String(36), unique=True, nullable=False, default=lambda: str(uuid.uuid4()))
@@ -72,13 +77,16 @@ class AssignmentTemplate(Base):
     export_data = Column(Text)  # JSON string for export/import
 
     # Audit fields
-    created_by = Column(Integer, ForeignKey("users.id"), nullable=False)
+    created_by = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
     updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
     is_archived = Column(Boolean, default=False, nullable=False)
 
     # Relationships
-    subject = relationship("Subject", back_populates="assignment_templates")
+    # selectin avoids N+1 when iterating templates and touching .subject
+    subject = relationship(
+        "Subject", back_populates="assignment_templates", lazy="selectin"
+    )
     creator = relationship("User", foreign_keys=[created_by])
     student_assignments = relationship(
         "StudentAssignment", back_populates="template", cascade="all, delete-orphan"
@@ -95,11 +103,18 @@ class StudentAssignment(Base):
 
     __tablename__ = "student_assignments"
 
+    __table_args__ = (
+        Index("idx_student_assignments_student_assigned_date", "student_id", "assigned_date"),
+        Index("idx_student_assignments_student_graded_date", "student_id", "graded_date"),
+        Index("idx_student_assignments_template_id", "template_id"),
+        Index("idx_student_assignments_student_id", "student_id"),
+    )
+
     id = Column(Integer, primary_key=True, index=True)
 
     # References
     template_id = Column(Integer, ForeignKey("assignment_templates.id"), nullable=False)
-    student_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    student_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
 
     # Assignment details
     assigned_date = Column(Date, nullable=False, default=lambda: datetime.now(timezone.utc).date())
@@ -121,7 +136,7 @@ class StudentAssignment(Base):
     letter_grade = Column(String)  # Optional letter grade
     is_graded = Column(Boolean, default=False)
     graded_date = Column(Date)
-    graded_by = Column(Integer, ForeignKey("users.id"))
+    graded_by = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"))
 
     # Feedback and notes
     teacher_feedback = Column(Text)
@@ -137,12 +152,15 @@ class StudentAssignment(Base):
     custom_max_points = Column(Integer)  # Custom point value if different from template
 
     # Audit fields
-    assigned_by = Column(Integer, ForeignKey("users.id"), nullable=False)
+    assigned_by = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
     updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
 
     # Relationships
-    template = relationship("AssignmentTemplate", back_populates="student_assignments")
+    # selectin avoids N+1 when serializing assignment lists / report cards
+    template = relationship(
+        "AssignmentTemplate", back_populates="student_assignments", lazy="selectin"
+    )
     student = relationship(
         "User", foreign_keys=[student_id], back_populates="assigned_assignments"
     )
@@ -197,22 +215,43 @@ class StudentAssignment(Base):
             term_membership_filter,
         )
 
-        active_term = session.query(Term).filter(Term.is_active).first()
-        if not active_term:
+        # Resolve the term this assignment belongs to by its effective due date,
+        # so grading past/future-dated work persists to the correct term rather
+        # than only the active one. Fall back to the active term if none matches.
+        if self.template is None:
             return
 
-        # Find the term-subject relationship
+        eff = self.extended_due_date or self.due_date or self.assigned_date
+        target_term = None
+        if eff is not None:
+            target_term = (
+                session.query(Term)
+                .filter(Term.start_date <= eff, Term.end_date >= eff)
+                .order_by(Term.start_date.desc())
+                .first()
+            )
+        if target_term is None:
+            target_term = session.query(Term).filter(Term.is_active).first()
+        if target_term is None:
+            return
+
+        # Find (or auto-create) the term-subject relationship.
         term_subject = (
             session.query(TermSubject)
             .filter(
-                TermSubject.term_id == active_term.id,
+                TermSubject.term_id == target_term.id,
                 TermSubject.subject_id == self.template.subject_id,
             )
             .first()
         )
 
         if not term_subject:
-            return
+            term_subject = TermSubject(
+                term_id=target_term.id,
+                subject_id=self.template.subject_id,
+            )
+            session.add(term_subject)
+            session.flush()
 
         # Find or create the student's term grade record
         student_term_grade = (
@@ -238,7 +277,7 @@ class StudentAssignment(Base):
             .filter(
                 StudentAssignment.student_id == self.student_id,
                 AssignmentTemplate.subject_id == self.template.subject_id,
-                term_membership_filter(active_term),
+                term_membership_filter(target_term),
             )
             .all()
         )

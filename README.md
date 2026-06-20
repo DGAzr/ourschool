@@ -63,8 +63,9 @@ pip install -r requirements.txt
 
 3. Set up environment variables:
 ```bash
-cp .env.example .env
-# Edit .env with your database credentials and secret key
+cp env.EXAMPLE .env
+# Edit .env with your database credentials and secret key.
+# Generate a strong SECRET_KEY, e.g.: openssl rand -hex 32
 ```
 
 4. **Database Initialization (First Time Setup)**:
@@ -124,9 +125,11 @@ npm run dev
 ```
 
 The application will be available at:
-- Frontend: http://localhost:3000
+- Frontend (Vite dev server, `npm run dev`): http://localhost:3000
 - API: http://localhost:8000
-- API Documentation: http://localhost:8000/docs
+- API Documentation: http://localhost:8000/docs (can be disabled with `ENABLE_API_DOCS=false`)
+
+> Note: the Docker deployment serves the frontend on port **4173** (Vite preview), not 3000. Port 3000 applies only to the local `npm run dev` workflow.
 
 
 ## API Integration
@@ -289,14 +292,18 @@ alembic upgrade head
 
 ### Running Tests
 
-Backend tests:
+Backend tests (pytest + httpx, run against a Postgres test database — set
+`DATABASE_URL` and `SECRET_KEY` first):
 ```bash
 pytest
 ```
 
-Frontend tests:
+Frontend checks (type-check, lint, and production build):
 ```bash
-cd frontend && npm test
+cd frontend
+npx tsc --noEmit
+npm run lint
+npm run build
 ```
 
 ## Tech Stack

@@ -90,7 +90,7 @@ export const pointsApi = {
     return await api.get('/points/my-balance')
   },
 
-  getMyLedger: async (page: number = 1, perPage: number = 20): Promise<PointsLedger> => {
+  getMyLedger: async (page = 1, perPage = 20): Promise<PointsLedger> => {
     return await api.get(`/points/my-ledger?page=${page}&per_page=${perPage}`)
   },
 
@@ -101,8 +101,8 @@ export const pointsApi = {
 
   getStudentLedger: async (
     studentId: number, 
-    page: number = 1, 
-    perPage: number = 20
+    page = 1, 
+    perPage = 20
   ): Promise<PointsLedger> => {
     return await api.get(`/points/student/${studentId}/ledger?page=${page}&per_page=${perPage}`)
   },

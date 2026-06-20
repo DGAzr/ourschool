@@ -14,7 +14,9 @@ services:
     volumes:
       - postgres_data:/var/lib/postgresql/data
     ports:
-      - "${POSTGRES_PORT:-5432}:5432"
+      # Bind to loopback only; the backend reaches the DB over the compose
+      # network. Override POSTGRES_BIND=0.0.0.0 only if you must expose it.
+      - "${POSTGRES_BIND:-127.0.0.1}:${POSTGRES_PORT:-5432}:5432"
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres}"]
       interval: 10s
@@ -43,7 +45,9 @@ services:
       DATABASE_PASSWORD: ${DATABASE_PASSWORD:-${POSTGRES_PASSWORD:-postgres}}
 
       # Security configuration
-      SECRET_KEY: ${SECRET_KEY:-your-secret-key-change-this-in-production}
+      # No default: deployment must provide a strong SECRET_KEY (compose fails
+      # fast if it is unset). Generate one with: openssl rand -hex 32
+      SECRET_KEY: ${SECRET_KEY:?SECRET_KEY must be set in .env}
       ALGORITHM: ${ALGORITHM:-HS256}
       ACCESS_TOKEN_EXPIRE_MINUTES: ${ACCESS_TOKEN_EXPIRE_MINUTES:-30}
 
@@ -62,11 +66,11 @@ services:
         condition: service_healthy
         required: false  # skipped when db service is not running (external DB mode)
     ports:
-      - "${BACKEND_PORT:-8000}:8000"
-    volumes:
-      - ./app:/app/app:ro
-      - ./alembic:/app/alembic:ro
-      - ./alembic.ini:/app/alembic.ini:ro
+      # Loopback by default; external API consumers reach it via the frontend
+      # proxy. Set BACKEND_BIND=0.0.0.0 only behind a TLS reverse proxy.
+      - "${BACKEND_BIND:-127.0.0.1}:${BACKEND_PORT:-8000}:8000"
+    # NOTE: source is intentionally NOT bind-mounted here so the deployed image
+    # is immutable. Use docker-compose.override.yml for live-reload in dev.
     command: ["./start.sh"]
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]

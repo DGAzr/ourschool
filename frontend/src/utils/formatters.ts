@@ -26,7 +26,7 @@
  * @param decimals - Number of decimal places to show (default: 1)
  * @returns Formatted percentage string with % symbol
  */
-export const formatPercentage = (value: number | null | undefined, decimals: number = 1): string => {
+export const formatPercentage = (value: number | null | undefined, decimals = 1): string => {
   if (value === null || value === undefined) {
     return 'N/A';
   }
@@ -79,4 +79,29 @@ export const formatDateOnly = (
   };
   
   return date.toLocaleDateString('en-US', options || defaultOptions);
+};
+
+/**
+ * Parse a date-only string (YYYY-MM-DD) into a local Date at midnight.
+ * Avoids `new Date('YYYY-MM-DD')` which parses as UTC and shifts the day
+ * for users behind UTC.
+ */
+export const parseDateOnly = (dateString?: string): Date | null => {
+  if (!dateString) return null;
+  const [year, month, day] = dateString.split('-').map(Number);
+  if (!year || !month || !day) return null;
+  return new Date(year, month - 1, day);
+};
+
+/**
+ * True if a date-only string is strictly before today (local time).
+ * Use for "overdue" comparisons so the boundary is correct regardless of
+ * the user's timezone.
+ */
+export const isPastDateOnly = (dateString?: string): boolean => {
+  const date = parseDateOnly(dateString);
+  if (!date) return false;
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  return date.getTime() < today.getTime();
 };

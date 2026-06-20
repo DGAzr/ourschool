@@ -92,33 +92,11 @@ def grade_assignment_via_api(
     # Calculate percentage
     percentage = assignment.calculate_percentage_grade()
 
-    # Assign letter grade if not provided
+    # Assign letter grade if not provided, using the canonical scale shared by
+    # the rest of the app (avoids divergent grade boundaries).
     if not grade_data.letter_grade and percentage is not None:
-        if percentage >= 97:
-            letter_grade = "A+"
-        elif percentage >= 93:
-            letter_grade = "A"
-        elif percentage >= 90:
-            letter_grade = "A-"
-        elif percentage >= 87:
-            letter_grade = "B+"
-        elif percentage >= 83:
-            letter_grade = "B"
-        elif percentage >= 80:
-            letter_grade = "B-"
-        elif percentage >= 77:
-            letter_grade = "C+"
-        elif percentage >= 73:
-            letter_grade = "C"
-        elif percentage >= 70:
-            letter_grade = "C-"
-        elif percentage >= 67:
-            letter_grade = "D+"
-        elif percentage >= 65:
-            letter_grade = "D"
-        else:
-            letter_grade = "F"
-        assignment.letter_grade = letter_grade
+        from app.crud.reports import calculate_letter_grade
+        assignment.letter_grade = calculate_letter_grade(percentage)
     else:
         assignment.letter_grade = grade_data.letter_grade
 
@@ -130,29 +108,30 @@ def grade_assignment_via_api(
     db.commit()
     db.refresh(assignment)
 
-    # Award points if points system is enabled
+    # Sync points if points system is enabled (idempotent; safe on re-grade)
     try:
         from app.crud import points as points_crud
         if points_crud.is_points_system_enabled(db):
             assignment_title = f"{assignment.template.name}" if assignment.template else f"Assignment {assignment.id}"
-            points_crud.award_assignment_points(
+            points_crud.set_assignment_points(
                 db=db,
                 student_id=assignment.student_id,
                 assignment_id=assignment.id,
                 points_earned=grade_data.points_earned,
                 assignment_title=assignment_title
             )
+            db.commit()
             logger.info(
-                "Awarded %s points to student %s for assignment %s via API",
-                grade_data.points_earned,
+                "Synced points for student %s assignment %s via API",
                 assignment.student_id,
                 assignment.id,
                 extra={"api_key": api_key_user.name}
             )
     except Exception as e:
-        # Don't fail the grading process if points awarding fails
+        # Don't fail the grading process if points syncing fails
+        db.rollback()
         logger.error(
-            "Failed to award points for assignment %s via API: %s",
+            "Failed to sync points for assignment %s via API: %s",
             assignment.id,
             str(e),
             extra={"api_key": api_key_user.name}

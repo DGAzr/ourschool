@@ -17,28 +17,22 @@
 """Meta endpoint — exposes enum values and permissions for MCP discovery."""
 from fastapi import APIRouter
 
+from app.crud.api_keys import AVAILABLE_PERMISSIONS
 from app.enums import AssignmentStatus, AssignmentType
 
 router = APIRouter()
 
-# Valid permission strings for API keys
-API_KEY_PERMISSIONS = [
-    "assignments:read",
-    "assignments:grade",
-    "assignments:create",
-    "points:read",
-    "points:write",
-    "students:read",
-    "attendance:read",
-    "reports:read",
-]
-
 
 @router.get("/meta")
 def get_meta():
-    """Return available enum values and permissions. Used by MCP clients to discover valid inputs."""
+    """Return available enum values and permissions. Used by MCP clients to discover valid inputs.
+
+    Permissions are sourced from the single canonical list in
+    ``crud.api_keys.AVAILABLE_PERMISSIONS`` so discovery never advertises a
+    permission that can't be created or has no backing endpoint.
+    """
     return {
         "assignment_types": [t.value for t in AssignmentType],
         "assignment_statuses": [s.value for s in AssignmentStatus],
-        "permissions": API_KEY_PERMISSIONS,
+        "permissions": list(AVAILABLE_PERMISSIONS),
     }

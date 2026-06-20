@@ -161,21 +161,10 @@ Lightweight read-only endpoints that expose enum values, permission lists, or ot
 # app/routers/meta.py
 from fastapi import APIRouter
 
+from app.crud.api_keys import AVAILABLE_PERMISSIONS  # single source of truth
 from app.enums import AssignmentStatus, AssignmentType
 
 router = APIRouter()
-
-# Valid permission strings for API keys
-API_KEY_PERMISSIONS = [
-    "assignments:read",
-    "assignments:grade",
-    "assignments:create",
-    "points:read",
-    "points:write",
-    "students:read",
-    "attendance:read",
-    "reports:read",
-]
 
 
 @router.get("/meta")
@@ -184,15 +173,69 @@ def get_meta():
     return {
         "assignment_types": [t.value for t in AssignmentType],
         "assignment_statuses": [s.value for s in AssignmentStatus],
-        "permissions": API_KEY_PERMISSIONS,
+        "permissions": list(AVAILABLE_PERMISSIONS),
     }
 ```
+
+`permissions` is sourced from the single canonical list
+(`crud.api_keys.AVAILABLE_PERMISSIONS`) so `/api/meta` only ever advertises
+permissions that can actually be created **and** have a backing endpoint. The
+current set is:
+
+| Permission | Backing endpoint(s) |
+|------------|---------------------|
+| `students:read` | `GET /api/users/students/lookup`, `GET /api/users/students/{id}/info` |
+| `assignments:read` | `GET /api/integrations/assignments/{id}` |
+| `assignments:grade` | `POST /api/integrations/assignments/{id}/grade` |
+| `points:read` | `GET /api/students/{id}/points` (+ ledger, overview) |
+| `points:write` | `POST /api/students/{id}/points/adjust` |
 
 These endpoints:
 - Are registered at the top-level prefix (e.g., `prefix="/api"`) not under a domain prefix
 - Return plain dictionaries, not Pydantic models
 - Require no authentication (public information)
 - Are cached-friendly (content doesn't change between releases)
+
+### External Integration Endpoints (API-key authenticated)
+
+These are the only endpoints intended for external/MCP consumers. They
+authenticate with an API key passed in the `X-API-Key` header (not a Bearer
+token) and require the corresponding permission.
+
+**Grade an assignment**
+
+```
+POST /api/integrations/assignments/{assignment_id}/grade
+Header:   X-API-Key: os_xxxxxxxx...
+Permission: assignments:grade
+Body (application/json):  StudentAssignmentGrade
+  {
+    "points_earned": 18.5,        # float, 0..max_points
+    "letter_grade": "A-",          # optional; computed from % if omitted
+    "teacher_feedback": "Great work"  # optional
+  }
+Response 200 (hand-built JSON, not a response_model):
+  {
+    "id", "template_id", "student_id", "assigned_date", "due_date",
+    "status", "points_earned", "percentage_grade", "letter_grade",
+    "is_graded", "graded_date", "teacher_feedback", "max_points"
+  }
+Errors: 404 (assignment not found), 400 (points exceed maximum),
+        403 (missing permission), 401 (invalid/missing key)
+```
+
+Points are synced idempotently: re-grading adjusts the student's balance by the
+delta rather than re-awarding the full amount.
+
+**Read an assignment**
+
+```
+GET /api/integrations/assignments/{assignment_id}
+Header:   X-API-Key: os_xxxxxxxx...
+Permission: assignments:read
+Response 200: assignment detail JSON (see integrations.py for fields)
+Errors: 404, 403, 401
+```
 
 ## 📝 Endpoint Standards
 

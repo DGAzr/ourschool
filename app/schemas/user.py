@@ -18,9 +18,25 @@
 from datetime import date, datetime
 from typing import Optional
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, field_validator
 
 from app.enums import UserRole
+
+# Minimum password length enforced across create/change/reset flows.
+MIN_PASSWORD_LENGTH = 10
+
+
+def validate_password_strength(password: str) -> str:
+    """Enforce a consistent password policy. Raises ValueError if too weak."""
+    if password is None or len(password) < MIN_PASSWORD_LENGTH:
+        raise ValueError(
+            f"Password must be at least {MIN_PASSWORD_LENGTH} characters long."
+        )
+    has_letter = any(c.isalpha() for c in password)
+    has_digit = any(c.isdigit() for c in password)
+    if not (has_letter and has_digit):
+        raise ValueError("Password must contain both letters and numbers.")
+    return password
 
 
 class UserBase(BaseModel):
@@ -34,13 +50,18 @@ class UserBase(BaseModel):
     # Student-specific fields (only required for student users)
     parent_id: Optional[int] = None
     date_of_birth: Optional[date] = None
-    grade_level: Optional[int] = None
+    grade_level: Optional[int] = Field(None, ge=0, le=12)
 
 
 class UserCreate(UserBase):
     """Schema for creating users."""
 
     password: str
+
+    @field_validator("password")
+    @classmethod
+    def _validate_password(cls, v: str) -> str:
+        return validate_password_strength(v)
 
 
 class UserUpdate(BaseModel):
@@ -54,7 +75,7 @@ class UserUpdate(BaseModel):
     # Student-specific fields
     parent_id: Optional[int] = None
     date_of_birth: Optional[date] = None
-    grade_level: Optional[int] = None
+    grade_level: Optional[int] = Field(None, ge=0, le=12)
 
 
 class User(UserBase):

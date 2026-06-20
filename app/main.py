@@ -18,13 +18,17 @@
 import time
 import uuid
 from contextlib import asynccontextmanager
+from typing import Annotated
 
-from fastapi import FastAPI, Request, Response, HTTPException
+from fastapi import FastAPI, Request, Response, HTTPException, Depends, status
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
 from app.core.logging import setup_logging, log_request_start, log_request_end, get_logger
 from app.core.error_tracking import ErrorHandler
 from app.core.config import settings
+from app.models.user import User
+from app.routers.auth import get_current_admin_user
 from app.routers import activity, api_keys, assignments, attendance, auth, backup, integrations, journal, meta, performance, points, reports, subjects, terms, users
 from app.routers import settings as settings_router
 
@@ -57,6 +61,9 @@ app = FastAPI(
     description="A comprehensive homeschool management platform",
     version="1.0.0",
     lifespan=lifespan,
+    docs_url="/docs" if settings.enable_api_docs else None,
+    redoc_url="/redoc" if settings.enable_api_docs else None,
+    openapi_url="/openapi.json" if settings.enable_api_docs else None,
 )
 
 # Add error handlers
@@ -70,6 +77,41 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.middleware("http")
+async def limit_body_size(request: Request, call_next):
+    """Reject requests whose declared body exceeds the configured maximum."""
+    content_length = request.headers.get("content-length")
+    if content_length is not None:
+        try:
+            if int(content_length) > settings.max_request_body_bytes:
+                return JSONResponse(
+                    status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+                    content={"detail": "Request body too large"},
+                )
+        except ValueError:
+            return JSONResponse(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                content={"detail": "Invalid Content-Length header"},
+            )
+    return await call_next(request)
+
+
+@app.middleware("http")
+async def security_headers(request: Request, call_next):
+    """Attach standard security headers to every response."""
+    response = await call_next(request)
+    response.headers.setdefault("X-Content-Type-Options", "nosniff")
+    response.headers.setdefault("X-Frame-Options", "DENY")
+    response.headers.setdefault("Referrer-Policy", "no-referrer")
+    response.headers.setdefault(
+        "Strict-Transport-Security", "max-age=31536000; includeSubDomains"
+    )
+    response.headers.setdefault(
+        "Content-Security-Policy", "frame-ancestors 'none'"
+    )
+    return response
 
 
 @app.middleware("http")
@@ -180,21 +222,22 @@ async def database_health_check():
             return {"status": "unhealthy", "database": "query_failed"}
             
     except Exception as e:
+        # Log full detail server-side; never leak DB internals to callers.
+        get_logger("health").error("Database health check failed", extra={"error": str(e)})
         return {
             "status": "unhealthy",
-            "database": "connection_failed", 
-            "error": str(e)
+            "database": "connection_failed",
         }
 
 
 @app.get("/errors/recent")
-async def get_recent_errors(limit: int = 20):
-    """Get recent errors for debugging (admin only in production)."""
+async def get_recent_errors(
+    current_user: Annotated[User, Depends(get_current_admin_user)],
+    limit: int = 20,
+):
+    """Get recent errors for debugging (admin only)."""
     from app.core.error_tracking import error_tracker
-    
-    # In production, add authentication check here
-    # current_user: User = Depends(get_current_admin_user)
-    
+
     recent_errors = error_tracker.get_recent_errors(limit)
     
     # Sanitize sensitive information
@@ -217,15 +260,15 @@ async def get_recent_errors(limit: int = 20):
 
 
 @app.get("/errors/{error_id}")
-async def get_error_details(error_id: str):
-    """Get detailed error information by ID (admin only in production)."""
+async def get_error_details(
+    error_id: str,
+    current_user: Annotated[User, Depends(get_current_admin_user)],
+):
+    """Get detailed error information by ID (admin only)."""
     from app.core.error_tracking import error_tracker
-    
-    # In production, add authentication check here
-    # current_user: User = Depends(get_current_admin_user)
-    
+
     error_details = error_tracker.get_error(error_id)
     if not error_details:
         raise HTTPException(status_code=404, detail="Error not found")
-    
+
     return error_details

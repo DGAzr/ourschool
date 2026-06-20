@@ -256,8 +256,7 @@ def get_auth_context_for_logging(auth_user: AuthUser) -> dict:
         return {
             "auth_type": "api_key",
             "api_key_id": auth_user.api_key_id,
-            "api_key_name": auth_user.name,
-            "permissions": auth_user.permissions
+            "permission_count": len(auth_user.permissions or []),
         }
     else:
         return {"auth_type": "unknown"}

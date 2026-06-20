@@ -17,7 +17,7 @@
 """Attendance models."""
 from datetime import datetime, timezone
 
-from sqlalchemy import Column, Date, DateTime, Enum, ForeignKey, Integer, Text
+from sqlalchemy import Column, Date, DateTime, Enum, ForeignKey, Index, Integer, Text, UniqueConstraint
 from sqlalchemy.orm import relationship
 
 from app.core.database import Base
@@ -28,6 +28,11 @@ class AttendanceRecord(Base):
     """Attendance records for students."""
 
     __tablename__ = "attendance_records"
+
+    __table_args__ = (
+        Index("idx_attendance_records_student_date", "student_id", "date"),
+        UniqueConstraint("student_id", "date", name="uq_attendance_student_date"),
+    )
 
     id = Column(Integer, primary_key=True, index=True)
     student_id = Column(

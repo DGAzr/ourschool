@@ -31,7 +31,7 @@ from app.models.attendance import AttendanceRecord
 from app.models.user import User, UserRole
 from app.routers.auth import get_current_active_user, get_current_user
 from app.schemas.user import User as UserSchema
-from app.schemas.user import UserCreate, UserUpdate
+from app.schemas.user import UserCreate, UserUpdate, validate_password_strength
 
 router = APIRouter()
 
@@ -218,6 +218,10 @@ def read_user(
     return db_user
 
 
+# Fields a non-admin user is permitted to change on their own account.
+SELF_EDITABLE_FIELDS = {"email", "username", "first_name", "last_name"}
+
+
 @router.put("/{user_id}", response_model=UserSchema)
 def update_user(
     user_id: int,
@@ -225,12 +229,29 @@ def update_user(
     db: Annotated[Session, Depends(get_db)],
     current_user: Annotated[User, Depends(get_current_active_user)],
 ):
-    """Update a user."""
+    """Update a user.
+
+    Admins may update any user; non-admins may update only their own account
+    and only a restricted set of profile fields.
+    """
     db_user = db.query(User).filter(User.id == user_id).first()
     if db_user is None:
         raise HTTPException(status_code=404, detail="User not found")
 
-    update_data = user_update.dict(exclude_unset=True)
+    is_admin = current_user.role == UserRole.ADMIN
+    if not is_admin and db_user.id != current_user.id:
+        raise HTTPException(status_code=403, detail="Access denied")
+
+    update_data = user_update.model_dump(exclude_unset=True)
+
+    if not is_admin:
+        disallowed = set(update_data) - SELF_EDITABLE_FIELDS
+        if disallowed:
+            raise HTTPException(
+                status_code=403,
+                detail=f"You may not modify: {', '.join(sorted(disallowed))}",
+            )
+
     for field, value in update_data.items():
         setattr(db_user, field, value)
 
@@ -316,11 +337,13 @@ def change_my_password(
             detail="Current password is incorrect",
         )
 
-    # Validate new password strength
-    if len(new_password) < 6:
+    # Validate new password strength (shared policy)
+    try:
+        validate_password_strength(new_password)
+    except ValueError as exc:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="New password must be at least 6 characters long",
+            detail=str(exc),
         )
 
     # Don't allow same password

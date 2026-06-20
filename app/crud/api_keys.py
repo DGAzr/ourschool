@@ -194,20 +194,15 @@ def get_system_api_key_stats(db: Session) -> Dict[str, Any]:
     }
 
 
-# Permission constants
+# Permission constants — single source of truth for API-key permissions.
+# Only permissions backed by a real integration endpoint are listed, so the
+# /api/meta discovery contract never advertises capabilities that don't exist.
 AVAILABLE_PERMISSIONS = [
-    "students:read",
-    "students:write", 
-    "attendance:read",
-    "attendance:write",
-    "assignments:read",
-    "assignments:write",
-    "assignments:grade",
-    "points:read",
-    "points:write",
-    "reports:read",
-    "admin:read",
-    "admin:write"
+    "students:read",     # GET /api/users/students/lookup, /students/{id}/info
+    "assignments:read",  # GET /api/integrations/assignments/{id}
+    "assignments:grade", # POST /api/integrations/assignments/{id}/grade
+    "points:read",       # GET /api/students/{id}/points (+ ledger, overview)
+    "points:write",      # POST /api/students/{id}/points/adjust
 ]
 
 

@@ -40,7 +40,7 @@ class StudentPoints(Base):
     __tablename__ = "student_points"
 
     id = Column(Integer, primary_key=True, index=True)
-    student_id = Column(Integer, ForeignKey("users.id"), unique=True, nullable=False, index=True)
+    student_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), unique=True, nullable=False, index=True)
     current_balance = Column(Integer, default=0, nullable=False)
     total_earned = Column(Integer, default=0, nullable=False)  # Lifetime points earned
     total_spent = Column(Integer, default=0, nullable=False)   # Lifetime points spent/deducted
@@ -61,13 +61,13 @@ class PointTransaction(Base):
     __tablename__ = "point_transactions"
 
     id = Column(Integer, primary_key=True, index=True)
-    student_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    student_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
     amount = Column(Integer, nullable=False)  # Positive for awards, negative for deductions/spending
     transaction_type = Column(String(50), nullable=False, index=True)  # 'assignment', 'admin_award', 'admin_deduction', 'spending'
     source_id = Column(Integer, nullable=True)  # ID of assignment if transaction_type is 'assignment'
     source_description = Column(String(255), nullable=True)  # Brief description of the source
     notes = Column(Text, nullable=True)  # Detailed notes, especially for manual adjustments
-    admin_id = Column(Integer, ForeignKey("users.id"), nullable=True)  # Admin who made manual adjustment
+    admin_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)  # Admin who made manual adjustment
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     # Relationships

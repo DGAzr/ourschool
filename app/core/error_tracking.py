@@ -29,6 +29,18 @@ from app.core.logging import get_logger, log_error
 logger = get_logger("error_tracking")
 
 
+# Header names that must never be stored/returned in error records.
+_SENSITIVE_HEADERS = {"authorization", "cookie", "set-cookie", "x-api-key", "proxy-authorization"}
+
+
+def _redact_headers(headers: Dict[str, str]) -> Dict[str, str]:
+    """Return a copy of headers with sensitive values redacted."""
+    return {
+        key: ("[REDACTED]" if key.lower() in _SENSITIVE_HEADERS else value)
+        for key, value in headers.items()
+    }
+
+
 class ErrorTracker:
     """Centralized error tracking and handling."""
     
@@ -52,7 +64,7 @@ class ErrorTracker:
             request_context = {
                 "method": request.method,
                 "url": str(request.url),
-                "headers": dict(request.headers),
+                "headers": _redact_headers(dict(request.headers)),
                 "query_params": dict(request.query_params),
                 "path_params": getattr(request, 'path_params', {}),
                 "request_id": getattr(request.state, 'request_id', 'unknown'),
@@ -62,7 +74,7 @@ class ErrorTracker:
         # Create comprehensive error record
         error_record = {
             "error_id": error_id,
-            "timestamp": datetime.now(timezone.utc).isoformat() + "Z",
+            "timestamp": datetime.now(timezone.utc).isoformat(),
             "error_type": type(error).__name__,
             "error_message": str(error),
             "traceback": traceback.format_exception(type(error), error, error.__traceback__),

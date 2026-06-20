@@ -33,7 +33,7 @@ class JSONFormatter(logging.Formatter):
         import json
         
         log_data = {
-            "timestamp": datetime.now(timezone.utc).isoformat() + "Z",
+            "timestamp": datetime.now(timezone.utc).isoformat(),
             "level": record.levelname,
             "logger": record.name,
             "message": record.getMessage(),

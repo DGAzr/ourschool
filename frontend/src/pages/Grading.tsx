@@ -24,6 +24,7 @@ import { useAssignmentFilters } from '../hooks/useAssignmentFilters'
 import { SegmentedControl, StatTile, Pill, SubjectDot, statusToPillVariant, useToast } from '../components/ui'
 import GradeAssignmentModal from '../components/assignments/GradeAssignmentModal'
 import { StudentAssignment } from '../types'
+import { isPastDateOnly } from '../utils/formatters'
 
 const Grading: React.FC = () => {
   const { user } = useAuth()
@@ -62,7 +63,7 @@ const Grading: React.FC = () => {
   const getSubjectById = (id: number) => subjects.find(s => s.id === id)
 
   const needsGrading = allAssignments.filter(a => a.status === 'submitted' && !a.is_graded)
-  const overdueAssignments = allAssignments.filter(a => a.status !== 'graded' && a.due_date && new Date(a.due_date) < new Date())
+  const overdueAssignments = allAssignments.filter(a => a.status !== 'graded' && isPastDateOnly(a.due_date))
   const gradedCount = allAssignments.filter(a => a.is_graded).length
   const inProgressCount = allAssignments.filter(a => a.status === 'in_progress').length
 

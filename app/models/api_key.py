@@ -43,23 +43,30 @@ class APIKey(Base):
     key_prefix = Column(String(8), nullable=False, index=True)
     permissions = Column(JSON, nullable=False)  # List of permission strings
     is_active = Column(Boolean, default=True, index=True)
-    created_by = Column(Integer, ForeignKey("users.id"), nullable=False)
-    last_used_at = Column(DateTime, nullable=True)
-    expires_at = Column(DateTime, nullable=True)
-    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
-    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
+    created_by = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    last_used_at = Column(DateTime(timezone=True), nullable=True)
+    expires_at = Column(DateTime(timezone=True), nullable=True)
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+    updated_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
 
     # Relationships
     creator = relationship("User", foreign_keys=[created_by])
+
+    @staticmethod
+    def _as_aware(value: datetime) -> datetime:
+        """Treat a naive datetime (legacy rows) as UTC for safe comparison."""
+        if value is not None and value.tzinfo is None:
+            return value.replace(tzinfo=timezone.utc)
+        return value
 
     def has_permission(self, permission: str) -> bool:
         """Check if this API key has a specific permission."""
         if not self.is_active:
             return False
-        
-        if self.expires_at and self.expires_at < datetime.now(timezone.utc):
+
+        if self.expires_at and self._as_aware(self.expires_at) < datetime.now(timezone.utc):
             return False
-            
+
         return permission in self.permissions
 
     def has_any_permission(self, permissions: List[str]) -> bool:
@@ -73,7 +80,7 @@ class APIKey(Base):
     @property
     def is_expired(self) -> bool:
         """Check if this API key is expired."""
-        return self.expires_at is not None and self.expires_at < datetime.now(timezone.utc)
+        return self.expires_at is not None and self._as_aware(self.expires_at) < datetime.now(timezone.utc)
 
     @property
     def is_valid(self) -> bool:

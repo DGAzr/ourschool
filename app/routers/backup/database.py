@@ -110,10 +110,10 @@ def export_system_backup(
         return backup
         
     except Exception as e:
-        logger.error(f"System backup export failed: {str(e)}")
+        logger.error(f"System backup export failed: {str(e)}", exc_info=True)
         raise HTTPException(
             status_code=500,
-            detail=f"Backup export failed: {str(e)}"
+            detail="Backup export failed. See server logs for details."
         )
 
 
@@ -140,8 +140,8 @@ def import_system_backup(
         return result
         
     except Exception as e:
-        logger.error(f"System backup import failed: {str(e)}")
+        logger.error(f"System backup import failed: {str(e)}", exc_info=True)
         raise HTTPException(
             status_code=500,
-            detail=f"Backup import failed: {str(e)}"
+            detail="Backup import failed. See server logs for details."
         )

@@ -1,0 +1,6 @@
+# Development & test dependencies (install on top of requirements.txt)
+-r requirements.txt
+
+pytest==8.3.3
+# httpx<0.28 keeps Starlette's TestClient(app=...) shortcut working
+httpx<0.28

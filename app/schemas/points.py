@@ -20,7 +20,19 @@ Points system Pydantic schemas for API requests and responses.
 
 from datetime import datetime
 from typing import Optional, List
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
+
+# Allowed transaction types (validated on create; responses stay permissive so
+# legacy rows always deserialize).
+ALLOWED_TRANSACTION_TYPES = {
+    "assignment",
+    "admin_award",
+    "admin_deduction",
+    "journal_submission",
+    "spending",
+}
+
+ALLOWED_SETTING_TYPES = {"boolean", "string", "integer", "json"}
 
 
 class PointTransactionBase(BaseModel):
@@ -35,6 +47,15 @@ class PointTransactionBase(BaseModel):
 class PointTransactionCreate(PointTransactionBase):
     """Schema for creating a point transaction."""
     student_id: int = Field(..., description="ID of the student receiving/losing points")
+
+    @field_validator("transaction_type")
+    @classmethod
+    def _validate_transaction_type(cls, v: str) -> str:
+        if v not in ALLOWED_TRANSACTION_TYPES:
+            raise ValueError(
+                f"transaction_type must be one of {sorted(ALLOWED_TRANSACTION_TYPES)}"
+            )
+        return v
 
 
 class AdminPointAdjustment(BaseModel):
@@ -118,7 +139,15 @@ class SystemSettingBase(BaseModel):
 
 class SystemSettingCreate(SystemSettingBase):
     """Schema for creating system settings."""
-    pass
+
+    @field_validator("setting_type")
+    @classmethod
+    def _validate_setting_type(cls, v: str) -> str:
+        if v not in ALLOWED_SETTING_TYPES:
+            raise ValueError(
+                f"setting_type must be one of {sorted(ALLOWED_SETTING_TYPES)}"
+            )
+        return v
 
 
 class SystemSetting(SystemSettingBase):

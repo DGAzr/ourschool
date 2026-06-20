@@ -128,8 +128,8 @@ def import_system_data(
         if not dry_run:
             db.rollback()
         logger.error(f"System backup import failed: {str(e)}", exc_info=True)
-        result.errors.append(f"Import failed: {str(e)}")
-        result.import_log.append(f"Import failed with error: {str(e)}")
+        result.errors.append("Import failed due to an internal error. See server logs.")
+        result.import_log.append("Import failed with an internal error.")
         return result
 
 
@@ -137,7 +137,8 @@ def _import_users(db: Session, users_data, result, import_options, dry_run):
     """Import users. Builds two resolution maps: by external_id and by email."""
     by_uuid: Dict[str, int] = {}
     by_email: Dict[str, int] = {}
-    imported = skipped = 0
+    imported = skipped = updated = 0
+    allow_admin_import = import_options.get("allow_admin_import", False)
 
     # Pre-load existing users into both maps
     for existing in db.query(User).all():
@@ -148,11 +149,31 @@ def _import_users(db: Session, users_data, result, import_options, dry_run):
     for user_data in users_data:
         existing_id = _resolve(user_data.external_id, user_data.email, by_uuid, by_email)
 
+        # Validate the role explicitly so a malformed/tampered backup fails with
+        # a clear per-record error rather than an opaque mid-import exception.
+        try:
+            role = UserRoleEnum(user_data.role)
+        except ValueError:
+            result.errors.append(
+                f"User {user_data.email}: invalid role '{user_data.role}'"
+            )
+            continue
+
         if existing_id and import_options.get("skip_existing_users", True):
-            by_uuid[user_data.external_id] = existing_id if user_data.external_id else None
+            if user_data.external_id:
+                by_uuid[user_data.external_id] = existing_id
             by_email[user_data.email] = existing_id
             skipped += 1
             result.import_log.append(f"Skipped existing user: {user_data.email}")
+            continue
+
+        # Guard against a backup silently provisioning new admin accounts.
+        if role == UserRoleEnum.ADMIN and not existing_id and not allow_admin_import:
+            skipped += 1
+            result.warnings.append(
+                f"User {user_data.email} (role=admin) not created — set "
+                "import option allow_admin_import=true to import admin accounts."
+            )
             continue
 
         if not dry_run:
@@ -161,7 +182,7 @@ def _import_users(db: Session, users_data, result, import_options, dry_run):
                 existing_user.first_name = user_data.first_name
                 existing_user.last_name = user_data.last_name
                 existing_user.username = user_data.username
-                existing_user.role = UserRoleEnum(user_data.role)
+                existing_user.role = role
                 existing_user.is_active = user_data.is_active
                 existing_user.date_of_birth = user_data.date_of_birth
                 existing_user.grade_level = user_data.grade_level
@@ -169,6 +190,7 @@ def _import_users(db: Session, users_data, result, import_options, dry_run):
                 by_email[user_data.email] = existing_user.id
                 if user_data.external_id:
                     by_uuid[user_data.external_id] = existing_user.id
+                updated += 1
                 result.import_log.append(f"Updated existing user: {user_data.email}")
             else:
                 import uuid as _uuid
@@ -179,7 +201,7 @@ def _import_users(db: Session, users_data, result, import_options, dry_run):
                     hashed_password="needs_reset",
                     first_name=user_data.first_name,
                     last_name=user_data.last_name,
-                    role=UserRoleEnum(user_data.role),
+                    role=role,
                     is_active=user_data.is_active,
                     date_of_birth=user_data.date_of_birth,
                     grade_level=user_data.grade_level
@@ -196,6 +218,7 @@ def _import_users(db: Session, users_data, result, import_options, dry_run):
 
     result.imported_counts["users"] = imported
     result.skipped_counts["users"] = skipped
+    result.updated_counts["users"] = updated
     result.id_mappings["users_by_uuid"] = by_uuid
     result.id_mappings["users_by_email"] = by_email
 
@@ -417,7 +440,7 @@ def _import_student_assignments(db: Session, student_assignments_data, result, d
     users_by_email = result.id_mappings.get("users_by_email", {})
     templates_by_uuid = result.id_mappings.get("templates_by_uuid", {})
     templates_by_name = result.id_mappings.get("templates_by_name", {})
-    imported = 0
+    imported = skipped = 0
 
     for sa_data in student_assignments_data:
         student_id = _resolve(getattr(sa_data, 'student_external_id', None), sa_data.student_email, users_by_uuid, users_by_email)
@@ -430,6 +453,21 @@ def _import_student_assignments(db: Session, student_assignments_data, result, d
         if not dry_run:
             from app.models.assignment import StudentAssignment
             from app.enums import AssignmentStatus
+
+            # Idempotency: skip if this student already has this template on this
+            # due date, so re-importing a backup does not duplicate assignments.
+            existing = db.query(StudentAssignment).filter(
+                StudentAssignment.student_id == student_id,
+                StudentAssignment.template_id == template_id,
+                StudentAssignment.due_date == sa_data.due_date,
+            ).first()
+            if existing:
+                skipped += 1
+                result.import_log.append(
+                    f"Skipped existing student_assignment for {sa_data.student_email}"
+                )
+                continue
+
             new_sa = StudentAssignment(
                 template_id=template_id,
                 student_id=student_id,
@@ -467,6 +505,7 @@ def _import_student_assignments(db: Session, student_assignments_data, result, d
         imported += 1
 
     result.imported_counts["student_assignments"] = imported
+    result.skipped_counts["student_assignments"] = skipped
 
 
 def _import_student_term_grades(db: Session, term_grades_data, result, dry_run):
@@ -557,7 +596,7 @@ def _import_attendance_records(db: Session, attendance_data, result, dry_run):
     """Import attendance records."""
     users_by_uuid = result.id_mappings.get("users_by_uuid", {})
     users_by_email = result.id_mappings.get("users_by_email", {})
-    imported = 0
+    imported = skipped = 0
 
     for att_data in attendance_data:
         student_id = _resolve(getattr(att_data, 'student_external_id', None), att_data.student_email, users_by_uuid, users_by_email)
@@ -568,6 +607,19 @@ def _import_attendance_records(db: Session, attendance_data, result, dry_run):
         if not dry_run:
             from app.models.attendance import AttendanceRecord
             from app.enums import AttendanceStatus
+
+            # Idempotency: one record per student per day.
+            existing = db.query(AttendanceRecord).filter(
+                AttendanceRecord.student_id == student_id,
+                AttendanceRecord.date == att_data.date,
+            ).first()
+            if existing:
+                skipped += 1
+                result.import_log.append(
+                    f"Skipped existing attendance for {att_data.student_email} on {att_data.date}"
+                )
+                continue
+
             new_att = AttendanceRecord(
                 student_id=student_id,
                 date=att_data.date,
@@ -580,13 +632,14 @@ def _import_attendance_records(db: Session, attendance_data, result, dry_run):
         imported += 1
 
     result.imported_counts["attendance_records"] = imported
+    result.skipped_counts["attendance_records"] = skipped
 
 
 def _import_journal_entries(db: Session, journal_data, result, dry_run):
     """Import journal entries."""
     users_by_uuid = result.id_mappings.get("users_by_uuid", {})
     users_by_email = result.id_mappings.get("users_by_email", {})
-    imported = 0
+    imported = skipped = 0
 
     for je_data in journal_data:
         author_id = _resolve(getattr(je_data, 'user_external_id', None), je_data.user_email, users_by_uuid, users_by_email)
@@ -594,14 +647,34 @@ def _import_journal_entries(db: Session, journal_data, result, dry_run):
             result.import_log.append(f"Skipped journal: {je_data.user_email} (unresolved)")
             continue
 
+        entry_date = (
+            datetime.combine(je_data.date, datetime.min.time())
+            if isinstance(je_data.date, date)
+            else je_data.date
+        )
+
         if not dry_run:
             from app.models.journal import JournalEntry
+
+            # Idempotency: dedup on (author, title, entry_date).
+            existing = db.query(JournalEntry).filter(
+                JournalEntry.author_id == author_id,
+                JournalEntry.title == je_data.title,
+                JournalEntry.entry_date == entry_date,
+            ).first()
+            if existing:
+                skipped += 1
+                result.import_log.append(
+                    f"Skipped existing journal entry: {je_data.title}"
+                )
+                continue
+
             new_je = JournalEntry(
                 student_id=author_id,
                 author_id=author_id,
                 title=je_data.title,
                 content=je_data.content,
-                entry_date=datetime.combine(je_data.date, datetime.min.time()) if isinstance(je_data.date, date) else je_data.date
+                entry_date=entry_date,
             )
             db.add(new_je)
             db.flush()
@@ -609,6 +682,7 @@ def _import_journal_entries(db: Session, journal_data, result, dry_run):
         imported += 1
 
     result.imported_counts["journal_entries"] = imported
+    result.skipped_counts["journal_entries"] = skipped
 
 
 def _import_system_settings(db: Session, system_settings_data, result, dry_run):

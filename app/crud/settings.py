@@ -155,7 +155,8 @@ def initialize_default_settings(db: Session) -> None:
             "description": "Required number of instructional days per academic year for attendance calculations"
         },
         {
-            "setting_key": "points.system_enabled",
+            # Must match the key read by crud.points.is_points_system_enabled
+            "setting_key": "points_system_enabled",
             "setting_value": "true",
             "setting_type": "boolean",
             "description": "Enable or disable the student points system"

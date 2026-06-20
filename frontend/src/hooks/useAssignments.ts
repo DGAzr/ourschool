@@ -77,21 +77,13 @@ export const useAssignments = ({ isAdmin, adminViewMode, selectedSubject }: UseA
         }
       } else {
         // Students see their assigned assignments
-        try {
-          const assignmentsData = await assignmentsApi.getMyAssignments({
-            subject_id: selectedSubject || undefined
-          })
-          setStudentAssignments(assignmentsData || [])
-        } catch (err) {
-          throw err
-        }
-        
-        try {
-          const subjectsData = await subjectsApi.getAll()
-          setSubjects(subjectsData || [])
-        } catch (err) {
-          throw err
-        }
+        const assignmentsData = await assignmentsApi.getMyAssignments({
+          subject_id: selectedSubject || undefined
+        })
+        setStudentAssignments(assignmentsData || [])
+
+        const subjectsData = await subjectsApi.getAll()
+        setSubjects(subjectsData || [])
       }
       
       setError(null)

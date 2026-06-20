@@ -20,6 +20,7 @@ import React, { useState, useEffect, useRef } from 'react'
 import { MoreVertical, Edit3, Trash2, Archive, Award, Play, FileCheck, Calendar, User, BookOpen } from 'lucide-react'
 import { StudentAssignment, Subject, User as UserType } from '../../types'
 import { assignmentUtils } from '../../services/assignments'
+import { isPastDateOnly } from '../../utils/formatters'
 import InlineGradeForm from './InlineGradeForm'
 
 interface GradingAssignmentsTableProps {
@@ -120,7 +121,7 @@ const GradingAssignmentsTable: React.FC<GradingAssignmentsTableProps> = ({
               const subject = assignment.template?.subject_id ? getSubjectById(assignment.template.subject_id) : undefined
               const student = getStudentById(assignment.student_id)
               const template = assignment.template
-              const isOverdue = assignment.due_date && new Date(assignment.due_date) < new Date() && assignment.status !== 'graded'
+              const isOverdue = isPastDateOnly(assignment.due_date) && assignment.status !== 'graded'
               const maxPts = assignment.custom_max_points || template?.max_points || 100
               const pct = maxPts > 0 ? ((assignment.points_earned || 0) / maxPts) * 100 : 0
 

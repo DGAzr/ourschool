@@ -45,10 +45,14 @@ def get_system_setting(db: Session, setting_key: str) -> Optional[SystemSettings
 
 
 def is_points_system_enabled(db: Session) -> bool:
-    """Check if the points system is enabled."""
+    """Check if the points system is enabled.
+
+    Defaults to enabled when the setting row is absent (e.g. before defaults
+    are seeded), matching the documented default.
+    """
     setting = get_system_setting(db, "points_system_enabled")
     if not setting:
-        return False
+        return True
     return setting.setting_value.lower() == "true"
 
 
@@ -143,8 +147,8 @@ def admin_adjust_points(
 
 
 def award_assignment_points(
-    db: Session, 
-    student_id: int, 
+    db: Session,
+    student_id: int,
     assignment_id: int,
     points_earned: int,
     assignment_title: str
@@ -158,8 +162,66 @@ def award_assignment_points(
         source_description=f"Assignment: {assignment_title}",
         notes=f"Earned {points_earned} points for completing assignment"
     )
-    
+
     return create_point_transaction(db, transaction_data)
+
+
+def set_assignment_points(
+    db: Session,
+    student_id: int,
+    assignment_id: int,
+    points_earned: float,
+    assignment_title: str,
+) -> Optional[PointTransaction]:
+    """Idempotently sync the points awarded for an assignment to ``points_earned``.
+
+    Computes the delta versus any points previously awarded for this assignment
+    (tracked by ``transaction_type='assignment'`` + ``source_id``) and records a
+    single adjusting transaction. Safe to call on first grade and every re-grade:
+    the student's net award always equals the (rounded) current score, so
+    balances never inflate or drift. Does not commit; caller controls the
+    transaction boundary.
+    """
+    # Points are integer-valued; round fractional scores half-up (8.5 -> 9)
+    # rather than Python's banker's rounding (8.5 -> 8).
+    from decimal import Decimal, ROUND_HALF_UP
+    target = int(
+        Decimal(str(points_earned or 0)).quantize(Decimal("1"), rounding=ROUND_HALF_UP)
+    )
+
+    previously_awarded = (
+        db.query(func.coalesce(func.sum(PointTransaction.amount), 0))
+        .filter(
+            PointTransaction.student_id == student_id,
+            PointTransaction.transaction_type == "assignment",
+            PointTransaction.source_id == assignment_id,
+        )
+        .scalar()
+        or 0
+    )
+
+    delta = target - int(previously_awarded)
+    if delta == 0:
+        return None
+
+    db_transaction = PointTransaction(
+        student_id=student_id,
+        amount=delta,
+        transaction_type="assignment",
+        source_id=assignment_id,
+        source_description=f"Assignment: {assignment_title}",
+        notes=f"Grade sync to {target} points for assignment",
+    )
+    db.add(db_transaction)
+
+    student_points = get_or_create_student_points(db, student_id)
+    student_points.current_balance += delta
+    # Assignment points are earnings; keep total_earned consistent with the
+    # net awarded value (never below zero).
+    student_points.total_earned = max(0, student_points.total_earned + delta)
+
+    db.flush()
+    return db_transaction
 
 
 def get_student_points(db: Session, student_id: int) -> Optional[StudentPoints]:

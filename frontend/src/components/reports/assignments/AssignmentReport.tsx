@@ -23,6 +23,7 @@ import { reportsApi } from '../../../services/reports'
 import AssignmentDetailModal from '../../assignments/AssignmentDetailModal'
 import ReportHeader from '../shared/ReportHeader'
 import { StatTile, Pill, statusToPillVariant, Select } from '../../ui'
+import { isPastDateOnly, formatDateOnly } from '../../../utils/formatters'
 
 interface AssignmentReportProps {
   assignmentReport: AssignmentReportType | null
@@ -80,7 +81,7 @@ const AssignmentReport: React.FC<AssignmentReportProps> = ({ assignmentReport, l
     const total = filteredAssignments.length
     const completed = filteredAssignments.filter(a => a.status === 'graded').length
     const inProgress = filteredAssignments.filter(a => a.status === 'in_progress').length
-    const overdue = filteredAssignments.filter(a => a.due_date && new Date(a.due_date) < new Date() && a.status !== 'graded').length
+    const overdue = filteredAssignments.filter(a => isPastDateOnly(a.due_date) && a.status !== 'graded').length
     const graded = filteredAssignments.filter(a => a.percentage_grade != null)
     const avgGrade = graded.length ? graded.reduce((s, a) => s + (a.percentage_grade || 0), 0) / graded.length : null
     return { total, completed, inProgress, overdue, avgGrade }
@@ -162,7 +163,7 @@ const AssignmentReport: React.FC<AssignmentReportProps> = ({ assignmentReport, l
             </thead>
             <tbody className="bg-panel divide-y divide-line">
               {filteredAssignments.map(a => {
-                const isOverdue = a.due_date && new Date(a.due_date) < new Date() && a.status !== 'graded'
+                const isOverdue = isPastDateOnly(a.due_date) && a.status !== 'graded'
                 return (
                   <tr
                     key={a.assignment_id}
@@ -181,7 +182,7 @@ const AssignmentReport: React.FC<AssignmentReportProps> = ({ assignmentReport, l
                     </td>
                     <td className="px-5 py-3.5 whitespace-nowrap">
                       <span className={`text-[13px] font-mono ${isOverdue ? 'text-neg-fg font-semibold' : 'text-ink-2'}`}>
-                        {a.due_date ? new Date(a.due_date).toLocaleDateString() : '—'}
+                        {a.due_date ? formatDateOnly(a.due_date) : '—'}
                       </span>
                     </td>
                     <td className="px-5 py-3.5 whitespace-nowrap">

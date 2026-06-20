@@ -15,7 +15,7 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 """APIs for activity tracking."""
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, timezone
 from typing import Annotated, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -75,12 +75,10 @@ class ActivityItem:
             # This is a date-only event created with datetime.combine(date, datetime.min.time())
             from datetime import date as Date
             
-            # Use UTC date to be consistent, but adjust for the fact that 
-            # database dates are stored as local dates
-            now_utc = datetime.now(timezone.utc)
-            # Adjust UTC to approximate local time (assuming EDT = UTC-4)
-            local_now = now_utc - timedelta(hours=4)  
-            today = local_now.date()
+            # Date-only events are stored using the server's local date, so
+            # compare against the server's local "today" rather than a
+            # hardcoded UTC offset (which was wrong outside EDT and during DST).
+            today = datetime.now().date()
             event_date = self.timestamp.date()
             
             day_diff = (today - event_date).days

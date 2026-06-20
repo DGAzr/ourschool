@@ -26,6 +26,7 @@ from sqlalchemy import (
     Enum,
     Float,
     ForeignKey,
+    Index,
     Integer,
     String,
     Text,
@@ -45,6 +46,10 @@ class Term(Base):
     """
 
     __tablename__ = "terms"
+
+    __table_args__ = (
+        Index("idx_terms_academic_year_start_date", "academic_year", "start_date"),
+    )
 
     id = Column(Integer, primary_key=True, index=True)
     external_id = Column(String(36), unique=True, nullable=False, default=lambda: str(uuid.uuid4()))
@@ -69,7 +74,7 @@ class Term(Base):
     # Audit fields
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
     updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
-    created_by = Column(Integer, ForeignKey("users.id"), nullable=False)
+    created_by = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
 
     # Relationships
     creator = relationship("User", foreign_keys=[created_by])
@@ -149,7 +154,7 @@ class StudentTermGrade(Base):
     )
 
     id = Column(Integer, primary_key=True, index=True)
-    student_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    student_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
     term_subject_id = Column(Integer, ForeignKey("term_subjects.id"), nullable=False)
 
     # Current term performance
@@ -165,7 +170,7 @@ class StudentTermGrade(Base):
     final_letter_grade = Column(String)
     is_finalized = Column(Boolean, default=False)
     finalized_date = Column(Date)
-    finalized_by = Column(Integer, ForeignKey("users.id"))
+    finalized_by = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"))
 
     # Additional metrics
     assignments_completed = Column(Integer, default=0)
@@ -248,7 +253,7 @@ class GradeHistory(Base):
     change_reason = Column(Text)  # Why the change was made
 
     # Who and when
-    changed_by = Column(Integer, ForeignKey("users.id"), nullable=False)
+    changed_by = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
     changed_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
     # Assignment context (if the change was due to a specific assignment)

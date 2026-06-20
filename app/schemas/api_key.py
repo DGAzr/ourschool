@@ -132,36 +132,17 @@ class AvailablePermissions(BaseModel):
     categories: List[str]
 
 
-# Permission descriptions for API documentation
+# Permission descriptions for API documentation. Keep keys in sync with
+# crud.api_keys.AVAILABLE_PERMISSIONS (only endpoint-backed permissions).
 PERMISSION_DESCRIPTIONS = {
     "students:read": PermissionInfo(
         permission="students:read",
         description="Read student information and profiles",
         category="Students"
     ),
-    "students:write": PermissionInfo(
-        permission="students:write", 
-        description="Create and update student records",
-        category="Students"
-    ),
-    "attendance:read": PermissionInfo(
-        permission="attendance:read",
-        description="Read attendance records and statistics",
-        category="Attendance"
-    ),
-    "attendance:write": PermissionInfo(
-        permission="attendance:write",
-        description="Record and update attendance",
-        category="Attendance"
-    ),
     "assignments:read": PermissionInfo(
         permission="assignments:read",
         description="Read assignment data and submissions",
-        category="Assignments"
-    ),
-    "assignments:write": PermissionInfo(
-        permission="assignments:write",
-        description="Create and update assignments",
         category="Assignments"
     ),
     "assignments:grade": PermissionInfo(
@@ -179,19 +160,4 @@ PERMISSION_DESCRIPTIONS = {
         description="Add or deduct student points with notes",
         category="Points"
     ),
-    "reports:read": PermissionInfo(
-        permission="reports:read",
-        description="Access reports and analytics",
-        category="Reports"
-    ),
-    "admin:read": PermissionInfo(
-        permission="admin:read",
-        description="Administrative read access",
-        category="Administration"
-    ),
-    "admin:write": PermissionInfo(
-        permission="admin:write",
-        description="Administrative write access",
-        category="Administration"
-    )
 }

@@ -9,10 +9,12 @@ alembic==1.14.0
 psycopg==3.2.9  # PostgreSQL adapter (psycopg3)
 
 # Request handling and multipart forms
-python-multipart==0.0.6
+# 0.0.18 fixes the multipart DoS (CVE-2024-24762) present in 0.0.6
+python-multipart==0.0.18
 
 # Authentication and security
-python-jose[cryptography]==3.3.0
+# 3.4.0 fixes JWT algorithm-confusion / DoS advisories (CVE-2024-33663/33664)
+python-jose[cryptography]==3.4.0
 passlib[bcrypt]==1.7.4
 bcrypt==4.0.1
 

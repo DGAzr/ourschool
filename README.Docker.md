@@ -210,12 +210,23 @@ docker-compose exec backend curl -f http://localhost:8000/health
 
 ## Security Notes
 
-- **Change default passwords** in production
-- **Use strong SECRET_KEY** values
-- **Restrict CORS origins** to your actual domains
-- **Use HTTPS** in production
-- **Keep Docker images updated**
-- **Don't expose database port** in production unless necessary
+- **Change default passwords** in production. `docker-deploy.sh` now refuses to
+  start with an empty/known-default `POSTGRES_PASSWORD` (override with
+  `ALLOW_WEAK_DB_PASSWORD=true` only if you really mean it).
+- **Use a strong SECRET_KEY.** `docker-compose.yml` has no default — deployment
+  fails fast if it is unset — and `docker-deploy.sh` rejects placeholder/short
+  keys. Generate one with `openssl rand -hex 32`.
+- **Restrict CORS origins** to your actual domains (`ALLOWED_ORIGINS`). A `*`
+  wildcard is rejected at startup because credentials are enabled.
+- **Terminate TLS at a reverse proxy.** The bundled frontend uses Vite's
+  `preview` server, which is not a hardened production web server and provides
+  no TLS, gzip, or rate limiting. Put nginx/Caddy/Traefik (or a managed load
+  balancer) in front to terminate HTTPS and add rate limiting. By default the
+  backend (8000) and database (5432) bind to `127.0.0.1`; set
+  `BACKEND_BIND`/`POSTGRES_BIND` to `0.0.0.0` only when fronted by such a proxy.
+- **Disable interactive API docs** in production if desired: `ENABLE_API_DOCS=false`.
+- **Keep Docker images updated** and rebuild after dependency bumps.
+- **Don't expose the database port** publicly (it stays on loopback by default).
 
 ## Backup and Restore
 

@@ -20,6 +20,7 @@ import React, { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { Eye, EyeOff } from 'lucide-react'
+import { config } from '../config/env'
 
 const Login: React.FC = () => {
   const [username, setUsername] = useState('')
@@ -41,14 +42,14 @@ const Login: React.FC = () => {
       formData.append('username', username)
       formData.append('password', password)
 
-      const response = await fetch('/api/auth/login', {
+      const response = await fetch(`${config.api.baseUrl}/auth/login`, {
         method: 'POST',
         body: formData,
       })
 
       if (response.ok) {
         const data = await response.json()
-        const userResponse = await fetch('/api/users/me', {
+        const userResponse = await fetch(`${config.api.baseUrl}/users/me`, {
           headers: { Authorization: `Bearer ${data.access_token}` },
         })
         if (userResponse.ok) {
@@ -92,11 +93,14 @@ const Login: React.FC = () => {
           )}
 
           <div>
-            <label className="block text-[11px] font-semibold text-faint uppercase tracking-[.06em] mb-1.5">
+            <label htmlFor="login-username" className="block text-[11px] font-semibold text-faint uppercase tracking-[.06em] mb-1.5">
               Username
             </label>
             <input
+              id="login-username"
+              name="username"
               type="text"
+              autoComplete="username"
               required
               value={username}
               onChange={(e) => setUsername(e.target.value)}
@@ -106,12 +110,15 @@ const Login: React.FC = () => {
           </div>
 
           <div>
-            <label className="block text-[11px] font-semibold text-faint uppercase tracking-[.06em] mb-1.5">
+            <label htmlFor="login-password" className="block text-[11px] font-semibold text-faint uppercase tracking-[.06em] mb-1.5">
               Password
             </label>
             <div className="relative">
               <input
+                id="login-password"
+                name="password"
                 type={showPassword ? 'text' : 'password'}
+                autoComplete="current-password"
                 required
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}

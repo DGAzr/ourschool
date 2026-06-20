@@ -75,7 +75,8 @@ class StudentAssignmentBackup(BaseModel):
     due_date: Optional[date] = None
     extended_due_date: Optional[date] = None
     status: str = "not_started"
-    points_earned: Optional[int] = None
+    # Float to match the model column; an int here truncates decimal scores.
+    points_earned: Optional[float] = None
     letter_grade: Optional[str] = None
     teacher_feedback: Optional[str] = None
     student_notes: Optional[str] = None

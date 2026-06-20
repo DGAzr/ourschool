@@ -623,27 +623,29 @@ def grade_student_assignment(
     db.commit()
     db.refresh(assignment)
 
-    # Award points if points system is enabled
+    # Sync points if points system is enabled (idempotent; safe on re-grade)
     try:
         if points_crud.is_points_system_enabled(db):
             assignment_title = f"{assignment.template.name}" if assignment.template else f"Assignment {assignment.id}"
-            points_crud.award_assignment_points(
+            points_crud.set_assignment_points(
                 db=db,
                 student_id=assignment.student_id,
                 assignment_id=assignment.id,
                 points_earned=grade_data.points_earned,
                 assignment_title=assignment_title
             )
+            db.commit()
             logger.info(
-                "Awarded %s points to student %s for assignment %s",
-                grade_data.points_earned,
+                "Synced points for student %s assignment %s to %s",
                 assignment.student_id,
                 assignment.id,
+                grade_data.points_earned,
             )
     except Exception as e:
-        # Don't fail the grading process if points awarding fails
+        # Don't fail the grading process if points syncing fails
+        db.rollback()
         logger.error(
-            "Failed to award points for assignment %s: %s",
+            "Failed to sync points for assignment %s: %s",
             assignment.id,
             str(e),
         )
@@ -669,6 +671,7 @@ def bulk_grade_assignments(
         raise HTTPException(status_code=403, detail="Only administrators can grade assignments")
 
     results: list[BulkGradeResult] = []
+    points_enabled = points_crud.is_points_system_enabled(db)
     for item in items:
         try:
             assignment = db.query(StudentAssignment).filter(StudentAssignment.id == item.assignment_id).first()
@@ -681,34 +684,33 @@ def bulk_grade_assignments(
                 results.append(BulkGradeResult(assignment_id=item.assignment_id, success=False, error=f"Points {item.points_earned} exceed maximum {max_points}"))
                 continue
 
-            was_already_graded = assignment.is_graded
+            # Each item commits or rolls back independently via a savepoint, so
+            # one failure never discards previously-applied items.
+            with db.begin_nested():
+                assignment.points_earned = item.points_earned
+                assignment.teacher_feedback = item.teacher_feedback
+                assignment.is_graded = True
+                assignment.graded_date = date.today()
+                assignment.graded_by = current_user.id
 
-            assignment.points_earned = item.points_earned
-            assignment.teacher_feedback = item.teacher_feedback
-            assignment.is_graded = True
-            assignment.graded_date = date.today()
-            assignment.graded_by = current_user.id
+                percentage = assignment.calculate_percentage_grade()
+                if percentage is not None:
+                    from app.crud.reports import calculate_letter_grade
+                    assignment.letter_grade = calculate_letter_grade(percentage)
 
-            percentage = assignment.calculate_percentage_grade()
-            if percentage is not None:
-                from app.crud.reports import calculate_letter_grade
-                assignment.letter_grade = calculate_letter_grade(percentage)
+                assignment.update_status()
+                assignment.update_term_grade(db)
 
-            assignment.update_status()
-            assignment.update_term_grade(db)
-            db.flush()
-
-            try:
-                if points_crud.is_points_system_enabled(db):
+                if points_enabled:
                     title = assignment.template.name if assignment.template else f"Assignment {assignment.id}"
-                    if not was_already_graded:
-                        # First-time grading: award full points
-                        points_crud.award_assignment_points(db=db, student_id=assignment.student_id, assignment_id=assignment.id, points_earned=item.points_earned, assignment_title=title)
-                    else:
-                        # Re-grade: adjust points via delta (placeholder — implement delta handler)
-                        logger.warning(f"Re-grade of assignment {assignment.id}: points adjustment not yet implemented, skipping award")
-            except Exception as e:
-                logger.warning(f"Failed to award points for assignment {assignment.id}: {e}")
+                    # Idempotent delta sync handles both first grade and re-grade.
+                    points_crud.set_assignment_points(
+                        db=db,
+                        student_id=assignment.student_id,
+                        assignment_id=assignment.id,
+                        points_earned=item.points_earned,
+                        assignment_title=title,
+                    )
 
             results.append(BulkGradeResult(assignment_id=item.assignment_id, success=True))
         except Exception as e:
@@ -1188,11 +1190,14 @@ def get_student_term_grades(
     db: Annotated[Session, Depends(get_db)],
     current_user: Annotated[User, Depends(get_current_active_user)],
 ):
-    """Get term grades for a specific student."""
-    from sqlalchemy import func
+    """Get term grades for a specific student, across all terms.
 
-    from app.models.subject import Subject
-    from app.models.term import Term, TermSubject
+    Delegates per-term computation to the canonical reporting CRUD so that term
+    membership (by effective due date), per-assignment-type weighting, and the
+    shared letter-grade scale match every other grade surface in the app.
+    """
+    from app.crud import reports as crud_reports
+    from app.models.term import Term
 
     # Verify access - admin must manage the student, or student can see their own
     if current_user.role == UserRole.ADMIN:
@@ -1211,84 +1216,23 @@ def get_student_term_grades(
     else:
         raise HTTPException(status_code=403, detail="Access denied")
 
-    # Get all terms with grades for this student
-    term_grades = (
-        db.query(
-            Term.id.label("term_id"),
-            Term.name.label("term_name"),
-            Subject.id.label("subject_id"),
-            Subject.name.label("subject_name"),
-            func.sum(StudentAssignment.points_earned).label("earned_points"),
-            func.sum(
-                func.coalesce(
-                    StudentAssignment.custom_max_points, AssignmentTemplate.max_points
-                )
-            ).label("total_points"),
-            func.count(StudentAssignment.id).label("assignments_count"),
-            func.count(func.case([(StudentAssignment.is_graded, 1)])).label(
-                "completed_count"
-            ),
-        )
-        .select_from(StudentAssignment)
-        .join(
-            AssignmentTemplate, StudentAssignment.template_id == AssignmentTemplate.id
-        )
-        .join(Subject, AssignmentTemplate.subject_id == Subject.id)
-        .join(TermSubject, TermSubject.subject_id == Subject.id)
-        .join(Term, TermSubject.term_id == Term.id)
-        .filter(
-            StudentAssignment.student_id == student_id,
-            StudentAssignment.is_graded,
-        )
-        .group_by(Term.id, Term.name, Subject.id, Subject.name)
-        .order_by(Term.term_order, Subject.name)
-        .all()
-    )
+    terms = db.query(Term).order_by(Term.term_order).all()
 
-    # Calculate percentages and letter grades
     result = []
-    for grade in term_grades:
-        if grade.total_points > 0:
-            percentage = round((grade.earned_points / grade.total_points) * 100, 1)
-
-            # Calculate letter grade
-            if percentage >= 97:
-                letter_grade = "A+"
-            elif percentage >= 93:
-                letter_grade = "A"
-            elif percentage >= 90:
-                letter_grade = "A-"
-            elif percentage >= 87:
-                letter_grade = "B+"
-            elif percentage >= 83:
-                letter_grade = "B"
-            elif percentage >= 80:
-                letter_grade = "B-"
-            elif percentage >= 77:
-                letter_grade = "C+"
-            elif percentage >= 73:
-                letter_grade = "C"
-            elif percentage >= 70:
-                letter_grade = "C-"
-            elif percentage >= 67:
-                letter_grade = "D+"
-            elif percentage >= 65:
-                letter_grade = "D"
-            else:
-                letter_grade = "F"
-
+    for term in terms:
+        for tg in crud_reports.get_student_term_grades(db, student_id, term_id=term.id):
             result.append(
                 {
-                    "term_id": grade.term_id,
-                    "term_name": grade.term_name,
-                    "subject_id": grade.subject_id,
-                    "subject_name": grade.subject_name,
-                    "total_points": grade.total_points,
-                    "earned_points": grade.earned_points,
-                    "percentage": percentage,
-                    "letter_grade": letter_grade,
-                    "assignments_count": grade.assignments_count,
-                    "completed_count": grade.completed_count,
+                    "term_id": tg.term_id,
+                    "term_name": tg.term_name,
+                    "subject_id": tg.subject_id,
+                    "subject_name": tg.subject_name,
+                    "total_points": tg.total_points,
+                    "earned_points": tg.earned_points,
+                    "percentage": tg.percentage,
+                    "letter_grade": tg.letter_grade,
+                    "assignments_count": tg.assignments_count,
+                    "completed_count": tg.completed_count,
                 }
             )
 

@@ -38,40 +38,56 @@ def get_password_hash(password: str) -> str:
     return pwd_context.hash(password)
 
 
-def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
-    """Create an access token."""
+def create_access_token(
+    data: dict,
+    expires_delta: Optional[timedelta] = None,
+    session_start: Optional[datetime] = None,
+):
+    """Create an access token.
+
+    ``session_start`` records when the underlying session originally began so
+    that ``/extend-session`` can enforce an absolute maximum session lifetime
+    regardless of how many times the token is renewed.
+    """
     to_encode = data.copy()
+    now = datetime.now(timezone.utc)
     if expires_delta:
-        expire = datetime.now(timezone.utc) + expires_delta
+        expire = now + expires_delta
     else:
-        expire = datetime.now(timezone.utc) + timedelta(minutes=15)
-    to_encode.update({"exp": expire})
+        expire = now + timedelta(minutes=settings.access_token_expire_minutes)
+    started = session_start or now
+    to_encode.update({"exp": expire, "iat": now, "sst": int(started.timestamp())})
     encoded_jwt = jwt.encode(
         to_encode, settings.secret_key, algorithm=settings.algorithm
     )
     return encoded_jwt
 
 
-def verify_token(token: str):
-    """Verify a token."""
+def decode_token(token: str) -> dict:
+    """Decode and verify a token, returning the full payload."""
     try:
-        payload = jwt.decode(
+        return jwt.decode(
             token, settings.secret_key, algorithms=[settings.algorithm]
         )
-        username: str = payload.get("sub")
-        if username is None:
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Invalid authentication credentials",
-                headers={"WWW-Authenticate": "Bearer"},
-            )
-        return username
     except JWTError as e:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid authentication credentials",
             headers={"WWW-Authenticate": "Bearer"},
         ) from e
+
+
+def verify_token(token: str):
+    """Verify a token and return the subject (username)."""
+    payload = decode_token(token)
+    username: str = payload.get("sub")
+    if username is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid authentication credentials",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+    return username
 
 
 def generate_api_key() -> Tuple[str, str]:

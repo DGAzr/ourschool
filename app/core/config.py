@@ -39,13 +39,27 @@ class Settings(BaseSettings):
     access_token_expire_minutes: int = Field(
         default=30, env="ACCESS_TOKEN_EXPIRE_MINUTES"
     )
+    # Absolute maximum lifetime a session may be extended to via /extend-session.
+    max_session_age_minutes: int = Field(
+        default=720, env="MAX_SESSION_AGE_MINUTES"
+    )
+
+    # Request hardening
+    # Maximum accepted request body size in bytes (default 10 MiB). Protects
+    # memory-heavy endpoints such as backup import from oversized payloads.
+    max_request_body_bytes: int = Field(
+        default=10 * 1024 * 1024, env="MAX_REQUEST_BODY_BYTES"
+    )
+    # Expose interactive API docs (/docs, /redoc, /openapi.json).
+    enable_api_docs: bool = Field(default=True, env="ENABLE_API_DOCS")
 
     # Backend server configuration
-    backend_host: str = Field(default="0.0.0.0", env="BACKEND_HOST")
+    # Default to loopback; set BACKEND_HOST=0.0.0.0 only behind a reverse proxy.
+    backend_host: str = Field(default="127.0.0.1", env="BACKEND_HOST")
     backend_port: int = Field(default=8000, env="BACKEND_PORT")
 
     # Frontend server configuration (for development/reference)
-    frontend_host: str = Field(default="0.0.0.0", env="FRONTEND_HOST")
+    frontend_host: str = Field(default="127.0.0.1", env="FRONTEND_HOST")
     frontend_port: int = Field(default=5173, env="FRONTEND_PORT")
 
     # Logging configuration
@@ -80,8 +94,37 @@ class Settings(BaseSettings):
     @computed_field
     @property
     def cors_origins(self) -> list[str]:
-        """Get CORS origins as a list."""
-        return [origin.strip() for origin in self.allowed_origins.split(",")]
+        """Get CORS origins as a validated list (wildcards rejected)."""
+        origins = [o.strip() for o in self.allowed_origins.split(",") if o.strip()]
+        for origin in origins:
+            if origin == "*":
+                raise ValueError(
+                    "ALLOWED_ORIGINS may not contain '*' while credentials are "
+                    "enabled. List explicit scheme+host origins instead."
+                )
+            if "://" not in origin:
+                raise ValueError(
+                    f"Invalid CORS origin '{origin}': must include a scheme "
+                    f"(e.g. https://example.com)."
+                )
+        return origins
+
+    @field_validator('secret_key')
+    @classmethod
+    def validate_secret_key(cls, v: str) -> str:
+        """Reject placeholder/weak signing keys so the app fails fast."""
+        weak_markers = (
+            "change-this", "change-me", "your-secret-key", "changeme",
+        )
+        lowered = v.lower()
+        if any(marker in lowered for marker in weak_markers):
+            raise ValueError(
+                "SECRET_KEY appears to be a placeholder value. Generate a real "
+                "key, e.g. `openssl rand -hex 32`."
+            )
+        if len(v) < 16:
+            raise ValueError("SECRET_KEY must be at least 16 characters long.")
+        return v
 
     @field_validator('log_level')
     @classmethod
