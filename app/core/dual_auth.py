@@ -172,6 +172,29 @@ def require_admin_or_student_self_or_permission(permission: str):
     return auth_dependency
 
 
+def require_user_or_permission(permission: str):
+    """
+    Dependency factory for read endpoints that serve any logged-in user.
+
+    Allows:
+    - Any active user session (admin or student) — per-role data scoping is
+      handled inside the endpoint, preserving existing behaviour.
+    - An API key with the specified permission (treated as an admin-equivalent
+      reader by the endpoint's scoping logic).
+    """
+    async def auth_dependency(
+        auth_user: AuthUser = Depends(get_current_user_or_api_key)
+    ) -> AuthUser:
+        if isinstance(auth_user, APIKeyUser) and not auth_user.has_permission(permission):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=f"Permission '{permission}' required"
+            )
+        return auth_user
+
+    return auth_dependency
+
+
 def require_any_permission(permissions: List[str]):
     """
     Dependency factory that requires any of the specified permissions for API keys,

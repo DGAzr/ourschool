@@ -4,6 +4,34 @@ All notable changes to OurSchool are documented here.
 
 ---
 
+## [Unreleased]
+
+### API surface for AI workflows
+
+Expanded the API-key-accessible surface so external/AI workflows can run
+end-to-end loops, not just grade a single known assignment.
+
+**Features**
+- **Assignment discovery & authoring via API key** — list templates, list/filter
+  student assignments (`/api/assignments/all-assignments`), read student
+  progress, and create/update templates and assign them to students.
+- **Attendance via API key** — read, record, update, and bulk-record attendance.
+- New scoped permissions: `assignments:write`, `attendance:read`,
+  `attendance:write` (advertised through `GET /api/meta`). Points totals,
+  ledger, and grant/deduct remain under `points:read` / `points:write`.
+- These reuse the dual-auth pattern (`require_admin_or_permission` /
+  `require_user_or_permission`), so one endpoint serves both the web UI and an
+  API key. Records authored by an API key carry null audit fields
+  (`created_by` / `assigned_by`), and the affected response schemas now mark
+  those fields optional.
+
+**Tests**
+- Added integration tests covering API-key access (allowed with permission,
+  403 without), null audit fields on key-authored records, and `/api/meta`
+  advertising the new permissions.
+
+---
+
 ## [1.0.0-beta.1] — 2026-06-20
 
 ### First beta release
