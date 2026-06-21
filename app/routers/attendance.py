@@ -28,7 +28,13 @@ from app.models.attendance import AttendanceRecord
 
 # Student model no longer needed - using unified User model
 from app.models.user import User, UserRole
-from app.routers.auth import get_current_active_user
+from app.core.dual_auth import (
+    AuthUser,
+    get_user_id_from_auth,
+    is_admin_user,
+    require_admin_or_permission,
+    require_user_or_permission,
+)
 from app.schemas.attendance import (
     AttendanceRecord as AttendanceRecordSchema,
 )
@@ -47,14 +53,9 @@ router = APIRouter()
 def create_attendance_record(
     record: AttendanceRecordCreate,
     db: Annotated[Session, Depends(get_db)],
-    current_user: Annotated[User, Depends(get_current_active_user)],
+    auth_user: Annotated[AuthUser, Depends(require_admin_or_permission("attendance:write"))],
 ):
-    """Create a new attendance record."""
-    if current_user.role != UserRole.ADMIN:
-        raise HTTPException(
-            status_code=403, detail="Only administrators can create attendance records"
-        )
-
+    """Create a new attendance record (admin session or API key with attendance:write)."""
     # Verify the student exists
     student = (
         db.query(User)
@@ -93,24 +94,29 @@ def create_attendance_record(
 @router.get("/", response_model=List[AttendanceRecordSchema])
 def read_attendance_records(
     db: Annotated[Session, Depends(get_db)],
-    current_user: Annotated[User, Depends(get_current_active_user)],
+    auth_user: Annotated[AuthUser, Depends(require_user_or_permission("attendance:read"))],
     student_id: Optional[int] = Query(None),
     start_date: Optional[date] = Query(None),
     end_date: Optional[date] = Query(None),
 ):
-    """Get all attendance records."""
+    """Get attendance records.
+
+    Admins and API keys (attendance:read) see all students' records; student
+    sessions see only their own.
+    """
     query = db.query(AttendanceRecord)
 
-    if current_user.role == UserRole.ADMIN:
-        # Get IDs of all active students
+    requester_id = get_user_id_from_auth(auth_user)
+    if is_admin_user(auth_user) or requester_id is None:
+        # Admin or API key: all active students
         student_ids = (
             db.query(User.id)
             .filter(User.role == UserRole.STUDENT, User.is_active)
         )
         query = query.filter(AttendanceRecord.student_id.in_(student_ids))
-    elif current_user.role == UserRole.STUDENT:
+    else:
         # Students can only see their own attendance records
-        query = query.filter(AttendanceRecord.student_id == current_user.id)
+        query = query.filter(AttendanceRecord.student_id == requester_id)
 
     if student_id:
         query = query.filter(AttendanceRecord.student_id == student_id)
@@ -127,14 +133,9 @@ def update_attendance_record(
     record_id: int,
     record_update: AttendanceRecordUpdate,
     db: Annotated[Session, Depends(get_db)],
-    current_user: Annotated[User, Depends(get_current_active_user)],
+    auth_user: Annotated[AuthUser, Depends(require_admin_or_permission("attendance:write"))],
 ):
-    """Update an attendance record."""
-    if current_user.role != UserRole.ADMIN:
-        raise HTTPException(
-            status_code=403, detail="Only administrators can update attendance records"
-        )
-
+    """Update an attendance record (admin session or API key with attendance:write)."""
     record = db.query(AttendanceRecord).filter(AttendanceRecord.id == record_id).first()
     if not record:
         raise HTTPException(status_code=404, detail="Attendance record not found")
@@ -164,26 +165,18 @@ def update_attendance_record(
 def create_bulk_attendance_records(
     bulk_record: BulkAttendanceCreate,
     db: Annotated[Session, Depends(get_db)],
-    current_user: Annotated[User, Depends(get_current_active_user)],
+    auth_user: Annotated[AuthUser, Depends(require_admin_or_permission("attendance:write"))],
 ):
-    """Create multiple attendance records at once."""
+    """Create multiple attendance records at once (admin session or API key with attendance:write)."""
+    actor_id = get_user_id_from_auth(auth_user)  # None for API keys
     log_business_event(
         "bulk_attendance_request",
-        user_id=str(current_user.id),
+        user_id=str(actor_id) if actor_id is not None else "api_key",
         date=str(bulk_record.date),
         student_count=len(bulk_record.student_ids)
     )
 
     try:
-        if current_user.role != UserRole.ADMIN:
-            logger.warning(
-                "Non-admin user %s attempted bulk attendance creation", current_user.id
-            )
-            raise HTTPException(
-                status_code=403,
-                detail="Only administrators can create attendance records",
-            )
-
         logger.info("Validating students: %s", bulk_record.student_ids)
 
         # Verify all students exist
@@ -298,14 +291,9 @@ def create_bulk_attendance_records(
 @router.get("/students", response_model=List[dict])
 def get_students_for_attendance(
     db: Annotated[Session, Depends(get_db)],
-    current_user: Annotated[User, Depends(get_current_active_user)],
+    auth_user: Annotated[AuthUser, Depends(require_admin_or_permission("attendance:read"))],
 ):
-    """Get all students managed by the current admin for attendance purposes."""
-    if current_user.role != UserRole.ADMIN:
-        raise HTTPException(
-            status_code=403, detail="Only administrators can access this endpoint"
-        )
-
+    """List active students for attendance (admin session or API key with attendance:read)."""
     students = (
         db.query(User)
         .filter(
@@ -331,14 +319,9 @@ def get_students_for_attendance(
 def delete_attendance_record(
     record_id: int,
     db: Annotated[Session, Depends(get_db)],
-    current_user: Annotated[User, Depends(get_current_active_user)],
+    auth_user: Annotated[AuthUser, Depends(require_admin_or_permission("attendance:write"))],
 ):
-    """Delete an attendance record."""
-    if current_user.role != UserRole.ADMIN:
-        raise HTTPException(
-            status_code=403, detail="Only administrators can delete attendance records"
-        )
-
+    """Delete an attendance record (admin session or API key with attendance:write)."""
     record = db.query(AttendanceRecord).filter(AttendanceRecord.id == record_id).first()
     if not record:
         raise HTTPException(status_code=404, detail="Attendance record not found")

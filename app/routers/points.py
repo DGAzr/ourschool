@@ -28,6 +28,7 @@ from app.core.dual_auth import (
     get_current_user_or_api_key,
     require_admin_or_permission,
     can_access_student_data,
+    get_actor_name_from_auth,
     get_auth_context_for_logging,
     get_user_id_from_auth,
 )
@@ -222,12 +223,9 @@ async def adjust_student_points(
     # Add names to response
     transaction.student_name = f"{student.first_name} {student.last_name}"
     
-    # Add admin name if it's a user session
-    if admin_id and isinstance(auth_user, User):
-        transaction.admin_name = f"{auth_user.first_name} {auth_user.last_name}"
-    else:
-        # For API keys, use the API key name
-        transaction.admin_name = f"API: {auth_user.name}"
+    # Attribute to the acting admin (user session, or API key acting
+    # on-behalf-of a user); otherwise fall back to the API key name.
+    transaction.admin_name = get_actor_name_from_auth(auth_user)
     
     # Log the adjustment with context
     auth_context = get_auth_context_for_logging(auth_user)

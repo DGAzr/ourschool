@@ -30,6 +30,13 @@ from app.models.subject import Subject
 from app.models.term import Term
 from app.models.user import User, UserRole
 from app.routers.auth import get_current_active_user
+from app.core.dual_auth import (
+    AuthUser,
+    get_user_id_from_auth,
+    is_admin_user,
+    require_admin_or_permission,
+    require_user_or_permission,
+)
 from app.crud import assignment_types as crud_types
 from app.crud import points as points_crud
 from app.schemas.assignment import (
@@ -69,15 +76,9 @@ def _validate_assignment_type(db: Session, key: str) -> None:
 def create_assignment_template(
     template: AssignmentTemplateCreate,
     db: Annotated[Session, Depends(get_db)],
-    current_user: Annotated[User, Depends(get_current_active_user)],
+    auth_user: Annotated[AuthUser, Depends(require_admin_or_permission("assignments:write"))],
 ):
-    """Create a new assignment template."""
-    if current_user.role != UserRole.ADMIN:
-        raise HTTPException(
-            status_code=403,
-            detail="Only administrators can create assignment templates",
-        )
-
+    """Create a new assignment template (admin session or API key with assignments:write)."""
     # Verify subject exists
     subject = db.query(Subject).filter(Subject.id == template.subject_id).first()
     if not subject:
@@ -85,13 +86,16 @@ def create_assignment_template(
 
     _validate_assignment_type(db, template.assignment_type)
 
-    db_template = AssignmentTemplate(**template.dict(), created_by=current_user.id)
+    created_by = get_user_id_from_auth(auth_user)
+    db_template = AssignmentTemplate(**template.dict(), created_by=created_by)
     db.add(db_template)
     db.commit()
     db.refresh(db_template)
 
     logger.info(
-        f"Created assignment template {db_template.id} by user {current_user.id}"
+        "Created assignment template %s by %s",
+        db_template.id,
+        created_by if created_by is not None else "API key",
     )
     return db_template
 
@@ -99,22 +103,28 @@ def create_assignment_template(
 @router.get("/templates", response_model=List[AssignmentTemplateResponse])
 def get_assignment_templates(
     db: Annotated[Session, Depends(get_db)],
-    current_user: Annotated[User, Depends(get_current_active_user)],
+    auth_user: Annotated[AuthUser, Depends(require_user_or_permission("assignments:read"))],
     subject_id: Optional[int] = Query(None),
     search: Optional[str] = Query(None),
     include_archived: bool = Query(False),
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=1000),
 ):
-    """Get assignment templates with optional filtering."""
+    """Get assignment templates with optional filtering.
+
+    Admin sessions and API keys (assignments:read) see all templates; student
+    sessions are scoped to their own.
+    """
     query = db.query(AssignmentTemplate).options(
         joinedload(AssignmentTemplate.subject),
         joinedload(AssignmentTemplate.creator)
     )
 
-    # Apply access control
-    if current_user.role != UserRole.ADMIN:
-        query = query.filter(AssignmentTemplate.created_by == current_user.id)
+    # Access control: admins and API keys see all; students see only their own.
+    if not is_admin_user(auth_user):
+        owner_id = get_user_id_from_auth(auth_user)  # None for API keys → full read
+        if owner_id is not None:
+            query = query.filter(AssignmentTemplate.created_by == owner_id)
 
     # Filter out archived templates unless explicitly requested
     if not include_archived:
@@ -185,16 +195,10 @@ def update_assignment_template(
     template_id: int,
     template_update: AssignmentTemplateUpdate,
     db: Annotated[Session, Depends(get_db)],
-    current_user: Annotated[User, Depends(get_current_active_user)],
+    auth_user: Annotated[AuthUser, Depends(require_admin_or_permission("assignments:write"))],
 ):
-    """Update an assignment template."""
-    if current_user.role != UserRole.ADMIN:
-        raise HTTPException(
-            status_code=403,
-            detail="Only administrators can update assignment templates",
-        )
-
-    # Since only admins can update, they can update any template
+    """Update an assignment template (admin session or API key with assignments:write)."""
+    # Admins and authorized API keys can update any template
     template = (
         db.query(AssignmentTemplate)
         .filter(AssignmentTemplate.id == template_id)
@@ -221,7 +225,7 @@ def update_assignment_template(
     db.commit()
     db.refresh(template)
 
-    logger.info(f"Updated assignment template {template_id} by user {current_user.id}")
+    logger.info("Updated assignment template %s", template_id)
     return template
 
 
@@ -312,14 +316,9 @@ def archive_assignment_template(
 def assign_template_to_students(
     assignment_request: AssignmentAssignmentRequest,
     db: Annotated[Session, Depends(get_db)],
-    current_user: Annotated[User, Depends(get_current_active_user)],
+    auth_user: Annotated[AuthUser, Depends(require_admin_or_permission("assignments:write"))],
 ):
-    """Assign an assignment template to multiple students."""
-    if current_user.role != UserRole.ADMIN:
-        raise HTTPException(
-            status_code=403, detail="Only administrators can assign assignments"
-        )
-
+    """Assign an assignment template to multiple students (admin session or API key with assignments:write)."""
     # Find active term
     active_term = db.query(Term).filter(Term.is_active).first()
     if not active_term:
@@ -329,13 +328,12 @@ def assign_template_to_students(
             "Please set an active term before assigning assignments.",
         )
 
-    # Verify template exists and is accessible by current user
-    query = db.query(AssignmentTemplate).filter(
-        AssignmentTemplate.id == assignment_request.template_id
+    # Verify template exists (admins and authorized API keys can use any template)
+    template = (
+        db.query(AssignmentTemplate)
+        .filter(AssignmentTemplate.id == assignment_request.template_id)
+        .first()
     )
-    if current_user.role != UserRole.ADMIN:
-        query = query.filter(AssignmentTemplate.created_by == current_user.id)
-    template = query.first()
 
     if not template:
         raise HTTPException(status_code=404, detail="Assignment template not found")
@@ -366,6 +364,7 @@ def assign_template_to_students(
 
     # Use current date for assignment date, or the provided one
     assigned_date = assignment_request.assigned_date or date.today()
+    assigned_by = get_user_id_from_auth(auth_user)  # None for API keys
 
     for student_id in assignment_request.student_ids:
         try:
@@ -378,7 +377,7 @@ def assign_template_to_students(
                 due_date=assignment_request.due_date,
                 custom_instructions=assignment_request.custom_instructions,
                 custom_max_points=assignment_request.custom_max_points,
-                assigned_by=current_user.id,
+                assigned_by=assigned_by,
             )
 
             db.add(student_assignment)
@@ -744,11 +743,16 @@ def bulk_grade_assignments(
 def get_student_progress(
     student_id: int,
     db: Annotated[Session, Depends(get_db)],
-    current_user: Annotated[User, Depends(get_current_active_user)],
+    auth_user: Annotated[AuthUser, Depends(require_user_or_permission("assignments:read"))],
 ):
-    """Get comprehensive progress summary for a student."""
-    # Verify access
-    if current_user.role == UserRole.ADMIN:
+    """Get comprehensive progress summary for a student.
+
+    Admins and API keys (assignments:read) may view any student; student
+    sessions may only view their own progress.
+    """
+    # Verify access. API keys have no user id → treated as privileged readers.
+    requester_id = get_user_id_from_auth(auth_user)
+    if is_admin_user(auth_user) or requester_id is None:
         student = (
             db.query(User)
             .filter(User.id == student_id, User.role == UserRole.STUDENT)
@@ -758,12 +762,12 @@ def get_student_progress(
             raise HTTPException(
                 status_code=404, detail="Student not found"
             )
-    elif current_user.role == UserRole.STUDENT and current_user.id != student_id:
+    elif requester_id != student_id:
         raise HTTPException(
             status_code=403, detail="Students can only view their own progress"
         )
     else:
-        student = current_user
+        student = auth_user
 
     # Get all assignments for this student grouped by subject
     assignments = (
@@ -1149,17 +1153,17 @@ def get_submitted_assignments(
 @router.get("/all-assignments", response_model=List[StudentAssignmentResponse])
 def get_all_assignments_for_grading(
     db: Annotated[Session, Depends(get_db)],
-    current_user: Annotated[User, Depends(get_current_active_user)],
+    auth_user: Annotated[AuthUser, Depends(require_admin_or_permission("assignments:read"))],
     status: Optional[str] = Query(None),
     subject_id: Optional[int] = Query(None),
     student_id: Optional[int] = Query(None),
 ):
-    """Get all assignments for admin grading view - allows managing all assignment statuses."""
-    if current_user.role != UserRole.ADMIN:
-        raise HTTPException(
-            status_code=403, detail="Only administrators can view all assignments"
-        )
+    """Get all student assignments for grading/discovery.
 
+    Accessible by admin sessions and API keys with assignments:read. This is the
+    primary endpoint an external workflow uses to discover assignments (e.g.
+    filtering by ``status=submitted`` and ``student_id``) before grading them.
+    """
     # Import enum for proper type handling
     from app.models.assignment import AssignmentStatus
 

@@ -172,6 +172,29 @@ def require_admin_or_student_self_or_permission(permission: str):
     return auth_dependency
 
 
+def require_user_or_permission(permission: str):
+    """
+    Dependency factory for read endpoints that serve any logged-in user.
+
+    Allows:
+    - Any active user session (admin or student) — per-role data scoping is
+      handled inside the endpoint, preserving existing behaviour.
+    - An API key with the specified permission (treated as an admin-equivalent
+      reader by the endpoint's scoping logic).
+    """
+    async def auth_dependency(
+        auth_user: AuthUser = Depends(get_current_user_or_api_key)
+    ) -> AuthUser:
+        if isinstance(auth_user, APIKeyUser) and not auth_user.has_permission(permission):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=f"Permission '{permission}' required"
+            )
+        return auth_user
+
+    return auth_dependency
+
+
 def require_any_permission(permissions: List[str]):
     """
     Dependency factory that requires any of the specified permissions for API keys,
@@ -202,10 +225,26 @@ def require_any_permission(permissions: List[str]):
 
 
 def get_user_id_from_auth(auth_user: AuthUser) -> Optional[int]:
-    """Extract user ID from auth user (None for API keys)."""
+    """Extract the user ID to attribute writes to.
+
+    For a user session this is the user's own ID. For an API key it is the
+    "acting on behalf of" admin resolved from the X-On-Behalf-Of header, or
+    None when the header was not supplied.
+    """
     if isinstance(auth_user, User):
         return auth_user.id
-    return None
+    return getattr(auth_user, "acting_user_id", None)
+
+
+def get_actor_name_from_auth(auth_user: AuthUser) -> str:
+    """Human-readable actor name for display/audit messages."""
+    if isinstance(auth_user, User):
+        return f"{auth_user.first_name} {auth_user.last_name}".strip()
+    if isinstance(auth_user, APIKeyUser):
+        if auth_user.acting_user_name:
+            return auth_user.acting_user_name
+        return f"API: {auth_user.name}"
+    return "Unknown"
 
 
 def is_admin_user(auth_user: AuthUser) -> bool:
