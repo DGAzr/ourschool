@@ -35,8 +35,8 @@ def validate_backup_data(backup_data: Dict[str, Any]) -> List[str]:
     
     # Check required fields
     required_fields = [
-        'export_timestamp', 'format_version', 'users', 'subjects', 
-        'terms', 'lessons', 'assignment_templates'
+        'backup_timestamp', 'format_version', 'users', 'subjects', 
+        'terms', 'assignment_templates'
     ]
     
     for field in required_fields:
@@ -44,18 +44,60 @@ def validate_backup_data(backup_data: Dict[str, Any]) -> List[str]:
             errors.append(f"Missing required field: {field}")
     
     # Validate format version
+    SUPPORTED_VERSIONS = {"1.0", "2.0"}
     if 'format_version' in backup_data:
         version = backup_data['format_version']
-        if version != "1.0":
-            errors.append(f"Unsupported backup format version: {version}")
+        if version not in SUPPORTED_VERSIONS:
+            errors.append(f"Unsupported backup format version: {version}. Supported: {', '.join(sorted(SUPPORTED_VERSIONS))}")
     
     # Validate timestamp
-    if 'export_timestamp' in backup_data:
+    if 'backup_timestamp' in backup_data:
         try:
-            datetime.fromisoformat(backup_data['export_timestamp'].replace('Z', '+00:00'))
+            ts = backup_data['backup_timestamp']
+            if not isinstance(ts, datetime):
+                datetime.fromisoformat(str(ts).replace('Z', '+00:00'))
         except (ValueError, AttributeError):
-            errors.append("Invalid export_timestamp format")
-    
+            errors.append("Invalid backup_timestamp format")
+
+    # Validate enum-valued fields up front so a dry run faithfully predicts the
+    # real import (enum coercion would otherwise only fail on the write path).
+    errors.extend(_validate_enums(backup_data))
+
+    return errors
+
+
+def _validate_enums(backup_data: Dict[str, Any]) -> List[str]:
+    """Check enum-typed fields across collections; return per-record errors."""
+    from app.enums import (
+        AssignmentStatus,
+        AttendanceStatus,
+        TermType,
+        UserRole,
+    )
+
+    errors: List[str] = []
+
+    def _check(collection: str, field: str, enum_cls, label_field: str = None):
+        for idx, item in enumerate(backup_data.get(collection, []) or []):
+            if not isinstance(item, dict):
+                continue
+            value = item.get(field)
+            if value is None:
+                continue
+            valid = {e.value for e in enum_cls}
+            if value not in valid:
+                label = item.get(label_field) if label_field else f"#{idx}"
+                errors.append(
+                    f"{collection}[{label}]: invalid {field} '{value}'"
+                )
+
+    _check("users", "role", UserRole, "email")
+    _check("terms", "type", TermType, "name")
+    # assignment_type is an admin-managed string key, not a fixed enum; the
+    # importer auto-creates any type it doesn't recognise, so nothing to check.
+    _check("student_assignments", "status", AssignmentStatus, "student_email")
+    _check("attendance_records", "status", AttendanceStatus, "student_email")
+
     return errors
 
 

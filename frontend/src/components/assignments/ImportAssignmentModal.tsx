@@ -16,50 +16,34 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-import { useState, useRef, useEffect } from 'react'
-import { X, Upload, AlertTriangle, CheckCircle } from 'lucide-react'
+import { useState, useRef } from 'react'
+import { Upload, AlertTriangle, CheckCircle } from 'lucide-react'
+import Modal from '../ui/Modal'
+import Button from '../ui/Button'
 
 interface ImportAssignmentModalProps {
   isOpen: boolean
   onClose: () => void
   onImport: (data: {
     assignment_data: any
-    target_lesson_id?: number
     target_subject_id?: number
   }) => Promise<any>
   subjects: Array<{ id: number; name: string }>
-  lessons: Array<{ id: number; title: string }>
 }
 
-export function ImportAssignmentModal({ 
-  isOpen, 
-  onClose, 
-  onImport, 
+export function ImportAssignmentModal({
+  isOpen,
+  onClose,
+  onImport,
   subjects,
-  lessons 
 }: ImportAssignmentModalProps) {
   const [step, setStep] = useState<'upload' | 'configure' | 'result'>('upload')
   const [isLoading, setIsLoading] = useState(false)
   const [assignmentData, setAssignmentData] = useState<any>(null)
-  const [targetLessonId, setTargetLessonId] = useState<number | undefined>()
   const [targetSubjectId, setTargetSubjectId] = useState<number | undefined>()
   const [importResult, setImportResult] = useState<any>(null)
   const [error, setError] = useState<string | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
-
-  // ESC key handling
-  useEffect(() => {
-    const handleEscape = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && isOpen) {
-        onClose()
-      }
-    }
-
-    if (isOpen) {
-      document.addEventListener('keydown', handleEscape)
-      return () => document.removeEventListener('keydown', handleEscape)
-    }
-  }, [isOpen, onClose])
 
   const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0]
@@ -69,26 +53,21 @@ export function ImportAssignmentModal({
     reader.onload = (e) => {
       try {
         const data = JSON.parse(e.target?.result as string)
-        
-        // Handle both single template and bulk export formats
+
         let templateData
         if (data.templates && Array.isArray(data.templates)) {
-          // Bulk export format - just take the first template for now
-          // TODO: Implement multi-template import
           templateData = data.templates[0]
         } else if (data.assignment_type && data.name) {
-          // Single template export format
           templateData = data
         } else {
           throw new Error('Invalid assignment template format')
         }
-        
+
         setAssignmentData(templateData)
         setError(null)
         setStep('configure')
 
-        // Try to find matching subject
-        const matchingSubject = subjects.find(s => 
+        const matchingSubject = subjects.find(s =>
           s.name.toLowerCase() === templateData.subject_name?.toLowerCase()
         )
         if (matchingSubject) {
@@ -105,8 +84,7 @@ export function ImportAssignmentModal({
   const handleTextImport = (text: string) => {
     try {
       const data = JSON.parse(text)
-      
-      // Handle both single template and bulk export formats
+
       let templateData
       if (data.templates && Array.isArray(data.templates)) {
         templateData = data.templates[0]
@@ -115,13 +93,12 @@ export function ImportAssignmentModal({
       } else {
         throw new Error('Invalid assignment template format')
       }
-      
+
       setAssignmentData(templateData)
       setError(null)
       setStep('configure')
 
-      // Try to find matching subject
-      const matchingSubject = subjects.find(s => 
+      const matchingSubject = subjects.find(s =>
         s.name.toLowerCase() === templateData.subject_name?.toLowerCase()
       )
       if (matchingSubject) {
@@ -140,10 +117,9 @@ export function ImportAssignmentModal({
     try {
       const result = await onImport({
         assignment_data: assignmentData,
-        target_lesson_id: targetLessonId,
         target_subject_id: targetSubjectId
       })
-      
+
       setImportResult(result)
       setStep('result')
     } catch (err: any) {
@@ -156,177 +132,113 @@ export function ImportAssignmentModal({
   const handleClose = () => {
     setStep('upload')
     setAssignmentData(null)
-    setTargetLessonId(undefined)
     setTargetSubjectId(undefined)
     setImportResult(null)
     setError(null)
     onClose()
   }
 
-  if (!isOpen) return null
+  const FIELD = 'bg-field-bg border border-field-border rounded-field px-3 py-2 text-[13px] text-ink focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent w-full'
+  const LABEL = 'block text-[11px] font-semibold text-muted uppercase tracking-wide mb-1.5'
+
+  const getFooter = () => {
+    if (step === 'upload') {
+      return <Button variant="secondary" onClick={handleClose}>Cancel</Button>
+    }
+    if (step === 'configure') {
+      return (
+        <>
+          <Button variant="secondary" onClick={() => setStep('upload')}>Back</Button>
+          <Button variant="primary" loading={isLoading} onClick={handleImport}>
+            <Upload size={14} />
+            Import Template
+          </Button>
+        </>
+      )
+    }
+    return (
+      <Button variant="primary" onClick={handleClose}>Done</Button>
+    )
+  }
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div className="bg-white rounded-lg p-6 w-full max-w-2xl max-h-[90vh] overflow-y-auto">
-        <div className="flex justify-between items-center mb-4">
-          <h2 className="text-xl font-bold">Import Assignment Template</h2>
-          <button onClick={handleClose} className="p-2 hover:bg-gray-100 rounded">
-            <X size={20} />
-          </button>
-        </div>
-
+    <Modal
+      isOpen={isOpen}
+      onClose={handleClose}
+      title="Import Assignment Template"
+      size="md"
+      footer={getFooter()}
+    >
+      <div className="space-y-5">
         {error && (
-          <div className="mb-4 p-4 bg-red-50 border border-red-200 rounded-lg">
-            <div className="flex items-center space-x-2">
-              <AlertTriangle size={16} className="text-red-600" />
-              <p className="text-red-800">{error}</p>
-            </div>
+          <div className="p-3 bg-danger-soft border border-danger-line rounded-field flex items-center gap-2">
+            <AlertTriangle size={14} className="text-danger flex-none" />
+            <p className="text-[13px] text-danger">{error}</p>
           </div>
         )}
 
         {step === 'upload' && (
-          <div>
-            <p className="text-gray-600 mb-4">
-              Import an assignment template shared by another homeschool family
-            </p>
-
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium mb-2">Upload from file:</label>
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  accept=".json"
-                  onChange={handleFileUpload}
-                  className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded file:border-0 file:text-sm file:font-medium file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
-                />
-              </div>
-
-              <div className="text-center text-gray-500">or</div>
-
-              <div>
-                <label className="block text-sm font-medium mb-2">Paste assignment data:</label>
-                <textarea
-                  rows={6}
-                  placeholder="Paste the assignment template export JSON data here..."
-                  className="w-full p-3 border border-gray-300 rounded-lg text-sm font-mono"
-                  onChange={(e) => e.target.value && handleTextImport(e.target.value)}
-                />
-              </div>
+          <>
+            <p className="text-[13px] text-muted">Import an assignment template shared by another homeschool family.</p>
+            <div>
+              <label className={LABEL}>Upload from file</label>
+              <input ref={fileInputRef} type="file" accept=".json" onChange={handleFileUpload}
+                className="block w-full text-[13px] text-muted file:mr-3 file:py-1.5 file:px-3 file:rounded-field file:border file:border-btn-border file:text-[12px] file:font-medium file:bg-panel file:text-ink hover:file:bg-track" />
             </div>
-          </div>
+            <div className="text-center text-[12px] text-faintest">— or —</div>
+            <div>
+              <label className={LABEL}>Paste assignment data</label>
+              <textarea rows={6} placeholder="Paste the assignment template export JSON data here..."
+                className={`${FIELD} font-mono text-[12px]`}
+                onChange={(e) => e.target.value && handleTextImport(e.target.value)} />
+            </div>
+          </>
         )}
 
         {step === 'configure' && assignmentData && (
-          <div>
-            <div className="mb-6">
-              <h3 className="font-semibold mb-2">Assignment Preview</h3>
-              <div className="bg-gray-50 rounded-lg p-4">
-                <h4 className="font-medium">{assignmentData.name}</h4>
-                {assignmentData.description && (
-                  <p className="text-sm text-gray-600 mt-1">{assignmentData.description}</p>
-                )}
-                <div className="mt-2 text-sm text-gray-500 grid grid-cols-2 gap-2">
+          <>
+            <div>
+              <p className="text-[11px] font-semibold text-muted uppercase tracking-wide mb-2">Assignment Preview</p>
+              <div className="bg-panel-2 border border-line rounded-[11px] p-4">
+                <p className="text-[14px] font-semibold text-ink">{assignmentData.name}</p>
+                {assignmentData.description && <p className="text-[13px] text-muted mt-1">{assignmentData.description}</p>}
+                <div className="mt-2 text-[12px] text-muted grid grid-cols-2 gap-1.5">
                   <div>Type: {assignmentData.assignment_type}</div>
                   <div>Subject: {assignmentData.subject_name}</div>
                   <div>Points: {assignmentData.max_points}</div>
-                  {assignmentData.estimated_duration_minutes && (
-                    <div>Duration: {assignmentData.estimated_duration_minutes}min</div>
-                  )}
+                  {assignmentData.estimated_duration_minutes && <div>Duration: {assignmentData.estimated_duration_minutes}min</div>}
                 </div>
               </div>
             </div>
-
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium mb-2">
-                  Subject:
-                </label>
-                <select
-                  value={targetSubjectId || ''}
-                  onChange={(e) => setTargetSubjectId(e.target.value ? Number(e.target.value) : undefined)}
-                  className="w-full p-2 border border-gray-300 rounded"
-                  required
-                >
-                  <option value="">Select or create subject</option>
-                  {subjects.map(subject => (
-                    <option key={subject.id} value={subject.id}>
-                      {subject.name}
-                    </option>
-                  ))}
-                </select>
-                <p className="text-xs text-gray-500 mt-1">
-                  {!targetSubjectId ? 
-                    `Will create new subject "${assignmentData.subject_name}"` :
-                    `Will use existing subject`
-                  }
-                </p>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium mb-2">
-                  Add to lesson (optional):
-                </label>
-                <select
-                  value={targetLessonId || ''}
-                  onChange={(e) => setTargetLessonId(e.target.value ? Number(e.target.value) : undefined)}
-                  className="w-full p-2 border border-gray-300 rounded"
-                >
-                  <option value="">Create as standalone template</option>
-                  {lessons.map(lesson => (
-                    <option key={lesson.id} value={lesson.id}>
-                      {lesson.title}
-                    </option>
-                  ))}
-                </select>
-              </div>
+            <div>
+              <label className={LABEL}>Subject</label>
+              <select value={targetSubjectId || ''} onChange={(e) => setTargetSubjectId(e.target.value ? Number(e.target.value) : undefined)} className={FIELD} required>
+                <option value="">Select or create subject</option>
+                {subjects.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+              </select>
+              <p className="text-[11px] text-faint mt-1">
+                {!targetSubjectId ? `Will create new subject "${assignmentData.subject_name}"` : 'Will use existing subject'}
+              </p>
             </div>
-
-            <div className="flex justify-end space-x-2 mt-6">
-              <button
-                onClick={() => setStep('upload')}
-                className="px-4 py-2 text-gray-600 border border-gray-300 rounded hover:bg-gray-50"
-              >
-                Back
-              </button>
-              <button
-                onClick={handleImport}
-                disabled={isLoading}
-                className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 disabled:opacity-50 flex items-center space-x-2"
-              >
-                <Upload size={16} />
-                <span>{isLoading ? 'Importing...' : 'Import Template'}</span>
-              </button>
-            </div>
-          </div>
+          </>
         )}
 
         {step === 'result' && importResult && (
-          <div>
-            <div className="text-center mb-4">
-              <CheckCircle size={48} className="text-green-500 mx-auto mb-2" />
-              <h3 className="text-lg font-semibold">Import Successful!</h3>
+          <div className="space-y-4">
+            <div className="text-center">
+              <CheckCircle size={40} className="text-pos-fg mx-auto mb-2" />
+              <h3 className="text-[15px] font-semibold text-ink">Import Successful!</h3>
             </div>
-
-            <div className="bg-green-50 border border-green-200 rounded-lg p-4 mb-4">
-              <h4 className="font-semibold text-green-800 mb-2">Import Summary:</h4>
-              <div className="text-sm text-green-700 space-y-1">
+            <div className="bg-pos-bg border border-pos-fg/20 rounded-[11px] p-4">
+              <p className="text-[11px] font-semibold text-pos-fg uppercase tracking-wide mb-2">Import Summary</p>
+              <div className="text-[13px] text-pos-fg space-y-1">
                 <div>{importResult.message}</div>
                 <div>Template ID: {importResult.template_id}</div>
               </div>
             </div>
-
-            <div className="flex justify-end">
-              <button
-                onClick={handleClose}
-                className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
-              >
-                Done
-              </button>
-            </div>
           </div>
         )}
       </div>
-    </div>
+    </Modal>
   )
 }

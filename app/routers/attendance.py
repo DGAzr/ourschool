@@ -22,8 +22,8 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
-from app.core.logging import get_logger, log_business_event, log_database_operation
-from app.core.error_tracking import track_error, AttendanceError
+from app.core.logging import get_logger, log_business_event
+from app.core.error_tracking import track_error
 from app.models.attendance import AttendanceRecord
 
 # Student model no longer needed - using unified User model

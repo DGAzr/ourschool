@@ -19,7 +19,8 @@
 import React, { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
-import { GraduationCap, Eye, EyeOff } from 'lucide-react'
+import { Eye, EyeOff } from 'lucide-react'
+import { config } from '../config/env'
 
 const Login: React.FC = () => {
   const [username, setUsername] = useState('')
@@ -27,7 +28,7 @@ const Login: React.FC = () => {
   const [showPassword, setShowPassword] = useState(false)
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState('')
-  
+
   const { login } = useAuth()
   const navigate = useNavigate()
 
@@ -41,21 +42,16 @@ const Login: React.FC = () => {
       formData.append('username', username)
       formData.append('password', password)
 
-      const response = await fetch('/api/auth/login', {
+      const response = await fetch(`${config.api.baseUrl}/auth/login`, {
         method: 'POST',
         body: formData,
       })
 
       if (response.ok) {
         const data = await response.json()
-        
-        // Get user info
-        const userResponse = await fetch('/api/users/me', {
-          headers: {
-            'Authorization': `Bearer ${data.access_token}`,
-          },
+        const userResponse = await fetch(`${config.api.baseUrl}/users/me`, {
+          headers: { Authorization: `Bearer ${data.access_token}` },
         })
-
         if (userResponse.ok) {
           const userData = await userResponse.json()
           login(data.access_token, userData)
@@ -67,7 +63,7 @@ const Login: React.FC = () => {
         const errorData = await response.json()
         setError(errorData.detail || 'Login failed')
       }
-    } catch (err) {
+    } catch {
       setError('Network error. Please try again.')
     } finally {
       setIsLoading(false)
@@ -75,89 +71,84 @@ const Login: React.FC = () => {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
-      <div className="max-w-md w-full space-y-8">
-        <div>
-          <div className="mx-auto h-12 w-12 flex items-center justify-center">
-            <GraduationCap className="h-12 w-12 text-blue-500" />
+    <div className="min-h-screen flex items-center justify-center bg-bg px-4">
+      <div className="w-full max-w-[360px]">
+        {/* Wordmark */}
+        <div className="flex flex-col items-center mb-8">
+          <div
+            className="w-10 h-10 rounded-xl flex items-center justify-center text-btn-primary-fg text-lg font-bold mb-4"
+            style={{ background: 'var(--btn-primary-bg)' }}
+          >
+            O
           </div>
-          <h2 className="mt-6 text-center text-3xl font-extrabold text-gray-900">
-            Sign in to OurSchool
-          </h2>
-          <p className="mt-2 text-center text-sm text-gray-600">
-            Homeschool Management System
-          </p>
+          <h1 className="text-[22px] font-semibold text-ink tracking-[-0.02em]">Sign in to OurSchool</h1>
+          <p className="mt-1 text-[13px] text-muted">Homeschool Management System</p>
         </div>
-        
-        <form className="mt-8 space-y-6" onSubmit={handleSubmit}>
+
+        <form onSubmit={handleSubmit} className="space-y-4">
           {error && (
-            <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded">
+            <div className="px-4 py-3 rounded-card text-[13px] text-neg-fg bg-neg-bg border border-neg-fg/20">
               {error}
             </div>
           )}
-          
-          <div className="space-y-4">
-            <div>
-              <label htmlFor="username" className="block text-sm font-medium text-gray-700">
-                Username
-              </label>
-              <input
-                id="username"
-                name="username"
-                type="text"
-                required
-                value={username}
-                onChange={(e) => setUsername(e.target.value)}
-                className="mt-1 appearance-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-                placeholder="Enter your username"
-              />
-            </div>
-            
-            <div>
-              <label htmlFor="password" className="block text-sm font-medium text-gray-700">
-                Password
-              </label>
-              <div className="mt-1 relative">
-                <input
-                  id="password"
-                  name="password"
-                  type={showPassword ? 'text' : 'password'}
-                  required
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  className="appearance-none relative block w-full px-3 py-2 pr-10 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-                  placeholder="Enter your password"
-                />
-                <button
-                  type="button"
-                  className="absolute inset-y-0 right-0 pr-3 flex items-center"
-                  onClick={() => setShowPassword(!showPassword)}
-                >
-                  {showPassword ? (
-                    <EyeOff className="h-4 w-4 text-gray-400" />
-                  ) : (
-                    <Eye className="h-4 w-4 text-gray-400" />
-                  )}
-                </button>
-              </div>
-            </div>
+
+          <div>
+            <label htmlFor="login-username" className="block text-[11px] font-semibold text-faint uppercase tracking-[.06em] mb-1.5">
+              Username
+            </label>
+            <input
+              id="login-username"
+              name="username"
+              type="text"
+              autoComplete="username"
+              required
+              value={username}
+              onChange={(e) => setUsername(e.target.value)}
+              placeholder="Enter your username"
+              className="w-full bg-field-bg border border-field-border text-ink text-[13.5px] rounded-field px-3 py-2.5 focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent transition-colors placeholder:text-faintest"
+            />
           </div>
 
           <div>
-            <button
-              type="submit"
-              disabled={isLoading}
-              className="group relative w-full flex justify-center py-2 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {isLoading ? (
-                <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white"></div>
-              ) : (
-                'Sign in'
-              )}
-            </button>
+            <label htmlFor="login-password" className="block text-[11px] font-semibold text-faint uppercase tracking-[.06em] mb-1.5">
+              Password
+            </label>
+            <div className="relative">
+              <input
+                id="login-password"
+                name="password"
+                type={showPassword ? 'text' : 'password'}
+                autoComplete="current-password"
+                required
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="Enter your password"
+                className="w-full bg-field-bg border border-field-border text-ink text-[13.5px] rounded-field px-3 py-2.5 pr-10 focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent transition-colors placeholder:text-faintest"
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
+                className="absolute inset-y-0 right-0 pr-3 flex items-center text-faint hover:text-muted"
+              >
+                {showPassword ? <EyeOff size={15} /> : <Eye size={15} />}
+              </button>
+            </div>
           </div>
 
-          
+          <button
+            type="submit"
+            disabled={isLoading}
+            className="w-full flex items-center justify-center gap-2 py-2.5 px-4 rounded-field text-[13.5px] font-semibold bg-btn-primary-bg text-btn-primary-fg hover:opacity-90 disabled:opacity-50 disabled:cursor-not-allowed transition-opacity mt-2"
+          >
+            {isLoading ? (
+              <svg className="animate-spin h-4 w-4" viewBox="0 0 24 24" fill="none">
+                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+              </svg>
+            ) : (
+              'Sign in'
+            )}
+          </button>
         </form>
       </div>
     </div>

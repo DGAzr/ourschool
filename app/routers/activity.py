@@ -15,7 +15,7 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 """APIs for activity tracking."""
-from datetime import datetime, timedelta
+from datetime import datetime, timezone, timedelta
 from typing import Annotated, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -27,7 +27,6 @@ from app.core.logging import get_logger, log_business_event
 from app.models.user import User, UserRole
 from app.models.assignment import StudentAssignment, AssignmentTemplate
 from app.models.attendance import AttendanceRecord
-from app.models.lesson import Lesson, LessonAssignment
 from app.enums import AssignmentStatus
 from app.routers.auth import get_current_active_user
 
@@ -76,12 +75,10 @@ class ActivityItem:
             # This is a date-only event created with datetime.combine(date, datetime.min.time())
             from datetime import date as Date
             
-            # Use UTC date to be consistent, but adjust for the fact that 
-            # database dates are stored as local dates
-            now_utc = datetime.utcnow()
-            # Adjust UTC to approximate local time (assuming EDT = UTC-4)
-            local_now = now_utc - timedelta(hours=4)  
-            today = local_now.date()
+            # Date-only events are stored using the server's local date, so
+            # compare against the server's local "today" rather than a
+            # hardcoded UTC offset (which was wrong outside EDT and during DST).
+            today = datetime.now().date()
             event_date = self.timestamp.date()
             
             day_diff = (today - event_date).days
@@ -96,7 +93,7 @@ class ActivityItem:
                 return "Today"
         
         # For regular datetime comparisons, use UTC
-        now_utc = datetime.utcnow()
+        now_utc = datetime.now(timezone.utc)
         diff = now_utc - self.timestamp
         
         if diff.days > 0:
@@ -128,7 +125,7 @@ def get_recent_activity(
     
     try:
         # Calculate date range
-        end_date = datetime.utcnow()
+        end_date = datetime.now(timezone.utc)
         start_date = end_date - timedelta(days=days)
         
         activities = []
@@ -137,7 +134,6 @@ def get_recent_activity(
             # Admin sees all activity
             activities.extend(_get_assignment_activities(db, start_date, end_date))
             activities.extend(_get_attendance_activities(db, start_date, end_date))
-            activities.extend(_get_lesson_activities(db, start_date, end_date))
         else:
             # Students see only their own activity
             activities.extend(_get_student_assignment_activities(db, current_user.id, start_date, end_date))
@@ -254,43 +250,6 @@ def _get_attendance_activities(db: Session, start_date: datetime, end_date: date
                 "status": record.status.value if hasattr(record.status, 'value') else record.status,
                 "date": record.date.isoformat(),
                 "notes": record.notes
-            }
-        ))
-    
-    return activities
-
-
-def _get_lesson_activities(db: Session, start_date: datetime, end_date: datetime) -> List[ActivityItem]:
-    """Get lesson-related activities for admin."""
-    activities = []
-    
-    # Recent lessons
-    lessons = (
-        db.query(Lesson)
-        .options(
-            joinedload(Lesson.lesson_assignments).joinedload(LessonAssignment.assignment_template).joinedload(AssignmentTemplate.subject)
-        )
-        .filter(
-            and_(
-                Lesson.updated_at >= start_date,
-                Lesson.updated_at <= end_date
-            )
-        )
-        .order_by(desc(Lesson.updated_at))
-        .limit(20)
-        .all()
-    )
-    
-    for lesson in lessons:
-        activities.append(ActivityItem(
-            activity_type="lesson_updated",
-            description=f"Lesson '{lesson.title}' updated",
-            timestamp=lesson.updated_at,
-            details={
-                "lesson_id": lesson.id,
-                "title": lesson.title,
-                "subject": lesson.primary_subject.name if lesson.primary_subject else None,
-                "date": lesson.scheduled_date.isoformat() if lesson.scheduled_date else None
             }
         ))
     

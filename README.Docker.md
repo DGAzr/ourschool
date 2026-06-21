@@ -1,258 +1,268 @@
 # OurSchool Docker Setup
 
-This document explains how to run OurSchool using Docker and Docker Compose.
+This document covers everything Docker-related: the recommended GHCR pull-based setup for end users and the build-from-source setup for contributors.
 
 ## Prerequisites
 
 - Docker and Docker Compose installed on your system
-- At least 2GB of available RAM
-- Available ports: 5432 (PostgreSQL), 8000 (Backend), 4173 (Frontend)
+- At least 2 GB of available RAM
+- Available ports: 5432 (PostgreSQL, local-db profile only), 8000 (Backend), 4173 (Frontend)
 
-## Quick Start
 
-1. **Copy the Docker environment file:**
-   ```bash
-   cp .env.docker .env
-   ```
+## Quick Start (GHCR — recommended for end users)
 
-2. **Build and start all services:**
-   ```bash
-   docker-compose up --build
-   ```
+No build step required. Pulls official images from the GitHub Container Registry.
 
-3. **Access the application:**
-   - Frontend: http://localhost:4173
-   - Backend API: http://localhost:8000
-   - API Documentation: http://localhost:8000/docs
+```bash
+# 1. Grab the compose file and sample env
+curl -O https://raw.githubusercontent.com/DGAzr/ourschool/main/docker-compose.ghcr.yml
+curl -O https://raw.githubusercontent.com/DGAzr/ourschool/main/env.EXAMPLE
+
+# 2. Configure your environment
+cp env.EXAMPLE .env
+# Edit .env — at minimum, set a real SECRET_KEY:
+#   openssl rand -hex 32
+
+# 3. Start (includes a bundled PostgreSQL container via --profile local-db)
+docker compose -f docker-compose.ghcr.yml --profile local-db up -d
+
+# 4. Open the app
+open http://localhost:4173
+```
+
+> ⚠️ **Change the default credentials immediately.** Admin login: `admin` / `admin123`.
+
+### Using an external database
+
+Skip `--profile local-db` and set `DATABASE_URL` in `.env`:
+
+```env
+DATABASE_URL=postgresql+psycopg://user:password@host:5432/dbname
+```
+
+Then:
+```bash
+docker compose -f docker-compose.ghcr.yml up -d
+```
+
+### Choosing an image tag
+
+`IMAGE_TAG` in `.env` controls which release is pulled (default: `v1.0.0-beta.1`). To upgrade, update `IMAGE_TAG` and pull fresh images:
+
+```bash
+# Update IMAGE_TAG in .env, then:
+docker compose -f docker-compose.ghcr.yml pull
+docker compose -f docker-compose.ghcr.yml up -d
+```
+
+All published tags: https://github.com/DGAzr/ourschool/pkgs/container/ourschool-backend
+
+
+## Build from Source (contributors)
+
+Use the build-based `docker-compose.yml` if you're working on the code and need to test local changes.
+
+### Dev mode (live-reload)
+
+`docker-compose.override.yml` is automatically merged in dev mode. It:
+- Mounts source directories for live backend reload without rebuilds.
+- Targets the `builder` stage of `Dockerfile.frontend` (Node/Vite instead of nginx).
+- Runs `vite dev` on port 80 inside the container so the standard `4173 → 80` host mapping works for both dev and production.
+
+```bash
+docker compose up --build
+```
+
+### Production-style build (ignores the dev override)
+
+```bash
+docker compose -f docker-compose.yml up --build -d
+```
+
+> **Note (Vite 8 + Colima):** Vite 8 added strict host checking. If the frontend is unreachable through a tunnel or reverse proxy, ensure `allowedHosts: true` is set in `vite.config.ts` (already the case in this repo).
+
 
 ## Environment Configuration
 
-The Docker setup uses environment variables for configuration. You can customize these in your `.env` file:
+Key variables (see `env.EXAMPLE` for the full annotated list):
 
-### Database Configuration
+### Database
+
 ```env
-POSTGRES_DB=ourschool                    # Database name
-POSTGRES_USER=postgres                   # Database user
-POSTGRES_PASSWORD=docker_password        # Database password (change for production!)
+POSTGRES_DB=ourschool
+POSTGRES_USER=postgres
+POSTGRES_PASSWORD=your-secure-password-here
+POSTGRES_PORT=5432
+
+# Or full URL (takes precedence):
+# DATABASE_URL=postgresql+psycopg://user:password@host:5432/dbname
 ```
 
-### Application Configuration
+### Security
+
 ```env
-SECRET_KEY=your-secret-key              # JWT signing key (REQUIRED - change for production!)
-ALGORITHM=HS256                         # JWT algorithm
-ACCESS_TOKEN_EXPIRE_MINUTES=30          # Token expiration time
-
-BACKEND_HOST=0.0.0.0                    # Backend bind address
-BACKEND_PORT=8000                       # Backend port
-FRONTEND_HOST=0.0.0.0                   # Frontend bind address  
-FRONTEND_PORT=4173                      # Frontend port
-
-LOG_LEVEL=INFO                          # Log level (DEBUG, INFO, WARNING, ERROR, CRITICAL)
-LOG_FORMAT=json                         # Log format (json or text)
-
-# CORS origins (comma-separated)
-ALLOWED_ORIGINS=http://localhost:4173,http://frontend:4173
+SECRET_KEY=...          # Required — app refuses to start if unset
+ALGORITHM=HS256
+ACCESS_TOKEN_EXPIRE_MINUTES=30
 ```
+
+### Server & ports
+
+```env
+BACKEND_PORT=8000
+FRONTEND_PORT=4173      # host port; container always listens on 80
+```
+
+### Logging
+
+```env
+LOG_LEVEL=INFO          # DEBUG, INFO, WARNING, ERROR, CRITICAL
+LOG_FORMAT=json         # json (default) or text
+```
+
+### CORS
+
+```env
+ALLOWED_ORIGINS=http://localhost:4173
+```
+
 
 ## Services
 
 ### Database (PostgreSQL)
-- **Image**: postgres:15-alpine
-- **Port**: 5432 (customizable with `POSTGRES_PORT`)
-- **Data**: Persisted in `postgres_data` volume
-- **Health Check**: Automatic readiness check
+- **Image**: `postgres:15-alpine`
+- **Port**: 5432 (customizable via `POSTGRES_PORT`)
+- **Data**: Persisted in the `postgres_data` named volume
+- **Profile**: `local-db` — only started when you pass `--profile local-db`
 
 ### Backend (FastAPI)
-- **Build**: `Dockerfile.backend`
-- **Port**: 8000 (customizable with `BACKEND_PORT`)
-- **Features**:
-  - Automatic database migrations on startup
-  - Initial admin user creation if no users exist
-  - Health checks on `/health` endpoint
-  - Hot-reload for development (when volumes are mounted)
+- **Image**: `ghcr.io/dgazr/ourschool-backend:${IMAGE_TAG}` (GHCR) or built from `Dockerfile.backend` (source)
+- **Port**: 8000 (customizable via `BACKEND_PORT`; binds loopback by default)
+- **Startup**: runs `start.sh` which applies Alembic migrations, seeds the admin account if no users exist, then starts uvicorn
+- **Health check**: `GET /health` — 15s interval, 5 retries, 30s start period
 
-### Frontend (React/Vite)
-- **Build**: `Dockerfile.frontend`
-- **Port**: 4173 (customizable with `FRONTEND_PORT`)
-- **Features**:
-  - Production build served by Vite preview server
-  - Proxy configuration for API calls
-  - Health checks
+### Frontend (React / nginx)
+- **Image**: `ghcr.io/dgazr/ourschool-frontend:${IMAGE_TAG}` (GHCR) or built from `Dockerfile.frontend` (source)
+- **Port**: 4173 → 80 (nginx; customizable via `FRONTEND_PORT`)
+- **Depends on**: backend `service_healthy` — won't start until the API is ready
+- **Health check**: `wget -qO- http://localhost:80` — 30s interval, 3 retries
 
-## Docker Commands
 
-### Start services (detached)
+## Common Docker Commands
+
 ```bash
-docker-compose up -d
+# View logs
+docker compose logs -f
+docker compose logs -f backend
+docker compose logs -f frontend
+
+# Stop services
+docker compose -f docker-compose.ghcr.yml down
+
+# Restart a service
+docker compose -f docker-compose.ghcr.yml restart backend
+
+# Check service status and health
+docker compose -f docker-compose.ghcr.yml ps
 ```
 
-### View logs
-```bash
-# All services
-docker-compose logs -f
-
-# Specific service
-docker-compose logs -f backend
-docker-compose logs -f frontend
-docker-compose logs -f db
-```
-
-### Stop services
-```bash
-docker-compose down
-```
-
-### Rebuild and restart
-```bash
-docker-compose down
-docker-compose up --build
-```
-
-### Reset database (removes all data!)
-```bash
-docker-compose down -v
-docker-compose up --build
-```
-
-## Development vs Production
-
-### Development Setup
-For development with hot-reload, you can mount source code as volumes:
-
-```yaml
-# Add to docker-compose.override.yml
-version: '3.8'
-services:
-  backend:
-    volumes:
-      - ./app:/app/app
-      - ./alembic:/app/alembic
-      - ./alembic.ini:/app/alembic.ini
-    environment:
-      LOG_LEVEL: DEBUG
-      LOG_FORMAT: text
-```
-
-### Production Setup
-For production:
-
-1. **Use strong passwords and secrets:**
-   ```env
-   SECRET_KEY=your-very-secure-production-secret-key
-   POSTGRES_PASSWORD=your-secure-database-password
-   ```
-
-2. **Configure proper CORS origins:**
-   ```env
-   ALLOWED_ORIGINS=https://yourapp.com,https://www.yourapp.com
-   ```
-
-3. **Use appropriate logging:**
-   ```env
-   LOG_LEVEL=INFO
-   LOG_FORMAT=json
-   ```
-
-4. **Consider using external database:**
-   Instead of the included PostgreSQL container, you might want to use a managed database service.
 
 ## Troubleshooting
 
-### Database Connection Issues
-```bash
-# Check if database is ready
-docker-compose exec db pg_isready -U postgres
+### Services won't start
 
-# Check database logs
-docker-compose logs db
+Check the logs:
+```bash
+docker compose -f docker-compose.ghcr.yml logs --tail=50
 ```
 
-### Backend Issues
-```bash
-# Check backend logs
-docker-compose logs backend
+### Backend fails to start / migrations error
 
-# Access backend container
-docker-compose exec backend bash
+```bash
+# Inspect backend logs
+docker compose -f docker-compose.ghcr.yml logs backend
 
 # Run migrations manually
-docker-compose exec backend alembic upgrade head
+docker compose -f docker-compose.ghcr.yml exec backend alembic upgrade head
 ```
 
-### Frontend Issues
+### Database connection issues
+
 ```bash
-# Check frontend logs
-docker-compose logs frontend
+# Check if the DB is ready
+docker compose -f docker-compose.ghcr.yml exec db pg_isready -U postgres
 
-# Rebuild frontend
-docker-compose build frontend
+# Check DB logs
+docker compose -f docker-compose.ghcr.yml logs db
 ```
 
-### Port Conflicts
-If you get port conflicts, you can change the ports in your `.env` file:
+### Health check failures
+
+Services have start periods to account for initialization (backend: 30s). If health checks are still failing after a minute, check the logs. You can also hit the health endpoints directly:
+
+```bash
+curl http://localhost:8000/health
+curl http://localhost:8000/health/db
+curl http://localhost:4173
+```
+
+### Port conflicts
+
+Change the conflicting ports in `.env`:
 ```env
 BACKEND_PORT=8001
 FRONTEND_PORT=3001
 POSTGRES_PORT=5433
 ```
 
-### Health Check Failures
-Health checks may fail if services are still starting up. Wait a few minutes and check logs:
-```bash
-# Check service status
-docker-compose ps
+### Reset everything (⚠️ destroys all data)
 
-# Check health status
-docker-compose exec backend curl -f http://localhost:8000/health
+```bash
+docker compose -f docker-compose.ghcr.yml down -v
+docker compose -f docker-compose.ghcr.yml --profile local-db up -d
 ```
+
 
 ## Security Notes
 
-- **Change default passwords** in production
-- **Use strong SECRET_KEY** values
-- **Restrict CORS origins** to your actual domains
-- **Use HTTPS** in production
-- **Keep Docker images updated**
-- **Don't expose database port** in production unless necessary
+- **Generate a real `SECRET_KEY`** — use `openssl rand -hex 32` and put it in `.env`. Docker Compose (both files) refuses to start if `SECRET_KEY` is unset.
+- **Change the default admin password** immediately after first login (`admin` / `admin123`).
+- **Set a strong database password.** The default `postgres`/`postgres` is for local dev only; it is not safe to expose publicly.
+- **Restrict `ALLOWED_ORIGINS`** to your actual domains in production — a `*` wildcard is rejected at startup because credentials are enabled.
+- **Terminate TLS at a reverse proxy.** The bundled frontend is served by nginx, which provides no TLS, gzip compression, or rate limiting by default. Put nginx/Caddy/Traefik (or a managed load balancer) in front. The backend (8000) and database (5432) bind to loopback by default; set `BACKEND_BIND`/`POSTGRES_BIND` to `0.0.0.0` only when they're behind such a proxy.
+- **Disable interactive API docs** in production if desired: `ENABLE_API_DOCS=false`.
+- **Don't expose the database port** publicly (stays on loopback by default).
+
 
 ## Backup and Restore
 
-### Backup Database
-```bash
-docker-compose exec db pg_dump -U postgres ourschool > backup.sql
-```
+OurSchool has a built-in backup/restore system (Admin → Backup) with dry-run preview, cross-version compatibility, and stable external IDs. That's the recommended way to back up application data.
 
-### Restore Database
+For a raw PostgreSQL dump:
+
 ```bash
-# Stop backend to avoid conflicts
-docker-compose stop backend
+# Backup
+docker compose -f docker-compose.ghcr.yml exec db \
+  pg_dump -U postgres ourschool > backup.sql
 
 # Restore
-docker-compose exec -T db psql -U postgres ourschool < backup.sql
-
-# Restart backend
-docker-compose start backend
+docker compose -f docker-compose.ghcr.yml stop backend
+docker compose -f docker-compose.ghcr.yml exec -T db \
+  psql -U postgres ourschool < backup.sql
+docker compose -f docker-compose.ghcr.yml start backend
 ```
+
 
 ## Monitoring
 
-### Check Service Health
 ```bash
-# Backend health
-curl http://localhost:8000/health
-
-# Database health  
-curl http://localhost:8000/health/db
-
-# Frontend health
-curl http://localhost:4173
-```
-
-### Resource Usage
-```bash
-# Check resource usage
+# Resource usage
 docker stats
 
-# Check disk usage
+# Disk usage
 docker system df
+
+# Health endpoints
+curl http://localhost:8000/health
+curl http://localhost:8000/health/db
 ```

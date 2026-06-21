@@ -17,14 +17,23 @@
  */
 
 import React, { useState, useEffect } from 'react'
-import { X, Users } from 'lucide-react'
 import { attendanceApi } from '../services/attendance'
 import { User } from '../types'
+import Modal from './ui/Modal'
+import Button from './ui/Button'
 
 interface BulkAttendanceModalProps {
   isOpen: boolean
   onClose: () => void
   onSuccess?: () => void
+}
+
+const FIELD = 'bg-field-bg border border-field-border rounded-field px-3 py-2 text-[13.5px] text-ink focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent placeholder:text-faintest w-full'
+const LABEL = 'block text-[12px] font-semibold text-muted uppercase tracking-wide mb-1.5'
+
+const getLocalDateString = () => {
+  const now = new Date()
+  return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
 }
 
 const BulkAttendanceModal: React.FC<BulkAttendanceModalProps> = ({
@@ -37,15 +46,6 @@ const BulkAttendanceModal: React.FC<BulkAttendanceModalProps> = ({
   const [error, setError] = useState<string | null>(null)
   const [selectedStudents, setSelectedStudents] = useState<number[]>([])
 
-  // Helper function to get local date in YYYY-MM-DD format
-  const getLocalDateString = () => {
-    const now = new Date()
-    const year = now.getFullYear()
-    const month = String(now.getMonth() + 1).padStart(2, '0')
-    const day = String(now.getDate()).padStart(2, '0')
-    return `${year}-${month}-${day}`
-  }
-
   const [bulkRecord, setBulkRecord] = useState({
     date: getLocalDateString(),
     status: 'present' as const,
@@ -55,248 +55,171 @@ const BulkAttendanceModal: React.FC<BulkAttendanceModalProps> = ({
   useEffect(() => {
     if (isOpen) {
       fetchStudents()
-      // Reset form when modal opens
-      setBulkRecord({
-        date: getLocalDateString(),
-        status: 'present' as const,
-        notes: ''
-      })
+      setBulkRecord({ date: getLocalDateString(), status: 'present' as const, notes: '' })
       setSelectedStudents([])
       setError(null)
     }
   }, [isOpen])
 
-  // ESC key handling
-  useEffect(() => {
-    const handleEscape = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && isOpen) {
-        onClose()
-      }
-    }
-
-    if (isOpen) {
-      document.addEventListener('keydown', handleEscape)
-      return () => document.removeEventListener('keydown', handleEscape)
-    }
-  }, [isOpen, onClose])
-
   const fetchStudents = async () => {
     try {
       setLoading(true)
-      const studentsData = await attendanceApi.getStudents()
-      setStudents(studentsData)
-      // Auto-select all students for quick "mark all present" workflow
-      setSelectedStudents(studentsData.map((student: User) => student.id))
-    } catch (err) {
+      const data = await attendanceApi.getStudents()
+      setStudents(data)
+      setSelectedStudents(data.map((s: User) => s.id))
+    } catch {
       setError('Failed to load students')
     } finally {
       setLoading(false)
     }
   }
 
-  const toggleStudentSelection = (studentId: number) => {
-    setSelectedStudents(prev => 
-      prev.includes(studentId)
-        ? prev.filter(id => id !== studentId)
-        : [...prev, studentId]
-    )
-  }
-
-  const selectAllStudents = () => {
-    setSelectedStudents(students.map(student => student.id))
-  }
-
-  const clearAllStudents = () => {
-    setSelectedStudents([])
+  const toggleStudent = (id: number) => {
+    setSelectedStudents(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id])
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    
-    if (selectedStudents.length === 0) {
-      setError('Please select at least one student')
-      return
-    }
+    if (selectedStudents.length === 0) { setError('Please select at least one student'); return }
 
     try {
       setLoading(true)
       setError(null)
-      
       await attendanceApi.createBulk({
         student_ids: selectedStudents,
         date: bulkRecord.date,
         status: bulkRecord.status,
-        notes: bulkRecord.notes
+        notes: bulkRecord.notes,
       })
-      
       onSuccess?.()
       onClose()
     } catch (err: any) {
-      setError(err.response?.data?.detail || 'Failed to record attendance')
+      setError(err.message || 'Failed to record attendance')
     } finally {
       setLoading(false)
     }
   }
 
-  if (!isOpen) return null
-
   return (
-    <div className="fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center z-50">
-      <div className="bg-white dark:bg-gray-800 rounded-lg w-full max-w-2xl max-h-[90vh] overflow-hidden">
-        {/* Header */}
-        <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700 bg-gradient-to-r from-blue-50 to-blue-100 dark:from-blue-900 dark:to-blue-800">
-          <div className="flex items-center justify-between">
-            <h3 className="text-lg font-semibold text-gray-900 dark:text-gray-100 flex items-center">
-              <div className="w-8 h-8 bg-blue-500 rounded-lg flex items-center justify-center mr-3">
-                <Users className="h-4 w-4 text-white" />
-              </div>
-              Quick Attendance
-            </h3>
-            <button
-              onClick={onClose}
-              className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
+    <Modal
+      isOpen={isOpen}
+      onClose={onClose}
+      title="Quick Attendance"
+      subtitle="Record attendance for one or more students"
+      size="md"
+      footer={
+        <>
+          <Button variant="secondary" onClick={onClose} disabled={loading}>Cancel</Button>
+          <Button
+            variant="primary"
+            loading={loading}
+            disabled={loading || selectedStudents.length === 0}
+            onClick={() => {
+              const form = document.getElementById('bulk-attendance-form') as HTMLFormElement
+              form?.requestSubmit()
+            }}
+          >
+            Record Attendance{selectedStudents.length > 0 ? ` (${selectedStudents.length})` : ''}
+          </Button>
+        </>
+      }
+    >
+      <form id="bulk-attendance-form" onSubmit={handleSubmit} className="space-y-5">
+        {error && (
+          <div className="bg-neg-bg text-neg-fg px-4 py-3 rounded-field text-[13px]">{error}</div>
+        )}
+
+        {/* Date + Status */}
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label className={LABEL}>Date</label>
+            <input
+              type="date"
+              value={bulkRecord.date}
+              onChange={e => setBulkRecord(r => ({ ...r, date: e.target.value }))}
+              className={FIELD}
+              disabled={loading}
+            />
+          </div>
+          <div>
+            <label className={LABEL}>Status</label>
+            <select
+              value={bulkRecord.status}
+              onChange={e => setBulkRecord(r => ({ ...r, status: e.target.value as any }))}
+              className={FIELD}
+              disabled={loading}
             >
-              <X className="h-5 w-5" />
-            </button>
+              <option value="present">Present</option>
+              <option value="absent">Absent</option>
+              <option value="late">Late</option>
+              <option value="excused">Excused</option>
+            </select>
           </div>
         </div>
 
-        <form onSubmit={handleSubmit} className="flex flex-col h-full">
-          <div className="flex-1 overflow-y-auto p-6">
-            {error && (
-              <div className="mb-4 bg-red-50 dark:bg-red-900 border border-red-200 dark:border-red-700 text-red-700 dark:text-red-200 px-4 py-3 rounded">
-                {error}
-              </div>
-            )}
+        {/* Notes */}
+        <div>
+          <label className={LABEL}>Notes <span className="normal-case font-normal text-faint">(optional)</span></label>
+          <textarea
+            value={bulkRecord.notes}
+            onChange={e => setBulkRecord(r => ({ ...r, notes: e.target.value }))}
+            rows={2}
+            className={FIELD}
+            placeholder="Optional notes for this attendance record…"
+            disabled={loading}
+          />
+        </div>
 
-            <div className="space-y-4">
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Date</label>
+        {/* Students */}
+        <div>
+          <div className="flex items-center justify-between mb-1.5">
+            <label className={LABEL + ' mb-0'}>
+              Students{selectedStudents.length > 0 && <span className="font-normal normal-case text-faint ml-1">({selectedStudents.length} selected)</span>}
+            </label>
+            <div className="flex gap-3">
+              <button type="button" onClick={() => setSelectedStudents(students.map(s => s.id))} className="text-[12px] font-medium text-accent hover:opacity-80 transition-opacity">
+                Select all
+              </button>
+              <button type="button" onClick={() => setSelectedStudents([])} className="text-[12px] font-medium text-faint hover:text-muted transition-colors">
+                Clear
+              </button>
+            </div>
+          </div>
+
+          {loading && students.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-10 gap-3">
+              <div className="w-6 h-6 border-2 border-accent border-t-transparent rounded-full animate-spin" />
+              <p className="text-[13px] text-faint">Loading…</p>
+            </div>
+          ) : (
+            <div className="border border-field-border rounded-field overflow-hidden max-h-52 overflow-y-auto divide-y divide-line">
+              {students.map(student => (
+                <label key={student.id} className="flex items-center gap-3 px-3 py-2.5 cursor-pointer hover:bg-track transition-colors">
                   <input
-                    type="date"
-                    value={bulkRecord.date}
-                    onChange={(e) => setBulkRecord({ ...bulkRecord, date: e.target.value })}
-                    className="w-full border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 rounded-md px-3 py-2 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                    type="checkbox"
+                    checked={selectedStudents.includes(student.id)}
+                    onChange={() => toggleStudent(student.id)}
+                    className="w-4 h-4 rounded accent-[var(--accent)]"
+                    disabled={loading}
                   />
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Status</label>
-                  <select
-                    value={bulkRecord.status}
-                    onChange={(e) => setBulkRecord({ ...bulkRecord, status: e.target.value as any })}
-                    className="w-full border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 rounded-md px-3 py-2 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-                  >
-                    <option value="present">Present</option>
-                    <option value="absent">Absent</option>
-                    <option value="late">Late</option>
-                    <option value="excused">Excused</option>
-                  </select>
-                </div>
-              </div>
-              
-              <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">Notes (Optional)</label>
-                <textarea
-                  value={bulkRecord.notes}
-                  onChange={(e) => setBulkRecord({ ...bulkRecord, notes: e.target.value })}
-                  rows={2}
-                  className="w-full border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 rounded-md px-3 py-2 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-                  placeholder="Optional notes for this attendance record..."
-                />
-              </div>
-
-              <div>
-                <div className="flex justify-between items-center mb-3">
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
-                    Select Students ({selectedStudents.length} selected)
-                  </label>
-                  <div className="space-x-2">
-                    <button
-                      type="button"
-                      onClick={selectAllStudents}
-                      className="text-sm text-blue-600 hover:text-blue-500 font-medium"
-                    >
-                      Select All
-                    </button>
-                    <button
-                      type="button"
-                      onClick={clearAllStudents}
-                      className="text-sm text-gray-600 hover:text-gray-500 font-medium"
-                    >
-                      Clear All
-                    </button>
+                  <div className="w-7 h-7 rounded-full bg-accent/15 flex items-center justify-center flex-shrink-0">
+                    <span className="text-[11px] font-semibold text-accent">
+                      {student.first_name[0]}{student.last_name[0]}
+                    </span>
                   </div>
-                </div>
-                
-                {loading ? (
-                  <div className="text-center py-8">
-                    <div className="animate-spin h-8 w-8 border-b-2 border-blue-500 rounded-full mx-auto"></div>
-                    <p className="text-sm text-gray-500 mt-2">Loading students...</p>
+                  <div className="min-w-0">
+                    <p className="text-[13.5px] font-medium text-ink">{student.first_name} {student.last_name}</p>
+                    <p className="text-[11.5px] text-faint truncate">
+                      {student.grade_level ? `${student.grade_level} · ` : ''}{student.email}
+                    </p>
                   </div>
-                ) : (
-                  <div className="border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 rounded-md max-h-60 overflow-y-auto">
-                    {students.map((student) => (
-                      <div
-                        key={student.id}
-                        className="flex items-center p-3 hover:bg-gray-50 dark:hover:bg-gray-600 border-b border-gray-200 dark:border-gray-600 last:border-b-0"
-                      >
-                        <input
-                          type="checkbox"
-                          checked={selectedStudents.includes(student.id)}
-                          onChange={() => toggleStudentSelection(student.id)}
-                          className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
-                        />
-                        <div className="ml-3 flex-1">
-                          <div className="flex items-center">
-                            <div className="flex-shrink-0 h-8 w-8">
-                              <div className="h-8 w-8 rounded-full bg-blue-100 dark:bg-blue-900 flex items-center justify-center">
-                                <span className="text-xs font-medium text-blue-800 dark:text-blue-200">
-                                  {student.first_name[0]}{student.last_name[0]}
-                                </span>
-                              </div>
-                            </div>
-                            <div className="ml-3">
-                              <p className="text-sm font-medium text-gray-900 dark:text-gray-100">
-                                {student.first_name} {student.last_name}
-                              </p>
-                              <p className="text-xs text-gray-500 dark:text-gray-400">
-                                {student.grade_level && `${student.grade_level} • `}{student.email}
-                              </p>
-                            </div>
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                )}
-              </div>
+                </label>
+              ))}
             </div>
-          </div>
-
-          {/* Footer */}
-          <div className="px-6 py-4 border-t border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-700">
-            <div className="flex space-x-3">
-              <button
-                type="button"
-                onClick={onClose}
-                disabled={loading}
-                className="flex-1 px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-gray-600 border border-gray-300 dark:border-gray-500 rounded-md hover:bg-gray-50 dark:hover:bg-gray-500 disabled:opacity-50"
-              >
-                Cancel
-              </button>
-              <button
-                type="submit"
-                disabled={loading || selectedStudents.length === 0}
-                className="flex-1 px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 disabled:opacity-50"
-              >
-                {loading ? 'Recording...' : `Record Attendance (${selectedStudents.length})`}
-              </button>
-            </div>
-          </div>
-        </form>
-      </div>
-    </div>
+          )}
+        </div>
+      </form>
+    </Modal>
   )
 }
 

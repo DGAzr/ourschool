@@ -17,82 +17,94 @@
  */
 
 import { config } from '../config/env'
+import { STORAGE_KEYS } from '../constants/auth'
 
 // Base API configuration
 const API_BASE = config.api.baseUrl
 
-const getAuthHeaders = () => {
-  const token = localStorage.getItem('token')
+// Event other parts of the app (AuthProvider) can listen for to react to a
+// server-side session invalidation.
+export const UNAUTHORIZED_EVENT = 'ourschool:unauthorized'
+
+const getAuthHeaders = (): Record<string, string> => {
+  const token = localStorage.getItem(STORAGE_KEYS.TOKEN)
   const headers: Record<string, string> = {
     'Content-Type': 'application/json'
   }
-  
   if (token) {
     headers['Authorization'] = `Bearer ${token}`
   }
-  
   return headers
 }
 
-export const api = {
-  // Generic API methods
-  get: async (endpoint: string) => {
-    const response = await fetch(`${API_BASE}${endpoint}`, {
-      headers: getAuthHeaders()
-    })
-    if (!response.ok) {
-      throw new Error(`API Error: ${response.status} ${response.statusText}`)
-    }
-    return response.json()
-  },
+let redirecting = false
 
-  post: async (endpoint: string, data: any) => {
-    const response = await fetch(`${API_BASE}${endpoint}`, {
-      method: 'POST',
-      headers: getAuthHeaders(),
-      body: JSON.stringify(data)
-    })
-    if (!response.ok) {
-      throw new Error(`API Error: ${response.status} ${response.statusText}`)
-    }
-    return response.json()
-  },
+/**
+ * Central handler for an authentication failure (401). Clears the stored
+ * session and redirects to the login page so a stale/revoked token never
+ * leaves the user in a half-logged-in state. Guarded so concurrent failed
+ * requests trigger a single redirect.
+ */
+const handleUnauthorized = () => {
+  localStorage.removeItem(STORAGE_KEYS.TOKEN)
+  localStorage.removeItem(STORAGE_KEYS.USER)
+  window.dispatchEvent(new CustomEvent(UNAUTHORIZED_EVENT))
+  if (!redirecting && window.location.pathname !== '/login') {
+    redirecting = true
+    window.location.assign('/login')
+  }
+}
 
-  put: async (endpoint: string, data: any) => {
-    const response = await fetch(`${API_BASE}${endpoint}`, {
-      method: 'PUT',
-      headers: getAuthHeaders(),
-      body: JSON.stringify(data)
-    })
-    if (!response.ok) {
-      throw new Error(`API Error: ${response.statusText}`)
-    }
-    return response.json()
-  },
-
-  delete: async (endpoint: string) => {
-    const response = await fetch(`${API_BASE}${endpoint}`, {
-      method: 'DELETE',
-      headers: getAuthHeaders()
-    })
-    if (!response.ok) {
-      const errorText = await response.text()
-      let errorMessage = `API Error: ${response.status} ${response.statusText}`
-      
-      try {
-        const errorData = JSON.parse(errorText)
-        if (errorData.detail) {
-          errorMessage = errorData.detail
-        }
-      } catch {
-        // If parsing fails, stick with the default message
+const parseError = async (response: Response): Promise<string> => {
+  let message = `API Error: ${response.status} ${response.statusText}`
+  try {
+    const text = await response.text()
+    if (text) {
+      const data = JSON.parse(text)
+      if (data?.detail) {
+        message = typeof data.detail === 'string' ? data.detail : JSON.stringify(data.detail)
       }
-      
-      
-      throw new Error(errorMessage)
     }
-    return response.ok
-  },
+  } catch {
+    // Non-JSON body: keep the default status-based message.
+  }
+  return message
+}
+
+/** Single code path for every request: auth headers, 401 handling, errors. */
+const request = async (endpoint: string, init: RequestInit = {}) => {
+  const response = await fetch(`${API_BASE}${endpoint}`, {
+    ...init,
+    headers: { ...getAuthHeaders(), ...(init.headers || {}) }
+  })
+
+  if (response.status === 401) {
+    handleUnauthorized()
+    throw new Error('Your session has expired. Please log in again.')
+  }
+
+  if (!response.ok) {
+    throw new Error(await parseError(response))
+  }
+
+  if (response.status === 204) {
+    return null
+  }
+  // Some endpoints (rare) return empty bodies on 200.
+  const text = await response.text()
+  return text ? JSON.parse(text) : null
+}
+
+export const api = {
+  get: (endpoint: string) => request(endpoint, { method: 'GET' }),
+
+  post: (endpoint: string, data?: unknown) =>
+    request(endpoint, { method: 'POST', body: JSON.stringify(data ?? {}) }),
+
+  put: (endpoint: string, data?: unknown) =>
+    request(endpoint, { method: 'PUT', body: JSON.stringify(data ?? {}) }),
+
+  delete: (endpoint: string) => request(endpoint, { method: 'DELETE' }),
 
   // Authentication-specific methods
   extendSession: async () => {
@@ -101,6 +113,7 @@ export const api = {
       headers: getAuthHeaders()
     })
     if (!response.ok) {
+      // Don't force-redirect here; the caller (AuthProvider) decides.
       throw new Error(`Session extension failed: ${response.status} ${response.statusText}`)
     }
     return response.json()

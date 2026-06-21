@@ -33,17 +33,6 @@ const AdminSettings: React.FC = () => {
   const [error, setError] = useState<string | null>(null)
   const [successMessage, setSuccessMessage] = useState<string | null>(null)
 
-  // Check if user is admin
-  if (user?.role !== 'admin') {
-    return (
-      <div className="text-center py-12">
-        <AlertTriangle className="h-16 w-16 text-red-500 mx-auto mb-4" />
-        <h2 className="text-2xl font-bold text-gray-900 dark:text-gray-100">Access Denied</h2>
-        <p className="text-gray-600 dark:text-gray-400 mt-2">Only administrators can access system settings.</p>
-      </div>
-    )
-  }
-
   const loadSettings = async () => {
     try {
       setLoading(true)
@@ -107,6 +96,17 @@ const AdminSettings: React.FC = () => {
   useEffect(() => {
     loadSettings()
   }, [])
+
+  // Check if user is admin (after hooks so hook order stays stable)
+  if (user?.role !== 'admin') {
+    return (
+      <div className="text-center py-12">
+        <AlertTriangle className="h-16 w-16 text-red-500 mx-auto mb-4" />
+        <h2 className="text-2xl font-bold text-gray-900 dark:text-gray-100">Access Denied</h2>
+        <p className="text-gray-600 dark:text-gray-400 mt-2">Only administrators can access system settings.</p>
+      </div>
+    )
+  }
 
   if (loading) {
     return (

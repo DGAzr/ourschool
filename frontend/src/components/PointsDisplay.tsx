@@ -19,7 +19,7 @@
 import React, { useState, useEffect } from 'react'
 import { useAuth } from '../contexts/AuthContext'
 import { pointsApi, type StudentPoints } from '../services/points'
-import { Coins, TrendingUp, Eye, EyeOff } from 'lucide-react'
+import { Coins, Eye, EyeOff } from 'lucide-react'
 
 interface PointsDisplayProps {
   compact?: boolean
@@ -41,16 +41,14 @@ const PointsDisplay: React.FC<PointsDisplayProps> = ({ compact = false, classNam
       }
 
       try {
-        // Check if points system is enabled
         const status = await pointsApi.getSystemStatus()
         setSystemEnabled(status.enabled)
-        
+
         if (status.enabled) {
           const pointsData = await pointsApi.getMyBalance()
           setPoints(pointsData)
         }
-      } catch (error) {
-        // Failed to load points data
+      } catch {
         setSystemEnabled(false)
       } finally {
         setIsLoading(false)
@@ -60,79 +58,52 @@ const PointsDisplay: React.FC<PointsDisplayProps> = ({ compact = false, classNam
     loadPointsData()
   }, [user])
 
-  // Don't render if not a student, system disabled, or still loading
-  if (!user || user.role !== 'student' || !systemEnabled || isLoading) {
+  if (!user || user.role !== 'student' || !systemEnabled || isLoading || !points) {
     return null
   }
 
-  // Don't render if no points data
-  if (!points) {
-    return null
-  }
-
-  const toggleVisibility = () => {
-    setIsVisible(!isVisible)
-  }
+  const toggleVisibility = () => setIsVisible(v => !v)
 
   if (compact) {
     return (
-      <div className={`flex items-center space-x-2 ${className}`}>
-        <div className="flex items-center bg-yellow-100 dark:bg-yellow-900 text-yellow-800 dark:text-yellow-200 px-3 py-1 rounded-full">
-          <Coins className="h-4 w-4 mr-1" />
-          <span className="font-medium">
-            {isVisible ? points.current_balance.toLocaleString() : '***'}
-          </span>
+      <div className={`flex items-center gap-1.5 ${className}`}>
+        <div className="flex items-center gap-1 px-2.5 py-1 rounded-full bg-panel-2 border border-line text-[12px] font-semibold text-ink">
+          <Coins size={12} className="text-muted" />
+          <span className="font-mono">{isVisible ? points.current_balance.toLocaleString() : '•••'}</span>
         </div>
         <button
           onClick={toggleVisibility}
-          className="p-1 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 rounded"
+          className="p-1 rounded text-muted hover:text-ink transition-colors"
           title={isVisible ? 'Hide points' : 'Show points'}
         >
-          {isVisible ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+          {isVisible ? <EyeOff size={13} /> : <Eye size={13} />}
         </button>
       </div>
     )
   }
 
   return (
-    <div className={`bg-gradient-to-r from-yellow-50 to-amber-50 dark:from-yellow-900/20 dark:to-amber-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg p-4 ${className}`}>
+    <div className={`bg-panel border border-line rounded-card p-4 ${className}`}>
       <div className="flex items-center justify-between">
-        <div className="flex items-center space-x-3">
-          <div className="bg-yellow-500 p-2 rounded-lg">
-            <Coins className="h-5 w-5 text-white" />
+        <div className="flex items-center gap-3">
+          <div className="w-9 h-9 rounded-field bg-panel-2 border border-line flex items-center justify-center text-muted">
+            <Coins size={16} />
           </div>
           <div>
-            <h3 className="text-sm font-medium text-gray-700 dark:text-gray-300">
-              My Points Balance
-            </h3>
-            <p className="text-2xl font-bold text-yellow-600 dark:text-yellow-400">
-              {isVisible ? points.current_balance.toLocaleString() : '***'}
+            <p className="text-[11px] font-semibold text-faint uppercase tracking-[.06em]">Balance</p>
+            <p className="text-[22px] font-bold text-ink font-mono leading-none mt-0.5">
+              {isVisible ? points.current_balance.toLocaleString() : '•••'}
             </p>
           </div>
         </div>
-        
-        <div className="flex items-center space-x-3">
-          <button
-            onClick={toggleVisibility}
-            className="p-2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 rounded-lg"
-            title={isVisible ? 'Hide points' : 'Show points'}
-          >
-            {isVisible ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
-          </button>
-        </div>
+        <button
+          onClick={toggleVisibility}
+          className="p-1.5 rounded-field text-muted hover:text-ink hover:bg-panel-2 transition-colors"
+          title={isVisible ? 'Hide points' : 'Show points'}
+        >
+          {isVisible ? <EyeOff size={15} /> : <Eye size={15} />}
+        </button>
       </div>
-      
-      {isVisible && (
-        <div className="mt-3 flex items-center justify-between text-sm text-gray-600 dark:text-gray-400">
-          <div className="flex items-center">
-            <TrendingUp className="h-4 w-4 mr-1 text-green-500" />
-            <span>Earned: {points.total_earned.toLocaleString()}</span>
-          </div>
-          <div className="flex items-center">
-            <span>Spent: {points.total_spent.toLocaleString()}</span>
-          </div>
-        </div>
-      )}
     </div>
   )
 }

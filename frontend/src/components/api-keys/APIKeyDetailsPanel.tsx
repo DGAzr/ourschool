@@ -21,7 +21,6 @@ import { apiKeysApi, formatLastUsed } from '../../services/apiKeys'
 import { TrendingUp, Calendar, Clock, AlertTriangle } from 'lucide-react'
 
 interface APIKeyDetailsPanelProps {
-  /** The ID of the API key to display details for */
   apiKeyId: number
 }
 
@@ -36,15 +35,6 @@ interface APIKeyStats {
   permissions: string[]
 }
 
-/**
- * Displays detailed usage statistics and information for a specific API key.
- * 
- * Features:
- * - Usage statistics (permissions count, creation date, last used)
- * - Permission list with visual badges
- * - Security monitoring notice
- * - Loading and error states
- */
 const APIKeyDetailsPanel: React.FC<APIKeyDetailsPanelProps> = ({ apiKeyId }) => {
   const [keyStats, setKeyStats] = useState<APIKeyStats | null>(null)
   const [loading, setLoading] = useState(true)
@@ -70,8 +60,8 @@ const APIKeyDetailsPanel: React.FC<APIKeyDetailsPanelProps> = ({ apiKeyId }) => 
   if (loading) {
     return (
       <div className="flex items-center justify-center py-8">
-        <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600"></div>
-        <span className="ml-2 text-gray-600 dark:text-gray-400">Loading usage statistics...</span>
+        <div className="w-5 h-5 border-2 border-line border-t-accent rounded-full animate-spin" />
+        <span className="ml-2 text-[13px] text-muted">Loading usage statistics...</span>
       </div>
     )
   }
@@ -79,7 +69,7 @@ const APIKeyDetailsPanel: React.FC<APIKeyDetailsPanelProps> = ({ apiKeyId }) => 
   if (error) {
     return (
       <div className="text-center py-8">
-        <p className="text-red-600 dark:text-red-400">{error}</p>
+        <p className="text-[13px] text-neg-fg">{error}</p>
       </div>
     )
   }
@@ -87,90 +77,75 @@ const APIKeyDetailsPanel: React.FC<APIKeyDetailsPanelProps> = ({ apiKeyId }) => 
   if (!keyStats) {
     return (
       <div className="text-center py-8">
-        <p className="text-gray-500 dark:text-gray-400">No statistics available</p>
+        <p className="text-[13px] text-faint">No statistics available</p>
       </div>
     )
   }
 
   return (
     <div className="space-y-4">
-      <h4 className="text-lg font-medium text-gray-900 dark:text-gray-100">
+      <h4 className="text-[14px] font-semibold text-ink">
         Usage Statistics for {keyStats.name}
       </h4>
-      
-      {/* Statistics Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <div className="bg-white dark:bg-gray-800 rounded-lg p-4 border border-gray-200 dark:border-gray-600">
-          <div className="flex items-center">
-            <div className="bg-blue-500 p-2 rounded">
-              <TrendingUp className="h-4 w-4 text-white" />
-            </div>
-            <div className="ml-3">
-              <p className="text-sm text-gray-600 dark:text-gray-400">Permissions</p>
-              <p className="text-lg font-semibold text-gray-900 dark:text-gray-100">
-                {keyStats.permissions_count || 0}
-              </p>
-            </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+        <div className="bg-panel border border-line rounded-card p-4 flex items-center gap-3">
+          <div className="bg-accent/10 p-2 rounded-field">
+            <TrendingUp className="h-4 w-4 text-accent" />
+          </div>
+          <div>
+            <p className="text-[11px] text-muted uppercase tracking-wide font-medium">Permissions</p>
+            <p className="text-[16px] font-semibold text-ink">{keyStats.permissions_count || 0}</p>
           </div>
         </div>
-        
-        <div className="bg-white dark:bg-gray-800 rounded-lg p-4 border border-gray-200 dark:border-gray-600">
-          <div className="flex items-center">
-            <div className="bg-green-500 p-2 rounded">
-              <Calendar className="h-4 w-4 text-white" />
-            </div>
-            <div className="ml-3">
-              <p className="text-sm text-gray-600 dark:text-gray-400">Created</p>
-              <p className="text-lg font-semibold text-gray-900 dark:text-gray-100">
-                {keyStats.created_at ? new Date(keyStats.created_at).toLocaleDateString() : 'N/A'}
-              </p>
-            </div>
+
+        <div className="bg-panel border border-line rounded-card p-4 flex items-center gap-3">
+          <div className="bg-pos-bg p-2 rounded-field">
+            <Calendar className="h-4 w-4 text-pos-fg" />
+          </div>
+          <div>
+            <p className="text-[11px] text-muted uppercase tracking-wide font-medium">Created</p>
+            <p className="text-[16px] font-semibold text-ink">
+              {keyStats.created_at ? new Date(keyStats.created_at).toLocaleDateString() : 'N/A'}
+            </p>
           </div>
         </div>
-        
-        <div className="bg-white dark:bg-gray-800 rounded-lg p-4 border border-gray-200 dark:border-gray-600">
-          <div className="flex items-center">
-            <div className="bg-purple-500 p-2 rounded">
-              <Clock className="h-4 w-4 text-white" />
-            </div>
-            <div className="ml-3">
-              <p className="text-sm text-gray-600 dark:text-gray-400">Last Used</p>
-              <p className="text-lg font-semibold text-gray-900 dark:text-gray-100">
-                {formatLastUsed(keyStats.last_used_at)}
-              </p>
-            </div>
+
+        <div className="bg-panel border border-line rounded-card p-4 flex items-center gap-3">
+          <div className="bg-panel-2 p-2 rounded-field">
+            <Clock className="h-4 w-4 text-muted" />
+          </div>
+          <div>
+            <p className="text-[11px] text-muted uppercase tracking-wide font-medium">Last Used</p>
+            <p className="text-[16px] font-semibold text-ink">{formatLastUsed(keyStats.last_used_at)}</p>
           </div>
         </div>
       </div>
-      
-      {/* Permissions List */}
-      <div className="bg-white dark:bg-gray-800 rounded-lg p-4 border border-gray-200 dark:border-gray-600">
-        <h5 className="text-sm font-medium text-gray-900 dark:text-gray-100 mb-3">Permissions</h5>
+
+      <div className="bg-panel border border-line rounded-card p-4">
+        <h5 className="text-[12px] font-semibold text-muted uppercase tracking-wide mb-3">Permissions</h5>
         <div className="flex flex-wrap gap-2">
-          {keyStats.permissions?.map((permission: string) => (
-            <span 
-              key={permission} 
-              className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200"
+          {(keyStats.permissions ?? []).map((permission: string) => (
+            <span
+              key={permission}
+              className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-medium bg-accent/10 text-accent"
             >
               {permission}
             </span>
-          )) || []}
+          ))}
         </div>
         {(!keyStats.permissions || keyStats.permissions.length === 0) && (
-          <p className="text-sm text-gray-500 dark:text-gray-400">No permissions assigned</p>
+          <p className="text-[13px] text-faint">No permissions assigned</p>
         )}
       </div>
-      
-      {/* Security Monitoring Notice */}
-      <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
-        <div className="flex items-start">
-          <AlertTriangle className="h-5 w-5 text-blue-600 dark:text-blue-400 mr-2 mt-0.5 flex-shrink-0" />
-          <div>
-            <h5 className="text-sm font-medium text-blue-800 dark:text-blue-200">Monitoring Note</h5>
-            <p className="text-sm text-blue-700 dark:text-blue-300 mt-1">
-              Usage statistics are updated in real-time. Monitor for unusual activity patterns and disable keys immediately if suspicious behavior is detected.
-            </p>
-          </div>
+
+      <div className="flex items-start gap-2 bg-panel border border-line rounded-card p-4">
+        <AlertTriangle className="h-4 w-4 text-muted flex-shrink-0 mt-0.5" />
+        <div>
+          <h5 className="text-[12px] font-semibold text-ink mb-1">Monitoring Note</h5>
+          <p className="text-[12px] text-muted">
+            Usage statistics are updated in real-time. Monitor for unusual activity patterns and disable keys immediately if suspicious behavior is detected.
+          </p>
         </div>
       </div>
     </div>

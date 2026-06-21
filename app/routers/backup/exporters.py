@@ -22,7 +22,8 @@ from sqlalchemy.orm import Session
 from app.models.assignment import AssignmentTemplate, StudentAssignment
 from app.models.attendance import AttendanceRecord
 from app.models.journal import JournalEntry
-from app.models.lesson import Lesson, LessonAssignment, Subject
+from app.models.points import PointTransaction, StudentPoints
+from app.models.subject import Subject
 from app.models.term import GradeHistory, StudentTermGrade, Term, TermSubject
 from app.models.user import User
 from app.schemas.backup import (
@@ -30,11 +31,12 @@ from app.schemas.backup import (
     AttendanceRecordBackup,
     GradeHistoryBackup,
     JournalEntryBackup,
-    LessonAssignmentBackup,
-    LessonBackup,
+    PointTransactionBackup,
     StudentAssignmentBackup,
+    StudentPointsBackup,
     StudentTermGradeBackup,
     SubjectBackup,
+    SystemSettingsBackup,
     TermBackup,
     TermSubjectBackup,
     UserBackup,
@@ -47,6 +49,7 @@ def export_users(db: Session) -> List[UserBackup]:
     users = db.query(User).all()
     for user in users:
         users_data.append(UserBackup(
+            external_id=user.external_id,
             email=user.email,
             username=user.username,
             first_name=user.first_name,
@@ -68,9 +71,11 @@ def export_subjects(db: Session) -> List[SubjectBackup]:
     subjects = db.query(Subject).all()
     for subject in subjects:
         subjects_data.append(SubjectBackup(
+            external_id=subject.external_id,
             name=subject.name,
             description=subject.description,
-            color=subject.color
+            color=subject.color,
+            icon=subject.icon,
         ))
     return subjects_data
 
@@ -81,8 +86,10 @@ def export_terms(db: Session) -> List[TermBackup]:
     terms = db.query(Term).all()
     for term in terms:
         terms_data.append(TermBackup(
+            external_id=term.external_id,
             name=term.name,
             type=term.term_type.value,
+            academic_year=term.academic_year,
             start_date=term.start_date,
             end_date=term.end_date,
             is_current=term.is_current,
@@ -90,30 +97,6 @@ def export_terms(db: Session) -> List[TermBackup]:
             updated_at=term.updated_at
         ))
     return terms_data
-
-
-def export_lessons(db: Session) -> List[LessonBackup]:
-    """Export all lessons."""
-    lessons_data = []
-    lessons = db.query(Lesson).all()
-    for lesson in lessons:
-        lessons_data.append(LessonBackup(
-            title=lesson.title,
-            description=lesson.description,
-            scheduled_date=lesson.scheduled_date,
-            start_time=lesson.start_time,
-            end_time=lesson.end_time,
-            estimated_duration_minutes=lesson.estimated_duration_minutes,
-            materials_needed=lesson.materials_needed,
-            objectives=lesson.objectives,
-            prerequisites=lesson.prerequisites,
-            resources=lesson.resources,
-            lesson_order=lesson.lesson_order,
-            subject_names=lesson.subject_names,
-            created_at=lesson.created_at,
-            updated_at=lesson.updated_at
-        ))
-    return lessons_data
 
 
 def export_assignment_templates(db: Session) -> List[AssignmentTemplateBackup]:
@@ -126,12 +109,14 @@ def export_assignment_templates(db: Session) -> List[AssignmentTemplateBackup]:
         creator_email = creator.email if creator else "unknown@system.local"
         
         templates_data.append(AssignmentTemplateBackup(
+            external_id=template.external_id,
             name=template.name,
             description=template.description,
             instructions=template.instructions,
-            assignment_type=template.assignment_type.value,
+            assignment_type=template.assignment_type,
+            subject_external_id=template.subject.external_id if template.subject else None,
             subject_name=template.subject.name if template.subject else "Unknown",
-            lesson_id=template.lesson_id,
+            icon=template.icon,
             max_points=template.max_points,
             estimated_duration_minutes=template.estimated_duration_minutes,
             prerequisites=template.prerequisites,
@@ -144,34 +129,17 @@ def export_assignment_templates(db: Session) -> List[AssignmentTemplateBackup]:
     return templates_data
 
 
-def export_lesson_assignments(db: Session) -> List[LessonAssignmentBackup]:
-    """Export all lesson assignments."""
-    lesson_assignments_data = []
-    lesson_assignments = db.query(LessonAssignment).all()
-    for la in lesson_assignments:
-        lesson_assignments_data.append(LessonAssignmentBackup(
-            lesson_title=la.lesson.title,
-            assignment_template_name=la.assignment_template.name,
-            order_in_lesson=la.order_in_lesson,
-            planned_duration_minutes=la.planned_duration_minutes,
-            custom_instructions=la.custom_instructions,
-            is_required=la.is_required,
-            custom_max_points=la.custom_max_points,
-            created_at=la.created_at
-        ))
-    return lesson_assignments_data
-
-
 def export_term_subjects(db: Session) -> List[TermSubjectBackup]:
     """Export all term subjects."""
     term_subjects_data = []
     term_subjects = db.query(TermSubject).all()
     for ts in term_subjects:
         term_subjects_data.append(TermSubjectBackup(
-            term_name=ts.term.name,
-            subject_name=ts.subject.name,
-            credits=ts.credits,
-            created_at=ts.created_at
+            term_external_id=ts.term.external_id if ts.term else None,
+            term_name=ts.term.name if ts.term else "Unknown",
+            subject_external_id=ts.subject.external_id if ts.subject else None,
+            subject_name=ts.subject.name if ts.subject else "Unknown",
+            weight=getattr(ts, 'weight', None),
         ))
     return term_subjects_data
 
@@ -182,7 +150,9 @@ def export_student_assignments(db: Session) -> List[StudentAssignmentBackup]:
     student_assignments = db.query(StudentAssignment).all()
     for sa in student_assignments:
         student_assignments_data.append(StudentAssignmentBackup(
+            student_external_id=sa.student.external_id if sa.student else None,
             student_email=sa.student.email if sa.student else "Unknown",
+            template_external_id=sa.template.external_id if sa.template else None,
             assignment_template_name=sa.template.name if sa.template else "Unknown",
             due_date=sa.due_date,
             extended_due_date=sa.extended_due_date,
@@ -208,16 +178,28 @@ def export_student_term_grades(db: Session) -> List[StudentTermGradeBackup]:
     term_grades_data = []
     term_grades = db.query(StudentTermGrade).all()
     for grade in term_grades:
+        ts = grade.term_subject
+        term = ts.term if ts else None
+        subject = ts.subject if ts else None
         term_grades_data.append(StudentTermGradeBackup(
+            student_external_id=grade.student.external_id if grade.student else None,
             student_email=grade.student.email if grade.student else "Unknown",
-            term_name=grade.term.name if grade.term else "Unknown", 
-            subject_name=grade.subject.name if grade.subject else "Unknown",
-            letter_grade=grade.letter_grade,
-            percentage_grade=grade.percentage_grade,
-            credits_earned=grade.credits_earned,
-            gpa_points=grade.gpa_points,
-            is_final=grade.is_final,
-            notes=grade.notes,
+            term_external_id=term.external_id if term else None,
+            term_name=term.name if term else "Unknown",
+            subject_external_id=subject.external_id if subject else None,
+            subject_name=subject.name if subject else "Unknown",
+            current_points_earned=grade.current_points_earned or 0.0,
+            current_points_possible=grade.current_points_possible or 0.0,
+            current_percentage=grade.current_percentage,
+            current_letter_grade=grade.current_letter_grade,
+            final_points_earned=grade.final_points_earned,
+            final_points_possible=grade.final_points_possible,
+            final_percentage=grade.final_percentage,
+            final_letter_grade=grade.final_letter_grade,
+            is_finalized=grade.is_finalized or False,
+            assignments_completed=grade.assignments_completed or 0,
+            assignments_total=grade.assignments_total or 0,
+            progress_notes=grade.progress_notes,
             created_at=grade.created_at,
             updated_at=grade.updated_at
         ))
@@ -225,20 +207,23 @@ def export_student_term_grades(db: Session) -> List[StudentTermGradeBackup]:
 
 
 def export_grade_history(db: Session) -> List[GradeHistoryBackup]:
-    """Export all grade history."""
+    """Export all grade history audit entries."""
     grade_history_data = []
     grade_history = db.query(GradeHistory).all()
     for history in grade_history:
+        stg = history.student_term_grade
+        ts = stg.term_subject if stg else None
+        term = ts.term if ts else None
+        subject = ts.subject if ts else None
+        student = stg.student if stg else None
         grade_history_data.append(GradeHistoryBackup(
-            student_email=history.student.email if history.student else "Unknown",
-            term_name=history.term.name if history.term else "Unknown",
-            subject_name=history.subject.name if history.subject else "Unknown",
-            old_letter_grade=history.old_letter_grade,
-            new_letter_grade=history.new_letter_grade,
-            old_percentage_grade=history.old_percentage_grade,
-            new_percentage_grade=history.new_percentage_grade,
+            student_email=student.email if student else "Unknown",
+            term_name=term.name if term else "Unknown",
+            subject_name=subject.name if subject else "Unknown",
+            field_name=history.field_name,
+            old_value=history.old_value,
+            new_value=history.new_value,
             change_reason=history.change_reason,
-            changed_by=history.changed_by,
             changed_at=history.changed_at
         ))
     return grade_history_data
@@ -250,6 +235,7 @@ def export_attendance_records(db: Session) -> List[AttendanceRecordBackup]:
     attendance = db.query(AttendanceRecord).all()
     for record in attendance:
         attendance_data.append(AttendanceRecordBackup(
+            student_external_id=record.student.external_id if record.student else None,
             student_email=record.student.email if record.student else "Unknown",
             date=record.date,
             status=record.status.value,
@@ -266,6 +252,7 @@ def export_journal_entries(db: Session) -> List[JournalEntryBackup]:
     journal_entries = db.query(JournalEntry).all()
     for entry in journal_entries:
         journal_data.append(JournalEntryBackup(
+            user_external_id=entry.author.external_id if entry.author else None,
             user_email=entry.author.email if entry.author else "Unknown",
             title=entry.title,
             content=entry.content,
@@ -275,3 +262,50 @@ def export_journal_entries(db: Session) -> List[JournalEntryBackup]:
             updated_at=entry.updated_at
         ))
     return journal_data
+
+
+def export_system_settings(db: Session) -> List[SystemSettingsBackup]:
+    """Export all system settings."""
+    from app.models.points import SystemSettings
+    settings_data = []
+    for setting in db.query(SystemSettings).all():
+        settings_data.append(SystemSettingsBackup(
+            setting_key=setting.setting_key,
+            setting_value=setting.setting_value,
+            setting_type=setting.setting_type,
+            description=setting.description,
+            is_active=setting.is_active,
+        ))
+    return settings_data
+
+
+def export_student_points(db: Session) -> List[StudentPointsBackup]:
+    """Export all student point balances."""
+    points_data = []
+    for sp in db.query(StudentPoints).all():
+        points_data.append(StudentPointsBackup(
+            student_external_id=sp.student.external_id if sp.student else None,
+            student_email=sp.student.email if sp.student else "Unknown",
+            current_balance=sp.current_balance,
+            total_earned=sp.total_earned,
+            total_spent=sp.total_spent,
+            created_at=sp.created_at,
+            updated_at=sp.updated_at
+        ))
+    return points_data
+
+
+def export_point_transactions(db: Session) -> List[PointTransactionBackup]:
+    """Export all point transactions in chronological order."""
+    transactions_data = []
+    for tx in db.query(PointTransaction).order_by(PointTransaction.created_at).all():
+        transactions_data.append(PointTransactionBackup(
+            student_external_id=tx.student.external_id if tx.student else None,
+            student_email=tx.student.email if tx.student else "Unknown",
+            amount=tx.amount,
+            transaction_type=tx.transaction_type,
+            source_description=tx.source_description,
+            notes=tx.notes,
+            created_at=tx.created_at
+        ))
+    return transactions_data

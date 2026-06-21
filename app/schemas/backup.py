@@ -16,7 +16,7 @@
 
 """Backup schemas for system-wide backup and restore functionality."""
 
-from datetime import date, datetime, time
+from datetime import date, datetime
 from typing import Dict, List, Optional, Any, Union
 from pydantic import BaseModel, Field, field_validator
 
@@ -25,6 +25,7 @@ from pydantic import BaseModel, Field, field_validator
 
 class UserBackup(BaseModel):
     """Schema for backing up user data."""
+    external_id: Optional[str] = None  # Stable cross-version identity (added format 2.0)
     email: str
     username: str
     first_name: str
@@ -40,19 +41,23 @@ class UserBackup(BaseModel):
 
 class SubjectBackup(BaseModel):
     """Schema for backing up subject data."""
+    external_id: Optional[str] = None  # Stable cross-version identity (added format 2.0)
     name: str
     description: Optional[str] = None
     color: str = "#3B82F6"
+    icon: Optional[str] = None
 
 
 class AssignmentTemplateBackup(BaseModel):
     """Schema for backing up assignment template data."""
+    external_id: Optional[str] = None  # Stable cross-version identity (added format 2.0)
     name: str
     description: Optional[str] = None
     instructions: Optional[str] = None
     assignment_type: str
-    subject_name: str  # Will be resolved during import
-    lesson_id: Optional[int] = None  # Will be resolved during import
+    subject_external_id: Optional[str] = None  # Preferred resolution key (format 2.0)
+    subject_name: str  # Fallback resolution key (all versions)
+    icon: Optional[str] = None
     max_points: int = 100
     estimated_duration_minutes: Optional[int] = None
     prerequisites: Optional[str] = None
@@ -63,52 +68,17 @@ class AssignmentTemplateBackup(BaseModel):
     updated_at: datetime
 
 
-class LessonBackup(BaseModel):
-    """Schema for backing up lesson data."""
-    title: str
-    description: Optional[str] = None
-    scheduled_date: date
-    start_time: Optional[str] = None
-    end_time: Optional[str] = None
-    
-    @field_validator('start_time', 'end_time', mode='before')
-    @classmethod
-    def convert_time_to_string(cls, v):
-        if v is None:
-            return None
-        if isinstance(v, time):
-            return v.strftime('%H:%M:%S')
-        return v
-    estimated_duration_minutes: Optional[int] = None
-    materials_needed: Optional[str] = None
-    objectives: Optional[str] = None
-    prerequisites: Optional[str] = None
-    resources: Optional[str] = None
-    lesson_order: int = 0
-    subject_names: List[str] = []
-    created_at: datetime
-    updated_at: datetime
-
-
-class LessonAssignmentBackup(BaseModel):
-    """Schema for backing up lesson-assignment relationships."""
-    lesson_title: str  # For resolution
-    assignment_template_name: str  # For resolution
-    order_in_lesson: int = 0
-    planned_duration_minutes: Optional[int] = None
-    custom_instructions: Optional[str] = None
-    is_required: bool = True
-    custom_max_points: Optional[int] = None
-
-
 class StudentAssignmentBackup(BaseModel):
     """Schema for backing up student assignment data."""
-    student_email: str  # For resolution
-    assignment_template_name: str  # For resolution
+    student_external_id: Optional[str] = None  # Preferred resolution key (format 2.0)
+    student_email: str  # Fallback resolution key
+    template_external_id: Optional[str] = None  # Preferred resolution key (format 2.0)
+    assignment_template_name: str  # Fallback resolution key
     due_date: Optional[date] = None
     extended_due_date: Optional[date] = None
     status: str = "not_started"
-    points_earned: Optional[int] = None
+    # Float to match the model column; an int here truncates decimal scores.
+    points_earned: Optional[float] = None
     letter_grade: Optional[str] = None
     teacher_feedback: Optional[str] = None
     student_notes: Optional[str] = None
@@ -124,8 +94,10 @@ class StudentAssignmentBackup(BaseModel):
 
 class TermBackup(BaseModel):
     """Schema for backing up term data."""
+    external_id: Optional[str] = None  # Stable cross-version identity (added format 2.0)
     name: str
     type: str
+    academic_year: Optional[str] = None  # Added format 2.0; derived on import if absent
     start_date: date
     end_date: date
     is_current: bool = False
@@ -135,41 +107,63 @@ class TermBackup(BaseModel):
 
 class TermSubjectBackup(BaseModel):
     """Schema for backing up term-subject relationships."""
-    term_name: str  # For resolution
-    subject_name: str  # For resolution
+    term_external_id: Optional[str] = None  # Preferred resolution key (format 2.0)
+    term_name: str  # Fallback resolution key
+    subject_external_id: Optional[str] = None  # Preferred resolution key (format 2.0)
+    subject_name: str  # Fallback resolution key
     target_grade: Optional[str] = None
     weight: Optional[float] = None
 
 
 class StudentTermGradeBackup(BaseModel):
     """Schema for backing up student term grades."""
-    student_email: str  # For resolution
-    term_name: str  # For resolution
-    subject_name: str  # For resolution
-    grade: Optional[str] = None
-    points_earned: Optional[int] = None
-    points_possible: Optional[int] = None
-    percentage: Optional[float] = None
-    comments: Optional[str] = None
+    student_external_id: Optional[str] = None
+    student_email: str  # Fallback resolution key
+    term_external_id: Optional[str] = None
+    term_name: str  # Fallback resolution key
+    subject_external_id: Optional[str] = None
+    subject_name: str  # Fallback resolution key
+    current_points_earned: float = 0.0
+    current_points_possible: float = 0.0
+    current_percentage: Optional[float] = None
+    current_letter_grade: Optional[str] = None
+    final_points_earned: Optional[float] = None
+    final_points_possible: Optional[float] = None
+    final_percentage: Optional[float] = None
+    final_letter_grade: Optional[str] = None
+    is_finalized: bool = False
+    assignments_completed: int = 0
+    assignments_total: int = 0
+    progress_notes: Optional[str] = None
     created_at: datetime
     updated_at: datetime
 
 
 class GradeHistoryBackup(BaseModel):
-    """Schema for backing up grade history."""
-    student_email: str  # For resolution
-    term_name: str  # For resolution
-    subject_name: str  # For resolution
-    grade: str
-    points_earned: int
-    points_possible: int
-    percentage: float
-    recorded_at: datetime
+    """Schema for backing up grade history audit entries."""
+    student_email: str  # For reference (import is skipped — audit data only)
+    term_name: str
+    subject_name: str
+    field_name: str
+    old_value: Optional[str] = None
+    new_value: Optional[str] = None
+    change_reason: Optional[str] = None
+    changed_at: datetime
+
+
+class SystemSettingsBackup(BaseModel):
+    """Schema for backing up system settings."""
+    setting_key: str
+    setting_value: str
+    setting_type: str
+    description: Optional[str] = None
+    is_active: bool = True
 
 
 class AttendanceRecordBackup(BaseModel):
     """Schema for backing up attendance records."""
-    student_email: str  # For resolution
+    student_external_id: Optional[str] = None
+    student_email: str  # Fallback resolution key
     date: date
     status: str
     notes: Optional[str] = None
@@ -179,7 +173,8 @@ class AttendanceRecordBackup(BaseModel):
 
 class JournalEntryBackup(BaseModel):
     """Schema for backing up journal entries."""
-    user_email: str  # For resolution
+    user_external_id: Optional[str] = None
+    user_email: str  # Fallback resolution key
     title: str
     content: str
     date: date
@@ -188,13 +183,35 @@ class JournalEntryBackup(BaseModel):
     updated_at: datetime
 
 
+class StudentPointsBackup(BaseModel):
+    """Schema for backing up student point balances."""
+    student_external_id: Optional[str] = None
+    student_email: str  # Fallback resolution key
+    current_balance: int = 0
+    total_earned: int = 0
+    total_spent: int = 0
+    created_at: datetime
+    updated_at: datetime
+
+
+class PointTransactionBackup(BaseModel):
+    """Schema for backing up individual point transactions."""
+    student_external_id: Optional[str] = None
+    student_email: str  # Fallback resolution key
+    amount: int
+    transaction_type: str
+    source_description: Optional[str] = None
+    notes: Optional[str] = None
+    created_at: datetime
+
+
 # Complete system backup schema
 
 class SystemBackup(BaseModel):
     """Complete system backup schema containing all data."""
     
     # Metadata
-    format_version: str = "1.0"
+    format_version: str = "2.0"
     backup_timestamp: datetime
     created_by: str
     system_info: Dict[str, Any] = {}
@@ -203,9 +220,7 @@ class SystemBackup(BaseModel):
     users: List[UserBackup] = []
     subjects: List[SubjectBackup] = []
     terms: List[TermBackup] = []
-    lessons: List[LessonBackup] = []
     assignment_templates: List[AssignmentTemplateBackup] = []
-    lesson_assignments: List[LessonAssignmentBackup] = []
     term_subjects: List[TermSubjectBackup] = []
     
     # Dependent data
@@ -214,6 +229,9 @@ class SystemBackup(BaseModel):
     grade_history: List[GradeHistoryBackup] = []
     attendance_records: List[AttendanceRecordBackup] = []
     journal_entries: List[JournalEntryBackup] = []
+    student_points: List[StudentPointsBackup] = []
+    point_transactions: List[PointTransactionBackup] = []
+    system_settings: List[SystemSettingsBackup] = []
     
     # Import statistics
     class Config:

@@ -21,9 +21,9 @@ export SECRET_KEY=your-production-secret-key
 ```
 
 ### 2. .env File (Recommended for Development)
-Copy `.env.example` to `.env` and customize:
+Copy `env.EXAMPLE` to `.env` and customize:
 ```bash
-cp .env.example .env
+cp env.EXAMPLE .env
 # Edit .env with your values
 ```
 
@@ -45,14 +45,17 @@ DATABASE_PASSWORD=yourpassword  # Database password
 ```
 
 #### Complete URL (takes precedence)
+The app uses the psycopg3 driver, so the URL **must** use the
+`postgresql+psycopg://` scheme (a bare `postgresql://` URL defaults to psycopg2,
+which is not installed, and will fail to start):
 ```env
-DATABASE_URL=postgresql://user:password@host:port/database
+DATABASE_URL=postgresql+psycopg://user:password@host:port/database
 ```
 
 **Examples:**
-- Local development: `postgresql://postgres:password@localhost:5432/ourschool`
-- Docker: `postgresql://postgres:password@db:5432/ourschool`
-- Cloud: `postgresql://user:pass@your-cloud-db.com:5432/ourschool`
+- Local development: `postgresql+psycopg://postgres:password@localhost:5432/ourschool`
+- Docker: `postgresql+psycopg://postgres:password@db:5432/ourschool`
+- Cloud: `postgresql+psycopg://user:pass@your-cloud-db.com:5432/ourschool`
 
 ### Security Configuration
 
@@ -72,11 +75,12 @@ BACKEND_HOST=0.0.0.0               # Backend bind address (default: 0.0.0.0)
 BACKEND_PORT=8000                  # Backend port (default: 8000)
 ```
 
-#### Frontend Server (Development Reference)
+#### Frontend Server
 ```env
-FRONTEND_HOST=0.0.0.0              # Frontend bind address (default: 0.0.0.0)
-FRONTEND_PORT=5173                 # Frontend port (default: 5173)
+FRONTEND_PORT=4173                 # Frontend port (default: 4173, Vite preview default)
 ```
+
+Note: `FRONTEND_HOST` is no longer used by the backend configuration. The frontend port is fixed at 4173 (Vite preview server default).
 
 ### Logging Configuration
 
@@ -100,7 +104,7 @@ LOG_FILE=/path/to/logfile.log      # Optional: Log to file (with rotation)
 ### CORS Configuration
 
 ```env
-ALLOWED_ORIGINS=http://localhost:5173,https://yourapp.com
+ALLOWED_ORIGINS=http://localhost:4173,https://yourapp.com
 ```
 
 Comma-separated list of allowed origins for CORS. Include all domains that will access your API.
@@ -119,18 +123,18 @@ SECRET_KEY=dev-secret-key-not-for-production
 
 BACKEND_HOST=127.0.0.1
 BACKEND_PORT=8000
-FRONTEND_PORT=5173
+FRONTEND_PORT=4173
 
 LOG_LEVEL=DEBUG
 LOG_FORMAT=text
 
-ALLOWED_ORIGINS=http://localhost:5173,http://localhost:3000
+ALLOWED_ORIGINS=http://localhost:4173,http://localhost:3000
 ```
 
 ### Production Environment
 ```env
 # Production settings
-DATABASE_URL=postgresql://user:secure_password@prod-db.example.com:5432/ourschool
+DATABASE_URL=postgresql+psycopg://user:secure_password@prod-db.example.com:5432/ourschool
 
 SECRET_KEY=your-extremely-secure-production-secret-key
 
@@ -233,7 +237,7 @@ If you're upgrading from a previous version that only used `DATABASE_URL`, you c
 2. **Migrate to individual settings** for more flexibility:
    ```env
    # Old way
-   DATABASE_URL=postgresql://user:pass@host:5432/db
+   DATABASE_URL=postgresql+psycopg://user:pass@host:5432/db
    
    # New way (both work)
    DATABASE_HOST=host

@@ -34,15 +34,17 @@ class AssignmentTemplateBase(BaseModel):
     name: str = Field(..., min_length=1, max_length=200)
     description: Optional[str] = None
     instructions: Optional[str] = None
-    assignment_type: AssignmentType = AssignmentType.HOMEWORK
-    lesson_id: Optional[int] = None  # Can be standalone
+    # Key of an admin-managed assignment type (assignment_types.key). Validated
+    # against the table in the router/CRUD layer where a db session is available.
+    assignment_type: str = Field(default=AssignmentType.HOMEWORK.value, max_length=50)
     subject_id: int
+    # Optional icon override (lucide icon name). Falls back to type icon then subject icon.
+    icon: Optional[str] = Field(default=None, max_length=50)
     max_points: int = Field(default=100, ge=1, le=1000)
     estimated_duration_minutes: Optional[int] = Field(None, ge=1)
     prerequisites: Optional[str] = None
     materials_needed: Optional[str] = None
     is_exportable: bool = True
-    order_in_lesson: int = 0
 
 
 class AssignmentTemplateCreate(AssignmentTemplateBase):
@@ -55,15 +57,14 @@ class AssignmentTemplateUpdate(BaseModel):
     name: Optional[str] = Field(None, min_length=1, max_length=200)
     description: Optional[str] = None
     instructions: Optional[str] = None
-    assignment_type: Optional[AssignmentType] = None
-    lesson_id: Optional[int] = None
+    assignment_type: Optional[str] = Field(default=None, max_length=50)
     subject_id: Optional[int] = None
+    icon: Optional[str] = Field(default=None, max_length=50)
     max_points: Optional[int] = Field(None, ge=1, le=1000)
     estimated_duration_minutes: Optional[int] = Field(None, ge=1)
     prerequisites: Optional[str] = None
     materials_needed: Optional[str] = None
     is_exportable: Optional[bool] = None
-    order_in_lesson: Optional[int] = None
     is_archived: Optional[bool] = None
 
 
@@ -117,6 +118,7 @@ class StudentAssignmentUpdate(BaseModel):
 
     due_date: Optional[date] = None
     extended_due_date: Optional[date] = None
+    assigned_date: Optional[date] = None
     status: Optional[AssignmentStatus] = None
     custom_instructions: Optional[str] = None
     custom_max_points: Optional[int] = Field(None, ge=1, le=1000)
@@ -155,6 +157,22 @@ class StudentAssignmentGrade(BaseModel):
     points_earned: float = Field(..., ge=0)
     teacher_feedback: Optional[str] = None
     letter_grade: Optional[str] = None
+
+
+class BulkGradeItem(BaseModel):
+    """Single item in a bulk grade request."""
+
+    assignment_id: int
+    points_earned: float = Field(..., ge=0)
+    teacher_feedback: Optional[str] = None
+
+
+class BulkGradeResult(BaseModel):
+    """Result of a single item in a bulk grade operation."""
+
+    assignment_id: int
+    success: bool
+    error: Optional[str] = None
 
 
 class StudentAssignmentResponse(StudentAssignmentBase):
@@ -215,8 +233,6 @@ class AssignmentDetailResponse(BaseModel):
     # Subject information
     subject_name: str
     subject_color: str
-    # Lesson context (if part of a lesson)
-    lesson_name: Optional[str] = None
 
 
 # Assignment Assignment (when assigning templates to students)
@@ -226,6 +242,7 @@ class AssignmentAssignmentRequest(BaseModel):
     template_id: int
     student_ids: List[int] = Field(..., min_items=1)
     due_date: Optional[date] = None
+    assigned_date: Optional[date] = None
     custom_instructions: Optional[str] = None
     custom_max_points: Optional[int] = Field(None, ge=1, le=1000)
 
@@ -271,6 +288,7 @@ class AssignmentTemplateExport(BaseModel):
     instructions: Optional[str] = None
     assignment_type: str
     subject_name: str  # Export with subject name instead of ID
+    icon: Optional[str] = None
     max_points: int
     estimated_duration_minutes: Optional[int] = None
     prerequisites: Optional[str] = None
@@ -282,5 +300,4 @@ class AssignmentTemplateImport(BaseModel):
     """Schema for importing assignment templates."""
 
     assignment_data: AssignmentTemplateExport
-    target_lesson_id: Optional[int] = None  # Where to import it
     target_subject_id: Optional[int] = None  # Override subject

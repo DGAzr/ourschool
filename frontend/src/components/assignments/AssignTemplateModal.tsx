@@ -20,6 +20,8 @@ import React, { useState, useEffect } from 'react'
 import { assignmentsApi } from '../../services/assignments'
 import { AssignmentTemplate, User, StudentAssignment } from '../../types'
 import { formatDateOnly } from '../../utils/formatters'
+import Modal from '../ui/Modal'
+import Button from '../ui/Button'
 
 interface AssignTemplateModalProps {
   template: AssignmentTemplate
@@ -28,14 +30,15 @@ interface AssignTemplateModalProps {
   onSuccess: () => void
 }
 
-const AssignTemplateModal: React.FC<AssignTemplateModalProps> = ({ 
-  template, 
-  students, 
-  onClose, 
-  onSuccess 
+const AssignTemplateModal: React.FC<AssignTemplateModalProps> = ({
+  template,
+  students,
+  onClose,
+  onSuccess
 }) => {
   const [selectedStudents, setSelectedStudents] = useState<number[]>([])
   const [assignedStudents, setAssignedStudents] = useState<StudentAssignment[]>([])
+  const [assignedDate, setAssignedDate] = useState(() => new Date().toISOString().slice(0, 10))
   const [dueDate, setDueDate] = useState('')
   const [customInstructions, setCustomInstructions] = useState('')
   const [customMaxPoints, setCustomMaxPoints] = useState<number | undefined>(undefined)
@@ -44,14 +47,12 @@ const AssignTemplateModal: React.FC<AssignTemplateModalProps> = ({
   const [error, setError] = useState<string | null>(null)
   const [activeTab, setActiveTab] = useState<'assign' | 'manage'>('assign')
 
-  // Fetch assigned students when modal opens
   useEffect(() => {
     const fetchAssignedStudents = async () => {
       try {
         const assignments = await assignmentsApi.getTemplateAssignments(template.id)
         setAssignedStudents(assignments)
-        // Set active tab based on whether there are active assignments (not completed ones)
-        const activeAssignments = assignments.filter(assignment => 
+        const activeAssignments = assignments.filter(assignment =>
           !['submitted', 'graded', 'excused'].includes(assignment.status)
         )
         if (activeAssignments.length > 0) {
@@ -61,18 +62,17 @@ const AssignTemplateModal: React.FC<AssignTemplateModalProps> = ({
         // Failed to fetch assigned students
       }
     }
-    
+
     fetchAssignedStudents()
   }, [template.id])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    
-    // Only handle form submission on assign tab
+
     if (activeTab !== 'assign') {
       return
     }
-    
+
     if (selectedStudents.length === 0) {
       setError('Please select at least one student')
       return
@@ -81,23 +81,23 @@ const AssignTemplateModal: React.FC<AssignTemplateModalProps> = ({
     try {
       setLoading(true)
       setError(null)
-      
+
       const assignmentData = {
         template_id: template.id,
         student_ids: selectedStudents,
+        assigned_date: assignedDate || undefined,
         due_date: dueDate || undefined,
         custom_instructions: customInstructions || undefined,
         custom_max_points: customMaxPoints || undefined
       }
-      
+
       await assignmentsApi.assignToStudents(assignmentData)
-      
-      // Refresh the assigned students list and switch to manage tab
+
       const assignments = await assignmentsApi.getTemplateAssignments(template.id)
       setAssignedStudents(assignments)
       setSelectedStudents([])
       setActiveTab('manage')
-      
+
       onSuccess()
     } catch (err: any) {
       setError(err.message || 'Failed to assign template to students')
@@ -111,13 +111,11 @@ const AssignTemplateModal: React.FC<AssignTemplateModalProps> = ({
       setUnassignLoading(true)
       setError(null)
       await assignmentsApi.deleteStudentAssignment(assignmentId)
-      
-      // Refresh assigned students list
+
       const assignments = await assignmentsApi.getTemplateAssignments(template.id)
       setAssignedStudents(assignments)
-      
-      // If no more active assignments, switch to assign tab
-      const activeAssignments = assignments.filter(assignment => 
+
+      const activeAssignments = assignments.filter(assignment =>
         !['submitted', 'graded', 'excused'].includes(assignment.status)
       )
       if (activeAssignments.length === 0) {
@@ -131,18 +129,16 @@ const AssignTemplateModal: React.FC<AssignTemplateModalProps> = ({
   }
 
   const toggleStudent = (studentId: number) => {
-    setSelectedStudents(prev => 
-      prev.includes(studentId) 
+    setSelectedStudents(prev =>
+      prev.includes(studentId)
         ? prev.filter(id => id !== studentId)
         : [...prev, studentId]
     )
   }
 
-  // All students are available for assignment (templates can be assigned multiple times)
   const availableStudents = students
 
-  // Filter to only show active assignments (not completed ones)
-  const activeAssignments = assignedStudents.filter(assignment => 
+  const activeAssignments = assignedStudents.filter(assignment =>
     !['submitted', 'graded', 'excused'].includes(assignment.status)
   )
 
@@ -159,222 +155,165 @@ const AssignTemplateModal: React.FC<AssignTemplateModalProps> = ({
     return student ? `${student.first_name} ${student.last_name}` : 'Unknown Student'
   }
 
+  const FIELD = 'bg-field-bg border border-field-border rounded-field px-3 py-2 text-[13px] text-ink focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent w-full'
+  const LABEL = 'block text-[11px] font-semibold text-muted uppercase tracking-wide mb-1.5'
+
   return (
-    <div className="fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center z-50">
-      <div className="bg-white dark:bg-gray-800 rounded-lg w-full max-w-2xl max-h-[90vh] overflow-y-auto">
-        <form onSubmit={handleSubmit}>
-          {/* Header */}
-          <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700">
-            <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100">Manage Template Assignment</h3>
-            <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
-              "{template.name}" - {activeAssignments.length} active assignment{activeAssignments.length !== 1 ? 's' : ''}
-            </p>
-            
-            {/* Tabs */}
-            <div className="flex mt-4 space-x-1 bg-gray-100 dark:bg-gray-700 rounded-lg p-1">
-              <button
-                type="button"
-                onClick={() => setActiveTab('assign')}
-                className={`flex-1 px-3 py-2 text-sm font-medium rounded-md transition-colors ${
-                  activeTab === 'assign'
-                    ? 'bg-white dark:bg-gray-600 text-gray-900 dark:text-gray-100 shadow-sm'
-                    : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100'
-                }`}
-              >
-                Assign to Students ({availableStudents.length} students)
-              </button>
-              <button
-                type="button"
-                onClick={() => setActiveTab('manage')}
-                className={`flex-1 px-3 py-2 text-sm font-medium rounded-md transition-colors ${
-                  activeTab === 'manage'
-                    ? 'bg-white dark:bg-gray-600 text-gray-900 dark:text-gray-100 shadow-sm'
-                    : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100'
-                }`}
-              >
-                Manage Assigned ({activeAssignments.length})
-              </button>
+    <Modal
+      isOpen={true}
+      onClose={onClose}
+      title="Manage Template Assignment"
+      subtitle={`"${template.name}" — ${activeAssignments.length} active assignment${activeAssignments.length !== 1 ? 's' : ''}`}
+      size="md"
+      footer={
+        <>
+          <Button variant="secondary" onClick={onClose} disabled={loading || unassignLoading}>
+            {activeTab === 'manage' ? 'Done' : 'Cancel'}
+          </Button>
+          {activeTab === 'assign' && (
+            <Button
+              variant="primary"
+              loading={loading}
+              disabled={loading || selectedStudents.length === 0}
+              onClick={() => {
+                const form = document.getElementById('assign-template-form') as HTMLFormElement
+                form?.requestSubmit()
+              }}
+            >
+              Assign to {selectedStudents.length} Student{selectedStudents.length !== 1 ? 's' : ''}
+            </Button>
+          )}
+        </>
+      }
+    >
+      <form id="assign-template-form" onSubmit={handleSubmit} className="space-y-5">
+        {/* Tabs */}
+        <div className="flex gap-1 bg-panel-2 border border-line rounded-field p-1">
+          {(['assign', 'manage'] as const).map(tab => (
+            <button
+              key={tab}
+              type="button"
+              onClick={() => setActiveTab(tab)}
+              className={`flex-1 px-3 py-1.5 text-[12px] font-medium rounded-[6px] transition-colors ${
+                activeTab === tab ? 'bg-panel text-ink shadow-sm' : 'text-muted hover:text-ink'
+              }`}
+            >
+              {tab === 'assign' ? `Assign to Students (${availableStudents.length})` : `Manage Assigned (${activeAssignments.length})`}
+            </button>
+          ))}
+        </div>
+
+        {error && (
+          <div className="bg-danger-soft border border-danger-line text-danger rounded-field px-4 py-3 text-[13px]">
+            {error}
+          </div>
+        )}
+
+        {activeTab === 'assign' ? (
+          <>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <label className={LABEL}>Assignment Date</label>
+                <input type="date" value={assignedDate} onChange={(e) => setAssignedDate(e.target.value)} className={FIELD} />
+              </div>
+              <div>
+                <label className={LABEL}>Due Date (Optional)</label>
+                <input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} className={FIELD} />
+              </div>
+            </div>
+
+            <div>
+              <label className={LABEL}>Custom Max Points (Optional)</label>
+              <input
+                type="number" min="1" max="1000"
+                value={customMaxPoints || ''}
+                onChange={(e) => setCustomMaxPoints(e.target.value ? parseInt(e.target.value) : undefined)}
+                placeholder={`Default: ${template.max_points}`}
+                className={FIELD}
+              />
+            </div>
+
+            <div>
+              <label className={LABEL}>Custom Instructions (Optional)</label>
+              <textarea
+                value={customInstructions}
+                onChange={(e) => setCustomInstructions(e.target.value)}
+                rows={3}
+                className={FIELD}
+                placeholder="Any specific instructions for this assignment..."
+              />
+            </div>
+
+            <div>
+              <div className="flex items-center justify-between mb-2">
+                <label className={LABEL}>Select Students ({selectedStudents.length} of {availableStudents.length} selected)</label>
+                {availableStudents.length > 0 && (
+                  <button type="button" onClick={toggleAllStudents} className="text-[11px] text-accent hover:underline">
+                    {selectedStudents.length === availableStudents.length ? 'Deselect All' : 'Select All'}
+                  </button>
+                )}
+              </div>
+              <div className="border border-line rounded-field max-h-48 overflow-y-auto">
+                {availableStudents.length === 0 ? (
+                  <div className="p-4 text-center text-[13px] text-muted">No students available</div>
+                ) : (
+                  availableStudents.map((student) => {
+                    const studentActive = assignedStudents.filter(a =>
+                      a.student_id === student.id && !['submitted', 'graded', 'excused'].includes(a.status)
+                    )
+                    return (
+                      <label key={student.id} className="flex items-center p-3 hover:bg-panel-2 cursor-pointer border-b border-line last:border-b-0">
+                        <input
+                          type="checkbox"
+                          checked={selectedStudents.includes(student.id)}
+                          onChange={() => toggleStudent(student.id)}
+                          className="h-3.5 w-3.5 accent-[var(--accent)] rounded"
+                        />
+                        <span className="ml-3 text-[13px] text-ink flex-1">{student.first_name} {student.last_name}</span>
+                        {studentActive.length > 0 && (
+                          <span className="text-[11px] text-accent bg-accent/10 px-2 py-0.5 rounded-full">
+                            Active ({studentActive.length})
+                          </span>
+                        )}
+                      </label>
+                    )
+                  })
+                )}
+              </div>
+            </div>
+          </>
+        ) : (
+          <div>
+            <p className="text-[11px] font-semibold text-muted uppercase tracking-wide mb-2">Currently Assigned Students</p>
+            <div className="border border-line rounded-field max-h-64 overflow-y-auto">
+              {activeAssignments.length === 0 ? (
+                <div className="p-4 text-center text-[13px] text-muted">No active assignments for this template</div>
+              ) : (
+                activeAssignments.map((assignment) => (
+                  <div key={assignment.id} className="flex items-center justify-between p-3 border-b border-line last:border-b-0">
+                    <div className="flex-1">
+                      <p className="text-[13px] font-medium text-ink">{getStudentName(assignment.student_id)}</p>
+                      <p className="text-[11px] text-muted">
+                        {assignment.status} · Assigned: {formatDateOnly(assignment.assigned_date, { month: 'short', day: 'numeric' })}
+                        {assignment.due_date && ` · Due: ${formatDateOnly(assignment.due_date, { month: 'short', day: 'numeric' })}`}
+                      </p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => handleUnassign(assignment.id)}
+                      disabled={unassignLoading}
+                      className="ml-3 px-3 py-1 text-[12px] font-medium text-neg-fg bg-neg-bg border border-neg-fg/20 rounded-field hover:opacity-80 disabled:opacity-50 transition-opacity"
+                    >
+                      {unassignLoading ? 'Removing…' : 'Unassign'}
+                    </button>
+                  </div>
+                ))
+              )}
             </div>
           </div>
-
-          {/* Form Content */}
-          <div className="px-6 py-4 space-y-6">
-            {/* Error Message */}
-            {error && (
-              <div className="bg-red-50 dark:bg-red-900 border border-red-200 dark:border-red-700 text-red-700 dark:text-red-200 px-4 py-3 rounded">
-                {error}
-              </div>
-            )}
-
-            {activeTab === 'assign' ? (
-              <>
-                {/* Assignment Details */}
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                      Due Date (Optional)
-                    </label>
-                    <input
-                      type="date"
-                      value={dueDate}
-                      onChange={(e) => setDueDate(e.target.value)}
-                      className="w-full border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 rounded-md px-3 py-2 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-                    />
-                  </div>
-
-                  <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                      Custom Max Points (Optional)
-                    </label>
-                    <input
-                      type="number"
-                      min="1"
-                      max="1000"
-                      value={customMaxPoints || ''}
-                      onChange={(e) => setCustomMaxPoints(e.target.value ? parseInt(e.target.value) : undefined)}
-                      placeholder={`Default: ${template.max_points}`}
-                      className="w-full border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 rounded-md px-3 py-2 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-                    />
-                  </div>
-                </div>
-
-                {/* Custom Instructions */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-                    Custom Instructions (Optional)
-                  </label>
-                  <textarea
-                    value={customInstructions}
-                    onChange={(e) => setCustomInstructions(e.target.value)}
-                    rows={3}
-                    className="w-full border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 rounded-md px-3 py-2 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-                    placeholder="Any specific instructions for this assignment..."
-                  />
-                </div>
-
-                {/* Student Selection */}
-                <div>
-                  <div className="flex items-center justify-between mb-3">
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
-                      Select Students ({selectedStudents.length} of {availableStudents.length} selected)
-                    </label>
-                    {availableStudents.length > 0 && (
-                      <button
-                        type="button"
-                        onClick={toggleAllStudents}
-                        className="text-sm text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300"
-                      >
-                        {selectedStudents.length === availableStudents.length ? 'Deselect All' : 'Select All'}
-                      </button>
-                    )}
-                  </div>
-                  
-                  <div className="border border-gray-300 dark:border-gray-600 rounded-md max-h-48 overflow-y-auto">
-                    {availableStudents.length === 0 ? (
-                      <div className="p-4 text-center text-gray-500 dark:text-gray-400">
-                        No students available
-                      </div>
-                    ) : (
-                      availableStudents.map((student) => {
-                        // Only show "Active assignment" indicator if student has assignments that are not yet completed
-                        const activeAssignments = assignedStudents.filter(assignment => 
-                          assignment.student_id === student.id && 
-                          !['submitted', 'graded', 'excused'].includes(assignment.status)
-                        )
-                        const hasActiveAssignment = activeAssignments.length > 0
-                        return (
-                          <label
-                            key={student.id}
-                            className="flex items-center p-3 hover:bg-gray-50 dark:hover:bg-gray-700 cursor-pointer border-b border-gray-200 dark:border-gray-600 last:border-b-0"
-                          >
-                            <input
-                              type="checkbox"
-                              checked={selectedStudents.includes(student.id)}
-                              onChange={() => toggleStudent(student.id)}
-                              className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
-                            />
-                            <span className="ml-3 text-sm text-gray-900 dark:text-gray-100 flex-1">
-                              {student.first_name} {student.last_name}
-                            </span>
-                            {hasActiveAssignment && (
-                              <span className="text-xs text-amber-600 dark:text-amber-400 bg-amber-100 dark:bg-amber-900 px-2 py-1 rounded">
-                                Active assignment ({activeAssignments.length})
-                              </span>
-                            )}
-                          </label>
-                        )
-                      })
-                    )}
-                  </div>
-                </div>
-              </>
-            ) : (
-              /* Manage Assigned Students */
-              <div>
-                <h4 className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-3">
-                  Currently Assigned Students
-                </h4>
-                
-                <div className="border border-gray-300 dark:border-gray-600 rounded-md max-h-64 overflow-y-auto">
-                  {activeAssignments.length === 0 ? (
-                    <div className="p-4 text-center text-gray-500 dark:text-gray-400">
-                      No active assignments for this template
-                    </div>
-                  ) : (
-                    activeAssignments.map((assignment) => (
-                      <div
-                        key={assignment.id}
-                        className="flex items-center justify-between p-3 border-b border-gray-200 dark:border-gray-600 last:border-b-0"
-                      >
-                        <div className="flex-1">
-                          <p className="text-sm font-medium text-gray-900 dark:text-gray-100">
-                            {getStudentName(assignment.student_id)}
-                          </p>
-                          <p className="text-xs text-gray-500 dark:text-gray-400">
-                            Status: {assignment.status} | Assigned: {formatDateOnly(assignment.assigned_date, { month: 'short', day: 'numeric' })}
-                            {assignment.due_date && ` | Due: ${formatDateOnly(assignment.due_date, { month: 'short', day: 'numeric' })}`}
-                          </p>
-                        </div>
-                        
-                        <button
-                          type="button"
-                          onClick={() => handleUnassign(assignment.id)}
-                          disabled={unassignLoading}
-                          className="ml-3 px-3 py-1 text-xs font-medium text-red-600 dark:text-red-400 bg-red-50 dark:bg-red-900 border border-red-200 dark:border-red-700 rounded hover:bg-red-100 dark:hover:bg-red-800 disabled:opacity-50 transition-colors"
-                        >
-                          {unassignLoading ? 'Removing...' : 'Unassign'}
-                        </button>
-                      </div>
-                    ))
-                  )}
-                </div>
-              </div>
-            )}
-          </div>
-
-          {/* Footer */}
-          <div className="px-6 py-4 border-t border-gray-200 dark:border-gray-700 flex justify-end space-x-3">
-            <button
-              type="button"
-              onClick={onClose}
-              disabled={loading || unassignLoading}
-              className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 rounded-md hover:bg-gray-200 dark:hover:bg-gray-600 disabled:opacity-50"
-            >
-              {activeTab === 'manage' ? 'Done' : 'Cancel'}
-            </button>
-            {activeTab === 'assign' && (
-              <button
-                type="submit"
-                disabled={loading || selectedStudents.length === 0}
-                className="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {loading ? 'Assigning...' : `Assign to ${selectedStudents.length} Student${selectedStudents.length !== 1 ? 's' : ''}`}
-              </button>
-            )}
-          </div>
-        </form>
-      </div>
-    </div>
+        )}
+      </form>
+    </Modal>
   )
 }
 

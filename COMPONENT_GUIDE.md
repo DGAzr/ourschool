@@ -19,7 +19,11 @@ src/components/
 │   └── TablePageLayout/
 ├── assignments/          # Domain-specific components
 │   ├── CreateTemplateModal/
+│   ├── EditTemplateModal/
 │   ├── AssignmentCard/
+│   ├── QuickAssignModal/
+│   ├── InlineGradeForm/
+│   ├── GradingAssignmentsTable/
 │   └── common/           # Shared within domain
 └── shared/               # Cross-domain shared components
     ├── LoadingSpinner/

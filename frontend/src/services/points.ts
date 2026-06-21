@@ -31,6 +31,7 @@ export interface PointTransaction {
   created_at: string
   student_name?: string
   admin_name?: string
+  assignment_type_key?: string
 }
 
 export interface StudentPoints {
@@ -70,6 +71,11 @@ export interface PointsSystemStatus {
   can_toggle: boolean
 }
 
+export interface AwardPreset {
+  label: string
+  amount: number
+}
+
 export const pointsApi = {
   // System status
   getSystemStatus: async (): Promise<PointsSystemStatus> => {
@@ -85,7 +91,7 @@ export const pointsApi = {
     return await api.get('/points/my-balance')
   },
 
-  getMyLedger: async (page: number = 1, perPage: number = 20): Promise<PointsLedger> => {
+  getMyLedger: async (page = 1, perPage = 20): Promise<PointsLedger> => {
     return await api.get(`/points/my-ledger?page=${page}&per_page=${perPage}`)
   },
 
@@ -96,8 +102,8 @@ export const pointsApi = {
 
   getStudentLedger: async (
     studentId: number, 
-    page: number = 1, 
-    perPage: number = 20
+    page = 1, 
+    perPage = 20
   ): Promise<PointsLedger> => {
     return await api.get(`/points/student/${studentId}/ledger?page=${page}&per_page=${perPage}`)
   },
@@ -108,5 +114,13 @@ export const pointsApi = {
 
   getAdminOverview: async (): Promise<AdminPointsOverview> => {
     return await api.get('/points/admin/overview')
+  },
+
+  getPresets: async (): Promise<AwardPreset[]> => {
+    return await api.get('/points/presets')
+  },
+
+  setPresets: async (presets: AwardPreset[]): Promise<AwardPreset[]> => {
+    return await api.put('/points/presets', presets)
   },
 }

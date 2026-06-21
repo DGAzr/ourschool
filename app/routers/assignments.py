@@ -18,7 +18,7 @@
 
 import json
 import logging
-from datetime import date, datetime
+from datetime import date, datetime, timezone
 from typing import Annotated, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -26,10 +26,11 @@ from sqlalchemy.orm import Session, joinedload
 
 from app.core.database import get_db
 from app.models.assignment import AssignmentStatus, AssignmentTemplate, StudentAssignment
-from app.models.lesson import Lesson, Subject
+from app.models.subject import Subject
 from app.models.term import Term
 from app.models.user import User, UserRole
 from app.routers.auth import get_current_active_user
+from app.crud import assignment_types as crud_types
 from app.crud import points as points_crud
 from app.schemas.assignment import (
     AssignmentAssignmentRequest,
@@ -37,6 +38,8 @@ from app.schemas.assignment import (
     AssignmentTemplateCreate,
     AssignmentTemplateResponse,
     AssignmentTemplateUpdate,
+    BulkGradeItem,
+    BulkGradeResult,
     StudentAssignmentGrade,
     StudentAssignmentResponse,
     StudentAssignmentUpdate,
@@ -48,6 +51,16 @@ from app.schemas.assignment import (
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
+
+
+def _validate_assignment_type(db: Session, key: str) -> None:
+    """Reject template writes that reference an unknown/inactive type key."""
+    type_row = crud_types.get_by_key(db, key)
+    if type_row is None or not type_row.is_active:
+        raise HTTPException(
+            status_code=400, detail=f"Unknown assignment type '{key}'"
+        )
+
 
 # Assignment Template Management
 
@@ -70,11 +83,7 @@ def create_assignment_template(
     if not subject:
         raise HTTPException(status_code=404, detail="Subject not found")
 
-    # Verify lesson exists if provided
-    if template.lesson_id:
-        lesson = db.query(Lesson).filter(Lesson.id == template.lesson_id).first()
-        if not lesson:
-            raise HTTPException(status_code=404, detail="Lesson not found")
+    _validate_assignment_type(db, template.assignment_type)
 
     db_template = AssignmentTemplate(**template.dict(), created_by=current_user.id)
     db.add(db_template)
@@ -91,8 +100,8 @@ def create_assignment_template(
 def get_assignment_templates(
     db: Annotated[Session, Depends(get_db)],
     current_user: Annotated[User, Depends(get_current_active_user)],
-    lesson_id: Optional[int] = Query(None),
     subject_id: Optional[int] = Query(None),
+    search: Optional[str] = Query(None),
     include_archived: bool = Query(False),
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=1000),
@@ -100,10 +109,9 @@ def get_assignment_templates(
     """Get assignment templates with optional filtering."""
     query = db.query(AssignmentTemplate).options(
         joinedload(AssignmentTemplate.subject),
-        joinedload(AssignmentTemplate.lesson),
         joinedload(AssignmentTemplate.creator)
     )
-    
+
     # Apply access control
     if current_user.role != UserRole.ADMIN:
         query = query.filter(AssignmentTemplate.created_by == current_user.id)
@@ -113,10 +121,13 @@ def get_assignment_templates(
         query = query.filter(AssignmentTemplate.is_archived.is_(False))
 
     # Apply optional filters
-    if lesson_id:
-        query = query.filter(AssignmentTemplate.lesson_id == lesson_id)
     if subject_id:
         query = query.filter(AssignmentTemplate.subject_id == subject_id)
+    if search:
+        query = query.filter(
+            AssignmentTemplate.name.ilike(f"%{search}%")
+            | AssignmentTemplate.description.ilike(f"%{search}%")
+        )
 
     templates = query.offset(skip).limit(limit).all()
 
@@ -157,7 +168,6 @@ def get_assignment_template(
     """Get a specific assignment template."""
     query = db.query(AssignmentTemplate).options(
         joinedload(AssignmentTemplate.subject),
-        joinedload(AssignmentTemplate.lesson),
         joinedload(AssignmentTemplate.creator)
     ).filter(AssignmentTemplate.id == template_id)
     if current_user.role != UserRole.ADMIN:
@@ -202,13 +212,9 @@ def update_assignment_template(
         if not subject:
             raise HTTPException(status_code=404, detail="Subject not found")
 
-    # Verify new lesson exists if provided
-    if template_update.lesson_id:
-        lesson = db.query(Lesson).filter(Lesson.id == template_update.lesson_id).first()
-        if not lesson:
-            raise HTTPException(status_code=404, detail="Lesson not found")
-
     update_data = template_update.dict(exclude_unset=True)
+    if update_data.get("assignment_type") is not None:
+        _validate_assignment_type(db, update_data["assignment_type"])
     for field, value in update_data.items():
         setattr(template, field, value)
 
@@ -358,8 +364,8 @@ def assign_template_to_students(
     created_assignments = []
     failed_assignments = []
 
-    # Use current date for assignment date
-    assigned_date = date.today()
+    # Use current date for assignment date, or the provided one
+    assigned_date = assignment_request.assigned_date or date.today()
 
     for student_id in assignment_request.student_ids:
         try:
@@ -439,7 +445,7 @@ def get_student_assignments(
     )
 
     if not include_archived:
-        query = query.filter(StudentAssignment.status != AssignmentStatus.ARCHIVED)
+        query = query.filter(StudentAssignment.status != AssignmentStatus.EXCUSED)
 
     if subject_id:
         query = query.join(AssignmentTemplate).filter(
@@ -619,31 +625,9 @@ def grade_student_assignment(
 
     # Assign letter grade if not provided
     if not grade_data.letter_grade and percentage is not None:
-        if percentage >= 97:
-            letter_grade = "A+"
-        elif percentage >= 93:
-            letter_grade = "A"
-        elif percentage >= 90:
-            letter_grade = "A-"
-        elif percentage >= 87:
-            letter_grade = "B+"
-        elif percentage >= 83:
-            letter_grade = "B"
-        elif percentage >= 80:
-            letter_grade = "B-"
-        elif percentage >= 77:
-            letter_grade = "C+"
-        elif percentage >= 73:
-            letter_grade = "C"
-        elif percentage >= 70:
-            letter_grade = "C-"
-        elif percentage >= 67:
-            letter_grade = "D+"
-        elif percentage >= 65:
-            letter_grade = "D"
-        else:
-            letter_grade = "F"
-        assignment.letter_grade = letter_grade
+        from app.crud.reports import calculate_letter_grade
+        from app.crud.settings import get_grade_scale
+        assignment.letter_grade = calculate_letter_grade(percentage, get_grade_scale(db))
     else:
         assignment.letter_grade = grade_data.letter_grade
 
@@ -655,27 +639,29 @@ def grade_student_assignment(
     db.commit()
     db.refresh(assignment)
 
-    # Award points if points system is enabled
+    # Sync points if points system is enabled (idempotent; safe on re-grade)
     try:
         if points_crud.is_points_system_enabled(db):
             assignment_title = f"{assignment.template.name}" if assignment.template else f"Assignment {assignment.id}"
-            points_crud.award_assignment_points(
+            points_crud.set_assignment_points(
                 db=db,
                 student_id=assignment.student_id,
                 assignment_id=assignment.id,
                 points_earned=grade_data.points_earned,
                 assignment_title=assignment_title
             )
+            db.commit()
             logger.info(
-                "Awarded %s points to student %s for assignment %s",
-                grade_data.points_earned,
+                "Synced points for student %s assignment %s to %s",
                 assignment.student_id,
                 assignment.id,
+                grade_data.points_earned,
             )
     except Exception as e:
-        # Don't fail the grading process if points awarding fails
+        # Don't fail the grading process if points syncing fails
+        db.rollback()
         logger.error(
-            "Failed to award points for assignment %s: %s",
+            "Failed to sync points for assignment %s: %s",
             assignment.id,
             str(e),
         )
@@ -688,6 +674,67 @@ def grade_student_assignment(
     )
 
     return assignment
+
+
+@router.post("/bulk-grade", response_model=list[BulkGradeResult])
+def bulk_grade_assignments(
+    items: list[BulkGradeItem],
+    db: Annotated[Session, Depends(get_db)],
+    current_user: Annotated[User, Depends(get_current_active_user)],
+):
+    """Grade multiple student assignments in one request. Each item is graded independently; one failure does not roll back others."""
+    if current_user.role != UserRole.ADMIN:
+        raise HTTPException(status_code=403, detail="Only administrators can grade assignments")
+
+    results: list[BulkGradeResult] = []
+    points_enabled = points_crud.is_points_system_enabled(db)
+    for item in items:
+        try:
+            assignment = db.query(StudentAssignment).filter(StudentAssignment.id == item.assignment_id).first()
+            if not assignment:
+                results.append(BulkGradeResult(assignment_id=item.assignment_id, success=False, error="Assignment not found"))
+                continue
+
+            max_points = assignment.max_points
+            if item.points_earned > max_points:
+                results.append(BulkGradeResult(assignment_id=item.assignment_id, success=False, error=f"Points {item.points_earned} exceed maximum {max_points}"))
+                continue
+
+            # Each item commits or rolls back independently via a savepoint, so
+            # one failure never discards previously-applied items.
+            with db.begin_nested():
+                assignment.points_earned = item.points_earned
+                assignment.teacher_feedback = item.teacher_feedback
+                assignment.is_graded = True
+                assignment.graded_date = date.today()
+                assignment.graded_by = current_user.id
+
+                percentage = assignment.calculate_percentage_grade()
+                if percentage is not None:
+                    from app.crud.reports import calculate_letter_grade
+                    from app.crud.settings import get_grade_scale
+                    assignment.letter_grade = calculate_letter_grade(percentage, get_grade_scale(db))
+
+                assignment.update_status()
+                assignment.update_term_grade(db)
+
+                if points_enabled:
+                    title = assignment.template.name if assignment.template else f"Assignment {assignment.id}"
+                    # Idempotent delta sync handles both first grade and re-grade.
+                    points_crud.set_assignment_points(
+                        db=db,
+                        student_id=assignment.student_id,
+                        assignment_id=assignment.id,
+                        points_earned=item.points_earned,
+                        assignment_title=title,
+                    )
+
+            results.append(BulkGradeResult(assignment_id=item.assignment_id, success=True))
+        except Exception as e:
+            results.append(BulkGradeResult(assignment_id=item.assignment_id, success=False, error=str(e)))
+
+    db.commit()
+    return results
 
 
 # Progress and Analytics
@@ -977,7 +1024,7 @@ def get_assignment_dashboard(
             .filter(
                 User.role == UserRole.STUDENT,
                 StudentAssignment.status == AssignmentStatus.SUBMITTED,
-                not StudentAssignment.is_graded,
+                StudentAssignment.is_graded == False,
             )
             .count(),
             "students": [],
@@ -1160,11 +1207,14 @@ def get_student_term_grades(
     db: Annotated[Session, Depends(get_db)],
     current_user: Annotated[User, Depends(get_current_active_user)],
 ):
-    """Get term grades for a specific student."""
-    from sqlalchemy import func
+    """Get term grades for a specific student, across all terms.
 
-    from app.models.lesson import Subject
-    from app.models.term import Term, TermSubject
+    Delegates per-term computation to the canonical reporting CRUD so that term
+    membership (by effective due date), per-assignment-type weighting, and the
+    shared letter-grade scale match every other grade surface in the app.
+    """
+    from app.crud import reports as crud_reports
+    from app.models.term import Term
 
     # Verify access - admin must manage the student, or student can see their own
     if current_user.role == UserRole.ADMIN:
@@ -1183,84 +1233,23 @@ def get_student_term_grades(
     else:
         raise HTTPException(status_code=403, detail="Access denied")
 
-    # Get all terms with grades for this student
-    term_grades = (
-        db.query(
-            Term.id.label("term_id"),
-            Term.name.label("term_name"),
-            Subject.id.label("subject_id"),
-            Subject.name.label("subject_name"),
-            func.sum(StudentAssignment.points_earned).label("earned_points"),
-            func.sum(
-                func.coalesce(
-                    StudentAssignment.custom_max_points, AssignmentTemplate.max_points
-                )
-            ).label("total_points"),
-            func.count(StudentAssignment.id).label("assignments_count"),
-            func.count(func.case([(StudentAssignment.is_graded, 1)])).label(
-                "completed_count"
-            ),
-        )
-        .select_from(StudentAssignment)
-        .join(
-            AssignmentTemplate, StudentAssignment.template_id == AssignmentTemplate.id
-        )
-        .join(Subject, AssignmentTemplate.subject_id == Subject.id)
-        .join(TermSubject, TermSubject.subject_id == Subject.id)
-        .join(Term, TermSubject.term_id == Term.id)
-        .filter(
-            StudentAssignment.student_id == student_id,
-            StudentAssignment.is_graded,
-        )
-        .group_by(Term.id, Term.name, Subject.id, Subject.name)
-        .order_by(Term.term_order, Subject.name)
-        .all()
-    )
+    terms = db.query(Term).order_by(Term.term_order).all()
 
-    # Calculate percentages and letter grades
     result = []
-    for grade in term_grades:
-        if grade.total_points > 0:
-            percentage = round((grade.earned_points / grade.total_points) * 100, 1)
-
-            # Calculate letter grade
-            if percentage >= 97:
-                letter_grade = "A+"
-            elif percentage >= 93:
-                letter_grade = "A"
-            elif percentage >= 90:
-                letter_grade = "A-"
-            elif percentage >= 87:
-                letter_grade = "B+"
-            elif percentage >= 83:
-                letter_grade = "B"
-            elif percentage >= 80:
-                letter_grade = "B-"
-            elif percentage >= 77:
-                letter_grade = "C+"
-            elif percentage >= 73:
-                letter_grade = "C"
-            elif percentage >= 70:
-                letter_grade = "C-"
-            elif percentage >= 67:
-                letter_grade = "D+"
-            elif percentage >= 65:
-                letter_grade = "D"
-            else:
-                letter_grade = "F"
-
+    for term in terms:
+        for tg in crud_reports.get_student_term_grades(db, student_id, term_id=term.id):
             result.append(
                 {
-                    "term_id": grade.term_id,
-                    "term_name": grade.term_name,
-                    "subject_id": grade.subject_id,
-                    "subject_name": grade.subject_name,
-                    "total_points": grade.total_points,
-                    "earned_points": grade.earned_points,
-                    "percentage": percentage,
-                    "letter_grade": letter_grade,
-                    "assignments_count": grade.assignments_count,
-                    "completed_count": grade.completed_count,
+                    "term_id": tg.term_id,
+                    "term_name": tg.term_name,
+                    "subject_id": tg.subject_id,
+                    "subject_name": tg.subject_name,
+                    "total_points": tg.total_points,
+                    "earned_points": tg.earned_points,
+                    "percentage": tg.percentage,
+                    "letter_grade": tg.letter_grade,
+                    "assignments_count": tg.assignments_count,
+                    "completed_count": tg.completed_count,
                 }
             )
 
@@ -1425,7 +1414,7 @@ def export_assignment_template(
         name=template.name,
         description=template.description,
         instructions=template.instructions,
-        assignment_type=template.assignment_type.value,
+        assignment_type=template.assignment_type,
         subject_name=template.subject.name,
         max_points=template.max_points,
         estimated_duration_minutes=template.estimated_duration_minutes,
@@ -1434,7 +1423,7 @@ def export_assignment_template(
         export_metadata={
             "template_id": template_id,
             "exported_by": f"{current_user.first_name} {current_user.last_name}".strip() or current_user.email,
-            "export_timestamp": str(datetime.utcnow()),
+            "export_timestamp": str(datetime.now(timezone.utc)),
             "format_version": "1.0",
         }
     )
@@ -1455,10 +1444,23 @@ def import_assignment_template(
         )
     
     from datetime import datetime
-    from app.enums import AssignmentType
-    
+    from app.schemas.assignment_type import AssignmentTypeCreate
+
     try:
         assignment_data = import_request.assignment_data
+
+        # Resolve the imported assignment type to a local type, creating it on
+        # the fly when the source family used a type we don't have yet.
+        imported_type_key = assignment_data.assignment_type or "homework"
+        if crud_types.get_by_key(db, imported_type_key) is None:
+            created_type = crud_types.create_assignment_type(
+                db,
+                AssignmentTypeCreate(
+                    key=imported_type_key,
+                    name=imported_type_key.replace("_", " ").title(),
+                ),
+            )
+            imported_type_key = created_type.key
         
         # Handle subject mapping
         subject_id = import_request.target_subject_id
@@ -1483,8 +1485,7 @@ def import_assignment_template(
             "name": assignment_data.name,
             "description": assignment_data.description,
             "instructions": assignment_data.instructions,
-            "assignment_type": AssignmentType(assignment_data.assignment_type),
-            "lesson_id": import_request.target_lesson_id,
+            "assignment_type": imported_type_key,
             "subject_id": subject_id,
             "max_points": assignment_data.max_points,
             "estimated_duration_minutes": assignment_data.estimated_duration_minutes,
@@ -1530,7 +1531,6 @@ def bulk_export_assignment_templates(
         db.query(AssignmentTemplate)
         .options(
             joinedload(AssignmentTemplate.subject),
-            joinedload(AssignmentTemplate.lesson),
             joinedload(AssignmentTemplate.creator)
         )
         .filter(AssignmentTemplate.id.in_(template_ids))
@@ -1562,7 +1562,7 @@ def bulk_export_assignment_templates(
             name=template.name,
             description=template.description,
             instructions=template.instructions,
-            assignment_type=template.assignment_type.value,
+            assignment_type=template.assignment_type,
             subject_name=template.subject.name,
             max_points=template.max_points,
             estimated_duration_minutes=template.estimated_duration_minutes,
@@ -1576,7 +1576,7 @@ def bulk_export_assignment_templates(
     
     export_package = {
         "format_version": "1.0",
-        "export_timestamp": datetime.utcnow(),
+        "export_timestamp": datetime.now(timezone.utc),
         "exported_by": f"{current_user.first_name} {current_user.last_name}".strip() or current_user.email,
         "templates": exported_templates,
         "metadata": {

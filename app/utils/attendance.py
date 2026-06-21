@@ -83,20 +83,28 @@ def resolve_date_range_from_academic_year(
     return start_date, end_date
 
 
-def calculate_attendance_rate(
-    attendance_records: list,
-    required_days_of_instruction: int,
-) -> float:
+def calculate_attendance_rate(attendance_records: list) -> Optional[float]:
     """
-    Calculate attendance rate based on attendance records and required instruction days.
-    
+    Calculate attendance rate from recorded attendance days.
+
+    The rate is the share of recorded days the student was effectively in
+    attendance: present + late + excused, divided by the number of recorded
+    attendance rows. Returns ``None`` when there are no recorded days.
+
+    Note: this depends on attendance actually being recorded — absences must be
+    entered to be reflected. ``required_days_of_instruction`` remains available
+    separately as a compliance metric.
+
     Args:
         attendance_records: List of AttendanceRecord objects
-        required_days_of_instruction: Required number of instructional days
-        
+
     Returns:
-        Attendance rate as a percentage (0-100)
+        Attendance rate as a percentage (0-100), or None if no records exist.
     """
+    total_recorded = len(attendance_records)
+    if total_recorded == 0:
+        return None
+
     present_days = sum(
         1 for r in attendance_records if r.status == AttendanceStatus.PRESENT
     )
@@ -106,13 +114,10 @@ def calculate_attendance_rate(
     excused_days = sum(
         1 for r in attendance_records if r.status == AttendanceStatus.EXCUSED
     )
-    
-    # Calculate attendance rate (present + late + excused as acceptable attendance)
+
+    # present + late + excused count as acceptable attendance
     acceptable_days = present_days + late_days + excused_days
-    return (
-        (acceptable_days / required_days_of_instruction * 100) 
-        if required_days_of_instruction > 0 else 0
-    )
+    return acceptable_days / total_recorded * 100
 
 
 def get_attendance_statistics(attendance_records: list) -> dict:

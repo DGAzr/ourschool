@@ -18,6 +18,8 @@
 
 import React, { createContext, useContext, useState, useEffect, ReactNode, useCallback } from 'react'
 import { useAuth } from './AuthContext'
+import { config } from '../config/env'
+import { STORAGE_KEYS } from '../constants/auth'
 
 export type ThemeMode = 'light' | 'dark' | 'system'
 
@@ -115,11 +117,11 @@ export const ThemeProvider: React.FC<ThemeProviderProps> = ({ children }) => {
       try {
         // This would be an API call to update user preferences
         // For now we'll just save to localStorage
-        const response = await fetch('/api/user/preferences', {
+        const response = await fetch(`${config.api.baseUrl}/user/preferences`, {
           method: 'PATCH',
           headers: {
             'Content-Type': 'application/json',
-            'Authorization': `Bearer ${localStorage.getItem('token')}`
+            'Authorization': `Bearer ${localStorage.getItem(STORAGE_KEYS.TOKEN)}`
           },
           body: JSON.stringify({ theme_preference: newTheme })
         })

@@ -51,8 +51,25 @@ class SystemSetting(SystemSettingBase):
 class AttendanceSettings(BaseModel):
     """Schema for attendance-specific settings."""
     required_days_of_instruction: int
-    
-    
+
+
+class GradeBand(BaseModel):
+    """A single letter-grade threshold band."""
+    letter: str
+    min_percent: int
+
+
+class GradingSettings(BaseModel):
+    """Schema for grading-specific settings."""
+    scale: List[GradeBand]
+
+
+class GradeScaleUpdate(BaseModel):
+    """Payload for updating the grading scale."""
+    scale: List[GradeBand]
+
+
 class SystemSettingsGroup(BaseModel):
     """Schema for grouped system settings."""
     attendance: AttendanceSettings
+    grading: GradingSettings

@@ -16,55 +16,29 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-import { ReactNode } from 'react'
-import { Card } from '../../ui'
-
 interface ReportHeaderProps {
   title: string
   subtitle?: string
-  icon?: ReactNode
-  actions?: ReactNode
+  icon?: unknown
+  actions?: React.ReactNode
   className?: string
 }
 
 const ReportHeader: React.FC<ReportHeaderProps> = ({
   title,
   subtitle,
-  icon,
   actions,
   className = ''
 }) => {
   return (
-    <Card className={`mb-6 ${className}`}>
-      <Card.Header>
-        <div className="flex items-center justify-between">
-          <div className="flex items-center">
-            {icon && (
-              <div className="w-12 h-12 bg-blue-100 dark:bg-blue-900 rounded-xl flex items-center justify-center mr-4">
-                <div className="text-blue-600 dark:text-blue-400">
-                  {icon}
-                </div>
-              </div>
-            )}
-            <div>
-              <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100">
-                {title}
-              </h1>
-              {subtitle && (
-                <p className="text-gray-600 dark:text-gray-400 mt-1">
-                  {subtitle}
-                </p>
-              )}
-            </div>
-          </div>
-          {actions && (
-            <div className="flex items-center space-x-3">
-              {actions}
-            </div>
-          )}
-        </div>
-      </Card.Header>
-    </Card>
+    <div className={`flex items-start justify-between gap-4 mb-5 ${className}`}>
+      <div>
+        <p className="text-[11px] font-semibold text-faint uppercase tracking-[.06em] mb-1">Reports</p>
+        <h2 className="text-[22px] font-bold text-ink tracking-[-0.02em] leading-tight">{title}</h2>
+        {subtitle && <p className="text-[13px] text-muted mt-1">{subtitle}</p>}
+      </div>
+      {actions && <div className="flex items-center gap-2 mt-1">{actions}</div>}
+    </div>
   )
 }
 

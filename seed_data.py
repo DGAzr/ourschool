@@ -6,7 +6,7 @@ This script creates:
 - Admin and student users
 - Subjects
 - Terms and term subjects
-- Lessons with assignments
+- Assignment templates
 - Student assignments
 - Attendance records
 - Journal entries
@@ -26,7 +26,7 @@ from app.core.security import get_password_hash
 
 # Import all models
 from app.models.user import User
-from app.models.lesson import Subject, Lesson, LessonAssignment
+from app.models.subject import Subject
 from app.models.term import Term, TermSubject, StudentTermGrade
 from app.models.assignment import AssignmentTemplate, StudentAssignment
 from app.models.attendance import AttendanceRecord
@@ -203,122 +203,39 @@ def create_terms_and_term_subjects(db: Session, admin_user: User, subjects: list
     return current_term, spring_term, term_subjects
 
 
-def create_lessons_and_assignments(db: Session, admin_user: User, subjects: list):
-    """Create lessons and assignment templates."""
-    print("\n📝 Creating lessons and assignments...")
-    
-    lessons_data = [
-        {
-            "title": "Introduction to Algebra",
-            "description": "Basic algebraic concepts and solving simple equations",
-            "subject": "Mathematics",
-            "scheduled_date": date.today() - timedelta(days=7),
-            "assignments": [
-                {
-                    "name": "Solving Linear Equations",
-                    "description": "Practice solving basic linear equations", 
-                    "type": AssignmentType.WORKSHEET.value,
-                    "max_points": 50
-                },
-                {
-                    "name": "Algebra Word Problems",
-                    "description": "Apply algebra to real-world scenarios",
-                    "type": AssignmentType.HOMEWORK.value,
-                    "max_points": 75
-                }
-            ]
-        },
-        {
-            "title": "Plant Biology",
-            "description": "Learn about plant structures and photosynthesis",
-            "subject": "Science", 
-            "scheduled_date": date.today() - timedelta(days=5),
-            "assignments": [
-                {
-                    "name": "Plant Parts Diagram",
-                    "description": "Label and describe plant parts",
-                    "type": AssignmentType.WORKSHEET.value,
-                    "max_points": 40
-                },
-                {
-                    "name": "Photosynthesis Lab Report",
-                    "description": "Write report on photosynthesis experiment",
-                    "type": AssignmentType.PROJECT.value,
-                    "max_points": 100
-                }
-            ]
-        },
-        {
-            "title": "Creative Writing Workshop",
-            "description": "Explore different writing styles and techniques",
-            "subject": "English",
-            "scheduled_date": date.today() - timedelta(days=3),
-            "assignments": [
-                {
-                    "name": "Short Story Draft",
-                    "description": "Write a 500-word short story",
-                    "type": AssignmentType.ESSAY.value,
-                    "max_points": 80
-                }
-            ]
-        }
+def create_assignment_templates(db: Session, admin_user: User, subjects: list):
+    """Create assignment templates."""
+    print("\n📝 Creating assignment templates...")
+
+    templates_data = [
+        {"name": "Solving Linear Equations", "description": "Practice solving basic linear equations", "subject": "Mathematics", "type": AssignmentType.WORKSHEET, "max_points": 50},
+        {"name": "Algebra Word Problems", "description": "Apply algebra to real-world scenarios", "subject": "Mathematics", "type": AssignmentType.HOMEWORK, "max_points": 75},
+        {"name": "Plant Parts Diagram", "description": "Label and describe plant parts", "subject": "Science", "type": AssignmentType.WORKSHEET, "max_points": 40},
+        {"name": "Photosynthesis Lab Report", "description": "Write report on photosynthesis experiment", "subject": "Science", "type": AssignmentType.PROJECT, "max_points": 100},
+        {"name": "Short Story Draft", "description": "Write a 500-word short story", "subject": "English", "type": AssignmentType.ESSAY, "max_points": 80},
     ]
-    
+
     subject_map = {s.name: s for s in subjects}
-    lessons = []
     assignment_templates = []
-    
-    for lesson_data in lessons_data:
-        subject = subject_map[lesson_data["subject"]]
-        
-        # Create lesson
-        lesson = Lesson(
-            title=lesson_data["title"],
-            description=lesson_data["description"],
-            scheduled_date=lesson_data["scheduled_date"],
-            estimated_duration_minutes=60,
-            objectives=f"Students will understand {lesson_data['description'].lower()}",
-            lesson_order=len(lessons) + 1
+
+    for t_data in templates_data:
+        subject = subject_map[t_data["subject"]]
+        template = AssignmentTemplate(
+            name=t_data["name"],
+            description=t_data["description"],
+            instructions=f"Complete: {t_data['description']}",
+            assignment_type=t_data["type"],
+            subject_id=subject.id,
+            max_points=t_data["max_points"],
+            estimated_duration_minutes=30,
+            created_by=admin_user.id,
         )
-        db.add(lesson)
-        db.commit()
-        db.refresh(lesson)
-        lessons.append(lesson)
-        print(f"✅ Created lesson: {lesson.title}")
-        
-        # Create assignment templates for this lesson
-        for i, assignment_data in enumerate(lesson_data["assignments"]):
-            template = AssignmentTemplate(
-                name=assignment_data["name"],
-                description=assignment_data["description"],
-                instructions=f"Complete {assignment_data['name']} as part of {lesson.title}",
-                assignment_type=assignment_data["type"],
-                lesson_id=lesson.id,
-                subject_id=subject.id,
-                max_points=assignment_data["max_points"],
-                estimated_duration_minutes=30,
-                order_in_lesson=i + 1,
-                created_by=admin_user.id
-            )
-            db.add(template)
-            assignment_templates.append(template)
-            print(f"  ✅ Created assignment template: {template.name}")
-            
-        # Create lesson-assignment relationships
-        db.commit()
-        for i, template in enumerate(assignment_templates[-len(lesson_data["assignments"]):]):
-            lesson_assignment = LessonAssignment(
-                lesson_id=lesson.id,
-                assignment_template_id=template.id,
-                order_in_lesson=i + 1,
-                planned_duration_minutes=30,
-                is_required=True
-            )
-            db.add(lesson_assignment)
-            print(f"    ✅ Linked assignment to lesson: {template.name}")
-    
+        db.add(template)
+        assignment_templates.append(template)
+        print(f"  ✅ Created template: {template.name}")
+
     db.commit()
-    return lessons, assignment_templates
+    return assignment_templates
 
 
 def create_student_assignments(db: Session, admin_user: User, student_users: list, assignment_templates: list):
@@ -327,33 +244,38 @@ def create_student_assignments(db: Session, admin_user: User, student_users: lis
     
     student_assignments = []
     
+    # Use a fixed seed date relative to today
+    seed_date = date.today() - timedelta(days=14)
+
     for student in student_users:
-        for template in assignment_templates:
-            # Assign recent assignments to students
-            if template.lesson and template.lesson.scheduled_date >= (date.today() - timedelta(days=10)):
-                assignment = StudentAssignment(
-                    template_id=template.id,
-                    student_id=student.id,
-                    assigned_date=template.lesson.scheduled_date,
-                    due_date=template.lesson.scheduled_date + timedelta(days=3),
-                    status=AssignmentStatus.NOT_STARTED.value,
-                    assigned_by=admin_user.id
-                )
-                
-                # Simulate some completed assignments
-                if template.lesson.scheduled_date < date.today() - timedelta(days=2):
-                    assignment.status = AssignmentStatus.COMPLETED.value
-                    assignment.completed_date = template.lesson.scheduled_date + timedelta(days=1)
-                    assignment.points_earned = template.max_points * 0.85  # 85% average
-                    assignment.is_graded = True
-                    assignment.graded_date = assignment.completed_date
-                    assignment.graded_by = admin_user.id
-                    assignment.calculate_percentage_grade()
-                    assignment.teacher_feedback = "Good work! Keep practicing."
-                
-                db.add(assignment)
-                student_assignments.append(assignment)
-                print(f"  ✅ Assigned '{template.name}' to {student.first_name}")
+        for i, template in enumerate(assignment_templates):
+            # Assign assignments spread across recent days
+            assigned_date = seed_date + timedelta(days=i % 14)
+            due_date = assigned_date + timedelta(days=3)
+
+            assignment = StudentAssignment(
+                template_id=template.id,
+                student_id=student.id,
+                assigned_date=assigned_date,
+                due_date=due_date,
+                status=AssignmentStatus.NOT_STARTED.value,
+                assigned_by=admin_user.id
+            )
+            
+            # Simulate some completed assignments (those older than 2 days from seed_date)
+            if assigned_date < date.today() - timedelta(days=2):
+                assignment.status = AssignmentStatus.COMPLETED.value
+                assignment.completed_date = assigned_date + timedelta(days=1)
+                assignment.points_earned = template.max_points * 0.85  # 85% average
+                assignment.is_graded = True
+                assignment.graded_date = assignment.completed_date
+                assignment.graded_by = admin_user.id
+                assignment.calculate_percentage_grade()
+                assignment.teacher_feedback = "Good work! Keep practicing."
+            
+            db.add(assignment)
+            student_assignments.append(assignment)
+            print(f"  ✅ Assigned '{template.name}' to {student.first_name}")
     
     db.commit()
     return student_assignments
@@ -527,7 +449,7 @@ def create_test_data():
         admin_user, student_users = create_users(db)
         subjects = create_subjects(db)
         current_term, spring_term, term_subjects = create_terms_and_term_subjects(db, admin_user, subjects)
-        lessons, assignment_templates = create_lessons_and_assignments(db, admin_user, subjects)
+        assignment_templates = create_assignment_templates(db, admin_user, subjects)
         student_assignments = create_student_assignments(db, admin_user, student_users, assignment_templates)
         create_student_term_grades(db, student_users, term_subjects)
         create_attendance_records(db, student_users)
@@ -551,7 +473,6 @@ def create_test_data():
         print(f"  • {len(student_users)} student users")
         print(f"  • {len(subjects)} subjects")
         print(f"  • 2 academic terms")
-        print(f"  • {len(lessons)} lessons")
         print(f"  • {len(assignment_templates)} assignment templates")
         print(f"  • {len(student_assignments)} student assignments")
         print(f"  • 10+ attendance records per student")

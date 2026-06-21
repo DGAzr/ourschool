@@ -9,11 +9,15 @@ This directory contains the refactored assignment components that were extracted
 - `useAssignmentFilters.ts` - Custom hook for managing filter state and filtering logic
 
 ### Components
-- `AssignmentHeader.tsx` - Header component with view mode toggles and create button
+- `AssignmentHeader.tsx` - Header component with view mode toggles, create button, quick-assign button, and pending grades count
 - `AssignmentFilters.tsx` - Filter controls for search, subject, type, and difficulty
 - `AssignmentTemplateCard.tsx` - Card component for displaying assignment templates (admin view)
 - `StudentAssignmentCard.tsx` - Card component for displaying student assignments
 - `CreateTemplateModal.tsx` - Modal for creating new assignment templates
+- `EditTemplateModal.tsx` - Modal for editing existing assignment templates
+- `QuickAssignModal.tsx` - Modal for rapid template creation with immediate assignment to students
+- `InlineGradeForm.tsx` - Inline grading form for grading assignments without opening a modal
+- `GradingAssignmentsTable.tsx` - Table view for grading multiple student assignments
 
 ### Main Component
 - `Assignments.tsx` - Refactored main component (reduced from 2000+ lines to ~300 lines)
@@ -29,15 +33,17 @@ This directory contains the refactored assignment components that were extracted
 
 ## TODO Items
 
-The refactored version includes several TODO comments for functionality that needs to be implemented:
+The refactored version has addressed several items from the original monolithic file:
 
-1. Edit template functionality
-2. Assignment template assignment functionality  
-3. Submission modal for student assignments
-4. Grading modal and functionality
-5. Archive/delete functionality for student assignments
+### Completed
+- ✅ Edit template functionality (`EditTemplateModal.tsx`)
+- ✅ Assignment template assignment functionality (`QuickAssignModal.tsx`)
+- ✅ Grading functionality (`InlineGradeForm.tsx`, `GradingAssignmentsTable.tsx`)
 
-These TODOs represent functionality from the original file that can be added back incrementally as separate components.
+### Still Pending
+1. Submission modal for student assignments
+2. Archive/delete functionality for student assignments
+3. Bulk export improvements
 
 ## Usage
 

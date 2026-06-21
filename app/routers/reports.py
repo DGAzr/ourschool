@@ -69,24 +69,28 @@ def get_admin_report(
 def get_student_term_grades(
     db: Annotated[Session, Depends(get_db)],
     current_user: Annotated[User, Depends(get_current_active_user)],
+    term_id: Optional[int] = None,
 ):
     """Retrieve the current student's grades for each term and subject."""
     if current_user.role != UserRole.STUDENT:
         raise HTTPException(status_code=403, detail="Not authorized")
 
-    return crud_reports.get_student_term_grades(db, current_user.id)
+    return crud_reports.get_student_term_grades(db, current_user.id, term_id=term_id)
 
 
 @router.get("/student/subject-performance", response_model=List[SubjectPerformance])
 def get_student_subject_performance(
     db: Annotated[Session, Depends(get_db)],
     current_user: Annotated[User, Depends(get_current_active_user)],
+    term_id: Optional[int] = None,
 ):
     """Retrieve the current student's academic performance by subject."""
     if current_user.role != UserRole.STUDENT:
         raise HTTPException(status_code=403, detail="Not authorized")
 
-    return crud_reports.get_student_subject_performance(db, current_user.id)
+    return crud_reports.get_student_subject_performance(
+        db, current_user.id, term_id=term_id
+    )
 
 
 @router.get("/admin/student-progress", response_model=List[StudentProgress])

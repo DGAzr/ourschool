@@ -23,22 +23,15 @@
 export interface TermGrade {
   term_id: number
   term_name: string
-  term: string
-  academic_year: string
   subject_id: number
   subject_name: string
   subject_color: string
   total_points: number
-  total_points_possible: number
   earned_points: number
-  total_points_earned: number
   percentage: number
   letter_grade: string
   assignments_count: number
-  total_assignments: number
   completed_count: number
-  completion_rate: number
-  notes?: string
 }
 
 export interface TrendDataPoint {
@@ -50,11 +43,14 @@ export interface TrendDataPoint {
 export interface SubjectPerformance {
   subject_id: number
   subject_name: string
+  subject_color?: string
   average_percentage: number
+  letter_grade: string
   total_assignments: number
   completed_assignments: number
   points_earned?: number
   points_possible?: number
+  terms?: TermGrade[]
   trend_data?: TrendDataPoint[]
 }
 
@@ -68,6 +64,7 @@ export interface StudentProgress {
   current_term_percentage: number
   current_term_letter_grade: string
   overall_grade: number
+  overall_letter_grade: string
   total_assignments: number
   completed_assignments: number
   pending_assignments: number
@@ -78,6 +75,38 @@ export interface StudentProgress {
   last_activity_date?: string
   subjects: SubjectPerformance[]
   subject_grades?: SubjectPerformance[]
+  grade_series: number[]
+  trend: number
+  journal_summary: string
+}
+
+export interface MetricTrend {
+  label: string
+  value: string
+  series: number[]
+  delta: string
+  delta_positive: boolean
+}
+
+export interface SubjectAverage {
+  subject_id: number
+  subject_name: string
+  subject_color: string
+  percentage: number
+  letter_grade: string
+  flagged: boolean
+}
+
+export interface StudentGlanceRow {
+  student_id: number
+  name: string
+  grade: number
+  letter: string
+  trend: number
+  completion: number
+  attendance_rate?: number
+  effort: string
+  status: string
 }
 
 export interface StudentReport {
@@ -87,6 +116,9 @@ export interface StudentReport {
   pending_grades: number
   average_grade: number
   current_term_grade: number
+  grade_series: number[]
+  trend: number
+  journal_summary: string
 }
 
 export interface AdminReport {
@@ -96,6 +128,10 @@ export interface AdminReport {
   average_grade: number
   total_assignments: number
   completed_assignments: number
+  kpis: MetricTrend[]
+  class_average_series: number[]
+  subject_averages: SubjectAverage[]
+  students_glance: StudentGlanceRow[]
 }
 
 export interface AcademicYear {

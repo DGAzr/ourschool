@@ -21,16 +21,23 @@ Handles automatic subject-term linking and grade calculations based on assignmen
 completion dates.
 """
 
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Dict, Optional
 
-from sqlalchemy import and_
+from sqlalchemy import and_, or_
 from sqlalchemy.orm import Session
 
+from app.crud.settings import get_assignment_type_weights
+from app.enums import AssignmentStatus
 from app.models.assignment import AssignmentTemplate, StudentAssignment
-from app.models.lesson import Subject
+from app.models.subject import Subject
 from app.models.term import StudentTermGrade, Term, TermSubject
 from app.models.user import User, UserRole
+from app.utils.grading import (
+    calculate_letter_grade,
+    compute_weighted_grade,
+    term_membership_filter,
+)
 
 
 class TermGradingService:
@@ -55,20 +62,14 @@ class TermGradingService:
         results = {"subjects_linked": 0, "term_subjects_created": 0}
 
         for term in terms:
-            # Find all completed assignments during this term period
+            # Find all assignments belonging to this term (by effective due date)
             completed_assignments = (
                 db.query(StudentAssignment)
                 .join(
                     AssignmentTemplate,
                     StudentAssignment.template_id == AssignmentTemplate.id,
                 )
-                .filter(
-                    and_(
-                        StudentAssignment.completed_date.isnot(None),
-                        StudentAssignment.completed_date >= term.start_date,
-                        StudentAssignment.completed_date <= term.end_date,
-                    )
-                )
+                .filter(term_membership_filter(term))
                 .all()
             )
 
@@ -137,12 +138,17 @@ class TermGradingService:
 
         students = students_query.all()
         results = {"grades_calculated": 0, "students_processed": 0}
+        from app.crud.settings import get_grade_scale
+        grade_scale = get_grade_scale(db)
 
         for student in students:
             results["students_processed"] += 1
 
+            type_weights = get_assignment_type_weights(db)
+
             for term_subject in term_subjects:
-                # Find all graded assignments for this student, subject, and term period
+                # Find all graded assignments for this student/subject in the term
+                # (membership by effective due date), matching the report card.
                 graded_assignments = (
                     db.query(StudentAssignment)
                     .join(
@@ -153,10 +159,12 @@ class TermGradingService:
                         and_(
                             StudentAssignment.student_id == student.id,
                             AssignmentTemplate.subject_id == term_subject.subject_id,
-                            StudentAssignment.is_graded,
-                            StudentAssignment.completed_date.isnot(None),
-                            StudentAssignment.completed_date >= term.start_date,
-                            StudentAssignment.completed_date <= term.end_date,
+                            StudentAssignment.points_earned.isnot(None),
+                            or_(
+                                StudentAssignment.is_graded,
+                                StudentAssignment.status == AssignmentStatus.GRADED,
+                            ),
+                            term_membership_filter(term),
                         )
                     )
                     .all()
@@ -165,23 +173,24 @@ class TermGradingService:
                 if not graded_assignments:
                     continue
 
-                # Calculate totals
-                total_points_earned = sum(
-                    a.points_earned or 0 for a in graded_assignments
+                # Points-weighted grade (with per-type weights); raw point sums
+                # are kept for display.
+                total_points_earned, total_points_possible, percentage = (
+                    compute_weighted_grade(
+                        (
+                            (a.points_earned, a.max_points, a.template.assignment_type)
+                            for a in graded_assignments
+                        ),
+                        type_weights,
+                    )
                 )
-                total_points_possible = sum(a.max_points for a in graded_assignments)
                 total_assignments = len(graded_assignments)
 
-                # Calculate percentage
-                current_percentage = None
-                if total_points_possible > 0:
-                    current_percentage = (
-                        total_points_earned / total_points_possible
-                    ) * 100
-
-                # Determine letter grade
-                letter_grade = TermGradingService._calculate_letter_grade(
-                    current_percentage
+                current_percentage = percentage if total_points_possible > 0 else None
+                letter_grade = (
+                    calculate_letter_grade(current_percentage, grade_scale)
+                    if current_percentage is not None
+                    else None
                 )
 
                 # Find or create StudentTermGrade record
@@ -209,7 +218,7 @@ class TermGradingService:
                 student_term_grade.assignments_total = (
                     total_assignments  # For now, same as completed
                 )
-                student_term_grade.last_calculated = datetime.utcnow()
+                student_term_grade.last_calculated = datetime.now(timezone.utc)
 
                 results["grades_calculated"] += 1
 
@@ -217,40 +226,18 @@ class TermGradingService:
         return results
 
     @staticmethod
-    def _calculate_letter_grade(percentage: Optional[float]) -> Optional[str]:
-        """Convert percentage to letter grade using standard scale."""
+    def _calculate_letter_grade(percentage: Optional[float], scale=None) -> Optional[str]:
+        """Convert percentage to letter grade using the configured scale."""
         if percentage is None:
             return None
-
-        if percentage >= 97:
-            return "A+"
-        if percentage >= 93:
-            return "A"
-        if percentage >= 90:
-            return "A-"
-        if percentage >= 87:
-            return "B+"
-        if percentage >= 83:
-            return "B"
-        if percentage >= 80:
-            return "B-"
-        if percentage >= 77:
-            return "C+"
-        if percentage >= 73:
-            return "C"
-        if percentage >= 70:
-            return "C-"
-        if percentage >= 67:
-            return "D+"
-        if percentage >= 63:
-            return "D"
-        if percentage >= 60:
-            return "D-"
-        return "F"
+        from app.utils.grading import calculate_letter_grade
+        return calculate_letter_grade(percentage, scale)
 
     @staticmethod
     def get_term_grade_report(db: Session, term_id: int) -> Dict:
         """Generate a comprehensive grade report for a term."""
+        from app.crud.settings import get_grade_scale
+        grade_scale = get_grade_scale(db)
         term = db.query(Term).filter(Term.id == term_id).first()
         if not term:
             return {"error": "Term not found"}
@@ -304,7 +291,7 @@ class TermGradingService:
                 ) * 100
                 student_data["overall_letter_grade"] = (
                     TermGradingService._calculate_letter_grade(
-                        student_data["overall_percentage"]
+                        student_data["overall_percentage"], grade_scale
                     )
                 )
 
@@ -318,6 +305,8 @@ class TermGradingService:
     @staticmethod
     def get_student_term_report(db: Session, term_id: int, student_id: int) -> Dict:
         """Generate a detailed report for a specific student in a term."""
+        from app.crud.settings import get_grade_scale
+        grade_scale = get_grade_scale(db)
         term = db.query(Term).filter(Term.id == term_id).first()
         student = db.query(User).filter(User.id == student_id).first()
 
@@ -353,9 +342,7 @@ class TermGradingService:
                     and_(
                         StudentAssignment.student_id == student_id,
                         AssignmentTemplate.subject_id == grade.term_subject.subject_id,
-                        StudentAssignment.completed_date.isnot(None),
-                        StudentAssignment.completed_date >= term.start_date,
-                        StudentAssignment.completed_date <= term.end_date,
+                        term_membership_filter(term),
                     )
                 )
                 .all()
@@ -378,7 +365,7 @@ class TermGradingService:
         if total_points_possible > 0:
             overall_percentage = (total_points_earned / total_points_possible) * 100
             overall_letter_grade = TermGradingService._calculate_letter_grade(
-                overall_percentage
+                overall_percentage, grade_scale
             )
 
         return {

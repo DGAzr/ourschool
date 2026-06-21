@@ -17,8 +17,7 @@
 """Performance monitoring utilities."""
 import time
 import functools
-from typing import Any, Callable, Dict, Optional
-from contextlib import contextmanager
+from typing import Any, Callable, Dict
 import threading
 
 from app.core.logging import get_logger
@@ -82,18 +81,6 @@ def track_query_performance(func_name: str):
         
         return wrapper
     return decorator
-
-
-@contextmanager
-def query_monitor(operation_name: str):
-    """Context manager to monitor execution time of operations."""
-    start_time = time.time()
-    
-    try:
-        yield
-    finally:
-        execution_time = time.time() - start_time
-        logger.info(f"Operation {operation_name}: {execution_time:.3f}s")
 
 
 def get_performance_stats() -> Dict[str, Dict[str, Any]]:

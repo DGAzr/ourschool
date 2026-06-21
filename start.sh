@@ -3,13 +3,23 @@ set -e
 
 echo "Starting OurSchool Backend..."
 
-# Wait for database to be ready
-echo "Waiting for database to be ready..."
-# Use DATABASE_USER if available, fallback to POSTGRES_USER for compatibility
-DB_USER=${DATABASE_USER:-${POSTGRES_USER:-postgres}}
-DB_HOST=${DATABASE_HOST:-db}
-DB_PORT=${DATABASE_PORT:-5432}
+# Resolve database connection parameters.
+# DATABASE_URL takes precedence; parse host/port/user from it when set.
+if [ -n "${DATABASE_URL}" ]; then
+    echo "Using DATABASE_URL for connection settings..."
+    read DB_HOST DB_PORT DB_USER <<< $(python3 -c "
+from urllib.parse import urlparse
+u = urlparse('${DATABASE_URL}')
+print(u.hostname or 'localhost', u.port or 5432, u.username or 'postgres')
+")
+else
+    DB_USER=${DATABASE_USER:-${POSTGRES_USER:-postgres}}
+    DB_HOST=${DATABASE_HOST:-db}
+    DB_PORT=${DATABASE_PORT:-5432}
+fi
 
+# Wait for database to be ready
+echo "Waiting for database at ${DB_HOST}:${DB_PORT}..."
 while ! pg_isready -h ${DB_HOST} -p ${DB_PORT} -U ${DB_USER}; do
     echo "Waiting for database..."
     sleep 2

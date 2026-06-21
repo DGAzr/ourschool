@@ -29,7 +29,7 @@ import {
   BulkAttendanceReport,
   AssignmentReport
 } from '../../../types'
-import { Term } from '../../../types/lesson'
+import { Term } from '../../../types/term'
 
 export type ReportView = 'overview' | 'terms' | 'subjects' | 'students' | 'attendance' | 'assignments' | 'reportcard'
 
@@ -77,8 +77,6 @@ interface UseReportsDataReturn {
   setReportCardStudentId: (id: string) => void
   reportCardTermId: string
   setReportCardTermId: (id: string) => void
-  reportCardAsOfDate: string
-  setReportCardAsOfDate: (date: string) => void
   reportCardLoading: boolean
   availableStudentsForReportCard: Array<{id: number, name: string}>
   availableTermsForReportCard: Array<{id: number, name: string, academic_year: string}>
@@ -120,7 +118,6 @@ export const useReportsData = (): UseReportsDataReturn => {
   const [reportCard, setReportCard] = useState<any | null>(null)
   const [reportCardStudentId, setReportCardStudentId] = useState<string>('')
   const [reportCardTermId, setReportCardTermId] = useState<string>('')
-  const [reportCardAsOfDate, setReportCardAsOfDate] = useState<string>(new Date().toISOString().split('T')[0])
   const [reportCardLoading, setReportCardLoading] = useState(false)
   const [availableStudentsForReportCard, setAvailableStudentsForReportCard] = useState<Array<{id: number, name: string}>>([])
   const [availableTermsForReportCard, setAvailableTermsForReportCard] = useState<Array<{id: number, name: string, academic_year: string}>>([])
@@ -186,16 +183,13 @@ export const useReportsData = (): UseReportsDataReturn => {
 
   const loadReportCardOptions = async () => {
     try {
-      // Load available terms
-      const terms = await reportsApi.getAcademicYears()
-      const termOptions = terms.flatMap(year => 
-        // For now, we'll use the academic year data, but in a real app you'd want term-specific data
-        [{
-          id: year.terms_count, // This is a placeholder - you'd need actual term IDs
-          name: year.academic_year,
-          academic_year: year.academic_year
-        }]
-      )
+      // Load available terms (real terms with real IDs)
+      const termsData = await reportsApi.getTerms()
+      const termOptions = termsData.map(term => ({
+        id: term.id,
+        name: term.name,
+        academic_year: term.academic_year
+      }))
       setAvailableTermsForReportCard(termOptions)
 
       if (isAdmin) {
@@ -228,8 +222,7 @@ export const useReportsData = (): UseReportsDataReturn => {
       const studentId = parseInt(reportCardStudentId)
       const termId = parseInt(reportCardTermId)
 
-      // Pass the specified "as of" date to exclude future assignments from grade calculations
-      const data = await reportsApi.getReportCard(studentId, termId, reportCardAsOfDate)
+      const data = await reportsApi.getReportCard(studentId, termId)
       setReportCard(data)
     } catch (err: any) {
       setError('Failed to generate report card: ' + (err.message || 'Unknown error'))
@@ -369,8 +362,6 @@ export const useReportsData = (): UseReportsDataReturn => {
     setReportCardStudentId,
     reportCardTermId,
     setReportCardTermId,
-    reportCardAsOfDate,
-    setReportCardAsOfDate,
     reportCardLoading,
     availableStudentsForReportCard,
     availableTermsForReportCard,

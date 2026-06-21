@@ -30,8 +30,11 @@ export * from './user'
 // Assignment and assessment types
 export * from './assignment'
 
-// Lesson and subject types
-export * from './lesson'
+// Subject types
+export * from './subject'
+
+// Term types
+export * from './term'
 
 // Attendance tracking types
 export * from './attendance'

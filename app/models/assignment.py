@@ -15,7 +15,8 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 """Assignment models."""
-from datetime import datetime
+import uuid
+from datetime import datetime, timezone
 
 from sqlalchemy import (
     Boolean,
@@ -25,11 +26,10 @@ from sqlalchemy import (
     Enum,
     Float,
     ForeignKey,
+    Index,
     Integer,
     String,
     Text,
-    case,
-    func,
 )
 from sqlalchemy.orm import relationship
 
@@ -47,20 +47,24 @@ class AssignmentTemplate(Base):
 
     __tablename__ = "assignment_templates"
 
+    __table_args__ = (
+        Index("idx_assignment_templates_subject_id", "subject_id"),
+    )
+
     id = Column(Integer, primary_key=True, index=True)
+    external_id = Column(String(36), unique=True, nullable=False, default=lambda: str(uuid.uuid4()))
     name = Column(String, nullable=False)
     description = Column(Text)
     instructions = Column(Text)
+    # Stores the ``key`` of an app.models.assignment_type.AssignmentTypeConfig
+    # row. Kept as a plain string (rather than a DB enum) so admins can manage
+    # the set of types at runtime.
     assignment_type = Column(
-        Enum(AssignmentType, values_callable=lambda obj: [e.value for e in obj]),
+        String(50),
         nullable=False,
-        default=AssignmentType.HOMEWORK,
+        default=AssignmentType.HOMEWORK.value,
     )
 
-    # Relationships
-    lesson_id = Column(
-        Integer, ForeignKey("lessons.id"), nullable=True
-    )  # Can be standalone
     subject_id = Column(Integer, ForeignKey("subjects.id"), nullable=False)
 
     # Grading information
@@ -71,32 +75,28 @@ class AssignmentTemplate(Base):
     prerequisites = Column(Text)  # What students should know first
     materials_needed = Column(Text)  # Required materials/resources
 
+    # Optional per-template icon override (lucide icon name, e.g. "book-open").
+    # When unset consumers fall back to the assignment type's icon, then the subject's.
+    icon = Column(String(50), nullable=True)
+
     # Export/Import capabilities
     is_exportable = Column(Boolean, default=True)
     export_data = Column(Text)  # JSON string for export/import
 
-    # Ordering and organization
-    order_in_lesson = Column(Integer, default=0)
-
     # Audit fields
-    created_by = Column(Integer, ForeignKey("users.id"), nullable=False)
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_by = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
     is_archived = Column(Boolean, default=False, nullable=False)
 
     # Relationships
-    lesson = relationship("Lesson", back_populates="assignment_templates")
-    subject = relationship("Subject", back_populates="assignment_templates")
+    # selectin avoids N+1 when iterating templates and touching .subject
+    subject = relationship(
+        "Subject", back_populates="assignment_templates", lazy="selectin"
+    )
     creator = relationship("User", foreign_keys=[created_by])
     student_assignments = relationship(
         "StudentAssignment", back_populates="template", cascade="all, delete-orphan"
-    )
-
-    # New: Many-to-many with lessons
-    lesson_assignments = relationship(
-        "LessonAssignment",
-        back_populates="assignment_template",
-        cascade="all, delete-orphan",
     )
 
 
@@ -110,14 +110,21 @@ class StudentAssignment(Base):
 
     __tablename__ = "student_assignments"
 
+    __table_args__ = (
+        Index("idx_student_assignments_student_assigned_date", "student_id", "assigned_date"),
+        Index("idx_student_assignments_student_graded_date", "student_id", "graded_date"),
+        Index("idx_student_assignments_template_id", "template_id"),
+        Index("idx_student_assignments_student_id", "student_id"),
+    )
+
     id = Column(Integer, primary_key=True, index=True)
 
     # References
     template_id = Column(Integer, ForeignKey("assignment_templates.id"), nullable=False)
-    student_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    student_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
 
     # Assignment details
-    assigned_date = Column(Date, nullable=False, default=datetime.utcnow().date)
+    assigned_date = Column(Date, nullable=False, default=lambda: datetime.now(timezone.utc).date())
     due_date = Column(Date)
     extended_due_date = Column(Date)  # If deadline is extended
 
@@ -136,7 +143,7 @@ class StudentAssignment(Base):
     letter_grade = Column(String)  # Optional letter grade
     is_graded = Column(Boolean, default=False)
     graded_date = Column(Date)
-    graded_by = Column(Integer, ForeignKey("users.id"))
+    graded_by = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"))
 
     # Feedback and notes
     teacher_feedback = Column(Text)
@@ -152,12 +159,15 @@ class StudentAssignment(Base):
     custom_max_points = Column(Integer)  # Custom point value if different from template
 
     # Audit fields
-    assigned_by = Column(Integer, ForeignKey("users.id"), nullable=False)
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    assigned_by = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
 
     # Relationships
-    template = relationship("AssignmentTemplate", back_populates="student_assignments")
+    # selectin avoids N+1 when serializing assignment lists / report cards
+    template = relationship(
+        "AssignmentTemplate", back_populates="student_assignments", lazy="selectin"
+    )
     student = relationship(
         "User", foreign_keys=[student_id], back_populates="assigned_assignments"
     )
@@ -166,9 +176,9 @@ class StudentAssignment(Base):
     grade_history = relationship("GradeHistory", back_populates="assignment")
 
     @property
-    def max_points(self):
+    def max_points(self) -> int:
         """Get the maximum points for this assignment (custom or from template)."""
-        return self.custom_max_points or self.template.max_points
+        return self.custom_max_points or (self.template.max_points if self.template else 100) or 100
 
     def calculate_percentage_grade(self):
         """Calculate and update the percentage grade."""
@@ -195,29 +205,60 @@ class StudentAssignment(Base):
             self.status = AssignmentStatus.NOT_STARTED
 
     def update_term_grade(self, session):
-        """Update the student's term grade when this assignment is graded."""
-        if not self.is_graded or not self.points_earned:
+        """Update the student's term grade when this assignment is graded.
+
+        Uses the canonical points-weighted calculation (with per-assignment-type
+        weights) and buckets assignments into the term by effective due date, so
+        the persisted StudentTermGrade agrees with the live report card.
+        """
+        if not self.is_graded or self.points_earned is None:
             return
 
-        # Find the active term
         from app.models.term import StudentTermGrade, Term, TermSubject
+        from app.crud.settings import get_assignment_type_weights
+        from app.utils.grading import (
+            calculate_letter_grade,
+            compute_weighted_grade,
+            term_membership_filter,
+        )
 
-        active_term = session.query(Term).filter(Term.is_active).first()
-        if not active_term:
+        # Resolve the term this assignment belongs to by its effective due date,
+        # so grading past/future-dated work persists to the correct term rather
+        # than only the active one. Fall back to the active term if none matches.
+        if self.template is None:
             return
 
-        # Find the term-subject relationship
+        eff = self.extended_due_date or self.due_date or self.assigned_date
+        target_term = None
+        if eff is not None:
+            target_term = (
+                session.query(Term)
+                .filter(Term.start_date <= eff, Term.end_date >= eff)
+                .order_by(Term.start_date.desc())
+                .first()
+            )
+        if target_term is None:
+            target_term = session.query(Term).filter(Term.is_active).first()
+        if target_term is None:
+            return
+
+        # Find (or auto-create) the term-subject relationship.
         term_subject = (
             session.query(TermSubject)
             .filter(
-                TermSubject.term_id == active_term.id,
+                TermSubject.term_id == target_term.id,
                 TermSubject.subject_id == self.template.subject_id,
             )
             .first()
         )
 
         if not term_subject:
-            return
+            term_subject = TermSubject(
+                term_id=target_term.id,
+                subject_id=self.template.subject_id,
+            )
+            session.add(term_subject)
+            session.flush()
 
         # Find or create the student's term grade record
         student_term_grade = (
@@ -235,60 +276,51 @@ class StudentAssignment(Base):
             )
             session.add(student_term_grade)
 
-        # Recalculate term grade based on all assignments in this term/subject
-        assignment_stats = (
-            session.query(
-                func.sum(StudentAssignment.points_earned).label("total_earned"),
-                func.sum(StudentAssignment.custom_max_points).label(
-                    "total_possible_custom"
-                ),
-                func.count(StudentAssignment.id).label("total_assignments"),
-                func.sum(case([(StudentAssignment.is_graded, 1)], else_=0)).label(
-                    "graded_count"
-                ),
-            )
+        # Recalculate from all assignments in this term/subject (membership by
+        # effective due date), applying the same weighting as the report card.
+        assignments = (
+            session.query(StudentAssignment)
             .join(AssignmentTemplate)
             .filter(
                 StudentAssignment.student_id == self.student_id,
                 AssignmentTemplate.subject_id == self.template.subject_id,
-                StudentAssignment.assigned_date >= active_term.start_date,
-                StudentAssignment.assigned_date <= active_term.end_date,
+                term_membership_filter(target_term),
             )
-            .first()
+            .all()
         )
 
-        if assignment_stats.total_earned is not None:
-            # Calculate total possible points
-            # (using custom points or template max points)
-            total_possible = (
-                session.query(
-                    func.sum(
-                        func.coalesce(
-                            StudentAssignment.custom_max_points,
-                            AssignmentTemplate.max_points,
-                        )
-                    )
+        graded = [
+            a
+            for a in assignments
+            if a.points_earned is not None
+            and (a.is_graded or a.status == AssignmentStatus.GRADED)
+        ]
+        type_weights = get_assignment_type_weights(session)
+        earned, possible, percentage = compute_weighted_grade(
+            (
+                (
+                    a.points_earned,
+                    a.custom_max_points
+                    or (a.template.max_points if a.template else None),
+                    a.template.assignment_type if a.template else None,
                 )
-                .join(AssignmentTemplate)
-                .filter(
-                    StudentAssignment.student_id == self.student_id,
-                    AssignmentTemplate.subject_id == self.template.subject_id,
-                    StudentAssignment.assigned_date >= active_term.start_date,
-                    StudentAssignment.assigned_date <= active_term.end_date,
-                    StudentAssignment.is_graded,
-                )
-                .scalar()
-                or 0
-            )
+                for a in graded
+            ),
+            type_weights,
+        )
 
-            student_term_grade.current_points_earned = assignment_stats.total_earned
-            student_term_grade.current_points_possible = total_possible
-            student_term_grade.assignments_completed = (
-                assignment_stats.graded_count or 0
-            )
-            student_term_grade.assignments_total = (
-                assignment_stats.total_assignments or 0
-            )
-            student_term_grade.calculate_current_grade()
+        student_term_grade.current_points_earned = earned
+        student_term_grade.current_points_possible = possible
+        student_term_grade.assignments_completed = len(graded)
+        student_term_grade.assignments_total = len(assignments)
+        student_term_grade.current_percentage = (
+            round(percentage, 2) if possible > 0 else None
+        )
+        student_term_grade.current_letter_grade = (
+            calculate_letter_grade(percentage) if possible > 0 else None
+        )
+        student_term_grade.last_calculated = datetime.now(timezone.utc)
 
-        session.commit()
+        # NOTE: No session.commit() here — the caller (grading router)
+        # manages the transaction boundary and calls db.commit() after
+        # the full operation completes.

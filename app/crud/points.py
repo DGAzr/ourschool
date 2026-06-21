@@ -20,14 +20,13 @@ CRUD operations for the points system.
 
 from typing import List, Optional, Tuple
 from datetime import datetime, timezone
-from sqlalchemy.orm import Session, joinedload
+from sqlalchemy.orm import Session, joinedload, make_transient
 from sqlalchemy import and_, desc, func
 
 from app.models.points import StudentPoints, PointTransaction, SystemSettings
 from app.models.user import User
 from app.enums import UserRole
 from app.schemas.points import (
-    StudentPointsCreate,
     PointTransactionCreate,
     AdminPointAdjustment,
     SystemSettingCreate,
@@ -45,10 +44,14 @@ def get_system_setting(db: Session, setting_key: str) -> Optional[SystemSettings
 
 
 def is_points_system_enabled(db: Session) -> bool:
-    """Check if the points system is enabled."""
+    """Check if the points system is enabled.
+
+    Defaults to enabled when the setting row is absent (e.g. before defaults
+    are seeded), matching the documented default.
+    """
     setting = get_system_setting(db, "points_system_enabled")
     if not setting:
-        return False
+        return True
     return setting.setting_value.lower() == "true"
 
 
@@ -143,8 +146,8 @@ def admin_adjust_points(
 
 
 def award_assignment_points(
-    db: Session, 
-    student_id: int, 
+    db: Session,
+    student_id: int,
     assignment_id: int,
     points_earned: int,
     assignment_title: str
@@ -158,8 +161,66 @@ def award_assignment_points(
         source_description=f"Assignment: {assignment_title}",
         notes=f"Earned {points_earned} points for completing assignment"
     )
-    
+
     return create_point_transaction(db, transaction_data)
+
+
+def set_assignment_points(
+    db: Session,
+    student_id: int,
+    assignment_id: int,
+    points_earned: float,
+    assignment_title: str,
+) -> Optional[PointTransaction]:
+    """Idempotently sync the points awarded for an assignment to ``points_earned``.
+
+    Computes the delta versus any points previously awarded for this assignment
+    (tracked by ``transaction_type='assignment'`` + ``source_id``) and records a
+    single adjusting transaction. Safe to call on first grade and every re-grade:
+    the student's net award always equals the (rounded) current score, so
+    balances never inflate or drift. Does not commit; caller controls the
+    transaction boundary.
+    """
+    # Points are integer-valued; round fractional scores half-up (8.5 -> 9)
+    # rather than Python's banker's rounding (8.5 -> 8).
+    from decimal import Decimal, ROUND_HALF_UP
+    target = int(
+        Decimal(str(points_earned or 0)).quantize(Decimal("1"), rounding=ROUND_HALF_UP)
+    )
+
+    previously_awarded = (
+        db.query(func.coalesce(func.sum(PointTransaction.amount), 0))
+        .filter(
+            PointTransaction.student_id == student_id,
+            PointTransaction.transaction_type == "assignment",
+            PointTransaction.source_id == assignment_id,
+        )
+        .scalar()
+        or 0
+    )
+
+    delta = target - int(previously_awarded)
+    if delta == 0:
+        return None
+
+    db_transaction = PointTransaction(
+        student_id=student_id,
+        amount=delta,
+        transaction_type="assignment",
+        source_id=assignment_id,
+        source_description=f"Assignment: {assignment_title}",
+        notes=f"Grade sync to {target} points for assignment",
+    )
+    db.add(db_transaction)
+
+    student_points = get_or_create_student_points(db, student_id)
+    student_points.current_balance += delta
+    # Assignment points are earnings; keep total_earned consistent with the
+    # net awarded value (never below zero).
+    student_points.total_earned = max(0, student_points.total_earned + delta)
+
+    db.flush()
+    return db_transaction
 
 
 def get_student_points(db: Session, student_id: int) -> Optional[StudentPoints]:
@@ -170,20 +231,20 @@ def get_student_points(db: Session, student_id: int) -> Optional[StudentPoints]:
 
 
 def get_student_points_ledger(
-    db: Session, 
-    student_id: int, 
-    page: int = 1, 
-    per_page: int = 20
+    db: Session,
+    student_id: int,
+    page: int = 1,
+    per_page: int = 20,
 ) -> Tuple[StudentPoints, List[PointTransaction], int]:
     """Get student points and paginated transaction history."""
+    from app.models.assignment import StudentAssignment, AssignmentTemplate
+
     student_points = get_or_create_student_points(db, student_id)
-    
-    # Get total count for pagination
+
     total_transactions = db.query(PointTransaction).filter(
         PointTransaction.student_id == student_id
     ).count()
-    
-    # Get paginated transactions
+
     transactions = db.query(PointTransaction).options(
         joinedload(PointTransaction.admin)
     ).filter(
@@ -191,9 +252,27 @@ def get_student_points_ledger(
     ).order_by(desc(PointTransaction.created_at)).offset(
         (page - 1) * per_page
     ).limit(per_page).all()
-    
+
+    # Attach assignment_type_key for assignment transactions so the frontend
+    # can render the correct icon without an extra round-trip.
+    assignment_ids = [
+        t.source_id for t in transactions
+        if t.transaction_type == "assignment" and t.source_id is not None
+    ]
+    if assignment_ids:
+        rows = (
+            db.query(StudentAssignment.id, AssignmentTemplate.assignment_type)
+            .join(AssignmentTemplate, StudentAssignment.template_id == AssignmentTemplate.id)
+            .filter(StudentAssignment.id.in_(assignment_ids))
+            .all()
+        )
+        type_by_assignment = {row[0]: row[1] for row in rows}
+        for t in transactions:
+            if t.transaction_type == "assignment" and t.source_id in type_by_assignment:
+                t.assignment_type_key = type_by_assignment[t.source_id]
+
     total_pages = (total_transactions + per_page - 1) // per_page
-    
+
     return student_points, transactions, total_pages
 
 
@@ -230,17 +309,18 @@ def get_all_students_with_points(db: Session) -> List[StudentPoints]:
             student_points.student_name = f"{student.first_name} {student.last_name}"
             result.append(student_points)
         else:
-            # Create a dummy StudentPoints object for display
-            now = datetime.now(timezone.utc)
             dummy_points = StudentPoints(
-                id=0,  # Dummy ID (will be ignored since this is not persisted)
                 student_id=student.id,
                 current_balance=0,
                 total_earned=0,
-                total_spent=0,
-                created_at=now,
-                updated_at=now
+                total_spent=0
             )
+            # Detach from SQLAlchemy's identity map so it can never be flushed to the DB
+            make_transient(dummy_points)
+            now = datetime.now(timezone.utc)
+            dummy_points.id = -(student.id)   # negative user ID: unique + signals "no real record"
+            dummy_points.created_at = now
+            dummy_points.updated_at = now
             dummy_points.student = student
             dummy_points.student_name = f"{student.first_name} {student.last_name}"
             result.append(dummy_points)

@@ -19,27 +19,33 @@
 import React, { useState, useEffect } from 'react'
 import { useAuth } from '../contexts/AuthContext'
 import { pointsApi, type PointsLedger } from '../services/points'
-import PointsDisplay from '../components/PointsDisplay'
-import { 
-  Coins, 
-  Calendar, 
-  User, 
-  FileText, 
-  ChevronLeft, 
+import { useAssignmentTypes } from '../contexts/AssignmentTypesContext'
+import Icon from '../components/ui/Icon/Icon'
+import {
+  Coins,
+  Calendar,
+  User,
+  FileText,
+  ChevronLeft,
   ChevronRight,
   TrendingUp,
   TrendingDown,
   Award,
-  ShoppingCart
+  ShoppingCart,
+  BookOpen,
+  Eye,
+  EyeOff,
 } from 'lucide-react'
 
 const MyPoints: React.FC = () => {
   const { user } = useAuth()
+  const { getTypeIcon, getTypeColor, getTypeLabel } = useAssignmentTypes()
   const [ledger, setLedger] = useState<PointsLedger | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [currentPage, setCurrentPage] = useState(1)
   const [systemEnabled, setSystemEnabled] = useState(false)
+  const [balanceVisible, setBalanceVisible] = useState(true)
 
   useEffect(() => {
     loadLedger(currentPage)
@@ -55,11 +61,10 @@ const MyPoints: React.FC = () => {
     try {
       setLoading(true)
       setError(null)
-      
-      // Check if points system is enabled
+
       const status = await pointsApi.getSystemStatus()
       setSystemEnabled(status.enabled)
-      
+
       if (!status.enabled) {
         setError('Points system is currently disabled')
         return
@@ -74,207 +79,249 @@ const MyPoints: React.FC = () => {
     }
   }
 
-  const getTransactionIcon = (transactionType: string) => {
-    switch (transactionType) {
-      case 'assignment':
-        return <Award className="h-5 w-5 text-green-500" />
-      case 'admin_award':
-        return <TrendingUp className="h-5 w-5 text-blue-500" />
-      case 'admin_deduction':
-        return <TrendingDown className="h-5 w-5 text-red-500" />
-      case 'spending':
-        return <ShoppingCart className="h-5 w-5 text-purple-500" />
-      default:
-        return <Coins className="h-5 w-5 text-gray-500" />
+  const getTransactionIcon = (transactionType: string, assignmentTypeKey?: string) => {
+    if (transactionType === 'assignment') {
+      const iconName = getTypeIcon(assignmentTypeKey)
+      const color = getTypeColor(assignmentTypeKey)
+      return (
+        <div
+          className="w-8 h-8 rounded-field flex items-center justify-center flex-shrink-0"
+          style={{ background: color ? `${color}22` : 'var(--pos-bg)', color: color ?? 'var(--pos-fg)' }}
+        >
+          <Icon name={iconName} size={15} />
+        </div>
+      )
     }
-  }
-
-  const getTransactionDescription = (transactionType: string) => {
-    switch (transactionType) {
-      case 'assignment':
-        return 'Assignment Completion'
-      case 'admin_award':
-        return 'Admin Award'
-      case 'admin_deduction':
-        return 'Admin Deduction'
-      case 'spending':
-        return 'Point Spending'
-      default:
-        return 'Transaction'
+    if (transactionType === 'journal_submission') {
+      return (
+        <div className="w-8 h-8 rounded-field flex items-center justify-center flex-shrink-0 bg-[var(--exc-bg)] text-[var(--exc-fg)]">
+          <BookOpen size={15} />
+        </div>
+      )
     }
-  }
-
-  const formatAmount = (amount: number) => {
-    const sign = amount >= 0 ? '+' : '-'
-    const color = amount >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'
+    if (transactionType === 'admin_award') {
+      return (
+        <div className="w-8 h-8 rounded-field flex items-center justify-center flex-shrink-0 bg-[var(--pos-bg)] text-[var(--pos-fg)]">
+          <TrendingUp size={15} />
+        </div>
+      )
+    }
+    if (transactionType === 'admin_deduction') {
+      return (
+        <div className="w-8 h-8 rounded-field flex items-center justify-center flex-shrink-0 bg-[var(--neg-bg)] text-[var(--neg-fg)]">
+          <TrendingDown size={15} />
+        </div>
+      )
+    }
+    if (transactionType === 'spending') {
+      return (
+        <div className="w-8 h-8 rounded-field flex items-center justify-center flex-shrink-0" style={{ background: 'color-mix(in srgb, var(--accent) 15%, transparent)', color: 'var(--accent)' }}>
+          <ShoppingCart size={15} />
+        </div>
+      )
+    }
     return (
-      <span className={`font-semibold ${color}`}>
-        {sign}{Math.abs(amount).toLocaleString()}
-      </span>
-    )
-  }
-
-  if (!user || user.role !== 'student') {
-    return (
-      <div className="text-center py-12">
-        <Coins className="h-16 w-16 text-gray-400 mx-auto mb-4" />
-        <h2 className="text-2xl font-bold text-gray-900 dark:text-gray-100">Access Denied</h2>
-        <p className="text-gray-600 dark:text-gray-400 mt-2">Only students can view their points ledger.</p>
+      <div className="w-8 h-8 rounded-field flex items-center justify-center flex-shrink-0 bg-panel-2 text-muted">
+        <Coins size={15} />
       </div>
     )
   }
 
-  if (!systemEnabled) {
+  const getTransactionLabel = (transactionType: string, assignmentTypeKey?: string) => {
+    if (transactionType === 'assignment') {
+      return assignmentTypeKey ? getTypeLabel(assignmentTypeKey) : 'Assignment'
+    }
+    if (transactionType === 'journal_submission') return 'Journal'
+    if (transactionType === 'admin_award') return 'Award'
+    if (transactionType === 'admin_deduction') return 'Deduction'
+    if (transactionType === 'spending') return 'Spending'
+    return 'Transaction'
+  }
+
+  if (!user || user.role !== 'student') {
     return (
-      <div className="text-center py-12">
-        <Coins className="h-16 w-16 text-gray-400 mx-auto mb-4" />
-        <h2 className="text-2xl font-bold text-gray-900 dark:text-gray-100">Points System Disabled</h2>
-        <p className="text-gray-600 dark:text-gray-400 mt-2">The points system is currently disabled by your administrator.</p>
+      <div className="flex flex-col items-center justify-center py-16 text-center">
+        <Coins size={36} className="text-faint mb-3" />
+        <p className="text-[15px] font-semibold text-ink">Access Denied</p>
+        <p className="text-[13px] text-muted mt-1">Only students can view their points ledger.</p>
       </div>
     )
   }
 
   if (loading) {
     return (
-      <div className="space-y-6">
-        <div className="bg-gray-200 dark:bg-gray-700 animate-pulse rounded-lg h-32"></div>
-        <div className="space-y-4">
-          {[...Array(5)].map((_, i) => (
-            <div key={i} className="bg-gray-200 dark:bg-gray-700 animate-pulse rounded-lg h-20"></div>
-          ))}
-        </div>
+      <div className="flex items-center gap-2 text-muted text-[13px] py-12">
+        <div className="w-4 h-4 border-2 border-line border-t-accent rounded-full animate-spin" />
+        Loading…
       </div>
     )
   }
 
-  if (error) {
+  if (!systemEnabled || error) {
     return (
-      <div className="text-center py-12">
-        <Coins className="h-16 w-16 text-red-500 mx-auto mb-4" />
-        <h2 className="text-2xl font-bold text-gray-900 dark:text-gray-100">Error</h2>
-        <p className="text-red-600 dark:text-red-400 mt-2">{error}</p>
-        <button
-          onClick={() => loadLedger(currentPage)}
-          className="mt-4 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
-        >
-          Try Again
-        </button>
+      <div className="flex flex-col items-center justify-center py-16 text-center">
+        <Coins size={36} className="text-faint mb-3" />
+        <p className="text-[15px] font-semibold text-ink">
+          {!systemEnabled ? 'Points System Disabled' : 'Error'}
+        </p>
+        <p className="text-[13px] text-muted mt-1">
+          {!systemEnabled
+            ? 'The points system is currently disabled by your administrator.'
+            : error}
+        </p>
+        {error && systemEnabled && (
+          <button
+            onClick={() => loadLedger(currentPage)}
+            className="mt-4 px-4 py-2 rounded-field bg-accent text-white text-[13px] font-medium hover:opacity-90 transition-opacity"
+          >
+            Try Again
+          </button>
+        )}
       </div>
     )
   }
 
-  if (!ledger) {
-    return null
-  }
+  if (!ledger) return null
+
+  const { student_points: points } = ledger
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div className="bg-gradient-to-r from-yellow-600 to-amber-600 rounded-lg shadow-lg">
-        <div className="px-6 py-8">
-          <div className="flex items-center">
-            <Coins className="h-8 w-8 text-white mr-3" />
-            <div>
-              <h1 className="text-3xl font-bold text-white">
-                My Points Ledger
-              </h1>
-              <p className="text-yellow-100 text-lg mt-1">
-                Track your earned points and spending history
-              </p>
-            </div>
-          </div>
-        </div>
+    <div>
+      {/* Page header */}
+      <div className="mb-6">
+        <p className="text-[11px] font-semibold text-faint uppercase tracking-[.06em] mb-0.5">Student</p>
+        <h1 className="text-[26px] font-semibold text-ink tracking-[-0.02em]">My Points</h1>
       </div>
 
-      {/* Points Balance Display */}
-      <PointsDisplay />
-
-      {/* Transaction History */}
-      <div className="bg-white dark:bg-gray-800 rounded-lg shadow-md">
-        <div className="px-6 py-4 border-b border-gray-200 dark:border-gray-700">
-          <h2 className="text-xl font-semibold text-gray-900 dark:text-gray-100">
-            Transaction History
-          </h2>
-          <p className="text-gray-600 dark:text-gray-400 text-sm mt-1">
-            Complete record of all point awards and spending
-          </p>
+      {/* Balance card */}
+      <div className="bg-panel border border-line rounded-card p-5 mb-6">
+        <div className="flex items-start justify-between">
+          <div>
+            <p className="text-[11px] font-semibold text-faint uppercase tracking-[.06em] mb-1">
+              Current Balance
+            </p>
+            <div className="flex items-baseline gap-2">
+              <span className="text-[36px] font-bold text-ink tracking-[-0.03em] leading-none">
+                {balanceVisible ? points.current_balance.toLocaleString() : '•••'}
+              </span>
+              <span className="text-[14px] text-muted font-medium">pts</span>
+            </div>
+          </div>
+          <button
+            onClick={() => setBalanceVisible(v => !v)}
+            className="mt-0.5 p-1.5 rounded-field text-muted hover:text-ink hover:bg-panel-2 transition-colors"
+            title={balanceVisible ? 'Hide balance' : 'Show balance'}
+          >
+            {balanceVisible ? <EyeOff size={16} /> : <Eye size={16} />}
+          </button>
         </div>
 
-        <div className="divide-y divide-gray-200 dark:divide-gray-700">
-          {ledger.transactions.length === 0 ? (
-            <div className="px-6 py-12 text-center">
-              <Coins className="h-12 w-12 text-gray-400 mx-auto mb-4" />
-              <p className="text-gray-500 dark:text-gray-400">No transactions yet</p>
-              <p className="text-gray-400 dark:text-gray-500 text-sm mt-1">
-                Complete assignments to start earning points!
-              </p>
+        {balanceVisible && (
+          <div className="mt-4 pt-4 border-t border-line flex items-center gap-6">
+            <div className="flex items-center gap-1.5 text-[13px]">
+              <TrendingUp size={14} className="text-[var(--pos-fg)]" />
+              <span className="text-muted">Earned</span>
+              <span className="font-semibold text-ink font-mono">{points.total_earned.toLocaleString()}</span>
             </div>
-          ) : (
-            ledger.transactions.map((transaction) => (
-              <div key={transaction.id} className="px-6 py-4 hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors">
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center space-x-4">
-                    <div className="flex-shrink-0">
-                      {getTransactionIcon(transaction.transaction_type)}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center space-x-2">
-                        <p className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">
-                          {transaction.source_description || getTransactionDescription(transaction.transaction_type)}
-                        </p>
-                      </div>
-                      {transaction.notes && (
-                        <div className="flex items-center mt-1 text-xs text-gray-500 dark:text-gray-400">
-                          <FileText className="h-3 w-3 mr-1" />
-                          {transaction.notes}
-                        </div>
-                      )}
-                      <div className="flex items-center mt-1 text-xs text-gray-500 dark:text-gray-400">
-                        <Calendar className="h-3 w-3 mr-1" />
-                        {new Date(transaction.created_at).toLocaleString()}
-                        {transaction.admin_name && (
-                          <>
-                            <User className="h-3 w-3 ml-3 mr-1" />
-                            by {transaction.admin_name}
-                          </>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                  <div className="flex-shrink-0">
-                    {formatAmount(transaction.amount)}
-                  </div>
-                </div>
-              </div>
-            ))
+            <div className="flex items-center gap-1.5 text-[13px]">
+              <ShoppingCart size={14} className="text-muted" />
+              <span className="text-muted">Spent</span>
+              <span className="font-semibold text-ink font-mono">{points.total_spent.toLocaleString()}</span>
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Transaction history */}
+      <div className="bg-panel border border-line rounded-card overflow-hidden">
+        <div className="flex items-center justify-between px-5 py-3 border-b border-line bg-panel-2">
+          <p className="text-[12px] font-semibold text-faint uppercase tracking-[.06em]">Transaction History</p>
+          {ledger.total_pages > 1 && (
+            <span className="text-[12px] text-muted font-mono">
+              Page {ledger.current_page} / {ledger.total_pages}
+            </span>
           )}
         </div>
 
+        {ledger.transactions.length === 0 ? (
+          <div className="flex flex-col items-center justify-center py-16 text-center">
+            <Award size={32} className="text-faint mb-3" />
+            <p className="text-[14px] font-semibold text-ink">No transactions yet</p>
+            <p className="text-[12px] text-muted mt-1">Complete assignments to start earning points!</p>
+          </div>
+        ) : (
+          <div className="divide-y divide-line">
+            {ledger.transactions.map((transaction) => {
+              const isPositive = transaction.amount >= 0
+              return (
+                <div key={transaction.id} className="flex items-center gap-3 px-5 py-3.5 hover:bg-panel-2 transition-colors">
+                  {getTransactionIcon(transaction.transaction_type, transaction.assignment_type_key)}
+
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <span className="text-[13px] font-medium text-ink truncate">
+                        {transaction.source_description || getTransactionLabel(transaction.transaction_type, transaction.assignment_type_key)}
+                      </span>
+                      <span className="text-[11px] text-faint bg-panel-2 border border-line rounded px-1.5 py-0.5 shrink-0">
+                        {getTransactionLabel(transaction.transaction_type, transaction.assignment_type_key)}
+                      </span>
+                    </div>
+
+                    <div className="flex items-center gap-3 mt-0.5">
+                      <span className="flex items-center gap-1 text-[11px] text-muted">
+                        <Calendar size={10} />
+                        {new Date(transaction.created_at).toLocaleDateString('en-US', {
+                          month: 'short', day: 'numeric', year: 'numeric'
+                        })}
+                      </span>
+                      {transaction.admin_name && (
+                        <span className="flex items-center gap-1 text-[11px] text-muted">
+                          <User size={10} />
+                          {transaction.admin_name}
+                        </span>
+                      )}
+                      {transaction.notes && (
+                        <span className="flex items-center gap-1 text-[11px] text-muted truncate">
+                          <FileText size={10} />
+                          {transaction.notes}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  <span
+                    className="text-[14px] font-bold font-mono shrink-0"
+                    style={{ color: isPositive ? 'var(--pos-fg)' : 'var(--neg-fg)' }}
+                  >
+                    {isPositive ? '+' : ''}{transaction.amount.toLocaleString()}
+                  </span>
+                </div>
+              )
+            })}
+          </div>
+        )}
+
         {/* Pagination */}
         {ledger.total_pages > 1 && (
-          <div className="px-6 py-4 border-t border-gray-200 dark:border-gray-700">
-            <div className="flex items-center justify-between">
-              <div className="text-sm text-gray-700 dark:text-gray-300">
-                Page {ledger.current_page} of {ledger.total_pages}
-              </div>
-              <div className="flex space-x-2">
-                <button
-                  onClick={() => setCurrentPage(currentPage - 1)}
-                  disabled={currentPage === 1}
-                  className="flex items-center px-3 py-2 text-sm font-medium text-gray-500 dark:text-gray-400 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-md hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  <ChevronLeft className="h-4 w-4 mr-1" />
-                  Previous
-                </button>
-                <button
-                  onClick={() => setCurrentPage(currentPage + 1)}
-                  disabled={currentPage === ledger.total_pages}
-                  className="flex items-center px-3 py-2 text-sm font-medium text-gray-500 dark:text-gray-400 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-md hover:bg-gray-50 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed"
-                >
-                  Next
-                  <ChevronRight className="h-4 w-4 ml-1" />
-                </button>
-              </div>
+          <div className="flex items-center justify-between px-5 py-3 border-t border-line bg-panel-2">
+            <span className="text-[12px] text-muted">
+              {ledger.transactions.length} of {ledger.total_pages * 20} transactions
+            </span>
+            <div className="flex items-center gap-1.5">
+              <button
+                onClick={() => setCurrentPage(p => p - 1)}
+                disabled={currentPage === 1}
+                className="w-8 h-8 flex items-center justify-center rounded-field border border-btn-border text-muted hover:text-ink hover:bg-panel disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+              >
+                <ChevronLeft size={15} />
+              </button>
+              <button
+                onClick={() => setCurrentPage(p => p + 1)}
+                disabled={currentPage === ledger.total_pages}
+                className="w-8 h-8 flex items-center justify-center rounded-field border border-btn-border text-muted hover:text-ink hover:bg-panel disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+              >
+                <ChevronRight size={15} />
+              </button>
             </div>
           </div>
         )}

@@ -65,15 +65,13 @@ export const useReportCard = (): UseReportCardReturn => {
     try {
       setError(null)
       
-      // Load available terms
-      const years = await reportsApi.getAcademicYears()
-      const termOptions = years.flatMap(year => 
-        [{
-          id: parseInt(year.academic_year.split('-')[0]), // Convert "2023-2024" to 2023
-          name: `${year.academic_year} Term`,
-          academic_year: year.academic_year
-        }]
-      )
+      // Load available terms (real terms with real IDs)
+      const termsData = await reportsApi.getTerms()
+      const termOptions = termsData.map(term => ({
+        id: term.id,
+        name: term.name,
+        academic_year: term.academic_year
+      }))
       
       // Load available students from assignment report (which includes student data)
       try {

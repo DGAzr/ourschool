@@ -23,11 +23,15 @@ from app.core.database import get_db
 from app.crud import settings as crud_settings
 from app.models.user import User, UserRole
 from app.routers.auth import get_current_active_user
+import json
 from app.schemas.settings import (
     SystemSetting,
     SystemSettingCreate,
     SystemSettingUpdate,
     AttendanceSettings,
+    GradingSettings,
+    GradeBand,
+    GradeScaleUpdate,
     SystemSettingsGroup
 )
 
@@ -55,18 +59,21 @@ def get_grouped_settings(
     if current_user.role != UserRole.ADMIN:
         raise HTTPException(status_code=403, detail="Not authorized")
     
-    # Get attendance settings
     required_days = crud_settings.get_setting_value(
-        db, 
-        "attendance.required_days_of_instruction", 
-        default_value=180, 
+        db,
+        "attendance.required_days_of_instruction",
+        default_value=180,
         value_type=int
     )
-    
+
+    raw_scale = crud_settings.get_grade_scale(db)
+    grade_bands = [GradeBand(letter=l, min_percent=m) for l, m in raw_scale]
+
     return SystemSettingsGroup(
         attendance=AttendanceSettings(
             required_days_of_instruction=required_days
-        )
+        ),
+        grading=GradingSettings(scale=grade_bands)
     )
 
 
@@ -124,6 +131,29 @@ def update_setting(
         raise HTTPException(status_code=404, detail="Setting not found")
     
     return updated_setting
+
+
+@router.put("/grading/scale", response_model=GradingSettings)
+def update_grade_scale(
+    scale_update: GradeScaleUpdate,
+    db: Annotated[Session, Depends(get_db)],
+    current_user: Annotated[User, Depends(get_current_active_user)],
+):
+    """Update the letter-grade threshold scale (admin only)."""
+    if current_user.role != UserRole.ADMIN:
+        raise HTTPException(status_code=403, detail="Not authorized")
+
+    if not scale_update.scale:
+        raise HTTPException(status_code=400, detail="Scale must have at least one band")
+
+    payload = json.dumps(
+        [{"letter": b.letter, "min_percent": b.min_percent} for b in scale_update.scale]
+    )
+    crud_settings.upsert_setting(
+        db, "grading.scale", payload, "json",
+        "Letter-grade threshold bands (JSON array of {letter, min_percent})"
+    )
+    return GradingSettings(scale=scale_update.scale)
 
 
 @router.put("/attendance/required-days", response_model=SystemSetting)
