@@ -122,7 +122,7 @@ const OverviewReport: React.FC<OverviewReportProps> = ({
         </div>
 
         {/* Trend chart + subject bars */}
-        <div className="grid gap-4" style={{ gridTemplateColumns: '1.5fr 1fr' }}>
+        <div className="grid grid-cols-1 lg:grid-cols-[1.5fr_1fr] gap-4">
           <div className="bg-panel border border-line rounded-card" style={{ padding: '18px 20px' }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 }}>
               <h3 style={{ margin: 0, fontSize: 15, fontWeight: 600, color: 'var(--ink)' }}>
@@ -231,6 +231,7 @@ const OverviewReport: React.FC<OverviewReportProps> = ({
               </h3>
               <span style={{ fontSize: 12, color: 'var(--muted)' }}>Grades · effort · who needs you</span>
             </div>
+            <div className="overflow-x-auto">
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13.5 }}>
               <thead>
                 <tr style={{ background: 'var(--panel-2)' }}>
@@ -347,6 +348,7 @@ const OverviewReport: React.FC<OverviewReportProps> = ({
                 })}
               </tbody>
             </table>
+            </div>
           </div>
         )}
       </div>
@@ -384,7 +386,7 @@ const OverviewReport: React.FC<OverviewReportProps> = ({
         ))}
       </div>
 
-      <div className="grid gap-4" style={{ gridTemplateColumns: '1.5fr 1fr' }}>
+      <div className="grid grid-cols-1 lg:grid-cols-[1.5fr_1fr] gap-4">
         <div className="bg-panel border border-line rounded-card" style={{ padding: '18px 20px' }}>
           <h3 style={{ margin: '0 0 4px', fontSize: 15, fontWeight: 600, color: 'var(--ink)' }}>
             Grade trend

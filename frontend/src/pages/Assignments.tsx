@@ -344,7 +344,7 @@ const Assignments: React.FC = () => {
           )}
         </div>
         {isAdmin && (
-          <div className="flex items-center gap-2 mt-1">
+          <div className="flex flex-wrap items-center gap-2 mt-1">
             {selectedTemplates.size > 0 && (
               <button
                 onClick={handleBulkExport}
@@ -392,8 +392,8 @@ const Assignments: React.FC = () => {
       {!loading && isAdmin && (
         <>
           {/* Toolbar */}
-          <div className="flex items-center gap-3 mb-8">
-            <div className="relative flex-1 max-w-[280px]">
+          <div className="flex flex-col sm:flex-row sm:items-center gap-3 mb-8">
+            <div className="relative w-full sm:max-w-[280px]">
               <svg className="absolute left-3 top-1/2 -translate-y-1/2 text-faint" width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
                 <circle cx="11" cy="11" r="8" /><path d="m21 21-4.35-4.35" />
               </svg>
@@ -405,6 +405,7 @@ const Assignments: React.FC = () => {
                 className="w-full pl-8 pr-3 py-2 bg-field-bg border border-field-border rounded-field text-[13px] text-ink placeholder:text-faintest focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent"
               />
             </div>
+            <div className="flex items-center gap-3">
             <select
               value={selectedSubject ?? ''}
               onChange={e => setSelectedSubject(e.target.value ? parseInt(e.target.value) : null)}
@@ -421,6 +422,7 @@ const Assignments: React.FC = () => {
               <option value="">All Types</option>
               {Object.entries(TYPE_LABELS).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
             </select>
+            </div>
           </div>
 
           {/* ── Shelves view ── */}
@@ -489,27 +491,44 @@ const Assignments: React.FC = () => {
                           <svg width="9" height="7" fill="none" viewBox="0 0 9 7"><path d="M1 3.5 3.5 6 8 1" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" /></svg>
                         )}
                       </button>
-                      {/* Name + desc */}
+                      {/* Name + desc + mobile metadata */}
                       <div className="flex-1 min-w-0">
                         <div className="font-semibold text-[14px] text-ink tracking-[-0.01em]">{template.name}</div>
                         {template.description && (
                           <div className="text-[12px] text-faint mt-0.5 truncate">{template.description}</div>
                         )}
+                        {/* Mobile-only metadata row (hidden on desktop) */}
+                        <div className="flex items-center gap-2 mt-1 lg:hidden">
+                          <span className="inline-block px-2 py-[2px] rounded-pill bg-track text-ink-2 text-[11px] font-semibold">
+                            {TYPE_LABELS[template.assignment_type] ?? template.assignment_type}
+                          </span>
+                          {template.max_points != null && (
+                            <span className="text-[11.5px] font-mono text-ink-2">{template.max_points} pts</span>
+                          )}
+                          {template.estimated_duration_minutes ? (
+                            <span className="text-[11.5px] font-mono text-muted">{template.estimated_duration_minutes}m</span>
+                          ) : null}
+                          {(template.total_assigned ?? 0) > 0 && (
+                            <span className="px-1.5 py-0.5 rounded bg-accent-soft text-accent text-[11px] font-mono font-semibold">
+                              {template.total_assigned} assigned
+                            </span>
+                          )}
+                        </div>
                       </div>
-                      {/* Type pill */}
-                      <span className="flex-none inline-block px-2.5 py-[3px] rounded-pill bg-track text-ink-2 text-[11.5px] font-semibold">
+                      {/* Type pill — desktop only */}
+                      <span className="hidden lg:inline-block flex-none px-2.5 py-[3px] rounded-pill bg-track text-ink-2 text-[11.5px] font-semibold">
                         {TYPE_LABELS[template.assignment_type] ?? template.assignment_type}
                       </span>
-                      {/* Points */}
-                      <span className="flex-none w-[62px] text-right font-mono tabular-nums text-[13px] text-ink-2">
+                      {/* Points — desktop only */}
+                      <span className="hidden lg:inline flex-none w-[62px] text-right font-mono tabular-nums text-[13px] text-ink-2">
                         {template.max_points ?? '—'} pts
                       </span>
-                      {/* Duration */}
-                      <span className="flex-none w-[52px] text-right font-mono tabular-nums text-[13px] text-muted">
+                      {/* Duration — desktop only */}
+                      <span className="hidden lg:inline flex-none w-[52px] text-right font-mono tabular-nums text-[13px] text-muted">
                         {template.estimated_duration_minutes ? `${template.estimated_duration_minutes}m` : '—'}
                       </span>
-                      {/* Assigned count */}
-                      <span className="flex-none w-[40px] flex justify-center">
+                      {/* Assigned count — desktop only */}
+                      <span className="hidden lg:flex flex-none w-[40px] justify-center">
                         {(template.total_assigned ?? 0) > 0 ? (
                           <span className="px-1.5 py-0.5 rounded bg-accent-soft text-accent text-[11px] font-mono font-semibold">
                             {template.total_assigned}
@@ -518,8 +537,8 @@ const Assignments: React.FC = () => {
                           <span className="text-[11px] text-faintest">—</span>
                         )}
                       </span>
-                      {/* Actions (hover-revealed) */}
-                      <div className="flex-none w-[96px] flex justify-end gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                      {/* Actions — always visible on mobile, hover-revealed on desktop */}
+                      <div className="flex-none w-[96px] flex justify-end gap-1.5 opacity-100 lg:opacity-0 lg:group-hover:opacity-100 transition-opacity">
                         <button
                           onClick={() => handleAssignTemplate(template)}
                           className="h-[30px] px-3 border border-btn-border bg-panel rounded-[7px] text-[12.5px] font-semibold text-ink hover:bg-track transition-colors"

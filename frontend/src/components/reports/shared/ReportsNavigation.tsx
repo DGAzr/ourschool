@@ -43,22 +43,24 @@ const ReportsNavigation: React.FC<ReportsNavigationProps> = ({
   ]
 
 return (
-    <div className="inline-flex items-center gap-0.5 bg-track p-[3px] rounded-[10px] mb-6">
-      {navItems.map((item) => {
-        const active = selectedView === item.view
-        return (
-          <button
-            key={item.view}
-            onClick={() => onViewChange(item.view)}
-            className={[
-              'px-3 py-1.5 rounded-[8px] text-[12.5px] font-semibold transition-all duration-150 select-none',
-              active ? 'bg-seg-active text-ink shadow-sm' : 'text-muted hover:text-ink-2',
-            ].join(' ')}
-          >
-            {item.label}
-          </button>
-        )
-      })}
+    <div className="overflow-x-auto mb-6 -mx-0.5 px-0.5 pb-0.5">
+      <div className="inline-flex items-center gap-0.5 bg-track p-[3px] rounded-[10px]">
+        {navItems.map((item) => {
+          const active = selectedView === item.view
+          return (
+            <button
+              key={item.view}
+              onClick={() => onViewChange(item.view)}
+              className={[
+                'px-3 py-1.5 rounded-[8px] text-[12.5px] font-semibold transition-all duration-150 select-none whitespace-nowrap',
+                active ? 'bg-seg-active text-ink shadow-sm' : 'text-muted hover:text-ink-2',
+              ].join(' ')}
+            >
+              {item.label}
+            </button>
+          )
+        })}
+      </div>
     </div>
   )
 }

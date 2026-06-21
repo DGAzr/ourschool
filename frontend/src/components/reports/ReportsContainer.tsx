@@ -98,50 +98,22 @@ const ReportsContainer: React.FC = () => {
   return (
     <div>
       {/* Header — matches prototype: eyebrow + title + term select + Export */}
-      <div className="no-print flex items-flex-end justify-between gap-5 mb-5">
+      <div className="no-print flex flex-wrap items-end justify-between gap-x-5 gap-y-3 mb-5">
         <div>
-          <div
-            style={{
-              fontSize: 12,
-              fontWeight: 600,
-              letterSpacing: '.08em',
-              textTransform: 'uppercase',
-              color: 'var(--faint)',
-              marginBottom: 6,
-            }}
-          >
+          <p className="text-[12px] font-semibold uppercase tracking-[.08em] text-faint mb-1.5">
             Reports
-          </div>
-          <h1
-            style={{
-              margin: 0,
-              fontSize: 27,
-              fontWeight: 700,
-              letterSpacing: '-.02em',
-              color: 'var(--ink)',
-            }}
-          >
+          </p>
+          <h1 className="text-[27px] font-bold tracking-[-0.02em] text-ink leading-none">
             {VIEW_TITLES[selectedView]}
           </h1>
         </div>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+        <div className="flex items-center gap-2.5 flex-wrap">
           {/* Term filter — shown on all views except attendance/reportcard which have their own controls */}
           {selectedView !== 'attendance' && selectedView !== 'reportcard' && terms.length > 0 && (
             <select
               value={selectedTermId ?? ''}
               onChange={(e) => setSelectedTermId(e.target.value ? Number(e.target.value) : null)}
-              style={{
-                height: 36,
-                padding: '0 30px 0 12px',
-                border: '1px solid var(--field-border)',
-                background: 'var(--field-bg)',
-                borderRadius: 9,
-                fontSize: 13,
-                fontFamily: 'inherit',
-                color: 'var(--ink-2)',
-                cursor: 'pointer',
-                outline: 'none',
-              }}
+              className="h-[36px] px-3 bg-field-bg border border-field-border rounded-field text-[13px] text-ink-2 focus:outline-none cursor-pointer"
             >
               <option value="">Current term</option>
               {terms.map((t) => (
@@ -153,17 +125,7 @@ const ReportsContainer: React.FC = () => {
           )}
           <button
             onClick={handleExport}
-            style={{
-              height: 36,
-              padding: '0 14px',
-              border: '1px solid var(--btn-border)',
-              background: 'var(--panel)',
-              borderRadius: 9,
-              fontSize: 13,
-              fontWeight: 600,
-              color: 'var(--ink-2)',
-              cursor: 'pointer',
-            }}
+            className="h-[36px] px-3.5 border border-btn-border bg-panel rounded-field text-[13px] font-semibold text-ink-2 cursor-pointer hover:bg-track transition-colors"
           >
             Export
           </button>

@@ -393,7 +393,7 @@ const Attendance: React.FC = () => {
               <p className="text-[15px] font-semibold text-ink">
                 {new Date(calYear, calMonth - 1).toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
               </p>
-              <div className="flex items-center gap-4 text-[11.5px] text-muted">
+              <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-[11.5px] text-muted">
                 <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm inline-block" style={{ background: 'var(--pos-bg)' }} />Present</span>
                 <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm inline-block" style={{ background: 'var(--exc-bg)' }} />Excused</span>
                 <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm inline-block" style={{ background: 'var(--neg-bg)' }} />Absent</span>
@@ -401,13 +401,13 @@ const Attendance: React.FC = () => {
               </div>
             </div>
             {/* Day-of-week headers */}
-            <div className="grid grid-cols-7 gap-1 mb-1">
+            <div className="grid grid-cols-7 gap-1 mb-1 min-w-[280px]">
               {['Su','Mo','Tu','We','Th','Fr','Sa'].map(d => (
                 <div key={d} className="text-center text-[10.5px] font-semibold text-faint py-1">{d}</div>
               ))}
             </div>
             {/* Calendar cells */}
-            <div className="grid grid-cols-7 gap-1">
+            <div className="grid grid-cols-7 gap-1 min-w-[280px]">
               {/* Empty cells for first week offset */}
               {Array.from({ length: firstDow }).map((_, i) => <div key={`empty-${i}`} />)}
               {days.map(({ iso, day }) => {

@@ -367,7 +367,7 @@ const Dashboard: React.FC = () => {
           </p>
         </div>
         {isAdmin && (
-          <div className="flex gap-2 mt-1">
+          <div className="flex flex-wrap gap-2 mt-1">
             <button
               onClick={() => setShowBulkAttendanceModal(true)}
               className="h-[34px] px-3 text-[13px] font-semibold rounded-field border border-btn-border bg-panel text-ink hover:bg-track transition-colors"
@@ -386,7 +386,7 @@ const Dashboard: React.FC = () => {
 
       {/* ── Health tiles ── */}
       {isAdmin && adminReport && (
-        <div className="grid grid-cols-5 gap-3 mb-6">
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 mb-6">
           <StatTile label="Students" value={String(adminReport.total_students ?? 0)} />
           <StatTile label="Active assignments" value={String(adminReport.active_assignments ?? 0)} />
           <StatTile label="Pending grades" value={String(adminReport.pending_grades ?? 0)} accent={(adminReport.pending_grades ?? 0) > 0} />
@@ -396,7 +396,7 @@ const Dashboard: React.FC = () => {
       )}
 
       {!isAdmin && studentReport && (
-        <div className="grid grid-cols-4 gap-3 mb-6">
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
           <StatTile label="Assignments" value={String(studentReport.total_assignments ?? 0)} />
           <StatTile label="Completed" value={String(studentReport.completed_assignments ?? 0)} accent />
           <StatTile label="In progress" value={String(studentReport.in_progress_assignments ?? 0)} />
@@ -405,7 +405,7 @@ const Dashboard: React.FC = () => {
       )}
 
       {/* ── Two-column body ── */}
-      <div className="grid grid-cols-[1.55fr_1fr] gap-4">
+      <div className="grid grid-cols-1 lg:grid-cols-[1.55fr_1fr] gap-4">
         {/* LEFT — Activity feed */}
         <div className="bg-panel border border-line rounded-card overflow-hidden">
           <div className="flex items-center justify-between px-5 py-3.5 border-b border-line-2">

@@ -80,9 +80,9 @@ const StudentsReport: React.FC<StudentsReportProps> = ({
   const ti = trendInfo(sel?.trend ?? 0)
 
   return (
-    <div style={{ display: 'flex', gap: 18, alignItems: 'flex-start' }}>
+    <div className="flex flex-col lg:flex-row gap-[18px] items-start">
       {/* Roster picker */}
-      <div style={{ flexShrink: 0, width: 212, display: 'flex', flexDirection: 'column', gap: 7 }}>
+      <div className="flex-shrink-0 w-full lg:w-[212px] flex flex-col gap-[7px]">
         {studentProgress.map((p) => {
           const isSelected = p.student_id === (sel?.student_id ?? -1)
           const name = displayName(p)
@@ -158,7 +158,7 @@ const StudentsReport: React.FC<StudentsReportProps> = ({
 
       {/* Detail panel */}
       {sel ? (
-        <div style={{ flex: 1, minWidth: 0 }}>
+        <div className="flex-1 min-w-0">
           {/* Student header */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 18 }}>
             <span
@@ -214,7 +214,7 @@ const StudentsReport: React.FC<StudentsReportProps> = ({
           </div>
 
           {/* Stat tiles */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4,1fr)', gap: 12, marginBottom: 16 }}>
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
             {[
               { value: `${Math.round(sel.completion_rate ?? 0)}%`, label: 'Completion', color: 'var(--ink)' },
               {
@@ -250,7 +250,7 @@ const StudentsReport: React.FC<StudentsReportProps> = ({
           </div>
 
           {/* Trend chart + subject bars */}
-          <div style={{ display: 'grid', gridTemplateColumns: '1.4fr 1fr', gap: 16, marginBottom: 16 }}>
+          <div className="grid grid-cols-1 lg:grid-cols-[1.4fr_1fr] gap-4 mb-4">
             <div className="bg-panel border border-line rounded-card" style={{ padding: '18px 20px' }}>
               <h3 style={{ margin: '0 0 4px', fontSize: 15, fontWeight: 600, color: 'var(--ink)' }}>
                 Grade trend

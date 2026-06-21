@@ -312,6 +312,7 @@ const ReportCard: React.FC<ReportCardProps> = ({
             </div>
 
             {/* Grade table */}
+            <div className="overflow-x-auto no-print:overflow-x-auto print:overflow-visible">
             <table
               style={{
                 width: '100%',
@@ -381,6 +382,7 @@ const ReportCard: React.FC<ReportCardProps> = ({
                 ))}
               </tbody>
             </table>
+            </div>
 
             {/* Summary boxes */}
             <div style={{ display: 'flex', gap: 14, marginBottom: 22 }}>
