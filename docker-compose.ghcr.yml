@@ -1,0 +1,128 @@
+# OurSchool — pull-based Docker Compose (recommended for end users)
+#
+# Pulls pre-built images from the GitHub Container Registry instead of
+# building from source. This is the fastest way to get OurSchool running.
+#
+# Quick start:
+#   cp env.EXAMPLE .env          # then edit .env — especially SECRET_KEY!
+#   docker compose -f docker-compose.ghcr.yml --profile local-db up -d
+#   open http://localhost:4173
+#
+# Use --profile local-db to start a bundled PostgreSQL container.
+# Omit the profile flag and set DATABASE_URL instead to use your own database.
+#
+# Looking for contributor / build-from-source setup?
+# Use docker-compose.yml (which builds from local Dockerfiles) instead.
+#
+# Image tag:
+#   IMAGE_TAG controls which release to pull (default: v1.0.0-beta.1).
+#   Set it in .env or override inline:
+#     IMAGE_TAG=v1.1.0 docker compose -f docker-compose.ghcr.yml up -d
+#   All published tags: https://github.com/DGAzr/ourschool/pkgs/container/ourschool-backend
+
+services:
+  db:
+    # Only started when --profile local-db is used.
+    # To use an external PostgreSQL database, omit this profile and set DATABASE_URL
+    # (or DATABASE_HOST / DATABASE_PORT / DATABASE_NAME / DATABASE_USER / DATABASE_PASSWORD)
+    # in your .env file, then run: docker compose -f docker-compose.ghcr.yml up backend frontend
+    profiles: ["local-db"]
+    image: postgres:15-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-ourschool}
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      # Bind to loopback only; the backend reaches the DB over the compose
+      # network. Override POSTGRES_BIND=0.0.0.0 only if you must expose it.
+      - "${POSTGRES_BIND:-127.0.0.1}:${POSTGRES_PORT:-5432}:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  backend:
+    image: ghcr.io/dgazr/ourschool-backend:${IMAGE_TAG:-v1.0.0-beta.1}
+    restart: unless-stopped
+    environment:
+      # Database configuration
+      # Set DATABASE_URL to use an external PostgreSQL instance and skip the local db service.
+      # If DATABASE_URL is set it takes precedence over the individual vars below.
+      DATABASE_URL: ${DATABASE_URL:-}
+      DATABASE_HOST: ${DATABASE_HOST:-db}
+      DATABASE_PORT: ${DATABASE_PORT:-5432}
+      DATABASE_NAME: ${DATABASE_NAME:-${POSTGRES_DB:-ourschool}}
+      DATABASE_USER: ${DATABASE_USER:-${POSTGRES_USER:-postgres}}
+      DATABASE_PASSWORD: ${DATABASE_PASSWORD:-${POSTGRES_PASSWORD:-postgres}}
+
+      # Security configuration
+      # No default: deployment fails fast if SECRET_KEY is unset.
+      # Generate one with: openssl rand -hex 32
+      SECRET_KEY: ${SECRET_KEY:?SECRET_KEY must be set in .env — generate with: openssl rand -hex 32}
+      ALGORITHM: ${ALGORITHM:-HS256}
+      ACCESS_TOKEN_EXPIRE_MINUTES: ${ACCESS_TOKEN_EXPIRE_MINUTES:-30}
+
+      # Backend server configuration
+      BACKEND_HOST: ${BACKEND_HOST:-0.0.0.0}
+      BACKEND_PORT: ${BACKEND_PORT:-8000}
+
+      # Logging — valid levels: DEBUG, INFO, WARNING, ERROR, CRITICAL
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      LOG_FORMAT: ${LOG_FORMAT:-json}
+
+      # CORS configuration
+      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-http://localhost:4173}
+    depends_on:
+      db:
+        condition: service_healthy
+        required: false  # skipped when db service is not running (external DB mode)
+    ports:
+      # Loopback by default; external API consumers reach it via the frontend
+      # proxy. Set BACKEND_BIND=0.0.0.0 only behind a TLS reverse proxy.
+      - "${BACKEND_BIND:-127.0.0.1}:${BACKEND_PORT:-8000}:8000"
+    command: ["./start.sh"]
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  frontend:
+    image: ghcr.io/dgazr/ourschool-frontend:${IMAGE_TAG:-v1.0.0-beta.1}
+    restart: unless-stopped
+    ports:
+      # Host port 4173 → container port 80 (nginx). Change FRONTEND_PORT to
+      # adjust only the host side; the container always listens on 80.
+      - "${FRONTEND_PORT:-4173}:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:80"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+volumes:
+  postgres_data:
