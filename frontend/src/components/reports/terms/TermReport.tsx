@@ -17,147 +17,93 @@
  */
 
 import React from 'react'
-import { BarChart3, TrendingUp, Calendar } from 'lucide-react'
 import { TermGrade } from '../../../types'
+import ReportHeader from '../shared/ReportHeader'
 
 interface TermReportProps {
   termGrades: TermGrade[]
   loading: boolean
 }
 
+const gradeColor = (p: number) =>
+  p >= 90 ? 'text-pos-fg' : p >= 80 ? 'text-info-fg' : p >= 70 ? 'text-sub-fg' : 'text-neg-fg'
+const gradeBg = (p: number) =>
+  p >= 90 ? 'bg-pos-bg text-pos-fg' : p >= 80 ? 'bg-info-bg text-info-fg' : p >= 70 ? 'bg-sub-bg text-sub-fg' : 'bg-neg-bg text-neg-fg'
+
 const TermReport: React.FC<TermReportProps> = ({ termGrades, loading }) => {
-  const calculateGradeColor = (percentage: number): string => {
-    if (percentage >= 90) return 'text-green-600'
-    if (percentage >= 80) return 'text-blue-600'
-    if (percentage >= 70) return 'text-yellow-600'
-    if (percentage >= 60) return 'text-orange-600'
-    return 'text-red-600'
-  }
-
-  const getGradeLetter = (percentage: number): string => {
-    if (percentage >= 90) return 'A'
-    if (percentage >= 80) return 'B'
-    if (percentage >= 70) return 'C'
-    if (percentage >= 60) return 'D'
-    return 'F'
-  }
-
   if (loading) {
     return (
-      <div className="text-center py-12">
-        <div className="inline-flex items-center">
-          <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-purple-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-          </svg>
-          <span className="ml-2 text-gray-600 dark:text-gray-400">Loading term grades...</span>
-        </div>
+      <div className="flex items-center justify-center py-16">
+        <svg className="h-6 w-6 animate-spin text-accent" fill="none" viewBox="0 0 24 24">
+          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+        </svg>
       </div>
     )
   }
 
   if (termGrades.length === 0) {
     return (
-      <div className="text-center py-12">
-        <div className="w-20 h-20 bg-gray-100 dark:bg-gray-800 rounded-full flex items-center justify-center mx-auto mb-4">
-          <BarChart3 className="h-10 w-10 text-gray-400 dark:text-gray-500" />
+      <>
+        <ReportHeader title="Term Grades" subtitle="Your academic performance organized by term and subject area." />
+        <div className="py-16 text-center bg-panel border border-line rounded-card">
+          <p className="text-[15px] font-semibold text-ink-2 mb-1">No term grades yet</p>
+          <p className="text-[13px] text-muted">Grades will appear here once assignments are completed and graded.</p>
         </div>
-        <h3 className="text-xl font-semibold text-gray-900 dark:text-gray-100 mb-2">No term grades available</h3>
-        <p className="text-gray-600 dark:text-gray-400">Term grades will appear here once assignments are completed and graded.</p>
-      </div>
+      </>
     )
   }
 
-  // Group grades by term
   const gradesByTerm = termGrades.reduce((acc, grade) => {
-    const termKey = grade.academic_year + ' - ' + grade.term
-    if (!acc[termKey]) {
-      acc[termKey] = []
-    }
-    acc[termKey].push(grade)
+    const key = grade.term_name
+    if (!acc[key]) acc[key] = []
+    acc[key].push(grade)
     return acc
   }, {} as Record<string, TermGrade[]>)
 
   return (
     <div className="space-y-6">
-      <div className="bg-white dark:bg-gray-800 shadow rounded-lg p-6">
-        <div className="flex items-center mb-4">
-          <Calendar className="h-5 w-5 text-amber-600 mr-2" />
-          <h3 className="text-lg font-medium text-gray-900 dark:text-gray-100">Grade by Term & Subject</h3>
-        </div>
-        <p className="text-sm text-gray-600 dark:text-gray-400 mb-6">
-          Your academic performance organized by term and subject area.
-        </p>
-        
-        <div className="space-y-8">
-          {Object.entries(gradesByTerm).map(([termKey, grades]) => (
-            <div key={termKey} className="border border-gray-200 dark:border-gray-700 rounded-lg p-4">
-              <h4 className="text-md font-semibold text-gray-900 dark:text-gray-100 mb-4 flex items-center">
-                <TrendingUp className="h-4 w-4 mr-2 text-amber-600" />
-                {termKey}
-              </h4>
-              
-              <div className="divide-y divide-gray-200 dark:divide-gray-700">
-                {grades.map((grade, index) => (
-                  <div 
-                    key={index} 
-                    className="py-4 first:pt-0 last:pb-0"
-                    style={{ 
-                      borderLeft: `4px solid ${grade.subject_color || '#9CA3AF'}`,
-                      paddingLeft: '16px',
-                      marginLeft: '8px'
-                    }}
-                  >
-                    <div className="flex items-center justify-between mb-2">
-                      <h5 
-                        className="text-sm font-medium"
-                        style={{ color: grade.subject_color || '#374151' }}
-                      >
-                        {grade.subject_name}
-                      </h5>
-                      <div className="flex items-center space-x-2">
-                        <span className={`text-lg font-bold ${calculateGradeColor(grade.percentage)}`}>
-                          {grade.percentage.toFixed(1)}%
-                        </span>
-                        <span className={`text-sm font-semibold px-2 py-1 rounded-full ${
-                          grade.percentage >= 90 ? 'bg-green-100 text-green-800' :
-                          grade.percentage >= 80 ? 'bg-blue-100 text-blue-800' :
-                          grade.percentage >= 70 ? 'bg-yellow-100 text-yellow-800' :
-                          grade.percentage >= 60 ? 'bg-orange-100 text-orange-800' :
-                          'bg-red-100 text-red-800'
-                        }`}>
-                          {getGradeLetter(grade.percentage)}
-                        </span>
-                      </div>
-                    </div>
-                    
-                    <div className="grid grid-cols-3 gap-4 text-xs text-gray-600 dark:text-gray-400">
-                      <div>
-                        <span className="font-medium">Total Points:</span>
-                        <div>{grade.total_points_earned} / {grade.total_points_possible}</div>
-                      </div>
-                      <div>
-                        <span className="font-medium">Assignments:</span>
-                        <div>{grade.total_assignments}</div>
-                      </div>
-                      <div>
-                        <span className="font-medium">Completion:</span>
-                        <div>{grade.completion_rate.toFixed(1)}%</div>
-                      </div>
-                    </div>
-                    
-                    {grade.notes && (
-                      <div className="mt-2 text-xs text-gray-500 dark:text-gray-500 italic">
-                        {grade.notes}
-                      </div>
-                    )}
+      <ReportHeader title="Term Grades" subtitle="Your academic performance organized by term and subject area." />
+
+      {Object.entries(gradesByTerm).map(([termKey, grades]) => (
+        <div key={termKey} className="bg-panel border border-line rounded-card overflow-hidden">
+          <div className="px-5 py-3.5 border-b border-line bg-panel-2">
+            <p className="text-[13px] font-semibold text-ink">{termKey}</p>
+          </div>
+          <div className="divide-y divide-line-2">
+            {grades.map((grade, i) => (
+              <div key={i} className="px-5 py-4 flex items-center gap-4">
+                <span
+                  className="flex-none w-1 self-stretch rounded-full"
+                  style={{ background: grade.subject_color || 'var(--accent)' }}
+                />
+                <div className="flex-1 min-w-0">
+                  <p className="text-[13.5px] font-semibold text-ink mb-1" style={{ color: grade.subject_color || undefined }}>
+                    {grade.subject_name}
+                  </p>
+                  <div className="flex items-center gap-4 text-[12px] text-muted font-mono">
+                    <span>{grade.earned_points} / {grade.total_points} pts</span>
+                    <span>{grade.assignments_count} assignments</span>
+                    <span>
+                      {grade.assignments_count > 0
+                        ? Math.round((grade.completed_count / grade.assignments_count) * 100)
+                        : 0}% complete
+                    </span>
                   </div>
-                ))}
+                </div>
+                <div className="flex items-center gap-2 flex-none">
+                  <span className={`font-mono font-bold text-[18px] ${gradeColor(grade.percentage)}`}>
+                    {grade.percentage.toFixed(1)}%
+                  </span>
+                  <span className={`text-[11px] font-bold px-2 py-0.5 rounded-pill ${gradeBg(grade.percentage)}`}>
+                    {grade.letter_grade}
+                  </span>
+                </div>
               </div>
-            </div>
-          ))}
+            ))}
+          </div>
         </div>
-      </div>
+      ))}
     </div>
   )
 }

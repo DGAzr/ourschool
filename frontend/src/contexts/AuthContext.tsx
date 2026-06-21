@@ -26,7 +26,7 @@ import {
   formatTimeRemaining
 } from '../utils/auth'
 import { config } from '../config/env'
-import { api } from '../services/api'
+import { api, UNAUTHORIZED_EVENT } from '../services/api'
 import { AUTH_TIMEOUTS, STORAGE_KEYS } from '../constants'
 
 interface AuthContextType {
@@ -119,7 +119,13 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     try {
       const result = await api.extendSession()
       const newToken = result.access_token
-      
+
+      // Validate the returned token before trusting/storing it.
+      if (!newToken || !isValidTokenFormat(newToken)) {
+        logout('Invalid token returned from session extension')
+        return
+      }
+
       // Update token in localStorage
       localStorage.setItem(STORAGE_KEYS.TOKEN, newToken)
       
@@ -251,6 +257,13 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     
     setIsLoading(false)
   }, [validateToken, startTokenMonitoring, logout])
+
+  // React to a server-side 401 surfaced by the API layer: clear local state.
+  useEffect(() => {
+    const onUnauthorized = () => logout('Server rejected the session (401)')
+    window.addEventListener(UNAUTHORIZED_EVENT, onUnauthorized)
+    return () => window.removeEventListener(UNAUTHORIZED_EVENT, onUnauthorized)
+  }, [logout])
 
   // Cleanup on unmount
   useEffect(() => {

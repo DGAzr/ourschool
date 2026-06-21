@@ -34,7 +34,6 @@ export const API_ENDPOINTS = {
   USERS: '/users',
   STUDENTS: '/students', 
   ASSIGNMENTS: '/assignments',
-  LESSONS: '/lessons',
   SUBJECTS: '/subjects',
   TERMS: '/terms',
   ATTENDANCE: '/attendance',

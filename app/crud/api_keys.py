@@ -15,7 +15,7 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 """CRUD operations for API keys."""
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import List, Optional, Dict, Any
 
 from sqlalchemy.orm import Session
@@ -100,7 +100,7 @@ def update_api_key(
     if expires_at is not None:
         api_key.expires_at = expires_at
     
-    api_key.updated_at = datetime.utcnow()
+    api_key.updated_at = datetime.now(timezone.utc)
     db.commit()
     db.refresh(api_key)
     
@@ -131,7 +131,7 @@ def regenerate_api_key(db: Session, api_key_id: int) -> Optional[tuple[APIKey, s
     # Update the record
     api_key.key_hash = key_hash
     api_key.key_prefix = prefix
-    api_key.updated_at = datetime.utcnow()
+    api_key.updated_at = datetime.now(timezone.utc)
     api_key.last_used_at = None  # Reset usage tracking
     
     db.commit()
@@ -144,7 +144,7 @@ def record_api_key_usage(db: Session, api_key_id: int) -> None:
     """Record that an API key was used."""
     api_key = get_api_key_by_id(db, api_key_id)
     if api_key:
-        api_key.last_used_at = datetime.utcnow()
+        api_key.last_used_at = datetime.now(timezone.utc)
         db.commit()
 
 
@@ -175,11 +175,11 @@ def get_system_api_key_stats(db: Session) -> Dict[str, Any]:
     active_keys = db.query(func.count(APIKey.id)).filter(APIKey.is_active == True).scalar()
     expired_keys = db.query(func.count(APIKey.id)).filter(
         APIKey.expires_at.isnot(None),
-        APIKey.expires_at < datetime.utcnow()
+        APIKey.expires_at < datetime.now(timezone.utc)
     ).scalar()
     
     # Keys used in the last 30 days
-    thirty_days_ago = datetime.utcnow() - timedelta(days=30)
+    thirty_days_ago = datetime.now(timezone.utc) - timedelta(days=30)
     recently_used = db.query(func.count(APIKey.id)).filter(
         APIKey.last_used_at.isnot(None),
         APIKey.last_used_at > thirty_days_ago
@@ -194,20 +194,15 @@ def get_system_api_key_stats(db: Session) -> Dict[str, Any]:
     }
 
 
-# Permission constants
+# Permission constants — single source of truth for API-key permissions.
+# Only permissions backed by a real integration endpoint are listed, so the
+# /api/meta discovery contract never advertises capabilities that don't exist.
 AVAILABLE_PERMISSIONS = [
-    "students:read",
-    "students:write", 
-    "attendance:read",
-    "attendance:write",
-    "assignments:read",
-    "assignments:write",
-    "assignments:grade",
-    "points:read",
-    "points:write",
-    "reports:read",
-    "admin:read",
-    "admin:write"
+    "students:read",     # GET /api/users/students/lookup, /students/{id}/info
+    "assignments:read",  # GET /api/integrations/assignments/{id}
+    "assignments:grade", # POST /api/integrations/assignments/{id}/grade
+    "points:read",       # GET /api/students/{id}/points (+ ledger, overview)
+    "points:write",      # POST /api/students/{id}/points/adjust
 ]
 
 

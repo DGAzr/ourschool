@@ -16,7 +16,7 @@
 
 """APIs for database backup and restore operations."""
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -31,11 +31,12 @@ from .exporters import (
     export_attendance_records,
     export_grade_history,
     export_journal_entries,
-    export_lesson_assignments,
-    export_lessons,
+    export_point_transactions,
     export_student_assignments,
+    export_student_points,
     export_student_term_grades,
     export_subjects,
+    export_system_settings,
     export_term_subjects,
     export_terms,
     export_users,
@@ -61,43 +62,47 @@ def export_system_backup(
         users_data = export_users(db)
         subjects_data = export_subjects(db)
         terms_data = export_terms(db)
-        lessons_data = export_lessons(db)
         templates_data = export_assignment_templates(db)
-        lesson_assignments_data = export_lesson_assignments(db)
         term_subjects_data = export_term_subjects(db)
         student_assignments_data = export_student_assignments(db)
         term_grades_data = export_student_term_grades(db)
         grade_history_data = export_grade_history(db)
         attendance_data = export_attendance_records(db)
         journal_data = export_journal_entries(db)
-        
+        student_points_data = export_student_points(db)
+        point_transactions_data = export_point_transactions(db)
+        system_settings_data = export_system_settings(db)
+
         # Create system backup
         backup = SystemBackup(
-            format_version="1.0",
-            backup_timestamp=datetime.utcnow(),
+            format_version="2.0",
+            backup_timestamp=datetime.now(timezone.utc),
             created_by=f"{current_user.first_name} {current_user.last_name}".strip() or current_user.email,
             system_info={
                 "total_users": len(users_data),
                 "total_subjects": len(subjects_data),
-                "total_lessons": len(lessons_data),
                 "total_assignment_templates": len(templates_data),
                 "total_student_assignments": len(student_assignments_data),
                 "total_terms": len(terms_data),
                 "total_attendance_records": len(attendance_data),
                 "total_journal_entries": len(journal_data),
+                "total_student_points": len(student_points_data),
+                "total_point_transactions": len(point_transactions_data),
+                "total_system_settings": len(system_settings_data),
             },
             users=users_data,
             subjects=subjects_data,
             terms=terms_data,
-            lessons=lessons_data,
             assignment_templates=templates_data,
-            lesson_assignments=lesson_assignments_data,
             term_subjects=term_subjects_data,
             student_assignments=student_assignments_data,
             student_term_grades=term_grades_data,
             grade_history=grade_history_data,
             attendance_records=attendance_data,
-            journal_entries=journal_data
+            journal_entries=journal_data,
+            student_points=student_points_data,
+            point_transactions=point_transactions_data,
+            system_settings=system_settings_data,
         )
         
         total_objects = sum(backup.system_info.values())
@@ -105,10 +110,10 @@ def export_system_backup(
         return backup
         
     except Exception as e:
-        logger.error(f"System backup export failed: {str(e)}")
+        logger.error(f"System backup export failed: {str(e)}", exc_info=True)
         raise HTTPException(
             status_code=500,
-            detail=f"Backup export failed: {str(e)}"
+            detail="Backup export failed. See server logs for details."
         )
 
 
@@ -124,18 +129,19 @@ def import_system_backup(
         log_backup_operation("import", current_user.email, "Starting system backup import")
         
         # Delegate to import handler
-        result = import_system_data(db, import_request.backup_data, current_user)
+        result = import_system_data(db, import_request.backup_data, current_user, import_request.import_options)
         
         if result.success:
-            log_backup_operation("import", current_user.email, f"Import completed successfully. {len(result.imported_objects)} objects imported")
+            total = sum(result.imported_counts.values()) if result.imported_counts else 0
+            log_backup_operation("import", current_user.email, f"Import completed successfully. {total} objects imported")
         else:
             log_backup_operation("import", current_user.email, f"Import failed with {len(result.errors)} errors")
             
         return result
         
     except Exception as e:
-        logger.error(f"System backup import failed: {str(e)}")
+        logger.error(f"System backup import failed: {str(e)}", exc_info=True)
         raise HTTPException(
             status_code=500,
-            detail=f"Backup import failed: {str(e)}"
+            detail="Backup import failed. See server logs for details."
         )

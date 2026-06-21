@@ -31,8 +31,18 @@ export interface AttendanceSettings {
   required_days_of_instruction: number
 }
 
+export interface GradeBand {
+  letter: string
+  min_percent: number
+}
+
+export interface GradingSettings {
+  scale: GradeBand[]
+}
+
 export interface SystemSettingsGroup {
   attendance: AttendanceSettings
+  grading: GradingSettings
 }
 
 export const settingsApi = {
@@ -61,6 +71,11 @@ export const settingsApi = {
 
   updateRequiredDaysOfInstruction: async (requiredDays: number): Promise<SystemSetting> => {
     const response = await api.put(`/settings/attendance/required-days?required_days=${requiredDays}`, {})
+    return response
+  },
+
+  updateGradeScale: async (scale: GradeBand[]): Promise<GradingSettings> => {
+    const response = await api.put('/settings/grading/scale', { scale })
     return response
   }
 }

@@ -1,21 +1,24 @@
 # OurSchool - Homeschool Management System
 
-A comprehensive web application for managing homeschool programs, supporting multiple students with attendance tracking, lesson planning, assignments, and grading. Designed to help ease the administrative burden of your homeschool program and improve the accuracy of mandatory reporting. 
+A comprehensive web application for managing homeschool programs, supporting multiple students with attendance tracking, subject configuration, assignments, and grading. Designed to help ease the administrative burden of your homeschool program and improve the accuracy of mandatory reporting. 
 
 # Current Status
-Just in time for the Fall Semester I'm releasing this as an alpha for those who want to test and use it. I find that it already works great for the needs of our program. We use it daily to record and review our progress, but I am sure there will need to be changes as we proceed through the year. I will do my best to keep the database schema as stable as possible, but I can't guarantee there won't be breaking changes yet. (Use the built in system export to take regular backups!)
+Now available as a beta release! The lessons feature has been removed in favor of a streamlined subject-and-assignment workflow. Report accuracy has been significantly improved, and the backup system now supports cross-version import with stable external IDs. The API is MCP-ready for AI integration, with a meta endpoint for enum/permission discovery.
 
-Once I've completed our first academic term I plan to release a more stable beta in January 2026. Then by summer 2026 I will feel confident enough for a stable release in time for the 2026-2027 school year.
+This is still pre-stable software; the database schema may have breaking changes until the 2026-2027 stable release. Use the built-in system backup/restore (now with dry-run preview) to safeguard your data.
 
 ## Features
 
 - **Multi-user Authentication**: Separate logins for parents (administrators) and students
 - **Attendance Tracking**: Record daily attendance with notes and status. Flexibile academic terms to support reporting needs of your jurisdiction.
-- **Lesson Planning**: Organize lessons by subject with scheduling and materials
-- **Assignment Management**: Create, track, and grade various types of assignments
+- **Subject Management**: Configure subject areas with names, descriptions, and colors
+- **Assignment Management**: Create, track, grade, and bulk-assign various types of assignments with inline grading
 - **Optional Gamification**: As assignments are graded, student points accumulate to be used as an incentive system (Points system can be disabled in Admin Center)
-- **Import/Export System**: Assignments and Lesson Plans can be exported to simple JSON files for import by other OurSchool installations. Help your fellow homeschool families by sharing.
-- **Integration API**: API can be accessed by external systems for Integration and Automation
+- **System Backup/Restore**: Full system export/import with dry-run preview, cross-version compatibility, and stable external IDs for entity resolution
+- **Integration API**: API can be accessed by external systems for integration and automation; MCP-ready with enum/permission discovery endpoint
+- **Academic Terms**: Flexible term types (semester, quarter, trimester, custom) with per-subject grading configuration
+- **Reports**: Performance reports, attendance summaries, assignment completion rates, grade trends
+- **Journal**: Teacher/student entries with date tracking
 
 
 ## Quick Start
@@ -28,6 +31,8 @@ cp env.EXAMPLE .env
 bash docker-deploy.sh
 ```
 Point your browser at localhost:4173
+
+> ⚠️ **Change the default credentials immediately after first login.** The seeded passwords (`admin123`, `student123`) are public — they are only a starting point.
 
 ### Screenshots
 ![A screenshot of the default OurSchool Admin Dashboard](/utils/OS_Login.png?raw=true "OurSchool Admin Dashboard")
@@ -60,8 +65,9 @@ pip install -r requirements.txt
 
 3. Set up environment variables:
 ```bash
-cp .env.example .env
-# Edit .env with your database credentials and secret key
+cp env.EXAMPLE .env
+# Edit .env with your database credentials and secret key.
+# Generate a strong SECRET_KEY, e.g.: openssl rand -hex 32
 ```
 
 4. **Database Initialization (First Time Setup)**:
@@ -98,6 +104,8 @@ python seed_data.py
 This creates:
 - Admin user: `admin` / `admin123`
 
+> ⚠️ **Change these credentials immediately after first login.** The seed passwords (`admin123`, `student123`) are public knowledge — they exist only to get you in the door.
+
 7. Start the API server:
 ```bash
 uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
@@ -121,21 +129,12 @@ npm run dev
 ```
 
 The application will be available at:
-- Frontend: http://localhost:3000
+- Frontend (Vite dev server, `npm run dev`): http://localhost:3000
 - API: http://localhost:8000
-- API Documentation: http://localhost:8000/docs
+- API Documentation: http://localhost:8000/docs (can be disabled with `ENABLE_API_DOCS=false`)
 
-## Database Schema
+> Note: the Docker deployment serves the frontend via nginx on port **4173** (host) → 80 (container). Port 3000 applies only to the local `npm run dev` workflow.
 
-The application includes the following main entities:
-
-- **Users**: Parent and student accounts with role-based access
-- **Students**: Student profiles linked to parent accounts
-- **Attendance Records**: Daily attendance tracking with status and notes
-- **Subjects**: Course subjects with customizable colors
-- **Lessons**: Scheduled lessons with materials and objectives
-- **Assignments**: Various assignment types with due dates and status tracking
-- **Grades**: Assessment results with points and feedback
 
 ## API Integration
 
@@ -189,14 +188,14 @@ curl -X GET "http://localhost:8000/api/points/admin/overview" \
       "total_earned": 500,
       "total_spent": 0,
       "student_id": 4,
-      "student_name": "William Ashley"
+      "student_name": "Student One"
     },
     {
       "current_balance": 300,
       "total_earned": 300,
       "total_spent": 0,
       "student_id": 5,
-      "student_name": "Evelyn Ashley"
+      "student_name": "Student Two"
     }
   ]
 }
@@ -264,7 +263,9 @@ if response.status_code == 200:
 
 #### Other Endpoints
 - `POST /api/attendance/` - Record attendance
-- `GET /api/lessons/` - List lessons with filtering
+- `GET /api/subjects/` - List subjects
+- `POST /api/subjects/` - Create subject (admin only)
+- `GET /api/meta` - Discover enum values and permissions (MCP clients)
 - `POST /api/assignments/` - Create assignments (session auth)
 
 ### Required Permissions
@@ -295,14 +296,18 @@ alembic upgrade head
 
 ### Running Tests
 
-Backend tests:
+Backend tests (pytest + httpx, run against a Postgres test database — set
+`DATABASE_URL` and `SECRET_KEY` first):
 ```bash
 pytest
 ```
 
-Frontend tests:
+Frontend checks (type-check, lint, and production build):
 ```bash
-cd frontend && npm test
+cd frontend
+npx tsc --noEmit
+npm run lint
+npm run build
 ```
 
 ## Tech Stack

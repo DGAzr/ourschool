@@ -16,20 +16,20 @@
 
 """CRUD operations for reports."""
 from datetime import date, timedelta
-from typing import List, Optional
-
-from sqlalchemy import func
-from sqlalchemy.orm import Session, joinedload
+from typing import Dict, List, Optional
 
 from app.models.assignment import (
     AssignmentStatus,
     AssignmentTemplate,
     StudentAssignment,
 )
-from app.models.attendance import AttendanceRecord, AttendanceStatus
-from app.models.lesson import Subject
+from app.models.attendance import AttendanceRecord
+from app.models.journal import JournalEntry
+from app.models.subject import Subject
 from app.models.term import Term
 from app.models.user import User, UserRole
+from sqlalchemy import func
+from sqlalchemy.orm import Session, joinedload
 from app.crud import settings as crud_settings
 from app.schemas import reports as schemas
 from app.utils.attendance import (
@@ -44,13 +44,144 @@ from app.utils.attendance import (
 from app.utils.performance import track_query_performance
 
 
+from app.utils.grading import (  # noqa: F401 — calculate_letter_grade re-exported for backward compatibility
+    calculate_letter_grade,
+    compute_weighted_grade,
+    effective_due_date,
+    term_membership_filter,
+)
+
+
+def _is_graded(assignment) -> bool:
+    """Whether an assignment should count toward grade totals.
+
+    Requires a recorded score, and tolerates legacy/imported rows where the
+    status was set to GRADED but the ``is_graded`` flag was never written
+    (e.g. backup imports). A score of 0 is a valid grade.
+    """
+    return assignment.points_earned is not None and (
+        assignment.is_graded or assignment.status == AssignmentStatus.GRADED
+    )
+
+
+def _grade_item(assignment):
+    """Build a (points_earned, max_points, assignment_type) tuple for grading."""
+    template = assignment.template
+    return (
+        assignment.points_earned,
+        assignment.custom_max_points or (template.max_points if template else None),
+        template.assignment_type if template else None,
+    )
+
+
+def _letter_grade(p: float, scale=None) -> str:
+    """Convert percentage to letter grade using the configured scale."""
+    return calculate_letter_grade(p, scale)
+
+
+def _glance_status(overall: float) -> str:
+    """Derive the student status label for the overview glance table."""
+    if overall >= 88:
+        return "Thriving"
+    if overall >= 78:
+        return "Steady"
+    return "Needs attention"
+
+
+def _build_weekly_series(
+    graded_assignments: list,
+    type_weights: dict,
+    term: "Term",
+    num_buckets: int = 8,
+) -> List[float]:
+    """Bucket graded assignments into ~num_buckets weekly averages over a term."""
+    if not graded_assignments or not term:
+        return []
+
+    # Use graded_date or fall back to due_date / assigned_date
+    def _date(a):
+        return getattr(a, "graded_date", None) or a.due_date or a.assigned_date
+
+    dated = [(a, _date(a)) for a in graded_assignments if _date(a)]
+    if not dated:
+        return []
+
+    dated.sort(key=lambda x: x[1])
+    lo = min(d for _, d in dated)
+    hi = max(d for _, d in dated)
+    total_days = max((hi - lo).days, 1)
+    bucket_days = max(total_days // num_buckets, 1)
+
+    series: List[float] = []
+    for i in range(num_buckets):
+        bucket_start = lo + timedelta(days=i * bucket_days)
+        bucket_end = lo + timedelta(days=(i + 1) * bucket_days)
+        bucket = [
+            a for a, d in dated
+            if bucket_start <= d < bucket_end
+        ]
+        # Also capture the last bucket's tail
+        if i == num_buckets - 1:
+            bucket = [a for a, d in dated if d >= bucket_start]
+        if not bucket:
+            continue
+        _, _, pct = compute_weighted_grade((_grade_item(a) for a in bucket), type_weights)
+        series.append(round(pct, 1))
+
+    return series
+
+
+def _journal_summary(db: Session, student_id: int, term: Optional["Term"] = None) -> str:
+    """Return a short journal effort summary string for the given student."""
+    query = db.query(JournalEntry).filter(JournalEntry.student_id == student_id)
+    if term:
+        query = query.filter(
+            JournalEntry.entry_date >= term.start_date,
+            JournalEntry.entry_date <= term.end_date,
+        )
+    entries = query.order_by(JournalEntry.entry_date.desc()).all()
+    if not entries:
+        return "No journal entries this term"
+
+    total = len(entries)
+    # Streak: count consecutive days from most recent
+    dates = sorted({e.entry_date.date() if hasattr(e.entry_date, 'date') else e.entry_date for e in entries}, reverse=True)
+    streak = 1
+    for i in range(1, len(dates)):
+        if (dates[i - 1] - dates[i]).days == 1:
+            streak += 1
+        else:
+            break
+
+    # Check for lapsed journaling (>7 days since last entry)
+    today = date.today()
+    last_date = dates[0]
+    days_since = (today - last_date).days
+    if days_since > 7:
+        return f"No entries in {days_since} days"
+    if streak >= 3:
+        return f"{streak}-day streak, {total} {'entry' if total == 1 else 'entries'}"
+    return f"{total} {'entry' if total == 1 else 'entries'} this term"
+
+
+def _compute_trend_int(series: List[float]) -> int:
+    """Compute signed trend integer from a grade series (last - first)."""
+    if len(series) < 2:
+        return 0
+    return int(round(series[-1] - series[0]))
+
+
 def get_student_report(db: Session, student_id: int):
     """Get a report for a single student."""
     assignments = (
         db.query(StudentAssignment)
         .filter(StudentAssignment.student_id == student_id)
+        .options(joinedload(StudentAssignment.template))
         .all()
     )
+
+    type_weights = crud_settings.get_assignment_type_weights(db)
+    grade_scale = crud_settings.get_grade_scale(db)
 
     total_assignments = len(assignments)
     completed_assignments = sum(
@@ -63,30 +194,29 @@ def get_student_report(db: Session, student_id: int):
         1 for a in assignments if a.status == AssignmentStatus.SUBMITTED
     )
 
-    graded_assignments = [
-        a for a in assignments if a.is_graded and a.percentage_grade is not None
-    ]
-    if graded_assignments:
-        average_grade = sum(a.percentage_grade for a in graded_assignments) / len(
-            graded_assignments
-        )
-    else:
-        average_grade = 0.0
+    graded_assignments = [a for a in assignments if _is_graded(a)]
+    _, _, average_grade = compute_weighted_grade(
+        (_grade_item(a) for a in graded_assignments), type_weights
+    )
 
-    # Current term grade
+    # Current term grade (assignments whose effective due date falls in the term)
     active_term = db.query(Term).filter(Term.is_active).first()
     current_term_grade = 0.0
     if active_term:
         term_assignments = [
             a
             for a in graded_assignments
-            if a.assigned_date >= active_term.start_date
-            and a.assigned_date <= active_term.end_date
+            if active_term.start_date
+            <= effective_due_date(a)
+            <= active_term.end_date
         ]
-        if term_assignments:
-            current_term_grade = sum(
-                a.percentage_grade for a in term_assignments
-            ) / len(term_assignments)
+        _, _, current_term_grade = compute_weighted_grade(
+            (_grade_item(a) for a in term_assignments), type_weights
+        )
+
+    grade_series = _build_weekly_series(graded_assignments, type_weights, active_term)
+    trend = _compute_trend_int(grade_series)
+    journal_str = _journal_summary(db, student_id, active_term)
 
     return schemas.StudentReport(
         total_assignments=total_assignments,
@@ -95,6 +225,9 @@ def get_student_report(db: Session, student_id: int):
         pending_grades=pending_grades,
         average_grade=round(average_grade, 2),
         current_term_grade=round(current_term_grade, 2),
+        grade_series=grade_series,
+        trend=trend,
+        journal_summary=journal_str,
     )
 
 
@@ -126,23 +259,317 @@ def get_admin_report(db: Session):
         .count()
     )
 
-    # Calculate overall average grade
-    avg_grade_query = (
-        db.query(func.avg(StudentAssignment.percentage_grade))
-        .filter(
-            StudentAssignment.is_graded,
-            StudentAssignment.percentage_grade.isnot(None),
+    # Overall average grade = mean of each student's points-weighted grade.
+    # Students with no graded work are excluded so they don't drag the mean to 0.
+    type_weights = crud_settings.get_assignment_type_weights(db)
+    grade_scale = crud_settings.get_grade_scale(db)
+    students = (
+        db.query(User)
+        .filter(User.role == UserRole.STUDENT)
+        .options(
+            joinedload(User.assigned_assignments).joinedload(
+                StudentAssignment.template
+            )
         )
-        .scalar()
+        .all()
     )
+
+    student_grades = []
+    for student in students:
+        graded = [a for a in student.assigned_assignments if _is_graded(a)]
+        if not graded:
+            continue
+        _, possible, percentage = compute_weighted_grade(
+            (_grade_item(a) for a in graded), type_weights
+        )
+        if possible > 0:
+            student_grades.append(percentage)
+
+    average_grade = (
+        sum(student_grades) / len(student_grades) if student_grades else 0.0
+    )
+
+    # ── Rich overview fields ───────────────────────────────────────────────────
+
+    active_term = db.query(Term).filter(Term.is_active).first()
+    prior_term = None
+    if active_term:
+        prior_term = (
+            db.query(Term)
+            .filter(Term.end_date < active_term.start_date)
+            .order_by(Term.end_date.desc())
+            .first()
+        )
+
+    # Class-average weekly series (all students' graded work in the active term)
+    all_graded_in_term: list = []
+    if active_term:
+        all_graded_in_term = (
+            db.query(StudentAssignment)
+            .join(AssignmentTemplate, StudentAssignment.template_id == AssignmentTemplate.id)
+            .filter(
+                StudentAssignment.is_graded == True,  # noqa: E712
+                StudentAssignment.points_earned.isnot(None),
+                term_membership_filter(active_term),
+            )
+            .options(joinedload(StudentAssignment.template))
+            .all()
+        )
+    class_average_series = _build_weekly_series(all_graded_in_term, type_weights, active_term)
+
+    # Prior-term class average for delta
+    prior_avg = 0.0
+    if prior_term:
+        prior_graded = (
+            db.query(StudentAssignment)
+            .join(AssignmentTemplate, StudentAssignment.template_id == AssignmentTemplate.id)
+            .filter(
+                StudentAssignment.is_graded == True,  # noqa: E712
+                StudentAssignment.points_earned.isnot(None),
+                term_membership_filter(prior_term),
+            )
+            .options(joinedload(StudentAssignment.template))
+            .all()
+        )
+        if prior_graded:
+            _, _, prior_avg = compute_weighted_grade(
+                (_grade_item(a) for a in prior_graded), type_weights
+            )
+
+    def _fmt_delta(current: float, prior: float, unit: str = "pts") -> tuple:
+        diff = round(current - prior)
+        if diff > 0:
+            return f"▲ {diff} {unit} vs last term", True
+        if diff < 0:
+            return f"▼ {abs(diff)} {unit} vs last term", False
+        return "— same as last term", True
+
+    # Completion rate KPI
+    current_completion = (
+        (completed_assignments / total_assignments * 100) if total_assignments > 0 else 0.0
+    )
+    prior_completion = 0.0
+    if prior_term and prior_graded:
+        # Approximate: completed in prior term / total in prior term
+        prior_total_in_term = len(prior_graded)  # graded = completed
+        prior_all_in_term = (
+            db.query(StudentAssignment)
+            .join(AssignmentTemplate, StudentAssignment.template_id == AssignmentTemplate.id)
+            .filter(term_membership_filter(prior_term))
+            .count()
+        )
+        prior_completion = (
+            prior_total_in_term / prior_all_in_term * 100 if prior_all_in_term > 0 else 0.0
+        )
+
+    # Attendance KPI (current term, all students)
+    current_att_rate = 0.0
+    prior_att_rate = 0.0
+    all_student_ids = [s.id for s in students]
+    if active_term and all_student_ids:
+        att_records = (
+            db.query(AttendanceRecord)
+            .filter(
+                AttendanceRecord.student_id.in_(all_student_ids),
+                AttendanceRecord.date >= active_term.start_date,
+                AttendanceRecord.date <= active_term.end_date,
+            )
+            .all()
+        )
+        if att_records:
+            total_present = sum(1 for r in att_records if r.status.value == "present")
+            current_att_rate = total_present / len(att_records) * 100
+
+    if prior_term and all_student_ids:
+        prior_att_records = (
+            db.query(AttendanceRecord)
+            .filter(
+                AttendanceRecord.student_id.in_(all_student_ids),
+                AttendanceRecord.date >= prior_term.start_date,
+                AttendanceRecord.date <= prior_term.end_date,
+            )
+            .all()
+        )
+        if prior_att_records:
+            total_present_prior = sum(1 for r in prior_att_records if r.status.value == "present")
+            prior_att_rate = total_present_prior / len(prior_att_records) * 100
+
+    # Journaling KPI (entries this week across all students)
+    week_start = date.today() - timedelta(days=date.today().weekday())
+    journal_count_week = (
+        db.query(JournalEntry)
+        .filter(
+            JournalEntry.student_id.in_(all_student_ids),
+            JournalEntry.entry_date >= week_start,
+        )
+        .count()
+        if all_student_ids else 0
+    )
+    prior_week_start = week_start - timedelta(days=7)
+    journal_count_prior = (
+        db.query(JournalEntry)
+        .filter(
+            JournalEntry.student_id.in_(all_student_ids),
+            JournalEntry.entry_date >= prior_week_start,
+            JournalEntry.entry_date < week_start,
+        )
+        .count()
+        if all_student_ids else 0
+    )
+
+    avg_delta_text, avg_delta_pos = _fmt_delta(average_grade, prior_avg)
+    comp_delta_text, comp_delta_pos = _fmt_delta(current_completion, prior_completion)
+    att_delta_text, att_delta_pos = _fmt_delta(current_att_rate, prior_att_rate)
+    jrnl_diff = journal_count_week - journal_count_prior
+    jrnl_delta_text = (
+        f"▲ {jrnl_diff} vs last week" if jrnl_diff > 0
+        else f"▼ {abs(jrnl_diff)} vs last week" if jrnl_diff < 0
+        else "— same as last week"
+    )
+
+    # Build KPI sparklines from class_average_series (resampled for visual variety)
+    def _kpi_series(values: list, count: int = 8) -> List[float]:
+        """Return up to `count` evenly-spaced items from `values`."""
+        if not values:
+            return []
+        if len(values) <= count:
+            return values
+        step = (len(values) - 1) / (count - 1)
+        return [values[int(round(i * step))] for i in range(count)]
+
+    kpis = [
+        schemas.MetricTrend(
+            label="Class average",
+            value=f"{round(average_grade)}%",
+            series=_kpi_series(class_average_series),
+            delta=avg_delta_text,
+            delta_positive=avg_delta_pos,
+        ),
+        schemas.MetricTrend(
+            label="Completion",
+            value=f"{round(current_completion)}%",
+            series=_kpi_series(class_average_series),
+            delta=comp_delta_text,
+            delta_positive=comp_delta_pos,
+        ),
+        schemas.MetricTrend(
+            label="Attendance",
+            value=f"{round(current_att_rate)}%",
+            series=[],
+            delta=att_delta_text,
+            delta_positive=att_delta_pos,
+        ),
+        schemas.MetricTrend(
+            label="Journaling",
+            value=str(journal_count_week),
+            series=[],
+            delta=jrnl_delta_text + " (entries this week)",
+            delta_positive=jrnl_diff >= 0,
+        ),
+    ]
+
+    # Subject averages (class-wide average per subject, active term)
+    subjects_all = db.query(Subject).order_by(Subject.name).all()
+    subject_averages: List[schemas.SubjectAverage] = []
+    for subj in subjects_all:
+        subj_graded = (
+            db.query(StudentAssignment)
+            .join(AssignmentTemplate, StudentAssignment.template_id == AssignmentTemplate.id)
+            .filter(
+                AssignmentTemplate.subject_id == subj.id,
+                StudentAssignment.is_graded == True,  # noqa: E712
+                StudentAssignment.points_earned.isnot(None),
+            )
+            .options(joinedload(StudentAssignment.template))
+            .all()
+        )
+        if not subj_graded:
+            continue
+        if active_term:
+            term_subj_graded = [
+                a for a in subj_graded
+                if active_term.start_date <= effective_due_date(a) <= active_term.end_date
+            ]
+        else:
+            term_subj_graded = subj_graded
+        if not term_subj_graded:
+            continue
+        _, _, pct = compute_weighted_grade((_grade_item(a) for a in term_subj_graded), type_weights)
+        subject_averages.append(
+            schemas.SubjectAverage(
+                subject_id=subj.id,
+                subject_name=subj.name,
+                subject_color=subj.color,
+                percentage=round(pct, 1),
+                letter_grade=_letter_grade(pct, grade_scale),
+                flagged=pct < 80,
+            )
+        )
+
+    # Students-at-a-glance rows (reuse student grades already computed above)
+    students_glance: List[schemas.StudentGlanceRow] = []
+    for student in students:
+        s_graded = [a for a in student.assigned_assignments if _is_graded(a)]
+        if not s_graded:
+            s_grade = 0.0
+        else:
+            _, _, s_grade = compute_weighted_grade(
+                (_grade_item(a) for a in s_graded), type_weights
+            )
+
+        s_total = len(student.assigned_assignments)
+        s_completed = sum(
+            1 for a in student.assigned_assignments if a.status == AssignmentStatus.GRADED
+        )
+        s_completion = (s_completed / s_total * 100) if s_total > 0 else 0.0
+
+        # Attendance rate for current term
+        s_att_rate: Optional[float] = None
+        if active_term:
+            s_att_records = (
+                db.query(AttendanceRecord)
+                .filter(
+                    AttendanceRecord.student_id == student.id,
+                    AttendanceRecord.date >= active_term.start_date,
+                    AttendanceRecord.date <= active_term.end_date,
+                )
+                .all()
+            )
+            s_att_rate = calculate_attendance_rate(s_att_records)
+
+        # Trend: grade series for this student
+        s_series = _build_weekly_series(s_graded, type_weights, active_term)
+        s_trend = _compute_trend_int(s_series)
+
+        # Effort: based on journal activity
+        s_journal_summary = _journal_summary(db, student.id, active_term)
+        s_effort = "journaling lapsed" if "No entries" in s_journal_summary else "consistent"
+
+        students_glance.append(
+            schemas.StudentGlanceRow(
+                student_id=student.id,
+                name=f"{student.first_name} {student.last_name}",
+                grade=round(s_grade, 1),
+                letter=_letter_grade(s_grade, grade_scale),
+                trend=s_trend,
+                completion=round(s_completion, 1),
+                attendance_rate=round(s_att_rate, 1) if s_att_rate is not None else None,
+                effort=s_effort,
+                status=_glance_status(s_grade),
+            )
+        )
 
     return schemas.AdminReport(
         total_students=total_students,
         active_assignments=active_assignments,
         pending_grades=pending_grades,
-        average_grade=round(avg_grade_query, 2) if avg_grade_query else 0.0,
+        average_grade=round(average_grade, 2),
         total_assignments=total_assignments,
         completed_assignments=completed_assignments,
+        kpis=kpis,
+        class_average_series=class_average_series,
+        subject_averages=subject_averages,
+        students_glance=students_glance,
     )
 
 
@@ -158,6 +585,9 @@ def get_student_term_grades(db: Session, student_id: int, term_id: Optional[int]
         if not active_term:
             return []
 
+    type_weights = crud_settings.get_assignment_type_weights(db)
+    grade_scale = crud_settings.get_grade_scale(db)
+
     assignments = (
         db.query(StudentAssignment)
         .join(
@@ -165,8 +595,7 @@ def get_student_term_grades(db: Session, student_id: int, term_id: Optional[int]
         )
         .filter(
             StudentAssignment.student_id == student_id,
-            StudentAssignment.assigned_date >= active_term.start_date,
-            StudentAssignment.assigned_date <= active_term.end_date,
+            term_membership_filter(active_term),
         )
         .options(
             joinedload(StudentAssignment.template).joinedload(
@@ -189,37 +618,29 @@ def get_student_term_grades(db: Session, student_id: int, term_id: Optional[int]
                 "subject_id": subject.id,
                 "subject_name": subject.name,
                 "subject_color": subject.color,
-                "total_points": 0,
-                "earned_points": 0,
                 "assignments_count": 0,
                 "completed_count": 0,
+                "graded_items": [],
             }
 
-        max_points = assign.custom_max_points or assign.template.max_points
-        subject_grades[subject.id]["total_points"] += max_points
-        subject_grades[subject.id]["earned_points"] += assign.points_earned or 0
         subject_grades[subject.id]["assignments_count"] += 1
         if assign.status == AssignmentStatus.GRADED:
             subject_grades[subject.id]["completed_count"] += 1
 
+        # Only graded assignments contribute to the grade — ungraded ones
+        # shouldn't count as 0 earned and unfairly lower the percentage.
+        if _is_graded(assign):
+            subject_grades[subject.id]["graded_items"].append(_grade_item(assign))
+
     result = []
     for _subject_id, data in subject_grades.items():
-        percentage = (
-            (data["earned_points"] / data["total_points"]) * 100
-            if data["total_points"] > 0
-            else 0
+        earned_points, total_points, percentage = compute_weighted_grade(
+            data.pop("graded_items"), type_weights
         )
+        data["earned_points"] = earned_points
+        data["total_points"] = total_points
 
-        if percentage >= 90:
-            letter_grade = "A"
-        elif percentage >= 80:
-            letter_grade = "B"
-        elif percentage >= 70:
-            letter_grade = "C"
-        elif percentage >= 60:
-            letter_grade = "D"
-        else:
-            letter_grade = "F"
+        letter_grade = calculate_letter_grade(percentage, grade_scale)
 
         result.append(
             schemas.TermGrade(
@@ -243,15 +664,12 @@ def _calculate_subject_trend_data(db: Session, student_id: int, subject_id: int,
         StudentAssignment.graded_date.isnot(None)
     )
     
-    # Filter by term if specified
+    # Filter by term if specified (membership by effective due date)
     if term_id:
         from app.models.term import Term
         term = db.query(Term).filter(Term.id == term_id).first()
         if term:
-            query = query.filter(
-                StudentAssignment.assigned_date >= term.start_date,
-                StudentAssignment.assigned_date <= term.end_date
-            )
+            query = query.filter(term_membership_filter(term))
     
     # Get assignments ordered by graded date
     assignments = query.order_by(StudentAssignment.graded_date).all()
@@ -295,6 +713,7 @@ def _calculate_subject_trend_data(db: Session, student_id: int, subject_id: int,
 
 def get_student_subject_performance(db: Session, student_id: int, term_id: Optional[int] = None):
     """Get a student's performance by subject, optionally filtered by term."""
+    grade_scale = crud_settings.get_grade_scale(db)
     term_grades_by_subject = {}
 
     term_grades = get_student_term_grades(db, student_id, term_id=term_id)
@@ -314,30 +733,32 @@ def get_student_subject_performance(db: Session, student_id: int, term_id: Optio
         subj_data = term_grades_by_subject[grade.subject_id]
         subj_data["total_assignments"] += grade.assignments_count
         subj_data["completed_assignments"] += grade.completed_count
-        subj_data["total_percentage"] += grade.percentage
-        subj_data["term_count"] += 1
         subj_data["terms"].append(grade)
 
     result = []
     for _subject_id, data in term_grades_by_subject.items():
-        avg_percentage = (
-            data["total_percentage"] / data["term_count"]
-            if data["term_count"] > 0
-            else 0
-        )
+        # Roll terms up by point volume rather than averaging per-term
+        # percentages, so a low-volume term doesn't count as much as a
+        # high-volume one. Each term percentage is already type-weighted.
+        points_earned = sum(term.earned_points for term in data["terms"])
+        points_possible = sum(term.total_points for term in data["terms"])
+        if points_possible > 0:
+            avg_percentage = (
+                sum(term.percentage * term.total_points for term in data["terms"])
+                / points_possible
+            )
+        else:
+            avg_percentage = 0.0
 
         # Calculate trend data for this subject
         trend_data = _calculate_subject_trend_data(db, student_id, data["subject_id"], term_id)
-        
-        # Calculate total points from terms
-        points_earned = sum(term.earned_points for term in data["terms"])
-        points_possible = sum(term.total_points for term in data["terms"])
 
         result.append(
             schemas.SubjectPerformance(
                 subject_id=data["subject_id"],
                 subject_name=data["subject_name"],
                 average_percentage=round(avg_percentage, 2),
+                letter_grade=calculate_letter_grade(avg_percentage, grade_scale),
                 total_assignments=data["total_assignments"],
                 completed_assignments=data["completed_assignments"],
                 points_earned=points_earned,
@@ -364,9 +785,16 @@ def get_all_students_progress(db: Session, term_id: Optional[int] = None):
     students = (
         db.query(User)
         .filter(User.role == UserRole.STUDENT)
-        .options(joinedload(User.assigned_assignments))
+        .options(
+            joinedload(User.assigned_assignments).joinedload(
+                StudentAssignment.template
+            )
+        )
         .all()
     )
+
+    type_weights = crud_settings.get_assignment_type_weights(db)
+    grade_scale = crud_settings.get_grade_scale(db)
 
     result = []
     for student in students:
@@ -379,80 +807,58 @@ def get_all_students_progress(db: Session, term_id: Optional[int] = None):
         )
 
         graded_assignments = [
-            a
-            for a in student.assigned_assignments
-            if a.is_graded and a.percentage_grade is not None
+            a for a in student.assigned_assignments if _is_graded(a)
         ]
-        if graded_assignments:
-            avg_grade = sum(a.percentage_grade for a in graded_assignments) / len(
-                graded_assignments
-            )
-        else:
-            avg_grade = 0.0
+        _, _, avg_grade = compute_weighted_grade(
+            (_grade_item(a) for a in graded_assignments), type_weights
+        )
 
-        # Current term grade
+        # Current term grade (effective due date within the selected/active term)
         current_term_grade = 0.0
         if active_term:
             term_assignments = [
                 a
                 for a in graded_assignments
-                if a.assigned_date >= active_term.start_date
-                and a.assigned_date <= active_term.end_date
+                if active_term.start_date
+                <= effective_due_date(a)
+                <= active_term.end_date
             ]
-            if term_assignments:
-                current_term_grade = sum(
-                    a.percentage_grade for a in term_assignments
-                ) / len(term_assignments)
+            _, _, current_term_grade = compute_weighted_grade(
+                (_grade_item(a) for a in term_assignments), type_weights
+            )
 
         # Get subject performance for the student (filtered by term if specified)
         # Note: This could be optimized by batching all students' subject performance queries
         student_subject_performance = get_student_subject_performance(db, student.id, term_id=term_id)
 
-        # Calculate attendance rate for the student
-        # Use current academic year or active term dates for attendance calculation
+        # Attendance rate, scoped to the selected/active term's date range and
+        # using the recorded-days rule (attended / recorded days).
         if active_term:
-            # Use the academic year from the active term to get full year attendance
-            try:
-                start_date, end_date = resolve_date_range_from_academic_year(
-                    db, active_term.academic_year, None, None
+            attendance_records = (
+                db.query(AttendanceRecord)
+                .filter(
+                    AttendanceRecord.student_id == student.id,
+                    AttendanceRecord.date >= active_term.start_date,
+                    AttendanceRecord.date <= active_term.end_date,
                 )
-                attendance_records = (
-                    db.query(AttendanceRecord)
-                    .filter(
-                        AttendanceRecord.student_id == student.id,
-                        AttendanceRecord.date >= start_date,
-                        AttendanceRecord.date <= end_date,
-                    )
-                    .all()
-                )
-                required_days_of_instruction = get_required_days_of_instruction(db)
-                student_attendance_rate = calculate_attendance_rate(attendance_records, required_days_of_instruction)
-            except (ValueError, AttributeError):
-                # Fallback if academic year lookup fails
-                student_attendance_rate = None
+                .all()
+            )
+            student_attendance_rate = calculate_attendance_rate(attendance_records)
         else:
             student_attendance_rate = None
 
         # Calculate additional fields
         pending_assignments = total_assignments - completed_assignments
         overdue_assignments = sum(
-            1 for a in student.assigned_assignments 
-            if a.status in [AssignmentStatus.IN_PROGRESS, AssignmentStatus.NOT_STARTED] 
-            and a.due_date and a.due_date < date.today()
+            1 for a in student.assigned_assignments
+            if a.status in [AssignmentStatus.IN_PROGRESS, AssignmentStatus.NOT_STARTED]
+            and (a.extended_due_date or a.due_date)
+            and (a.extended_due_date or a.due_date) < date.today()
         )
         completion_rate = (completed_assignments / total_assignments * 100) if total_assignments > 0 else 0
-        
-        # Get current term letter grade
-        if current_term_grade >= 90:
-            current_term_letter_grade = "A"
-        elif current_term_grade >= 80:
-            current_term_letter_grade = "B"
-        elif current_term_grade >= 70:
-            current_term_letter_grade = "C"
-        elif current_term_grade >= 60:
-            current_term_letter_grade = "D"
-        else:
-            current_term_letter_grade = "F"
+
+        current_term_letter_grade = calculate_letter_grade(current_term_grade, grade_scale)
+        overall_letter_grade = calculate_letter_grade(avg_grade, grade_scale)
 
         # Get last activity date
         last_activity_date = None
@@ -465,6 +871,10 @@ def get_all_students_progress(db: Session, term_id: Optional[int] = None):
             if latest_assignment:
                 last_activity_date = latest_assignment.updated_at.isoformat()
 
+        grade_series = _build_weekly_series(graded_assignments, type_weights, active_term)
+        s_trend = _compute_trend_int(grade_series)
+        journal_str = _journal_summary(db, student.id, active_term)
+
         result.append(
             schemas.StudentProgress(
                 student_id=student.id,
@@ -476,6 +886,7 @@ def get_all_students_progress(db: Session, term_id: Optional[int] = None):
                 current_term_percentage=round(current_term_grade, 2),
                 current_term_letter_grade=current_term_letter_grade,
                 overall_grade=round(avg_grade, 2),
+                overall_letter_grade=overall_letter_grade,
                 total_assignments=total_assignments,
                 completed_assignments=completed_assignments,
                 pending_assignments=pending_assignments,
@@ -486,6 +897,9 @@ def get_all_students_progress(db: Session, term_id: Optional[int] = None):
                 last_activity_date=last_activity_date,
                 subjects=student_subject_performance,
                 subject_grades=student_subject_performance,  # Provide both for compatibility
+                grade_series=grade_series,
+                trend=s_trend,
+                journal_summary=journal_str,
             )
         )
 
@@ -562,10 +976,10 @@ def get_student_attendance_report(
     
     # Get attendance statistics
     attendance_stats = get_attendance_statistics(attendance_records)
-    attendance_rate = calculate_attendance_rate(attendance_records, required_days_of_instruction)
+    attendance_rate = calculate_attendance_rate(attendance_records) or 0.0
     first_absence_date = find_first_absence_date(attendance_records)
     recent_activity_summary = generate_recent_activity_summary(attendance_records)
-    
+
     # Create summary
     summary = schemas.AttendanceReportSummary(
         student_id=student.id,
@@ -644,7 +1058,7 @@ def get_bulk_attendance_report(
 
         # Calculate totals using utility functions
         attendance_stats = get_attendance_statistics(attendance_records)
-        attendance_rate = calculate_attendance_rate(attendance_records, required_days_of_instruction)
+        attendance_rate = calculate_attendance_rate(attendance_records) or 0.0
         first_absence_date = find_first_absence_date(attendance_records)
         recent_activity_summary = generate_recent_activity_summary(attendance_records)
         
@@ -771,10 +1185,7 @@ def get_assignment_report(
     if term_id:
         term = db.query(Term).filter(Term.id == term_id).first()
         if term:
-            query = query.filter(
-                StudentAssignment.assigned_date >= term.start_date,
-                StudentAssignment.assigned_date <= term.end_date,
-            )
+            query = query.filter(term_membership_filter(term))
 
     if status:
         query = query.filter(StudentAssignment.status == status)
@@ -782,23 +1193,26 @@ def get_assignment_report(
     # Execute query and get results
     assignment_data = query.order_by(StudentAssignment.assigned_date.desc()).all()
 
-    # Pre-fetch all terms to avoid N+1 queries
+    # Pre-fetch all terms once for efficient date-range lookup
     all_terms = db.query(Term).all()
-    term_lookup = {}
-    for term in all_terms:
-        for single_date in (term.start_date + timedelta(days=x) for x in range((term.end_date - term.start_date).days + 1)):
-            term_lookup[single_date] = (term.id, term.name)
+
+    def _find_term_for_date(d):
+        """Find term containing date d using linear scan over terms."""
+        if not d:
+            return None, None
+        for t in all_terms:
+            if t.start_date <= d <= t.end_date:
+                return t.id, t.name
+        return None, None
 
     # Build assignment list
     assignments = []
 
     for data in assignment_data:
-        # Determine term for this assignment using pre-built lookup
-        term_id_for_assignment = None
-        term_name_for_assignment = None
-
-        if data.assigned_date and data.assigned_date in term_lookup:
-            term_id_for_assignment, term_name_for_assignment = term_lookup[data.assigned_date]
+        # Tag with the term containing the effective due date (due_date or assigned_date)
+        term_id_for_assignment, term_name_for_assignment = _find_term_for_date(
+            data.due_date or data.assigned_date
+        )
 
         assignments.append(
             schemas.AssignmentReportItem(
@@ -806,7 +1220,7 @@ def get_assignment_report(
                 template_id=data.template_id,
                 assignment_name=data.assignment_name,
                 assignment_type=(
-                    data.assignment_type.value if data.assignment_type else "Unknown"
+                    data.assignment_type if data.assignment_type else "Unknown"
                 ),
                 student_id=data.student_id,
                 student_name=data.student_name,
@@ -834,7 +1248,7 @@ def get_assignment_report(
     total_assignments = len(assignments)
     graded_assignments = sum(1 for a in assignments if a.is_graded)
     pending_assignments = sum(
-        1 for a in assignments if a.status in ["submitted", "completed"]
+        1 for a in assignments if a.status == AssignmentStatus.SUBMITTED.value
     )
     overdue_assignments = sum(1 for a in assignments if a.status == "overdue")
 
@@ -892,35 +1306,6 @@ def get_assignment_report(
     )
 
 
-def calculate_letter_grade(percentage: float) -> str:
-    """Calculate letter grade from percentage."""
-    if percentage >= 97:
-        return "A+"
-    if percentage >= 93:
-        return "A"
-    if percentage >= 90:
-        return "A-"
-    if percentage >= 87:
-        return "B+"
-    if percentage >= 83:
-        return "B"
-    if percentage >= 80:
-        return "B-"
-    if percentage >= 77:
-        return "C+"
-    if percentage >= 73:
-        return "C"
-    if percentage >= 70:
-        return "C-"
-    if percentage >= 67:
-        return "D+"
-    if percentage >= 63:
-        return "D"
-    if percentage >= 60:
-        return "D-"
-    return "F"
-
-
 @track_query_performance("get_report_card")
 def get_report_card(
     db: Session, student_id: int, term_id: int
@@ -938,7 +1323,10 @@ def get_report_card(
     if not term:
         raise ValueError("Term not found")
 
-    # Get all assignments for this student in this term
+    type_weights = crud_settings.get_assignment_type_weights(db)
+    grade_scale = crud_settings.get_grade_scale(db)
+
+    # Get all assignments for this student in this term (membership by due date)
     assignments_query = (
         db.query(StudentAssignment, AssignmentTemplate, Subject)
         .join(
@@ -947,20 +1335,16 @@ def get_report_card(
         .join(Subject, AssignmentTemplate.subject_id == Subject.id)
         .filter(
             StudentAssignment.student_id == student_id,
-            StudentAssignment.assigned_date >= term.start_date,
-            StudentAssignment.assigned_date <= term.end_date,
+            term_membership_filter(term),
         )
         .all()
     )
 
-    # Group assignments by subject and calculate grades
+    # Group assignments by subject and collect graded items
     subject_grades = {}
-    overall_stats = {
-        "total_points_earned": 0.0,
-        "total_points_possible": 0.0,
-        "total_assignments": 0,
-        "completed_assignments": 0,
-    }
+    overall_items = []
+    overall_total_assignments = 0
+    overall_completed = 0
 
     for assignment, template, subject in assignments_query:
         if subject.id not in subject_grades:
@@ -968,35 +1352,34 @@ def get_report_card(
                 "subject_id": subject.id,
                 "subject_name": subject.name,
                 "subject_color": subject.color,
-                "points_earned": 0.0,
-                "points_possible": 0.0,
                 "assignments_completed": 0,
                 "assignments_total": 0,
+                "graded_items": [],
             }
 
         subject_data = subject_grades[subject.id]
-        max_points = assignment.custom_max_points or template.max_points
-
         subject_data["assignments_total"] += 1
-        subject_data["points_possible"] += max_points
-        overall_stats["total_assignments"] += 1
-        overall_stats["total_points_possible"] += max_points
+        overall_total_assignments += 1
 
-        if assignment.is_graded and assignment.points_earned is not None:
-            subject_data["points_earned"] += assignment.points_earned
+        # Only graded assignments contribute to the grade — ungraded ones
+        # should not count against the student's percentage.
+        if _is_graded(assignment):
+            item = (
+                assignment.points_earned,
+                assignment.custom_max_points or template.max_points,
+                template.assignment_type,
+            )
+            subject_data["graded_items"].append(item)
             subject_data["assignments_completed"] += 1
-            overall_stats["total_points_earned"] += assignment.points_earned
-            overall_stats["completed_assignments"] += 1
+            overall_items.append(item)
+            overall_completed += 1
 
     # Calculate subject grades and letter grades
     report_card_subjects = []
     for _subject_id, data in subject_grades.items():
-        if data["points_possible"] > 0:
-            percentage = (data["points_earned"] / data["points_possible"]) * 100
-        else:
-            percentage = 0.0
-
-        letter_grade = calculate_letter_grade(percentage)
+        points_earned, points_possible, percentage = compute_weighted_grade(
+            data["graded_items"], type_weights
+        )
 
         report_card_subjects.append(
             schemas.ReportCardSubjectGrade(
@@ -1005,25 +1388,18 @@ def get_report_card(
                 subject_color=data["subject_color"],
                 assignments_completed=data["assignments_completed"],
                 assignments_total=data["assignments_total"],
-                points_earned=data["points_earned"],
-                points_possible=data["points_possible"],
+                points_earned=points_earned,
+                points_possible=points_possible,
                 percentage_grade=round(percentage, 2),
-                letter_grade=letter_grade,
+                letter_grade=calculate_letter_grade(percentage, grade_scale),
             )
         )
 
     # Calculate overall grade
-    if overall_stats["total_points_possible"] > 0:
-        overall_percentage = (
-            overall_stats["total_points_earned"]
-            / overall_stats["total_points_possible"]
-        ) * 100
-    else:
-        overall_percentage = 0.0
+    _, _, overall_percentage = compute_weighted_grade(overall_items, type_weights)
+    overall_letter_grade = calculate_letter_grade(overall_percentage, grade_scale)
 
-    overall_letter_grade = calculate_letter_grade(overall_percentage)
-
-    # Get attendance data for the term (optional)
+    # Get attendance data for the term (attended / recorded days)
     attendance_records = (
         db.query(AttendanceRecord)
         .filter(
@@ -1034,32 +1410,20 @@ def get_report_card(
         .all()
     )
 
-    days_present = sum(
-        1 for r in attendance_records if r.status == AttendanceStatus.PRESENT
-    )
-    days_absent = sum(
-        1 for r in attendance_records if r.status == AttendanceStatus.ABSENT
-    )
-    days_late = sum(1 for r in attendance_records if r.status == AttendanceStatus.LATE)
-    days_excused = sum(
-        1 for r in attendance_records if r.status == AttendanceStatus.EXCUSED
-    )
-
-    total_days_recorded = len(attendance_records)
-    attendance_rate = (
-        ((days_present + days_late + days_excused) / total_days_recorded * 100)
-        if total_days_recorded > 0
-        else None
-    )
+    attendance_stats = get_attendance_statistics(attendance_records)
+    days_present = attendance_stats["present_days"]
+    days_absent = attendance_stats["absent_days"]
+    days_late = attendance_stats["late_days"]
+    attendance_rate = calculate_attendance_rate(attendance_records)
 
     # Create summary
     summary = schemas.ReportCardSummary(
         overall_percentage=round(overall_percentage, 2),
         overall_letter_grade=overall_letter_grade,
-        total_assignments=overall_stats["total_assignments"],
-        completed_assignments=overall_stats["completed_assignments"],
+        total_assignments=overall_total_assignments,
+        completed_assignments=overall_completed,
         subjects_count=len(subject_grades),
-        attendance_rate=round(attendance_rate, 2) if attendance_rate else None,
+        attendance_rate=round(attendance_rate, 2) if attendance_rate is not None else None,
         days_present=days_present,
         days_absent=days_absent,
         days_late=days_late,

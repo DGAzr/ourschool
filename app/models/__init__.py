@@ -23,9 +23,10 @@ from .assignment import (
     AssignmentType,
     StudentAssignment,
 )
+from .assignment_type import AssignmentTypeConfig
 from .attendance import AttendanceRecord, AttendanceStatus
-from .journal import JournalEntry
-from .lesson import Lesson, LessonAssignment, Subject
+from .journal import JournalEntry, JournalReply
+from .subject import Subject
 from .term import GradeHistory, StudentTermGrade, Term, TermSubject, TermType
 from .user import User, UserRole
 from .points import StudentPoints, PointTransaction, SystemSettings

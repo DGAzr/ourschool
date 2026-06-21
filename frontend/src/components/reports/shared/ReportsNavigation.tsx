@@ -42,26 +42,24 @@ const ReportsNavigation: React.FC<ReportsNavigationProps> = ({
     ])
   ]
 
-  const getButtonClasses = (view: ReportView) => {
-    const baseClasses = 'px-4 py-2 text-sm font-semibold rounded-lg transition-all duration-200'
-    const activeClasses = 'bg-amber-600 text-white shadow-sm'
-    const inactiveClasses = 'text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white hover:bg-gray-50 dark:hover:bg-gray-700'
-    
-    return `${baseClasses} ${selectedView === view ? activeClasses : inactiveClasses}`
-  }
-
-  return (
-    <div className="bg-white dark:bg-gray-800 shadow-lg rounded-xl p-1 border border-gray-100 dark:border-gray-700 mb-6">
-      <div className="flex flex-wrap gap-1">
-        {navItems.map((item) => (
-          <button
-            key={item.view}
-            onClick={() => onViewChange(item.view)}
-            className={getButtonClasses(item.view)}
-          >
-            {item.label}
-          </button>
-        ))}
+return (
+    <div className="overflow-x-auto mb-6 -mx-0.5 px-0.5 pb-0.5">
+      <div className="inline-flex items-center gap-0.5 bg-track p-[3px] rounded-[10px]">
+        {navItems.map((item) => {
+          const active = selectedView === item.view
+          return (
+            <button
+              key={item.view}
+              onClick={() => onViewChange(item.view)}
+              className={[
+                'px-3 py-1.5 rounded-[8px] text-[12.5px] font-semibold transition-all duration-150 select-none whitespace-nowrap',
+                active ? 'bg-seg-active text-ink shadow-sm' : 'text-muted hover:text-ink-2',
+              ].join(' ')}
+            >
+              {item.label}
+            </button>
+          )
+        })}
       </div>
     </div>
   )

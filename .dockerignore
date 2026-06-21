@@ -1,0 +1,34 @@
+# Keep the Docker build context small and free of secrets/artifacts.
+.git
+.gitignore
+
+# Secrets / local env
+.env
+.env.*
+*.env
+
+# Python
+.venv
+venv
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache
+.mypy_cache
+.ruff_cache
+
+# Node / frontend build artifacts
+frontend/node_modules
+frontend/dist
+node_modules
+
+# Project docs / review artifacts not needed in images
+release-review
+*.md
+utils/*.png
+
+# Editor / OS cruft
+.vscode
+.idea
+.DS_Store
+.claude

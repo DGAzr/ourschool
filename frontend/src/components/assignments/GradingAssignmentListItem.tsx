@@ -17,18 +17,7 @@
  */
 
 import React, { useState, useEffect, useRef } from 'react'
-import { 
-  MoreVertical, 
-  Edit3, 
-  Trash2, 
-  Archive, 
-  Award,
-  Play,
-  FileCheck,
-  Clock,
-  Calendar,
-  User
-} from 'lucide-react'
+import { MoreVertical, Edit3, Trash2, Archive, Award, Play, FileCheck, Calendar, User } from 'lucide-react'
 import { StudentAssignment, Subject, User as UserType } from '../../types'
 import { ViewDensity } from '../layouts/CompactListLayout'
 import { assignmentUtils } from '../../services/assignments'
@@ -45,308 +34,155 @@ interface GradingAssignmentListItemProps {
   viewDensity: ViewDensity
 }
 
+const STATUS_BADGE: Record<string, string> = {
+  not_started: 'bg-panel-2 text-muted',
+  in_progress:  'bg-accent/10 text-accent',
+  submitted:    'bg-pos-bg text-pos-fg',
+  graded:       'bg-accent/10 text-accent',
+}
+
 const GradingAssignmentListItem: React.FC<GradingAssignmentListItemProps> = ({
-  assignment,
-  subject,
-  student,
-  onGrade,
-  onUpdateStatus,
-  onEdit,
-  onDelete,
-  onArchive,
-  viewDensity
+  assignment, subject, student,
+  onGrade, onUpdateStatus, onEdit, onDelete, onArchive, viewDensity
 }) => {
   const [showActions, setShowActions] = useState(false)
   const actionsRef = useRef<HTMLDivElement>(null)
   const template = assignment.template
 
-  // Close dropdown when clicking outside
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
       if (actionsRef.current && !actionsRef.current.contains(event.target as Node)) {
         setShowActions(false)
       }
     }
-
-    if (showActions) {
-      document.addEventListener('mousedown', handleClickOutside)
-    }
-
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside)
-    }
+    if (showActions) document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [showActions])
 
-  const getStatusIcon = (status: string) => {
-    switch (status) {
-      case 'not_started':
-        return <Clock className="h-3 w-3 text-gray-500" />
-      case 'in_progress':
-        return <Play className="h-3 w-3 text-blue-500" />
-      case 'submitted':
-        return <FileCheck className="h-3 w-3 text-purple-500" />
-      case 'graded':
-        return <Award className="h-3 w-3 text-indigo-500" />
-      default:
-        return <Clock className="h-3 w-3 text-gray-500" />
-    }
-  }
-
-  const getStatusColor = (status: string): string => {
-    switch (status) {
-      case 'not_started':
-        return 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300'
-      case 'in_progress':
-        return 'bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-300'
-      case 'submitted':
-        return 'bg-purple-100 dark:bg-purple-900 text-purple-700 dark:text-purple-300'
-      case 'graded':
-        return 'bg-indigo-100 dark:bg-indigo-900 text-indigo-700 dark:text-indigo-300'
-      default:
-        return 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300'
-    }
-  }
-
-  const getUrgencyIndicator = () => {
+  const urgencyDot = () => {
     if (!assignment.due_date) return null
-    
-    const dueDate = new Date(assignment.due_date + 'T00:00:00')
-    const today = new Date()
-    const diffTime = dueDate.getTime() - today.getTime()
-    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24))
-    
-    if (diffDays < 0) {
-      return <span className="w-2 h-2 bg-red-500 rounded-full" title="Overdue" />
-    } else if (diffDays <= 1) {
-      return <span className="w-2 h-2 bg-orange-500 rounded-full" title="Due soon" />
-    } else if (diffDays <= 3) {
-      return <span className="w-2 h-2 bg-yellow-500 rounded-full" title="Due this week" />
-    }
+    const diff = Math.ceil((new Date(assignment.due_date + 'T00:00:00').getTime() - Date.now()) / 86400000)
+    if (diff < 0) return <span className="w-2 h-2 bg-neg-fg rounded-full flex-none" title="Overdue" />
+    if (diff <= 1) return <span className="w-2 h-2 bg-accent rounded-full flex-none" title="Due soon" />
+    if (diff <= 3) return <span className="w-2 h-2 bg-[#B0762F] rounded-full flex-none" title="Due this week" />
     return null
   }
 
-  if (viewDensity === 'spacious') {
-    // Return null to indicate this item should render as a card
-    return null
-  }
+  if (viewDensity === 'spacious') return null
 
   const isCompact = viewDensity === 'compact'
-  const containerPadding = isCompact ? 'p-3' : 'p-4'
+  const pad = isCompact ? 'p-3' : 'p-4'
 
   return (
-    <div className={`bg-white dark:bg-gray-800 even:bg-gray-50 dark:even:bg-gray-750 border-l-4 border-b border-b-gray-100 dark:border-b-gray-700 first:border-t first:border-t-gray-100 dark:first:border-t-gray-700 last:border-b-0 hover:bg-gray-100 dark:hover:bg-gray-700 transition-all duration-200 ${containerPadding}`}
-         style={{ borderLeftColor: subject?.color || '#6B7280' }}>
+    <div
+      className={`bg-panel border-l-4 border-b border-b-line-2 first:border-t first:border-t-line-2 last:border-b-0 hover:bg-panel-2 transition-colors ${pad}`}
+      style={{ borderLeftColor: subject?.color || 'var(--faintest)' }}
+    >
       <div className="flex items-start justify-between">
-        {/* Main Content */}
         <div className="flex-1 min-w-0">
-          {/* Primary Line */}
-          <div className="flex items-center space-x-3 mb-1">
-            {/* Urgency Indicator */}
-            {getUrgencyIndicator()}
-            
-            {/* Type Icon */}
-            <span className={isCompact ? 'text-lg' : 'text-xl'}>
+          <div className="flex items-center gap-2 mb-1">
+            {urgencyDot()}
+            <span className={isCompact ? 'text-base' : 'text-lg'}>
               {assignmentUtils.getAssignmentTypeIcon(template?.assignment_type || '')}
             </span>
-            
-            {/* Assignment Name */}
-            <h3 className={`font-semibold text-gray-900 dark:text-gray-100 truncate ${
-              isCompact ? 'text-sm' : 'text-base'
-            }`}>
+            <h3 className={`font-semibold text-ink truncate ${isCompact ? 'text-[12px]' : 'text-[13px]'}`}>
               {template?.name}
             </h3>
-            
-            {/* Status Badge */}
-            <div className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${getStatusColor(assignment.status)} ${
-              isCompact ? 'px-1.5 py-0.5' : ''
-            }`}>
-              {getStatusIcon(assignment.status)}
-              <span className="ml-1 capitalize">{assignment.status.replace('_', ' ')}</span>
-            </div>
-          </div>
-          
-          {/* Secondary Line */}
-          <div className={`flex items-center space-x-4 text-xs text-gray-600 dark:text-gray-400 ${
-            isCompact ? 'space-x-3' : ''
-          }`}>
-            {/* Student */}
-            <div className="flex items-center">
-              <User className="h-3 w-3 mr-1" />
-              <span className="font-medium">
-                {student?.first_name} {student?.last_name}
-              </span>
-            </div>
-            
-            {/* Subject */}
-            <span>•</span>
-            <span>{subject?.name}</span>
-            
-            {/* Points */}
-            <span>•</span>
-            <span>
-              {assignment.points_earned || 0} / {assignment.custom_max_points || template?.max_points || 0} pts
+            <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-medium ${STATUS_BADGE[assignment.status] ?? 'bg-panel-2 text-muted'}`}>
+              <span className="capitalize">{assignment.status.replace('_', ' ')}</span>
             </span>
-            
-            {/* Grade */}
+          </div>
+
+          <div className={`flex items-center gap-3 text-[11px] text-muted ${isCompact ? 'gap-2' : ''}`}>
+            <span className="flex items-center gap-0.5"><User className="h-2.5 w-2.5" />{student?.first_name} {student?.last_name}</span>
+            <span>·</span>
+            <span>{subject?.name}</span>
+            <span>·</span>
+            <span>{assignment.points_earned || 0} / {assignment.custom_max_points || template?.max_points || 0} pts</span>
             {assignment.is_graded && assignment.letter_grade && (
-              <>
-                <span>•</span>
-                <span className="font-medium text-indigo-600 dark:text-indigo-400">
-                  {assignment.letter_grade}
-                </span>
-              </>
+              <><span>·</span><span className="font-semibold text-accent">{assignment.letter_grade}</span></>
             )}
-            
-            {/* Due Date */}
             {assignment.due_date && (
-              <>
-                <span>•</span>
-                <div className="flex items-center">
-                  <Calendar className="h-3 w-3 mr-1" />
-                  <span>Due {new Date(assignment.due_date + 'T00:00:00').toLocaleDateString()}</span>
-                </div>
-              </>
+              <><span>·</span><span className="flex items-center gap-0.5"><Calendar className="h-2.5 w-2.5" />Due {new Date(assignment.due_date + 'T00:00:00').toLocaleDateString()}</span></>
             )}
           </div>
-          
-          {/* Custom Instructions (for comfortable view only) */}
+
           {!isCompact && assignment.custom_instructions && (
-            <div className="text-xs text-gray-500 dark:text-gray-400 bg-gray-50 dark:bg-gray-700 p-2 rounded mt-2">
+            <div className="text-[11px] text-muted bg-panel-2 border border-line-2 rounded-field p-2 mt-1.5">
               <strong>Instructions:</strong> {assignment.custom_instructions}
             </div>
           )}
-          
-          {/* Submission Notes (for comfortable view only) */}
           {!isCompact && assignment.submission_notes && (
-            <div className="text-xs text-purple-600 dark:text-purple-400 bg-purple-50 dark:bg-purple-900 p-2 rounded mt-2">
+            <div className="text-[11px] text-pos-fg bg-pos-bg rounded-field p-2 mt-1.5">
               <strong>Submission:</strong> {assignment.submission_notes}
             </div>
           )}
         </div>
-        
-        {/* Actions */}
-        <div className="flex items-center space-x-2 ml-4">
-          {/* Primary Action */}
+
+        <div className="flex items-center gap-1 ml-4">
           {assignment.status === 'submitted' && !assignment.is_graded && onGrade && (
             <button
               onClick={() => onGrade(assignment)}
-              className={`text-green-600 dark:text-green-400 hover:text-green-800 dark:hover:text-green-300 transition-colors ${
-                isCompact ? 'p-1' : 'p-1.5'
-              }`}
+              className={`text-pos-fg hover:bg-pos-bg rounded-field transition-colors ${isCompact ? 'p-1' : 'p-1.5'}`}
               title="Grade assignment"
             >
-              <Award className={isCompact ? 'h-3 w-3' : 'h-4 w-4'} />
+              <Award className={isCompact ? 'h-3 w-3' : 'h-3.5 w-3.5'} />
             </button>
           )}
-          
           {assignment.is_graded && onGrade && (
             <button
               onClick={() => onGrade(assignment)}
-              className={`text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 transition-colors ${
-                isCompact ? 'p-1' : 'p-1.5'
-              }`}
+              className={`text-accent hover:bg-accent/10 rounded-field transition-colors ${isCompact ? 'p-1' : 'p-1.5'}`}
               title="Edit grade"
             >
-              <Edit3 className={isCompact ? 'h-3 w-3' : 'h-4 w-4'} />
+              <Edit3 className={isCompact ? 'h-3 w-3' : 'h-3.5 w-3.5'} />
             </button>
           )}
-          
-          {/* More Actions Menu */}
           <div className="relative" ref={actionsRef}>
             <button
               onClick={() => setShowActions(!showActions)}
-              className={`text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 transition-colors ${
-                isCompact ? 'p-1' : 'p-1.5'
-              }`}
+              className={`text-faint hover:text-ink hover:bg-panel-2 rounded-field transition-colors ${isCompact ? 'p-1' : 'p-1.5'}`}
             >
-              <MoreVertical className={isCompact ? 'h-3 w-3' : 'h-4 w-4'} />
+              <MoreVertical className={isCompact ? 'h-3 w-3' : 'h-3.5 w-3.5'} />
             </button>
-            
             {showActions && (
-              <div className="absolute right-0 top-8 w-40 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-md shadow-lg z-10">
+              <div className="absolute right-0 top-8 w-44 bg-panel border border-line rounded-card shadow-lg z-10">
                 {onEdit && (
-                  <button
-                    onClick={() => {
-                      onEdit(assignment)
-                      setShowActions(false)
-                    }}
-                    className="w-full text-left px-3 py-2 text-xs text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center"
-                  >
-                    <Edit3 className="h-3 w-3 mr-2" />
-                    Edit Details
+                  <button onClick={() => { onEdit(assignment); setShowActions(false) }} className="w-full text-left px-3 py-2 text-[12px] text-ink hover:bg-panel-2 flex items-center gap-2">
+                    <Edit3 className="h-3 w-3" />Edit Details
                   </button>
                 )}
-                
                 {onUpdateStatus && assignment.status === 'not_started' && (
-                  <button
-                    onClick={() => {
-                      onUpdateStatus(assignment.id, 'in_progress')
-                      setShowActions(false)
-                    }}
-                    className="w-full text-left px-3 py-2 text-xs text-blue-600 dark:text-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900 flex items-center"
-                  >
-                    <Play className="h-3 w-3 mr-2" />
-                    Start Assignment
+                  <button onClick={() => { onUpdateStatus(assignment.id, 'in_progress'); setShowActions(false) }} className="w-full text-left px-3 py-2 text-[12px] text-accent hover:bg-accent/10 flex items-center gap-2">
+                    <Play className="h-3 w-3" />Start Assignment
                   </button>
                 )}
-                
                 {onUpdateStatus && assignment.status === 'in_progress' && (
-                  <button
-                    onClick={() => {
-                      onUpdateStatus(assignment.id, 'submitted')
-                      setShowActions(false)
-                    }}
-                    className="w-full text-left px-3 py-2 text-xs text-purple-600 dark:text-purple-400 hover:bg-purple-50 dark:hover:bg-purple-900 flex items-center"
-                  >
-                    <FileCheck className="h-3 w-3 mr-2" />
-                    Mark Submitted
+                  <button onClick={() => { onUpdateStatus(assignment.id, 'submitted'); setShowActions(false) }} className="w-full text-left px-3 py-2 text-[12px] text-pos-fg hover:bg-pos-bg flex items-center gap-2">
+                    <FileCheck className="h-3 w-3" />Mark Submitted
                   </button>
                 )}
-                
                 {onGrade && !assignment.is_graded && (
                   <button
                     onClick={() => {
                       if (assignment.status !== 'submitted' && onUpdateStatus) {
                         onUpdateStatus(assignment.id, 'submitted')
-                        setTimeout(() => {
-                          onGrade(assignment)
-                          setShowActions(false)
-                        }, 100)
-                      } else {
-                        onGrade(assignment)
-                        setShowActions(false)
-                      }
+                        setTimeout(() => { onGrade(assignment); setShowActions(false) }, 100)
+                      } else { onGrade(assignment); setShowActions(false) }
                     }}
-                    className="w-full text-left px-3 py-2 text-xs text-green-600 dark:text-green-400 hover:bg-green-50 dark:hover:bg-green-900 flex items-center"
+                    className="w-full text-left px-3 py-2 text-[12px] text-pos-fg hover:bg-pos-bg flex items-center gap-2"
                   >
-                    <Award className="h-3 w-3 mr-2" />
-                    {assignment.status === 'submitted' ? 'Grade Now' : 'Submit & Grade'}
+                    <Award className="h-3 w-3" />{assignment.status === 'submitted' ? 'Grade Now' : 'Submit & Grade'}
                   </button>
                 )}
-                
                 {onArchive && (
-                  <button
-                    onClick={() => {
-                      onArchive(assignment)
-                      setShowActions(false)
-                    }}
-                    className="w-full text-left px-3 py-2 text-xs text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-700 flex items-center"
-                  >
-                    <Archive className="h-3 w-3 mr-2" />
-                    Archive
+                  <button onClick={() => { onArchive(assignment); setShowActions(false) }} className="w-full text-left px-3 py-2 text-[12px] text-ink hover:bg-panel-2 flex items-center gap-2">
+                    <Archive className="h-3 w-3" />Archive
                   </button>
                 )}
-                
                 {onDelete && (
-                  <button
-                    onClick={() => {
-                      onDelete(assignment)
-                      setShowActions(false)
-                    }}
-                    className="w-full text-left px-3 py-2 text-xs text-red-600 hover:bg-red-50 dark:hover:bg-red-900 flex items-center"
-                  >
-                    <Trash2 className="h-3 w-3 mr-2" />
-                    Delete
+                  <button onClick={() => { onDelete(assignment); setShowActions(false) }} className="w-full text-left px-3 py-2 text-[12px] text-neg-fg hover:bg-neg-bg flex items-center gap-2">
+                    <Trash2 className="h-3 w-3" />Delete
                   </button>
                 )}
               </div>

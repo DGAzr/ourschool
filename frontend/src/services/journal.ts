@@ -21,39 +21,54 @@ import {
   JournalEntryWithAuthor,
   JournalEntryCreate,
   JournalEntryUpdate,
-  JournalEntry,
-  JournalStudent
+  JournalReply,
+  JournalStudent,
+  JournalComposerData,
 } from '../types'
 
 export const journalApi = {
-  // Get all journal entries (filtered by role and optional student_id)
   getAll: async (studentId?: number): Promise<JournalEntryWithAuthor[]> => {
     const endpoint = studentId ? `/journal/entries?student_id=${studentId}` : '/journal/entries'
     return await api.get(endpoint)
   },
 
-  // Get a specific journal entry
   getById: async (id: number): Promise<JournalEntryWithAuthor> => {
     return await api.get(`/journal/entries/${id}`)
   },
 
-  // Create a new journal entry
-  create: async (data: JournalEntryCreate): Promise<JournalEntry> => {
+  create: async (data: JournalEntryCreate): Promise<JournalEntryWithAuthor> => {
     return await api.post('/journal/entries', data)
   },
 
-  // Update a journal entry
-  update: async (id: number, data: JournalEntryUpdate): Promise<JournalEntry> => {
+  update: async (id: number, data: JournalEntryUpdate): Promise<JournalEntryWithAuthor> => {
     return await api.put(`/journal/entries/${id}`, data)
   },
 
-  // Delete a journal entry
   delete: async (id: number): Promise<void> => {
     await api.delete(`/journal/entries/${id}`)
   },
 
-  // Get list of students (for admins)
+  setReactions: async (entryId: number, reactions: string[]): Promise<JournalEntryWithAuthor> => {
+    return await api.post(`/journal/entries/${entryId}/reactions`, { reactions })
+  },
+
+  addReply: async (entryId: number, text: string): Promise<JournalReply> => {
+    return await api.post(`/journal/entries/${entryId}/replies`, { text })
+  },
+
+  deleteReply: async (replyId: number): Promise<void> => {
+    await api.delete(`/journal/replies/${replyId}`)
+  },
+
+  markRead: async (entryId: number): Promise<JournalEntryWithAuthor> => {
+    return await api.post(`/journal/entries/${entryId}/mark-read`, {})
+  },
+
+  getComposerData: async (): Promise<JournalComposerData> => {
+    return await api.get('/journal/composer-data')
+  },
+
   getStudents: async (): Promise<JournalStudent[]> => {
     return await api.get('/journal/students')
-  }
+  },
 }

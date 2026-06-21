@@ -20,20 +20,56 @@
  * Assignment and assessment related types
  */
 
+/**
+ * Admin-managed assignment type / grade-book category.
+ * `weight` is a category percentage (0-100).
+ */
+export interface AssignmentTypeConfig {
+  id: number
+  key: string
+  name: string
+  color: string
+  icon?: string
+  weight: number
+  is_active: boolean
+  display_order: number
+  usage_count: number
+  created_at?: string
+  updated_at?: string
+}
+
+export interface AssignmentTypeCreate {
+  name: string
+  color?: string
+  icon?: string
+  weight?: number
+  is_active?: boolean
+  display_order?: number
+  key?: string
+}
+
+export interface AssignmentTypeUpdate {
+  name?: string
+  color?: string
+  icon?: string
+  weight?: number
+  is_active?: boolean
+  display_order?: number
+}
+
 export interface AssignmentTemplate {
   id: number
   name: string
   description?: string
   instructions?: string
-  assignment_type: 'homework' | 'project' | 'test' | 'quiz' | 'essay' | 'presentation' | 'worksheet' | 'reading' | 'practice'
-  lesson_id?: number
+  assignment_type: string
   subject_id: number
+  icon?: string
   max_points: number
   estimated_duration_minutes?: number
   prerequisites?: string
   materials_needed?: string
   is_exportable: boolean
-  order_in_lesson: number
   created_by: number
   created_at: string
   updated_at: string
@@ -75,36 +111,35 @@ export interface AssignmentTemplateCreate {
   name: string
   description?: string
   instructions?: string
-  assignment_type: 'homework' | 'project' | 'test' | 'quiz' | 'essay' | 'presentation' | 'worksheet' | 'reading' | 'practice'
-  lesson_id?: number
+  assignment_type: string
   subject_id: number
+  icon?: string | null
   max_points: number
   estimated_duration_minutes?: number
   prerequisites?: string
   materials_needed?: string
   is_exportable: boolean
-  order_in_lesson: number
 }
 
 export interface AssignmentTemplateUpdate {
   name?: string
   description?: string
   instructions?: string
-  assignment_type?: 'homework' | 'project' | 'test' | 'quiz' | 'essay' | 'presentation' | 'worksheet' | 'reading' | 'practice'
-  lesson_id?: number
+  assignment_type?: string
   subject_id?: number
+  icon?: string | null
   max_points?: number
   estimated_duration_minutes?: number
   prerequisites?: string
   materials_needed?: string
   is_exportable?: boolean
-  order_in_lesson?: number
 }
 
 export interface AssignmentAssignmentRequest {
   template_id: number
   student_ids: number[]
   due_date?: string
+  assigned_date?: string
   custom_instructions?: string
   custom_max_points?: number
 }

@@ -16,8 +16,10 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-import { Select, Input, TextArea } from '../../ui'
-import { Subject, Lesson } from '../../../types'
+import React from 'react'
+import { Input, TextArea, IconPickerButton, IconSelect } from '../../ui'
+import { Subject } from '../../../types'
+import { useAssignmentTypes } from '../../../contexts/AssignmentTypesContext'
 
 interface AssignmentFormFieldsProps {
   formData: {
@@ -25,18 +27,15 @@ interface AssignmentFormFieldsProps {
     description?: string
     instructions?: string
     assignment_type?: string
-    lesson_id?: number
     subject_id?: number
+    icon?: string | null
     max_points?: number
     estimated_duration_minutes?: number
-    difficulty_level?: string
     prerequisites?: string
     materials_needed?: string
     is_exportable?: boolean
-    order_in_lesson?: number
   }
   subjects: Subject[]
-  lessons: Lesson[]
   onUpdate: (field: string, value: any) => void
   showAllFields?: boolean
   disabled?: boolean
@@ -45,11 +44,32 @@ interface AssignmentFormFieldsProps {
 const AssignmentFormFields: React.FC<AssignmentFormFieldsProps> = ({
   formData,
   subjects,
-  lessons,
   onUpdate,
   showAllFields = true,
   disabled = false
 }) => {
+  const { types, getTypeLabel, getTypeIcon } = useAssignmentTypes()
+
+  // Color for icon preview: use the selected subject's color, falling back to accent
+  const selectedSubject = subjects.find(s => s.id === formData.subject_id)
+  const iconPreviewColor = selectedSubject?.color ?? 'var(--accent)'
+
+  // Offer active types; keep the current value selectable even if it is
+  // inactive so editing an existing template never silently loses its type.
+  const currentType = formData.assignment_type
+  const activeTypes = types.filter(t => t.is_active)
+  const typeOptions = [
+    ...activeTypes.map(t => ({
+      value: t.key,
+      label: t.name,
+      icon: t.icon ?? getTypeIcon(t.key),
+      iconColor: 'var(--accent)',
+    })),
+    ...(currentType && !activeTypes.some(t => t.key === currentType)
+      ? [{ value: currentType, label: getTypeLabel(currentType), icon: getTypeIcon(currentType), iconColor: 'var(--accent)' }]
+      : []),
+  ]
+
   return (
     <div className="space-y-6">
       {/* Basic Information */}
@@ -65,58 +85,54 @@ const AssignmentFormFields: React.FC<AssignmentFormFieldsProps> = ({
           />
         </div>
 
-        <Select
+        <IconSelect
           label="Subject"
           value={formData.subject_id || 0}
-          onChange={(e) => onUpdate('subject_id', parseInt(e.target.value))}
+          onChange={(v) => onUpdate('subject_id', Number(v))}
           required
           disabled={disabled || !subjects.length}
           options={[
             { value: 0, label: !subjects.length ? 'Loading subjects...' : 'Select a subject' },
             ...subjects.map(subject => ({
               value: subject.id,
-              label: subject.name
+              label: subject.name,
+              icon: subject.icon,
+              iconColor: subject.color,
             }))
           ]}
         />
 
-        <Select
-          label="Lesson (Optional)"
-          value={formData.lesson_id || ''}
-          onChange={(e) => onUpdate('lesson_id', e.target.value ? parseInt(e.target.value) : undefined)}
-          disabled={disabled}
-          options={[
-            { value: '', label: 'Standalone (no lesson)' },
-            ...lessons.map(lesson => ({
-              value: lesson.id,
-              label: lesson.title
-            }))
-          ]}
-        />
-
-        <Select
+        <IconSelect
           label="Assignment Type"
           value={formData.assignment_type || 'homework'}
-          onChange={(e) => onUpdate('assignment_type', e.target.value)}
+          onChange={(v) => onUpdate('assignment_type', String(v))}
           disabled={disabled}
-          options={[
-            { value: 'homework', label: '📝 Homework' },
-            { value: 'project', label: '🏗️ Project' },
-            { value: 'test', label: '📊 Test' },
-            { value: 'quiz', label: '❓ Quiz' },
-            { value: 'essay', label: '✍️ Essay' },
-            { value: 'presentation', label: '🎤 Presentation' },
-            { value: 'worksheet', label: '📄 Worksheet' },
-            { value: 'reading', label: '📚 Reading' },
-            { value: 'practice', label: '🎯 Practice' }
-          ]}
+          options={typeOptions}
         />
 
       </div>
 
+      {/* Icon override */}
+      <div>
+        <label className="block text-[12.5px] font-semibold text-muted uppercase tracking-wide mb-1.5">
+          Icon <span className="font-normal normal-case text-faint">(optional — defaults to the assignment type icon)</span>
+        </label>
+        <div className="flex items-center gap-3">
+          <IconPickerButton
+            value={formData.icon}
+            color={iconPreviewColor}
+            onSelect={name => onUpdate('icon', name)}
+            className={disabled ? 'pointer-events-none opacity-50' : ''}
+          />
+          {formData.icon && (
+            <span className="text-[12px] text-muted">{formData.icon}</span>
+          )}
+        </div>
+      </div>
+
       {/* Grading and Time */}
       {showAllFields && (
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           <Input
             type="number"
             label="Maximum Points"
@@ -134,15 +150,6 @@ const AssignmentFormFields: React.FC<AssignmentFormFieldsProps> = ({
             onChange={(e) => onUpdate('estimated_duration_minutes', e.target.value ? parseInt(e.target.value) : undefined)}
             min={1}
             placeholder="e.g., 30"
-            disabled={disabled}
-          />
-
-          <Input
-            type="number"
-            label="Order in Lesson"
-            value={formData.order_in_lesson || 0}
-            onChange={(e) => onUpdate('order_in_lesson', parseInt(e.target.value))}
-            min={0}
             disabled={disabled}
           />
         </div>

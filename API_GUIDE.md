@@ -16,7 +16,8 @@ app/
 │   │   ├── templates.py
 │   │   ├── student_assignments.py
 │   │   └── shared/
-│   ├── lessons/         # Lesson management
+│   ├── subjects.py      # Subject management (simple CRUD)
+│   ├── meta.py          # MCP discovery endpoint (enum/permission values)
 │   └── reports/         # Reporting endpoints
 ├── models/              # SQLAlchemy ORM models
 ├── schemas/             # Pydantic request/response schemas
@@ -69,6 +70,171 @@ router.include_router(student_assignments_router, prefix="/student")
 @router.post("/{assignment_id}/assign")    # POST /api/assignments/123/assign
 @router.post("/{assignment_id}/submit")    # POST /api/assignments/123/submit
 @router.get("/{assignment_id}/statistics") # GET /api/assignments/123/statistics
+```
+
+### Simple CRUD Router Pattern
+
+Domains with simple CRUD operations (like Subjects) use a flat router instead of sub-routers:
+
+```python
+# app/routers/subjects.py
+from typing import Annotated, List
+from fastapi import APIRouter, Depends, HTTPException
+from sqlalchemy.orm import Session
+
+from app.core.database import get_db
+from app.models.subject import Subject
+from app.models.user import User, UserRole
+from app.routers.auth import get_current_active_user
+from app.schemas.subject import Subject as SubjectSchema, SubjectCreate, SubjectUpdate
+
+router = APIRouter()
+
+
+@router.get("/", response_model=List[SubjectSchema])
+def list_subjects(
+    db: Annotated[Session, Depends(get_db)],
+    current_user: Annotated[User, Depends(get_current_active_user)],
+):
+    """List all subjects."""
+    return db.query(Subject).order_by(Subject.name).all()
+
+
+@router.post("/", response_model=SubjectSchema)
+def create_subject(
+    subject: SubjectCreate,
+    db: Annotated[Session, Depends(get_db)],
+    current_user: Annotated[User, Depends(_require_admin)],
+):
+    """Create a new subject."""
+    db_subject = Subject(**subject.dict())
+    db.add(db_subject)
+    db.commit()
+    db.refresh(db_subject)
+    return db_subject
+
+
+@router.put("/{subject_id}", response_model=SubjectSchema)
+def update_subject(
+    subject_id: int,
+    subject_update: SubjectUpdate,
+    db: Annotated[Session, Depends(get_db)],
+    current_user: Annotated[User, Depends(_require_admin)],
+):
+    """Update a subject."""
+    subject = _get_subject_or_404(db, subject_id)
+    for field, value in subject_update.dict(exclude_unset=True).items():
+        setattr(subject, field, value)
+    db.commit()
+    db.refresh(subject)
+    return subject
+
+
+@router.delete("/{subject_id}")
+def delete_subject(
+    subject_id: int,
+    db: Annotated[Session, Depends(get_db)],
+    current_user: Annotated[User, Depends(_require_admin)],
+):
+    """Delete a subject. Blocked if any assignment templates reference it."""
+    subject = _get_subject_or_404(db, subject_id)
+    templates_count = (
+        db.query(AssignmentTemplate)
+        .filter(AssignmentTemplate.subject_id == subject_id)
+        .count()
+    )
+    if templates_count > 0:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Cannot delete subject: {templates_count} assignment template(s) are using it.",
+        )
+    db.delete(subject)
+    db.commit()
+    return {"message": "Subject deleted successfully"}
+```
+
+### Discovery / Meta Endpoints
+
+Lightweight read-only endpoints that expose enum values, permission lists, or other discovery data for external tools (e.g., MCP/AI clients). These endpoints require no authentication and have no side effects.
+
+```python
+# app/routers/meta.py
+from fastapi import APIRouter
+
+from app.crud.api_keys import AVAILABLE_PERMISSIONS  # single source of truth
+from app.enums import AssignmentStatus, AssignmentType
+
+router = APIRouter()
+
+
+@router.get("/meta")
+def get_meta():
+    """Return available enum values and permissions. Used by MCP clients to discover valid inputs."""
+    return {
+        "assignment_types": [t.value for t in AssignmentType],
+        "assignment_statuses": [s.value for s in AssignmentStatus],
+        "permissions": list(AVAILABLE_PERMISSIONS),
+    }
+```
+
+`permissions` is sourced from the single canonical list
+(`crud.api_keys.AVAILABLE_PERMISSIONS`) so `/api/meta` only ever advertises
+permissions that can actually be created **and** have a backing endpoint. The
+current set is:
+
+| Permission | Backing endpoint(s) |
+|------------|---------------------|
+| `students:read` | `GET /api/users/students/lookup`, `GET /api/users/students/{id}/info` |
+| `assignments:read` | `GET /api/integrations/assignments/{id}` |
+| `assignments:grade` | `POST /api/integrations/assignments/{id}/grade` |
+| `points:read` | `GET /api/students/{id}/points` (+ ledger, overview) |
+| `points:write` | `POST /api/students/{id}/points/adjust` |
+
+These endpoints:
+- Are registered at the top-level prefix (e.g., `prefix="/api"`) not under a domain prefix
+- Return plain dictionaries, not Pydantic models
+- Require no authentication (public information)
+- Are cached-friendly (content doesn't change between releases)
+
+### External Integration Endpoints (API-key authenticated)
+
+These are the only endpoints intended for external/MCP consumers. They
+authenticate with an API key passed in the `X-API-Key` header (not a Bearer
+token) and require the corresponding permission.
+
+**Grade an assignment**
+
+```
+POST /api/integrations/assignments/{assignment_id}/grade
+Header:   X-API-Key: os_xxxxxxxx...
+Permission: assignments:grade
+Body (application/json):  StudentAssignmentGrade
+  {
+    "points_earned": 18.5,        # float, 0..max_points
+    "letter_grade": "A-",          # optional; computed from % if omitted
+    "teacher_feedback": "Great work"  # optional
+  }
+Response 200 (hand-built JSON, not a response_model):
+  {
+    "id", "template_id", "student_id", "assigned_date", "due_date",
+    "status", "points_earned", "percentage_grade", "letter_grade",
+    "is_graded", "graded_date", "teacher_feedback", "max_points"
+  }
+Errors: 404 (assignment not found), 400 (points exceed maximum),
+        403 (missing permission), 401 (invalid/missing key)
+```
+
+Points are synced idempotently: re-grading adjusts the student's balance by the
+delta rather than re-awarding the full amount.
+
+**Read an assignment**
+
+```
+GET /api/integrations/assignments/{assignment_id}
+Header:   X-API-Key: os_xxxxxxxx...
+Permission: assignments:read
+Response 200: assignment detail JSON (see integrations.py for fields)
+Errors: 404, 403, 401
 ```
 
 ## 📝 Endpoint Standards
@@ -246,6 +412,19 @@ class AssignmentListResponse(BaseModel):
     has_next: bool
     has_previous: bool
 ```
+
+### Cross-Version Identity (External IDs)
+
+Backup schemas now include an `external_id` field for stable entity resolution across software versions:
+
+```python
+class UserBackup(BaseModel):
+    external_id: Optional[str] = None  # Stable cross-version identity (added format 2.0)
+    email: str
+    # ... other fields
+```
+
+During import, `external_id` is preferred for matching records. If absent (legacy format 1.0), resolution falls back to name-based matching. This allows backups from older versions to be imported while still benefiting from stable IDs in newer backups.
 
 ## 🔐 Authentication & Authorization
 

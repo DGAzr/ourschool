@@ -15,7 +15,8 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 """CRUD operations for system settings."""
-from typing import Dict, List, Optional, Any
+import json
+from typing import Dict, List, Optional, Any, Tuple
 from sqlalchemy.orm import Session
 from app.models.points import SystemSettings
 from app.schemas.settings import SystemSettingCreate, SystemSettingUpdate
@@ -108,6 +109,54 @@ def get_setting_value(db: Session, setting_key: str, default_value: Any = None, 
         return default_value
 
 
+def get_assignment_type_weights(db: Session) -> Dict[str, float]:
+    """Return per-assignment-type grade category weights, keyed by type key.
+
+    Weights are sourced from the admin-managed ``assignment_types`` table. When
+    every weight is 0 (the default), grading falls back to plain
+    points-weighting (see ``app.utils.grading.compute_weighted_grade``).
+    """
+    # Imported here to avoid a circular import at module load time.
+    from app.models.assignment_type import AssignmentTypeConfig
+
+    rows = (
+        db.query(AssignmentTypeConfig)
+        .filter(AssignmentTypeConfig.is_active.is_(True))
+        .all()
+    )
+    weights: Dict[str, float] = {}
+    for row in rows:
+        try:
+            weights[row.key] = float(row.weight or 0.0)
+        except (TypeError, ValueError):
+            weights[row.key] = 0.0
+    return weights
+
+
+DEFAULT_GRADE_SCALE: List[Tuple[str, int]] = [
+    ("A+", 97), ("A", 93), ("A-", 90),
+    ("B+", 87), ("B", 83), ("B-", 80),
+    ("C+", 77), ("C", 73), ("C-", 70),
+    ("D+", 67), ("D", 63), ("D-", 60),
+    ("F", 0),
+]
+
+
+def get_grade_scale(db: Session) -> List[Tuple[str, int]]:
+    """Return the configured grading scale as [(letter, min_percent), ...].
+
+    Falls back to DEFAULT_GRADE_SCALE when no custom scale has been saved.
+    """
+    raw = get_setting_value(db, "grading.scale", default_value=None)
+    if raw:
+        try:
+            bands = json.loads(raw)
+            return [(b["letter"], int(b["min_percent"])) for b in bands]
+        except (json.JSONDecodeError, KeyError, TypeError, ValueError):
+            pass
+    return DEFAULT_GRADE_SCALE
+
+
 def initialize_default_settings(db: Session) -> None:
     """Initialize default system settings if they don't exist."""
     defaults = [
@@ -118,14 +167,20 @@ def initialize_default_settings(db: Session) -> None:
             "description": "Required number of instructional days per academic year for attendance calculations"
         },
         {
-            "setting_key": "points.system_enabled",
+            # Must match the key read by crud.points.is_points_system_enabled
+            "setting_key": "points_system_enabled",
             "setting_value": "true",
             "setting_type": "boolean",
             "description": "Enable or disable the student points system"
         }
     ]
-    
+
     for default in defaults:
         existing = get_setting(db, default["setting_key"])
         if not existing:
             create_setting(db, SystemSettingCreate(**default))
+
+    # Seed built-in assignment types on a fresh database.
+    from app.crud.assignment_types import ensure_default_assignment_types
+
+    ensure_default_assignment_types(db)

@@ -16,96 +16,88 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-/**
- * Color palette constants for consistent theming
- */
-
-// Status colors
 export const STATUS_COLORS = {
   success: {
-    bg: 'bg-green-50 dark:bg-green-900',
-    border: 'border-green-200 dark:border-green-700',
-    text: 'text-green-700 dark:text-green-200',
-    button: 'bg-green-600 hover:bg-green-700'
+    bg: 'bg-pos-bg',
+    border: 'border-pos-fg/30',
+    text: 'text-pos-fg',
+    button: 'bg-pos-fg hover:opacity-90'
   },
   error: {
-    bg: 'bg-red-50 dark:bg-red-900',
-    border: 'border-red-200 dark:border-red-700', 
-    text: 'text-red-700 dark:text-red-200',
-    button: 'bg-red-600 hover:bg-red-700'
+    bg: 'bg-neg-bg',
+    border: 'border-neg-fg/30',
+    text: 'text-neg-fg',
+    button: 'bg-danger hover:opacity-90'
   },
   warning: {
-    bg: 'bg-yellow-50 dark:bg-yellow-900',
-    border: 'border-yellow-200 dark:border-yellow-700',
-    text: 'text-yellow-700 dark:text-yellow-200',
-    button: 'bg-yellow-600 hover:bg-yellow-700'
+    bg: 'bg-sub-bg',
+    border: 'border-sub-fg/30',
+    text: 'text-sub-fg',
+    button: 'bg-sub-fg hover:opacity-90'
   },
   info: {
-    bg: 'bg-blue-50 dark:bg-blue-900',
-    border: 'border-blue-200 dark:border-blue-700',
-    text: 'text-blue-700 dark:text-blue-200',
-    button: 'bg-blue-600 hover:bg-blue-700'
+    bg: 'bg-info-bg',
+    border: 'border-info-fg/30',
+    text: 'text-info-fg',
+    button: 'bg-btn-primary-bg hover:opacity-90'
   }
 } as const
 
-// Assignment status colors
 export const ASSIGNMENT_STATUS_COLORS = {
   not_started: {
-    bg: 'bg-gray-50 dark:bg-gray-900',
-    border: 'border-gray-500',
-    text: 'text-gray-600',
-    checkbox: 'text-gray-600 focus:ring-gray-500'
+    bg: 'bg-ns-bg',
+    border: 'border-ns-fg/30',
+    text: 'text-ns-fg',
+    checkbox: 'text-ns-fg focus:ring-muted'
   },
   in_progress: {
-    bg: 'bg-blue-50 dark:bg-blue-900', 
-    border: 'border-blue-500',
-    text: 'text-blue-600',
-    checkbox: 'text-blue-600 focus:ring-blue-500'
+    bg: 'bg-info-bg',
+    border: 'border-info-fg/30',
+    text: 'text-info-fg',
+    checkbox: 'text-info-fg focus:ring-info-fg'
   },
   submitted: {
-    bg: 'bg-yellow-50 dark:bg-yellow-900',
-    border: 'border-yellow-500',
-    text: 'text-yellow-600', 
-    checkbox: 'text-yellow-600 focus:ring-yellow-500'
+    bg: 'bg-sub-bg',
+    border: 'border-sub-fg/30',
+    text: 'text-sub-fg',
+    checkbox: 'text-sub-fg focus:ring-sub-fg'
   },
   graded: {
-    bg: 'bg-purple-50 dark:bg-purple-900',
-    border: 'border-purple-500',
-    text: 'text-purple-600',
-    checkbox: 'text-purple-600 focus:ring-purple-500'
+    bg: 'bg-pos-bg',
+    border: 'border-pos-fg/30',
+    text: 'text-pos-fg',
+    checkbox: 'text-pos-fg focus:ring-pos-fg'
   },
   overdue: {
-    bg: 'bg-red-50 dark:bg-red-900',
-    border: 'border-red-500',
-    text: 'text-red-600',
-    checkbox: 'text-red-600 focus:ring-red-500'
+    bg: 'bg-neg-bg',
+    border: 'border-neg-fg/30',
+    text: 'text-neg-fg',
+    checkbox: 'text-neg-fg focus:ring-neg-fg'
   }
 } as const
 
-// Primary theme colors
 export const THEME_COLORS = {
   primary: {
-    50: 'bg-blue-50',
-    100: 'bg-blue-100',
-    500: 'bg-blue-500',
-    600: 'bg-blue-600',
-    700: 'bg-blue-700',
-    800: 'bg-blue-800'
+    50: 'bg-accent-soft',
+    100: 'bg-accent-soft',
+    500: 'bg-accent',
+    600: 'bg-accent',
+    700: 'bg-accent',
+    800: 'bg-btn-primary-bg'
   },
   secondary: {
-    50: 'bg-gray-50',
-    100: 'bg-gray-100', 
-    500: 'bg-gray-500',
-    600: 'bg-gray-600',
-    700: 'bg-gray-700',
-    800: 'bg-gray-800'
+    50: 'bg-panel-2',
+    100: 'bg-track',
+    500: 'bg-muted',
+    600: 'bg-ink-2',
+    700: 'bg-ink-2',
+    800: 'bg-ink'
   }
 } as const
 
-// Gradient backgrounds
 export const GRADIENTS = {
-  primary: 'bg-gradient-to-r from-blue-600 via-blue-700 to-blue-800',
-  success: 'bg-gradient-to-r from-green-600 to-green-700',
-  warning: 'bg-gradient-to-r from-yellow-600 to-yellow-700',
-  danger: 'bg-gradient-to-r from-red-600 to-red-700'
+  primary: 'bg-btn-primary-bg',
+  success: 'bg-pos-fg',
+  warning: 'bg-sub-fg',
+  danger: 'bg-danger'
 } as const

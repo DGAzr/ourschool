@@ -10,9 +10,9 @@ This document explains how to run OurSchool using Docker and Docker Compose.
 
 ## Quick Start
 
-1. **Copy the Docker environment file:**
+1. **Copy the environment file:**
    ```bash
-   cp .env.docker .env
+   cp env.EXAMPLE .env
    ```
 
 2. **Build and start all services:**
@@ -44,8 +44,7 @@ ACCESS_TOKEN_EXPIRE_MINUTES=30          # Token expiration time
 
 BACKEND_HOST=0.0.0.0                    # Backend bind address
 BACKEND_PORT=8000                       # Backend port
-FRONTEND_HOST=0.0.0.0                   # Frontend bind address  
-FRONTEND_PORT=4173                      # Frontend port
+FRONTEND_PORT=4173                      # Frontend port (default: 4173)
 
 LOG_LEVEL=INFO                          # Log level (DEBUG, INFO, WARNING, ERROR, CRITICAL)
 LOG_FORMAT=json                         # Log format (json or text)
@@ -65,19 +64,22 @@ ALLOWED_ORIGINS=http://localhost:4173,http://frontend:4173
 ### Backend (FastAPI)
 - **Build**: `Dockerfile.backend`
 - **Port**: 8000 (customizable with `BACKEND_PORT`)
+- **Restart**: `unless-stopped` (auto-restart on failure)
 - **Features**:
   - Automatic database migrations on startup
   - Initial admin user creation if no users exist
-  - Health checks on `/health` endpoint
+  - Health checks on `/health` endpoint (15s interval, 5 retries, 30s start period)
   - Hot-reload for development (when volumes are mounted)
 
 ### Frontend (React/Vite)
 - **Build**: `Dockerfile.frontend`
 - **Port**: 4173 (customizable with `FRONTEND_PORT`)
+- **Restart**: `unless-stopped` (auto-restart on failure)
+- **Depends on**: Backend with `condition: service_healthy` (waits for backend to be healthy, not just running)
 - **Features**:
   - Production build served by Vite preview server
   - Proxy configuration for API calls
-  - Health checks
+  - Health checks (node HTTP check)
 
 ## Docker Commands
 
@@ -117,21 +119,22 @@ docker-compose up --build
 ## Development vs Production
 
 ### Development Setup
-For development with hot-reload, you can mount source code as volumes:
+A `docker-compose.override.yml` is provided in the repository root for local development. It:
+- Mounts source directories so backend edits are live without a rebuild.
+- Targets the `builder` stage of `Dockerfile.frontend` (Node/Vite instead of nginx).
+- Runs `vite dev` on port 80 inside the container so the standard `4173→80` host-mapping works for both dev and production.
 
-```yaml
-# Add to docker-compose.override.yml
-version: '3.8'
-services:
-  backend:
-    volumes:
-      - ./app:/app/app
-      - ./alembic:/app/alembic
-      - ./alembic.ini:/app/alembic.ini
-    environment:
-      LOG_LEVEL: DEBUG
-      LOG_FORMAT: text
+```bash
+# Dev mode (override is applied automatically):
+docker-compose up --build
+
+# Production-style run (ignores the override):
+docker-compose -f docker-compose.yml up --build -d
 ```
+
+> **Note (Vite 8 + Colima):** Vite 8 added strict host checking. If the frontend
+> is unreachable through a tunnel or reverse proxy, ensure `allowedHosts: true`
+> is set in `vite.config.ts` (already the case in this repo).
 
 ### Production Setup
 For production:
@@ -208,12 +211,23 @@ docker-compose exec backend curl -f http://localhost:8000/health
 
 ## Security Notes
 
-- **Change default passwords** in production
-- **Use strong SECRET_KEY** values
-- **Restrict CORS origins** to your actual domains
-- **Use HTTPS** in production
-- **Keep Docker images updated**
-- **Don't expose database port** in production unless necessary
+- **Change default passwords** in production. `docker-deploy.sh` now refuses to
+  start with an empty/known-default `POSTGRES_PASSWORD` (override with
+  `ALLOW_WEAK_DB_PASSWORD=true` only if you really mean it).
+- **Use a strong SECRET_KEY.** `docker-compose.yml` has no default — deployment
+  fails fast if it is unset — and `docker-deploy.sh` rejects placeholder/short
+  keys. Generate one with `openssl rand -hex 32`.
+- **Restrict CORS origins** to your actual domains (`ALLOWED_ORIGINS`). A `*`
+  wildcard is rejected at startup because credentials are enabled.
+- **Terminate TLS at a reverse proxy.** The bundled frontend uses Vite's
+  `preview` server, which is not a hardened production web server and provides
+  no TLS, gzip, or rate limiting. Put nginx/Caddy/Traefik (or a managed load
+  balancer) in front to terminate HTTPS and add rate limiting. By default the
+  backend (8000) and database (5432) bind to `127.0.0.1`; set
+  `BACKEND_BIND`/`POSTGRES_BIND` to `0.0.0.0` only when fronted by such a proxy.
+- **Disable interactive API docs** in production if desired: `ENABLE_API_DOCS=false`.
+- **Keep Docker images updated** and rebuild after dependency bumps.
+- **Don't expose the database port** publicly (it stays on loopback by default).
 
 ## Backup and Restore
 

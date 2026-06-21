@@ -24,8 +24,15 @@ MANIFEST
 
 # Virtual Environment
 venv/
+.venv/
 env/
 ENV/
+
+# Local database backups (e.g. pg_dump output)
+.backups/
+
+# Stray root lockfile stub (the real one is frontend/package-lock.json)
+/package-lock.json
 
 # Environment Variables
 .env
@@ -64,3 +71,10 @@ lerna-debug.log*
 .Trashes
 ehthumbs.db
 Thumbs.db
+# Local development notes
+.claude/
+
+OurSchool.sh
+
+# Local Docker overrides
+docker-compose.override.yml

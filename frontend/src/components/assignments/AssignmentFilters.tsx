@@ -20,6 +20,8 @@ import React from 'react'
 import { Search } from 'lucide-react'
 import { Subject } from '../../types'
 
+const FIELD = 'bg-field-bg border border-field-border rounded-field px-3 py-2 text-[13.5px] text-ink focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent'
+
 interface AssignmentFiltersProps {
   searchTerm: string
   setSearchTerm: (term: string) => void
@@ -44,71 +46,59 @@ const AssignmentFilters: React.FC<AssignmentFiltersProps> = ({
   subjects
 }) => {
   return (
-    <div className="bg-white shadow rounded-lg p-6">
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
-        {/* Search */}
+    <div className="bg-panel border border-line rounded-card-lg p-5">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-3">
         <div className="lg:col-span-2">
           <div className="relative">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 h-4 w-4" />
+            <Search className="absolute left-3 top-1/2 -translate-y-1/2 text-faint h-3.5 w-3.5" />
             <input
               type="text"
-              placeholder="Search templates..."
+              placeholder="Search templates…"
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
-              className="pl-10 w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+              className={`${FIELD} pl-8 w-full`}
             />
           </div>
         </div>
 
-        {/* Subject Filter */}
-        <div>
-          <select
-            value={selectedSubject || ''}
-            onChange={(e) => setSelectedSubject(e.target.value ? parseInt(e.target.value) : null)}
-            className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-          >
-            <option value="">All Subjects</option>
-            {subjects.map(subject => (
-              <option key={subject.id} value={subject.id}>
-                {subject.name}
-              </option>
-            ))}
-          </select>
-        </div>
+        <select
+          value={selectedSubject || ''}
+          onChange={(e) => setSelectedSubject(e.target.value ? parseInt(e.target.value) : null)}
+          className={FIELD}
+        >
+          <option value="">All Subjects</option>
+          {subjects.map(subject => (
+            <option key={subject.id} value={subject.id}>{subject.name}</option>
+          ))}
+        </select>
 
-        {/* Assignment Type Filter */}
-        <div>
-          <select
-            value={selectedType || ''}
-            onChange={(e) => setSelectedType(e.target.value || null)}
-            className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-          >
-            <option value="">All Types</option>
-            <option value="homework">Homework</option>
-            <option value="project">Project</option>
-            <option value="test">Test</option>
-            <option value="quiz">Quiz</option>
-            <option value="essay">Essay</option>
-            <option value="presentation">Presentation</option>
-            <option value="worksheet">Worksheet</option>
-            <option value="reading">Reading</option>
-            <option value="practice">Practice</option>
-          </select>
-        </div>
+        <select
+          value={selectedType || ''}
+          onChange={(e) => setSelectedType(e.target.value || null)}
+          className={FIELD}
+        >
+          <option value="">All Types</option>
+          <option value="homework">Homework</option>
+          <option value="project">Project</option>
+          <option value="test">Test</option>
+          <option value="quiz">Quiz</option>
+          <option value="essay">Essay</option>
+          <option value="presentation">Presentation</option>
+          <option value="worksheet">Worksheet</option>
+          <option value="reading">Reading</option>
+          <option value="practice">Practice</option>
+        </select>
 
-        {/* Difficulty Filter */}
-        <div>
-          <select
-            value={selectedDifficulty || ''}
-            onChange={(e) => setSelectedDifficulty(e.target.value || null)}
-            className="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-          >
-            <option value="">All Difficulties</option>
-            <option value="beginner">Beginner</option>
-            <option value="intermediate">Intermediate</option>
-            <option value="advanced">Advanced</option>
-          </select>
-        </div>
+        <select
+          value={selectedDifficulty || ''}
+          onChange={(e) => setSelectedDifficulty(e.target.value || null)}
+          className={FIELD}
+        >
+          <option value="">All Difficulties</option>
+          <option value="beginner">Beginner</option>
+          <option value="intermediate">Intermediate</option>
+          <option value="advanced">Advanced</option>
+        </select>
       </div>
     </div>
   )

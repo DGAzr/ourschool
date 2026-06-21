@@ -267,3 +267,44 @@ async def get_admin_points_overview(
             student_points.student_name = f"{student_points.student.first_name} {student_points.student.last_name}"
     
     return AdminPointsOverview(**overview_data)
+
+@router.get("/presets")
+async def get_award_presets(
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db)
+):
+    """Get quick-award presets (admin only)."""
+    if current_user.role != UserRole.ADMIN:
+        raise HTTPException(status_code=403, detail="Not authorized")
+    import json
+    setting = points_crud.get_system_setting(db, "points_award_presets")
+    if not setting:
+        return []
+    try:
+        return json.loads(setting.setting_value)
+    except Exception:
+        return []
+
+
+@router.put("/presets")
+async def set_award_presets(
+    presets: list[dict],
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db)
+):
+    """Save quick-award presets (admin only)."""
+    if current_user.role != UserRole.ADMIN:
+        raise HTTPException(status_code=403, detail="Not authorized")
+    import json
+    from app.models.points import SystemSettings as _SS
+    for p in presets:
+        if not isinstance(p.get("label"), str) or not isinstance(p.get("amount"), int):
+            raise HTTPException(status_code=422, detail="Each preset must have a string label and integer amount")
+    setting = points_crud.get_system_setting(db, "points_award_presets")
+    if setting:
+        setting.setting_value = json.dumps(presets)
+    else:
+        setting = _SS(setting_key="points_award_presets", setting_value=json.dumps(presets), setting_type="json", description="Quick-award point presets")
+        db.add(setting)
+    db.commit()
+    return presets

@@ -17,31 +17,27 @@
  */
 
 import React from 'react'
-import { BUTTON_SIZES, STATUS_COLORS, SPINNER_STYLES } from '../../../constants'
 import { ButtonProps } from './Button.types'
 
-/**
- * A flexible and reusable button component with multiple variants, sizes, and states.
- * 
- * @component
- * @example
- * ```tsx
- * // Primary button
- * <Button variant="primary" onClick={handleSave}>
- *   Save Changes
- * </Button>
- * 
- * // Loading state
- * <Button loading={isSubmitting} disabled={!isValid}>
- *   Submit Form
- * </Button>
- * 
- * // With icon
- * <Button variant="secondary" icon={<PlusIcon />}>
- *   Add Item
- * </Button>
- * ```
- */
+const sizeClasses = {
+  sm: 'px-3 py-1.5 text-[12px] gap-1.5',
+  md: 'px-4 py-2 text-[13px] gap-2',
+  lg: 'px-5 py-2.5 text-[14px] gap-2',
+}
+
+const variantClasses = {
+  primary:
+    'bg-btn-primary-bg text-btn-primary-fg hover:opacity-90 border border-transparent',
+  secondary:
+    'bg-panel text-ink-2 border border-btn-border hover:bg-panel-2 hover:text-ink',
+  danger:
+    'bg-danger text-white border border-transparent hover:opacity-90',
+  success:
+    'bg-pos-fg text-white border border-transparent hover:opacity-90',
+  outline:
+    'bg-transparent text-accent border border-accent-line hover:bg-accent-soft',
+}
+
 const Button: React.FC<ButtonProps> = ({
   variant = 'primary',
   size = 'md',
@@ -53,73 +49,31 @@ const Button: React.FC<ButtonProps> = ({
   className = '',
   ...props
 }) => {
-  /**
-   * Returns CSS classes for button variant styling
-   * @returns {string} Combined CSS classes for the selected variant
-   */
-  const getVariantClasses = () => {
-    const base = 'inline-flex items-center justify-center font-semibold rounded-lg transition-all duration-200 focus:outline-none focus:ring-2 focus:ring-offset-2'
-    
-    switch (variant) {
-      case 'primary':
-        return `${base} text-white ${STATUS_COLORS.info.button} focus:ring-blue-500`
-      case 'secondary':
-        return `${base} text-gray-700 dark:text-gray-300 bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 border border-gray-300 dark:border-gray-600 focus:ring-gray-500`
-      case 'danger':
-        return `${base} text-white ${STATUS_COLORS.error.button} focus:ring-red-500`
-      case 'success':
-        return `${base} text-white ${STATUS_COLORS.success.button} focus:ring-green-500`
-      case 'outline':
-        return `${base} text-blue-600 dark:text-blue-400 bg-transparent border-2 border-blue-600 dark:border-blue-400 hover:bg-blue-50 dark:hover:bg-blue-900 focus:ring-blue-500`
-      default:
-        return `${base} text-white ${STATUS_COLORS.info.button} focus:ring-blue-500`
-    }
-  }
-
-  /**
-   * Returns CSS classes for button size styling
-   * @returns {string} CSS classes for the selected size
-   */
-  const getSizeClasses = () => {
-    return BUTTON_SIZES[size]
-  }
-
-  /**
-   * Returns CSS classes for button width styling
-   * @returns {string} CSS classes for width (full width or default)
-   */
-  const getWidthClasses = () => {
-    return fullWidth ? 'w-full' : ''
-  }
-
-  /**
-   * Returns CSS classes for disabled/loading state styling
-   * @returns {string} CSS classes for interactive states
-   */
-  const getDisabledClasses = () => {
-    return (disabled || loading) ? 'opacity-50 cursor-not-allowed' : 'hover:shadow-md'
-  }
-
-  const buttonClasses = [
-    getVariantClasses(),
-    getSizeClasses(),
-    getWidthClasses(),
-    getDisabledClasses(),
-    className
-  ].filter(Boolean).join(' ')
+  const classes = [
+    'inline-flex items-center justify-center font-semibold rounded-field transition-all duration-150 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-1 select-none',
+    variantClasses[variant] ?? variantClasses.primary,
+    sizeClasses[size],
+    fullWidth ? 'w-full' : '',
+    disabled || loading ? 'opacity-50 cursor-not-allowed' : '',
+    className,
+  ]
+    .filter(Boolean)
+    .join(' ')
 
   return (
-    <button
-      className={buttonClasses}
-      disabled={disabled || loading}
-      {...props}
-    >
+    <button className={classes} disabled={disabled || loading} {...props}>
       {loading && (
-        <div className={`${SPINNER_STYLES.sm} ${SPINNER_STYLES.base} mr-2`}></div>
+        <svg
+          className="animate-spin h-3.5 w-3.5 flex-shrink-0"
+          xmlns="http://www.w3.org/2000/svg"
+          fill="none"
+          viewBox="0 0 24 24"
+        >
+          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
+        </svg>
       )}
-      {!loading && icon && (
-        <span className="mr-2">{icon}</span>
-      )}
+      {!loading && icon && <span className="flex-shrink-0">{icon}</span>}
       {children}
     </button>
   )
