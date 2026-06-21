@@ -18,6 +18,5 @@
 
 export { default as PageLayout } from './PageLayout'
 export { default as TablePageLayout } from './TablePageLayout'
-export { default as CompactListLayout } from './CompactListLayout'
 export { default as DashboardLayout } from './DashboardLayout'
 export { usePageLayout } from './hooks/usePageLayout'

@@ -47,6 +47,10 @@ jobs:
         run: black --check app
         continue-on-error: true
 
+      - name: Dead code (vulture)
+        run: vulture app --min-confidence 80 --ignore-names cls
+        continue-on-error: true
+
       - name: Verify migrations apply cleanly
         run: alembic upgrade head
 
@@ -75,6 +79,10 @@ jobs:
 
       - name: Lint
         run: npm run lint
+        continue-on-error: true
+
+      - name: Unused code (knip)
+        run: npm run knip
         continue-on-error: true
 
       - name: Build

@@ -24,16 +24,12 @@ from sqlalchemy.orm import Session
 
 from app.core.database import get_db
 from app.core.dual_auth import (
-    AuthUser, 
+    AuthUser,
     get_current_user_or_api_key,
     require_admin_or_permission,
-    require_student_or_permission,
-    require_admin_or_student_self_or_permission,
     can_access_student_data,
     get_auth_context_for_logging,
     get_user_id_from_auth,
-    is_admin_user,
-    is_student_user
 )
 from app.core.logging import get_logger
 from app.routers.auth import get_current_active_user

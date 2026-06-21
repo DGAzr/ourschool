@@ -20,7 +20,7 @@ import uuid
 from contextlib import asynccontextmanager
 from typing import Annotated
 
-from fastapi import FastAPI, Request, Response, HTTPException, Depends, status
+from fastapi import FastAPI, Request, HTTPException, Depends, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
@@ -149,9 +149,6 @@ async def request_logging_middleware(request: Request, call_next):
 
 app.include_router(auth.router, prefix="/api/auth", tags=["authentication"])
 app.include_router(users.router, prefix="/api/users", tags=["users"])
-# app.include_router(
-#     students.router, prefix="/api/students", tags=["students"]
-# )  # Disabled - unified with users
 app.include_router(activity.router, prefix="/api/activity", tags=["activity"])
 app.include_router(attendance.router, prefix="/api/attendance", tags=["attendance"])
 app.include_router(subjects.router, prefix="/api/subjects", tags=["subjects"])
