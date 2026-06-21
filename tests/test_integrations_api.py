@@ -199,3 +199,109 @@ def test_meta_advertises_new_permissions(client):
     assert r.status_code == 200, r.text
     perms = set(r.json()["permissions"])
     assert {"assignments:write", "attendance:read", "attendance:write"} <= perms
+    assert r.json()["on_behalf_of_header"] == "X-On-Behalf-Of"
+
+
+# --------------------------------------------------------------------------
+# On-behalf-of attribution (X-On-Behalf-Of)
+# --------------------------------------------------------------------------
+
+
+def _obo(key: str, who) -> dict:
+    return {"X-API-Key": key, "X-On-Behalf-Of": str(who)}
+
+
+def test_on_behalf_of_attributes_template_create_by_id_and_username(client, seeded):
+    write = seeded["mint"]("assignments:write")
+    admin = seeded["admin"]
+    body = {"name": "Owned", "subject_id": seeded["subject"].id, "assignment_type": seeded["type_key"]}
+
+    # By numeric ID.
+    r = client.post("/api/assignments/templates", json=body, headers=_obo(write, admin.id))
+    assert r.status_code == 200, r.text
+    assert r.json()["created_by"] == admin.id
+
+    # By username.
+    body2 = {**body, "name": "Owned2"}
+    r = client.post("/api/assignments/templates", json=body2, headers=_obo(write, admin.username))
+    assert r.status_code == 200, r.text
+    assert r.json()["created_by"] == admin.id
+
+
+def test_on_behalf_of_attributes_points_adjust(client, seeded):
+    write = seeded["mint"]("points:write")
+    admin = seeded["admin"]
+    body = {"student_id": seeded["student"].id, "amount": 5, "notes": "Great work"}
+
+    r = client.post("/api/points/adjust", json=body, headers=_obo(write, admin.username))
+    assert r.status_code == 200, r.text
+    data = r.json()
+    assert data["admin_id"] == admin.id
+    assert data["admin_name"] == f"{admin.first_name} {admin.last_name}"
+
+
+def test_on_behalf_of_attributes_grade(client, seeded, db_session):
+    write = seeded["mint"]("assignments:write")
+    grade = seeded["mint"]("assignments:grade")
+    admin = seeded["admin"]
+
+    # Author + assign so there is something to grade.
+    r = client.post(
+        "/api/assignments/templates",
+        json={"name": "Quiz", "subject_id": seeded["subject"].id, "assignment_type": seeded["type_key"], "max_points": 10},
+        headers=_hdr(write),
+    )
+    template_id = r.json()["id"]
+    seeded["activate_term"]()
+    r = client.post(
+        "/api/assignments/assign",
+        json={"template_id": template_id, "student_ids": [seeded["student"].id]},
+        headers=_hdr(write),
+    )
+    assignment_id = r.json()["created_assignments"][0]["id"]
+
+    # Grade on behalf of the admin.
+    r = client.post(
+        f"/api/integrations/assignments/{assignment_id}/grade",
+        json={"points_earned": 8},
+        headers=_obo(grade, admin.username),
+    )
+    assert r.status_code == 200, r.text
+
+    from app.models.assignment import StudentAssignment
+
+    db_session.expire_all()
+    row = db_session.query(StudentAssignment).filter(StudentAssignment.id == assignment_id).first()
+    assert row.graded_by == admin.id
+
+
+def test_on_behalf_of_rejects_non_admin_and_unknown(client, seeded):
+    write = seeded["mint"]("assignments:write")
+    body = {"name": "Nope", "subject_id": seeded["subject"].id, "assignment_type": seeded["type_key"]}
+
+    # A student is not an admin → 400, nothing written.
+    r = client.post("/api/assignments/templates", json=body, headers=_obo(write, seeded["student"].username))
+    assert r.status_code == 400, r.text
+
+    # An unknown identifier → 400.
+    r = client.post("/api/assignments/templates", json=body, headers=_obo(write, "no-such-user-xyz"))
+    assert r.status_code == 400, r.text
+
+
+def test_on_behalf_of_rejects_inactive_admin(client, seeded, db_session):
+    write = seeded["mint"]("assignments:write")
+    inactive = User(
+        email=f"inactive-{seeded['admin'].username}@test.local",
+        username=f"inactive-{seeded['admin'].username}",
+        hashed_password="x",
+        first_name="In",
+        last_name="Active",
+        role=UserRole.ADMIN,
+        is_active=False,
+    )
+    db_session.add(inactive)
+    db_session.commit()
+
+    body = {"name": "Nope2", "subject_id": seeded["subject"].id, "assignment_type": seeded["type_key"]}
+    r = client.post("/api/assignments/templates", json=body, headers=_obo(write, inactive.username))
+    assert r.status_code == 400, r.text

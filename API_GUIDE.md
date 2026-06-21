@@ -282,6 +282,33 @@ continue to serve normal user sessions unchanged.
 > Use `GET /api/meta` to discover valid `assignment_types`, `assignment_statuses`,
 > and the full `permissions` list before constructing requests.
 
+### Acting on behalf of a user (attribution)
+
+By default, records written by an API key have null audit fields — grades,
+point adjustments, and authored content show up unattributed ("API
+Integration"). To attribute a write to a real person, send the
+**`X-On-Behalf-Of`** header alongside `X-API-Key`:
+
+```
+POST /api/points/adjust
+Header: X-API-Key: os_xxxxxxxx...
+Header: X-On-Behalf-Of: jsmith        # user ID or username
+
+→ the transaction's admin_id / a grade's graded_by / a template's created_by
+  is set to that user, and the UI shows e.g. "Graded by Jane Smith".
+```
+
+Rules:
+- The value is a **numeric user ID or a username** (numeric values are tried as
+  an ID first, then as a username).
+- The referenced user must be an **active admin**. An unknown, inactive, or
+  non-admin value **rejects the whole request with `400`** — no partial writes,
+  no silent mis-attribution.
+- The header is honored **only** for API-key auth. Normal user sessions are
+  always attributed to the logged-in user; the header is ignored for them.
+- The advertised header name is discoverable via `GET /api/meta`
+  (`on_behalf_of_header`).
+
 ## 📝 Endpoint Standards
 
 ### Complete Endpoint Template

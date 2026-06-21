@@ -24,17 +24,28 @@ from sqlalchemy.orm import Session
 from app.core.database import get_db
 from app.core.security import verify_api_key
 from app.models.api_key import APIKey
-from app.models.user import User
+from app.models.user import User, UserRole
 
 
 class APIKeyUser:
     """Represents an API key with permissions for authentication."""
-    
-    def __init__(self, api_key_id: int, permissions: List[str], name: str = "API Key"):
+
+    def __init__(
+        self,
+        api_key_id: int,
+        permissions: List[str],
+        name: str = "API Key",
+        acting_user_id: Optional[int] = None,
+        acting_user_name: Optional[str] = None,
+    ):
         self.api_key_id = api_key_id
         self.permissions = permissions
         self.role = "api_key"  # Special role for API keys
         self.name = name
+        # Optional "acting on behalf of" admin, resolved from the
+        # X-On-Behalf-Of header so writes can be attributed to a real user.
+        self.acting_user_id = acting_user_id
+        self.acting_user_name = acting_user_name
         
     def has_permission(self, permission: str) -> bool:
         """Check if this API key has a specific permission."""
@@ -49,14 +60,39 @@ class APIKeyUser:
         return all(self.has_permission(perm) for perm in permissions)
 
 
+def _resolve_acting_admin(db: Session, raw: str) -> User:
+    """Resolve an X-On-Behalf-Of value to an active admin user.
+
+    Accepts a numeric user ID or a username (numeric values are tried as an ID
+    first, then as a username). Fail-closed: an unknown, inactive, or non-admin
+    value raises 400 so the request is rejected before any mutation.
+    """
+    from app.routers.auth import get_user_by_username
+
+    ident = raw.strip()
+    user: Optional[User] = None
+    if ident.isdigit():
+        user = db.query(User).filter(User.id == int(ident)).first()
+    if user is None:
+        user = get_user_by_username(db, ident)
+
+    if user is None or not user.is_active or user.role != UserRole.ADMIN:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="X-On-Behalf-Of must reference an active admin user",
+        )
+    return user
+
+
 async def get_api_key_auth(
     x_api_key: Optional[str] = Header(None, alias="X-API-Key"),
+    x_on_behalf_of: Optional[str] = Header(None, alias="X-On-Behalf-Of"),
     db: Session = Depends(get_db)
 ) -> Optional[APIKeyUser]:
     """Authenticate via API key. Returns None if no API key provided."""
     if not x_api_key:
         return None
-    
+
     if not x_api_key.startswith("os_"):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -99,11 +135,21 @@ async def get_api_key_auth(
     # Update last used timestamp
     api_key.last_used_at = datetime.now(timezone.utc)
     db.commit()
-    
+
+    # Optionally attribute writes to a real admin (fail-closed if invalid).
+    acting_user_id = None
+    acting_user_name = None
+    if x_on_behalf_of:
+        acting_user = _resolve_acting_admin(db, x_on_behalf_of)
+        acting_user_id = acting_user.id
+        acting_user_name = f"{acting_user.first_name} {acting_user.last_name}".strip()
+
     return APIKeyUser(
         api_key_id=api_key.id,
         permissions=api_key.permissions,
-        name=api_key.name
+        name=api_key.name,
+        acting_user_id=acting_user_id,
+        acting_user_name=acting_user_name,
     )
 
 

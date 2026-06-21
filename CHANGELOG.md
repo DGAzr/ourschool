@@ -24,6 +24,12 @@ end-to-end loops, not just grade a single known assignment.
   API key. Records authored by an API key carry null audit fields
   (`created_by` / `assigned_by`), and the affected response schemas now mark
   those fields optional.
+- **On-behalf-of attribution** — API-key requests may send an
+  `X-On-Behalf-Of` header (user ID or username) to attribute grades, point
+  adjustments, and authored content to a real **active admin**, instead of
+  leaving them unattributed. The value is validated fail-closed (unknown /
+  inactive / non-admin → `400`); the header is honored only for API-key auth and
+  is discoverable via `GET /api/meta` (`on_behalf_of_header`).
 
 **Tests**
 - Added integration tests covering API-key access (allowed with permission,

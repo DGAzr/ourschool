@@ -225,10 +225,26 @@ def require_any_permission(permissions: List[str]):
 
 
 def get_user_id_from_auth(auth_user: AuthUser) -> Optional[int]:
-    """Extract user ID from auth user (None for API keys)."""
+    """Extract the user ID to attribute writes to.
+
+    For a user session this is the user's own ID. For an API key it is the
+    "acting on behalf of" admin resolved from the X-On-Behalf-Of header, or
+    None when the header was not supplied.
+    """
     if isinstance(auth_user, User):
         return auth_user.id
-    return None
+    return getattr(auth_user, "acting_user_id", None)
+
+
+def get_actor_name_from_auth(auth_user: AuthUser) -> str:
+    """Human-readable actor name for display/audit messages."""
+    if isinstance(auth_user, User):
+        return f"{auth_user.first_name} {auth_user.last_name}".strip()
+    if isinstance(auth_user, APIKeyUser):
+        if auth_user.acting_user_name:
+            return auth_user.acting_user_name
+        return f"API: {auth_user.name}"
+    return "Unknown"
 
 
 def is_admin_user(auth_user: AuthUser) -> bool:
