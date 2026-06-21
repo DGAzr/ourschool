@@ -1,6 +1,6 @@
 export default {
   plugins: {
-    tailwindcss: {},
-    autoprefixer: {},
+    // Tailwind 4 uses its own PostCSS plugin; autoprefixer is bundled.
+    '@tailwindcss/postcss': {},
   },
 }

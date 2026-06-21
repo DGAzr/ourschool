@@ -206,7 +206,7 @@ const GradingAssignmentsTable: React.FC<GradingAssignmentsTableProps> = ({
                             <Edit3 className="h-3.5 w-3.5" />
                           </button>
                         )}
-                        <div className="relative" ref={(el) => dropdownRefs.current[assignment.id] = el}>
+                        <div className="relative" ref={(el) => { dropdownRefs.current[assignment.id] = el }}>
                           <button
                             onClick={() => setOpenDropdownId(openDropdownId === assignment.id ? null : assignment.id)}
                             className="p-1.5 rounded-field text-faint hover:text-ink hover:bg-panel-2 transition-colors"

@@ -119,21 +119,22 @@ docker-compose up --build
 ## Development vs Production
 
 ### Development Setup
-For development with hot-reload, you can mount source code as volumes:
+A `docker-compose.override.yml` is provided in the repository root for local development. It:
+- Mounts source directories so backend edits are live without a rebuild.
+- Targets the `builder` stage of `Dockerfile.frontend` (Node/Vite instead of nginx).
+- Runs `vite dev` on port 80 inside the container so the standard `4173→80` host-mapping works for both dev and production.
 
-```yaml
-# Add to docker-compose.override.yml
-version: '3.8'
-services:
-  backend:
-    volumes:
-      - ./app:/app/app
-      - ./alembic:/app/alembic
-      - ./alembic.ini:/app/alembic.ini
-    environment:
-      LOG_LEVEL: DEBUG
-      LOG_FORMAT: text
+```bash
+# Dev mode (override is applied automatically):
+docker-compose up --build
+
+# Production-style run (ignores the override):
+docker-compose -f docker-compose.yml up --build -d
 ```
+
+> **Note (Vite 8 + Colima):** Vite 8 added strict host checking. If the frontend
+> is unreachable through a tunnel or reverse proxy, ensure `allowedHosts: true`
+> is set in `vite.config.ts` (already the case in this repo).
 
 ### Production Setup
 For production:

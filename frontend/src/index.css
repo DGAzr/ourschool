@@ -1,6 +1,81 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import "tailwindcss";
+
+/* ── Dark mode: trigger on .dark class (class-based, matches Tailwind v3 behaviour) */
+@custom-variant dark (&:is(.dark *));
+
+/* ── Tailwind theme: map utility names to our CSS design tokens ─────── */
+@theme {
+  /* Fonts */
+  --font-sans:  'Hanken Grotesk', system-ui, sans-serif;
+  --font-mono:  'JetBrains Mono', monospace;
+  --font-serif: 'Newsreader', Georgia, serif;
+
+  /* Colors — all resolve through CSS variables so light/dark toggling
+     happens automatically when the .dark class is applied to <html>   */
+  --color-bg:             var(--bg);
+  --color-panel:          var(--panel);
+  --color-panel-2:        var(--panel-2);
+
+  --color-ink:            var(--ink);
+  --color-ink-2:          var(--ink-2);
+  --color-muted:          var(--muted);
+  --color-faint:          var(--faint);
+  --color-faintest:       var(--faintest);
+
+  --color-line:           var(--line);
+  --color-line-2:         var(--line-2);
+  --color-line-3:         var(--line-3);
+
+  --color-track:          var(--track);
+  --color-seg-active:     var(--seg-active);
+  --color-field-border:   var(--field-border);
+  --color-field-bg:       var(--field-bg);
+  --color-btn-border:     var(--btn-border);
+  --color-check-border:   var(--check-border);
+
+  --color-accent:         var(--accent);
+  --color-accent-soft:    var(--accent-soft);
+  --color-accent-line:    var(--accent-line);
+
+  --color-danger:         var(--danger);
+  --color-danger-soft:    var(--danger-soft);
+  --color-danger-line:    var(--danger-line);
+  --color-warn:           var(--warn);
+  --color-warn-soft:      var(--warn-soft);
+  --color-warn-line:      var(--warn-line);
+  --color-pos:            var(--pos);
+  --color-pos-soft:       var(--pos-soft);
+  --color-nav-active:     var(--nav-active);
+
+  --color-btn-primary-bg: var(--btn-primary-bg);
+  --color-btn-primary-fg: var(--btn-primary-fg);
+
+  --color-pos-fg:         var(--pos-fg);
+  --color-pos-bg:         var(--pos-bg);
+  --color-info-fg:        var(--info-fg);
+  --color-info-bg:        var(--info-bg);
+  --color-sub-fg:         var(--sub-fg);
+  --color-sub-bg:         var(--sub-bg);
+  --color-exc-fg:         var(--exc-fg);
+  --color-exc-bg:         var(--exc-bg);
+  --color-neg-fg:         var(--neg-fg);
+  --color-neg-bg:         var(--neg-bg);
+  --color-ns-fg:          var(--ns-fg);
+  --color-ns-bg:          var(--ns-bg);
+  --color-reply:          var(--reply);
+  --color-overlay:        var(--overlay);
+
+  /* Border radius */
+  --radius-card:    13px;
+  --radius-card-lg: 16px;
+  --radius-field:   8px;
+  --radius-pill:    6px;
+
+  /* Shadows */
+  --shadow-card:  0 1px 4px var(--shadow);
+  --shadow-float: 0 4px 20px var(--shadow-lg);
+  --shadow-menu:  0 2px 12px var(--shadow);
+}
 
 /* ── Design tokens ─────────────────────────────────────────────────── */
 :root {
@@ -42,7 +117,7 @@
   --btn-primary-bg: #211F1B;
   --btn-primary-fg: #FFFFFF;
 
-  /* New semantic tokens */
+  /* Semantic tokens */
   --danger-soft: #FBEEEC;
   --danger-line: #E8CBC6;
   --warn:        #B0762F;

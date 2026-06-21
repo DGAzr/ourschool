@@ -19,23 +19,34 @@ import secrets
 from datetime import datetime, timedelta, timezone
 from typing import Optional, Tuple
 
+import bcrypt
 from fastapi import HTTPException, status
 from jose import JWTError, jwt
-from passlib.context import CryptContext
 
 from app.core.config import settings
 
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+# bcrypt truncates at 72 bytes.  passlib silently did the same; we reproduce
+# that behaviour explicitly so existing hashes (produced by passlib) continue
+# to verify and long passwords don't raise ValueError on bcrypt 5.x+.
+_BCRYPT_MAX_BYTES = 72
+
+
+def _normalize(secret: str) -> bytes:
+    """Encode *secret* to UTF-8 and truncate to the bcrypt 72-byte limit."""
+    return secret.encode("utf-8")[:_BCRYPT_MAX_BYTES]
 
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
-    """Verify a password."""
-    return pwd_context.verify(plain_password, hashed_password)
+    """Verify a password against a stored bcrypt hash."""
+    try:
+        return bcrypt.checkpw(_normalize(plain_password), hashed_password.encode("utf-8"))
+    except (ValueError, TypeError):
+        return False
 
 
 def get_password_hash(password: str) -> str:
-    """Get the hash of a password."""
-    return pwd_context.hash(password)
+    """Return a bcrypt hash of *password* as a str."""
+    return bcrypt.hashpw(_normalize(password), bcrypt.gensalt()).decode("utf-8")
 
 
 def create_access_token(
@@ -106,9 +117,12 @@ def generate_api_key() -> Tuple[str, str]:
 
 def hash_api_key(api_key: str) -> str:
     """Hash an API key for secure storage."""
-    return pwd_context.hash(api_key)
+    return bcrypt.hashpw(_normalize(api_key), bcrypt.gensalt()).decode("utf-8")
 
 
 def verify_api_key(api_key: str, hashed_key: str) -> bool:
     """Verify an API key against its hash."""
-    return pwd_context.verify(api_key, hashed_key)
+    try:
+        return bcrypt.checkpw(_normalize(api_key), hashed_key.encode("utf-8"))
+    except (ValueError, TypeError):
+        return False
