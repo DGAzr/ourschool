@@ -27,7 +27,6 @@ from app.models.points import StudentPoints, PointTransaction, SystemSettings
 from app.models.user import User
 from app.enums import UserRole
 from app.schemas.points import (
-    StudentPointsCreate,
     PointTransactionCreate,
     AdminPointAdjustment,
     SystemSettingCreate,

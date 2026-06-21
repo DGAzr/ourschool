@@ -8,11 +8,10 @@ sqlalchemy==2.0.51
 alembic==1.18.4
 psycopg==3.3.4  # PostgreSQL adapter (psycopg3)
 
-# Request handling and multipart forms
+# Authentication and security
+# Required by FastAPI's OAuth2PasswordRequestForm (used in auth/login endpoint)
 # 0.0.18 fixes the multipart DoS (CVE-2024-24762) present in 0.0.6
 python-multipart==0.0.32
-
-# Authentication and security
 # 3.5.0 fixes JWT algorithm-confusion / DoS advisories (CVE-2024-33663/33664)
 python-jose[cryptography]==3.5.0
 # passlib removed: it was unmaintained (last release 2020) and incompatible with
@@ -23,10 +22,3 @@ bcrypt==5.0.0
 # Data validation and settings
 pydantic[email]==2.13.4
 pydantic-settings==2.14.2
-
-# Environment and configuration
-python-dotenv==1.2.2
-
-# Development and code quality tools
-ruff==0.15.18
-black==26.5.1
