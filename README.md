@@ -1,344 +1,292 @@
-# OurSchool - Homeschool Management System
+# 🏫 OurSchool
 
-A comprehensive web application for managing homeschool programs, supporting multiple students with attendance tracking, subject configuration, assignments, and grading. Designed to help ease the administrative burden of your homeschool program and improve the accuracy of mandatory reporting. 
+**Homeschool Management System**
 
-# Current Status
-Now available as a beta release! The lessons feature has been removed in favor of a streamlined subject-and-assignment workflow. Report accuracy has been significantly improved, and the backup system now supports cross-version import with stable external IDs. The API is MCP-ready for AI integration, with a meta endpoint for enum/permission discovery.
+OurSchool is a self-hosted homeschool management system for families who take attendance seriously, grade assignments carefully, and really don't want to maintain a pile of spreadsheets. It handles the administrative grind — attendance, subjects, assignments, grading, reports, and a shameless gamification points system — so you can spend more time on the actual teaching.
 
-This is still pre-stable software; the database schema may have breaking changes until the 2026-2027 stable release. Use the built-in system backup/restore (now with dry-run preview) to safeguard your data.
-
-## Features
-
-- **Multi-user Authentication**: Separate logins for parents (administrators) and students
-- **Attendance Tracking**: Record daily attendance with notes and status. Flexibile academic terms to support reporting needs of your jurisdiction.
-- **Subject Management**: Configure subject areas with names, descriptions, and colors
-- **Assignment Management**: Create, track, grade, and bulk-assign various types of assignments with inline grading
-- **Optional Gamification**: As assignments are graded, student points accumulate to be used as an incentive system (Points system can be disabled in Admin Center)
-- **System Backup/Restore**: Full system export/import with dry-run preview, cross-version compatibility, and stable external IDs for entity resolution
-- **Integration API**: API can be accessed by external systems for integration and automation; MCP-ready with enum/permission discovery endpoint
-- **Academic Terms**: Flexible term types (semester, quarter, trimester, custom) with per-subject grading configuration
-- **Reports**: Performance reports, attendance summaries, assignment completion rates, grade trends
-- **Journal**: Teacher/student entries with date tracking
+> **Beta — `v1.0.0-beta.1`**  
+> Pre-stable software. The database schema may have breaking changes until the planned 2026–2027 stable release. Use the built-in system backup/restore (with dry-run preview) to safeguard your data between updates.
 
 
-## Quick Start
+## ✨ Features
 
-```
-git clone git@github.com:DGAzr/ourschool.git
-cd ourschool
+- **Multi-user auth** — Separate logins for parents (admin) and students. Program administrators see the whole picture for all students while students get a streamlined view of their own work and progress.
+- **Attendance tracking** — Daily records with status and notes. Flexible academic terms (`semester`, `quarter`, `trimester`, or `custom`) that map to your jurisdiction's reporting requirements.
+- **Subjects** — Configure subject areas with names, descriptions, and colors. They persist across terms so you're not re-entering them every year.
+- **Assignment templates → student assignments** — Create a template once, assign it to one or more students. Inline row grading and bulk-grade support mean less clicking.
+- **Optional gamification** — As assignments are graded, students earn points redeemable for whatever your household considers a reward. The whole system is opt-in and can be toggled off in Admin Center.
+- **Journal** — Teacher and student entries with date tracking, reactions, and threaded replies.
+- **Reports** — Performance reports, attendance summaries, assignment completion rates, grade trends, and term report cards. 
+- **System backup / restore** — Full export/import with dry-run preview, cross-version compatibility (hopefully...), and stable external IDs for conflict-free entity resolution.
+- **Integration API** — REST API with Bearer token and API key (`os_` prefix) auth. MCP-ready: `GET /api/meta` for enum/permission discovery. Full reference at `/docs`.
+
+
+## 🚀 Quick Start (Docker — recommended)
+
+The fastest path. Just yoink the official images from GHCR.
+
+```bash
+# 1. Grab the compose file and sample env
+curl -O https://raw.githubusercontent.com/DGAzr/ourschool/main/docker-compose.ghcr.yml
+curl -O https://raw.githubusercontent.com/DGAzr/ourschool/main/env.EXAMPLE
+
+# 2. Set up your environment
 cp env.EXAMPLE .env
-(!!!EDIT YOUR .env FILE TO SUIT YOUR ENVIRONMENT!!!)
-bash docker-deploy.sh
+# Edit .env — at minimum, replace SECRET_KEY with a real secret:
+#   openssl rand -hex 32
+
+# 3. Launch (includes a bundled PostgreSQL container)
+docker compose -f docker-compose.ghcr.yml --profile local-db up -d
+
+# 4. Open the app
+open http://localhost:4173
 ```
-Point your browser at localhost:4173
 
-> ⚠️ **Change the default credentials immediately after first login.** The seeded passwords (`admin123`, `student123`) are public — they are only a starting point.
+That's it. The backend runs migrations and seeds an admin account automatically on first start.
 
-### Screenshots
-![A screenshot of the default OurSchool Admin Dashboard](/utils/OS_Login.png?raw=true "OurSchool Admin Dashboard")
+> ⚠️ **Change the default credentials immediately after first login.**  
+> Admin login: `admin` / `admin123` — these are public knowledge and exist only to get you in the door.
+
+> 📌 **External database?** Skip `--profile local-db` and set `DATABASE_URL` in `.env` instead.
+
+> 🏷️ **Image tag:** The compose file defaults to `v1.0.0-beta.1`. Change `IMAGE_TAG` in `.env` to pin a different release. All published tags: [ghcr.io/dgazr/ourschool-backend](https://github.com/DGAzr/ourschool/pkgs/container/ourschool-backend).
 
 
-## Buy me a coffee
-I really, really like coffee :) 
+## 📸 Screenshots
+
+### Administrator Dashboard
+
+![OurSchool Admin Dashboard](/utils/OS_Dashboard.png?raw=true "Administrator Dashboard")
+
+### Administrator Assignment Definitions
+
+![OurSchool Assignment Library](/utils/OS_Assignments.png?raw=true "Assignment Library")
+
+### Assign things to Students
+
+![OurSchool Assign to Students](/utils/OS_Assign.png?raw=true "Assign to Students")
+
+### Take Attendance
+
+![OurSchool Attendance](/utils/OS_Attendance.png?raw=true "Attendance")
+
+### Grade Stuff
+
+![OurSchool Grading Desk](/utils/OS_Grading.png?raw=true "Grading Desk")
+
+
+## ☕ Buy me a coffee
+
+If OurSchool saves you time and/or a mild argument with your spreadsheet, I'd appreciate it!
 
 [![BuyMeACoffee](https://raw.githubusercontent.com/pachadotdev/buymeacoffee-badges/main/bmc-yellow.svg)](https://buymeacoffee.com/cyzfcykbd)
 
-## Not-so-quick-start
+
+## 🛠️ Manual Setup (from source)
+
+For contributors or anyone who wants to run the app without Docker.
 
 ### Prerequisites
-- Python 3.8+
-- Node.js 16+
+
+- Python **3.11+**
+- Node.js **20+**
 - PostgreSQL
 
-### Backend Setup
+### Backend
 
-1. Create a virtual environment:
 ```bash
+# Create and activate a virtual environment
 python -m venv venv
-source venv/bin/activate  # On Windows: venv\\Scripts\\activate
-```
+source venv/bin/activate  # Windows: venv\Scripts\activate
 
-2. Install dependencies:
-```bash
+# Install dependencies
 pip install -r requirements.txt
-```
 
-3. Set up environment variables:
-```bash
+# Configure environment
 cp env.EXAMPLE .env
-# Edit .env with your database credentials and secret key.
-# Generate a strong SECRET_KEY, e.g.: openssl rand -hex 32
-```
+# Edit .env — set DATABASE_URL (or POSTGRES_* vars) and SECRET_KEY
+# Generate a strong SECRET_KEY: openssl rand -hex 32
 
-4. **Database Initialization (First Time Setup)**:
-
-   a. Create the PostgreSQL database:
-   ```bash
-   # Connect to PostgreSQL as superuser
-   sudo -u postgres psql
-   
-   # Create database and user
-   CREATE DATABASE ourschool;
-   CREATE USER postgres WITH PASSWORD 'your-secure-password-here';
-   GRANT ALL PRIVILEGES ON DATABASE ourschool TO postgres;
-   \q
-   ```
-
-   b. Update your `.env` file with the correct database credentials:
-   ```bash
-   POSTGRES_DB=ourschool
-   POSTGRES_USER=postgres
-   POSTGRES_PASSWORD=your-secure-password-here
-   DATABASE_URL=postgresql+psycopg://postgres:your-secure-password-here@localhost:5432/ourschool
-   ```
-
-5. Run database migrations:
-```bash
+# Run migrations
 alembic upgrade head
-```
 
-6. **Seed the database with initial admin**:
-```bash
+# Seed the initial admin account
 python seed_data.py
-```
-This creates:
-- Admin user: `admin` / `admin123`
+# Admin login: admin / admin123 (change it!)
+# Add --full for demo students, subjects, terms, and sample assignments
 
-> ⚠️ **Change these credentials immediately after first login.** The seed passwords (`admin123`, `student123`) are public knowledge — they exist only to get you in the door.
-
-7. Start the API server:
-```bash
+# Start the API server
 uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
 ```
 
-### Frontend Setup
+### Frontend
 
-1. Navigate to frontend directory:
 ```bash
 cd frontend
-```
-
-2. Install dependencies:
-```bash
 npm install
-```
-
-3. Start the development server:
-```bash
 npm run dev
 ```
 
-The application will be available at:
-- Frontend (Vite dev server, `npm run dev`): http://localhost:3000
-- API: http://localhost:8000
-- API Documentation: http://localhost:8000/docs (can be disabled with `ENABLE_API_DOCS=false`)
+The app is available at:
 
-> Note: the Docker deployment serves the frontend via nginx on port **4173** (host) → 80 (container). Port 3000 applies only to the local `npm run dev` workflow.
+| Service | URL |
+|---------|-----|
+| Frontend (dev) | http://localhost:4173 |
+| API | http://localhost:8000 |
+| API docs | http://localhost:8000/docs |
+
+> API docs can be disabled with `ENABLE_API_DOCS=false` in `.env`.
 
 
-## API Integration
+## 🔌 API Integration
 
-OurSchool provides a comprehensive REST API for external integrations, supporting both user session authentication (Bearer tokens) and API key authentication for automated systems.
+OurSchool has a REST API for external integrations — handy for AI tools, automation, or a second screen that shows grades without navigating the UI. More endpoints coming soon!
 
-### API Key Setup
+### Authentication
 
-1. **Create API Key**: Navigate to Admin → API Keys in the web interface
-2. **Set Permissions**: Assign required permissions (e.g., `points:read`, `assignments:grade`)
-3. **Secure Storage**: Store your API key securely - it starts with `os_`
-
-### Authentication Methods
-
-#### User Session (Bearer Token)
+**User session (Bearer token)**
 ```bash
-# Login to get token
-curl -X POST "http://localhost:8000/api/auth/login" \
+curl -X POST http://localhost:8000/api/auth/login \
   -H "Content-Type: application/x-www-form-urlencoded" \
   -d "username=admin&password=admin123"
-
-# Use token in requests
-curl -H "Authorization: Bearer YOUR_JWT_TOKEN" \
-  "http://localhost:8000/api/points/admin/overview"
+# Returns a JWT — use as: Authorization: Bearer <token>
 ```
 
-#### API Key Authentication
+**API key** (create under Admin → API Keys)
 ```bash
-curl -H "X-API-Key: os_YOUR_API_KEY_HERE" \
-  "http://localhost:8000/api/points/admin/overview"
+curl -H "X-API-Key: os_YOUR_KEY_HERE" \
+  http://localhost:8000/api/points/admin/overview
 ```
 
-### Example API Calls
+### API Key Permissions
 
-#### Get Student Points Overview
-```bash
-curl -X GET "http://localhost:8000/api/points/admin/overview" \
-  -H "X-API-Key: os_YOUR_API_KEY_HERE" \
-  -H "Content-Type: application/json"
-```
-
-**Response:**
-```json
-{
-  "total_students_with_points": 2,
-  "total_students": 2,
-  "total_points_awarded": 800,
-  "total_points_spent": 0,
-  "student_points": [
-    {
-      "current_balance": 500,
-      "total_earned": 500,
-      "total_spent": 0,
-      "student_id": 4,
-      "student_name": "Student One"
-    },
-    {
-      "current_balance": 300,
-      "total_earned": 300,
-      "total_spent": 0,
-      "student_id": 5,
-      "student_name": "Student Two"
-    }
-  ]
-}
-```
-
-#### Grade an Assignment
-```bash
-curl -X POST "http://localhost:8000/api/integrations/assignments/123/grade" \
-  -H "X-API-Key: os_YOUR_API_KEY_HERE" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "points_earned": 85.0,
-    "teacher_feedback": "Good work! Minor areas for improvement.",
-    "letter_grade": "B+"
-  }'
-```
-
-#### Get Individual Student Points
-```bash
-curl -X GET "http://localhost:8000/api/points/student/4/balance" \
-  -H "X-API-Key: os_YOUR_API_KEY_HERE"
-```
-
-### Python Integration Example
-
-See `list_student_points.py` for a complete Python example:
-
-```python
-import requests
-import os
-
-BASE_URL = "http://localhost:8000"
-API_KEY = os.getenv("OURSCHOOL_API_KEY")
-
-headers = {
-    "X-API-Key": API_KEY,
-    "Content-Type": "application/json"
-}
-
-# Get all student points
-response = requests.get(f"{BASE_URL}/api/points/admin/overview", headers=headers)
-if response.status_code == 200:
-    data = response.json()
-    for student in data['student_points']:
-        print(f"{student['student_name']}: {student['current_balance']} points")
-```
-
-### API Endpoints
-
-#### Authentication
-- `POST /api/auth/login` - User authentication (returns JWT)
-
-#### Students & Users  
-- `GET /api/users/me` - Current user profile (session auth only)
-
-#### Points System
-- `GET /api/points/admin/overview` - All student points overview
-- `GET /api/points/student/{id}/balance` - Individual student points
-- `GET /api/points/student/{id}/ledger` - Student transaction history
-- `POST /api/points/adjust` - Manually adjust student points
-
-#### Assignments (Integration API)
-- `GET /api/integrations/assignments/{id}` - Get assignment details
-- `POST /api/integrations/assignments/{id}/grade` - Grade assignment
-
-#### Other Endpoints
-- `POST /api/attendance/` - Record attendance
-- `GET /api/subjects/` - List subjects
-- `POST /api/subjects/` - Create subject (admin only)
-- `GET /api/meta` - Discover enum values and permissions (MCP clients)
-- `POST /api/assignments/` - Create assignments (session auth)
-
-### Required Permissions
-
-| Permission | Description |
-|------------|-------------|
-| `points:read` | Read student points and transaction history |
-| `points:write` | Adjust student points |
+| Permission | What it grants |
+|------------|----------------|
+| `students:read` | Read student information |
 | `assignments:read` | Read assignment data |
 | `assignments:grade` | Grade student assignments |
-| `students:read` | Read student information |
-| `attendance:read` | Read attendance records |
-| `attendance:write` | Record attendance |
+| `points:read` | Read student points and transaction history |
+| `points:write` | Adjust student points |
 
-## Development
+### MCP / enum discovery
 
-### Database Migrations
-
-Create a new migration:
 ```bash
-alembic revision --autogenerate -m "Description"
+GET /api/meta
+```
+Returns all active assignment types, assignment status enum values, and available API key permissions. Useful for AI/MCP clients that need to enumerate valid values before taking action.
+
+### Quick example — grade an assignment
+
+```bash
+curl -X POST "http://localhost:8000/api/integrations/assignments/123/grade" \
+  -H "X-API-Key: os_YOUR_KEY_HERE" \
+  -H "Content-Type: application/json" \
+  -d '{"points_earned": 85.0, "teacher_feedback": "Nice work!", "letter_grade": "B+"}'
 ```
 
-Apply migrations:
+### Python snippet
+
+```python
+import requests, os
+
+API_KEY = os.getenv("OURSCHOOL_API_KEY")
+headers = {"X-API-Key": API_KEY}
+
+r = requests.get("http://localhost:8000/api/points/admin/overview", headers=headers)
+for student in r.json()["student_points"]:
+    print(f"{student['student_name']}: {student['current_balance']} pts")
+```
+
+Full endpoint reference: **http://localhost:8000/docs**
+
+
+## 🧑‍💻 Development
+
+### Database migrations
+
 ```bash
+# Create a new migration
+alembic revision --autogenerate -m "description"
+
+# Apply migrations
 alembic upgrade head
 ```
 
-### Running Tests
+### Tests
 
-Backend tests (pytest + httpx, run against a Postgres test database — set
-`DATABASE_URL` and `SECRET_KEY` first):
+Backend (pytest + httpx — set `DATABASE_URL` and `SECRET_KEY` first):
 ```bash
 pytest
 ```
 
-Frontend checks (type-check, lint, and production build):
+Frontend checks:
 ```bash
 cd frontend
-npx tsc --noEmit
-npm run lint
-npm run build
+npx tsc --noEmit   # type-check
+npm run lint        # lint
+npm run build       # production build
+npm run knip        # unused exports / dead code
 ```
 
-## Tech Stack
+### Build from source (Docker)
+
+Contributors can build and run locally using the base compose file:
+```bash
+# Dev mode (live-reload via docker-compose.override.yml, auto-merged):
+docker compose up --build
+
+# Production-style build (ignores the dev override):
+docker compose -f docker-compose.yml up --build -d
+```
+
+
+## 🏗️ Tech Stack
 
 ### Backend
-- **FastAPI** - Modern Python web framework
-- **SQLAlchemy** - Database ORM with PostgreSQL support
-- **Alembic** - Database migrations
-- **JWT Authentication** - Secure token-based auth
-- **Pydantic** - Data validation and serialization
+| | |
+|---|---|
+| **FastAPI** 0.138 | Web framework |
+| **SQLAlchemy** 2.0 + psycopg3 | ORM + PostgreSQL driver |
+| **Alembic** 1.18 | Database migrations |
+| **Pydantic** 2.13 | Data validation |
+| **python-jose** + **bcrypt** 5 | JWT auth + password hashing |
 
 ### Frontend
-- **React 18** - Modern UI library
-- **TypeScript** - Type-safe JavaScript
-- **Tailwind CSS** - Utility-first CSS framework
-- **React Router** - Client-side routing
-- **React Query** - Server state management
-- **Vite** - Fast build tool
+| | |
+|---|---|
+| **React** 19 | UI |
+| **TypeScript** 6 | Type safety |
+| **Tailwind CSS** 4 | Styling |
+| **React Router** 7 | Routing |
+| **TanStack Query** 5 | Server state |
+| **Vite** 8 | Build tool |
+| **lucide-react** | Icons |
+| **date-fns** | Date formatting |
+| **react-markdown** | Markdown rendering (journal) |
 
-## Deployment
 
-The application can be deployed using Docker, traditional hosting, or cloud platforms. Ensure proper environment variables are set for production use.
+## 🐳 Deployment
 
-## License
+**End users:** Use `docker-compose.ghcr.yml` (pulls pre-built images from GHCR) as shown in Quick Start above. The `--profile local-db` flag adds a bundled Postgres container; omit it and set `DATABASE_URL` for an external database.
 
-This project is licensed under the GNU Affero General Public License v3 (GNU AGPLv3).
+**Contributors:** Use `docker-compose.yml` (builds from local Dockerfiles). The `docker-compose.override.yml` is merged automatically for live-reload dev mode.
 
-### License Disclaimer
+**Security checklist before going live:**
+- Generate a real `SECRET_KEY` (`openssl rand -hex 32`). The app refuses to start without it.
+- Change the default admin password immediately after first login.
+- Set strong DB credentials; the default `postgres`/`postgres` is for local dev only.
+- Restrict `ALLOWED_ORIGINS` to your actual domain.
+- Put a TLS-terminating reverse proxy (nginx, Caddy, Traefik) in front; the bundled frontend doesn't do TLS or rate limiting.
+- Set `BACKEND_BIND=0.0.0.0` only when behind such a proxy (default is loopback).
+- Disable API docs in production if desired: `ENABLE_API_DOCS=false`.
+
+
+## 📄 License
+
+Licensed under the **GNU Affero General Public License v3 (AGPLv3)**.
 
 This program is free software: you can redistribute it and/or modify it under the terms of the GNU Affero General Public License as published by the Free Software Foundation, either version 3 of the License, or any later version.
 
 This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU Affero General Public License for more details.
 
-You should have received a copy of the GNU General Public License along with this program. If not, see <https://www.gnu.org/licenses/>. 
+You should have received a copy of the GNU General Public License along with this program. If not, see <https://www.gnu.org/licenses/>.
