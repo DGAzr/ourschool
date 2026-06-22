@@ -934,7 +934,7 @@ const Admin: React.FC = () => {
           <SectionHeader title="Points & rewards" desc={`Configure the optional gamification system. ${pointsStatus?.enabled ? 'Currently on.' : 'Currently off.'}`} />
 
           {/* Configuration */}
-          <div className="bg-panel border border-line rounded-card divide-y divide-line-2">
+          <div className="bg-panel border border-line rounded-card divide-y divide-line-2 px-5">
             <SettingRow label="Points & rewards system" desc="Gamified points for students.">
               <div className="flex items-center gap-3">
                 <span className={`text-[12px] font-semibold ${pointsStatus?.enabled ? 'text-pos-fg' : 'text-muted'}`}>
