@@ -83,28 +83,32 @@ def resolve_date_range_from_academic_year(
     return start_date, end_date
 
 
-def calculate_attendance_rate(attendance_records: list) -> Optional[float]:
+def calculate_attendance_rate(
+    attendance_records: list,
+    total_school_days: Optional[int] = None,
+) -> Optional[float]:
     """
     Calculate attendance rate from recorded attendance days.
 
-    The rate is the share of recorded days the student was effectively in
-    attendance: present + late + excused, divided by the number of recorded
-    attendance rows. Returns ``None`` when there are no recorded days.
+    When ``total_school_days`` is provided (the number of Mon–Fri weekdays in
+    the reporting period), that figure is used as the denominator so that
+    un-recorded days lower the rate — giving an accurate picture of how many
+    school days the student was actually in attendance.  This is the preferred
+    mode for compliance reporting.
 
-    Note: this depends on attendance actually being recorded — absences must be
-    entered to be reflected. ``required_days_of_instruction`` remains available
-    separately as a compliance metric.
+    When ``total_school_days`` is omitted the denominator falls back to the
+    number of *recorded* rows only (legacy behaviour), which inflates the rate
+    if absences were never entered.  Returns ``None`` when the denominator is
+    zero.
 
     Args:
         attendance_records: List of AttendanceRecord objects
+        total_school_days: Optional calendar school-day count (Mon–Fri) for
+            the reporting period; when provided this is used as the denominator.
 
     Returns:
-        Attendance rate as a percentage (0-100), or None if no records exist.
+        Attendance rate as a percentage (0-100), or None if denominator is zero.
     """
-    total_recorded = len(attendance_records)
-    if total_recorded == 0:
-        return None
-
     present_days = sum(
         1 for r in attendance_records if r.status == AttendanceStatus.PRESENT
     )
@@ -117,7 +121,18 @@ def calculate_attendance_rate(attendance_records: list) -> Optional[float]:
 
     # present + late + excused count as acceptable attendance
     acceptable_days = present_days + late_days + excused_days
-    return acceptable_days / total_recorded * 100
+
+    if total_school_days is not None:
+        # Accurate rate: unrecorded school days count against the student
+        if total_school_days == 0:
+            return None
+        return acceptable_days / total_school_days * 100
+    else:
+        # Legacy rate: only considers days that were explicitly recorded
+        total_recorded = len(attendance_records)
+        if total_recorded == 0:
+            return None
+        return acceptable_days / total_recorded * 100
 
 
 def get_attendance_statistics(attendance_records: list) -> dict:

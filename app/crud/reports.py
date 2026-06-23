@@ -976,7 +976,8 @@ def get_student_attendance_report(
     
     # Get attendance statistics
     attendance_stats = get_attendance_statistics(attendance_records)
-    attendance_rate = calculate_attendance_rate(attendance_records) or 0.0
+    # Use school-days denominator so unrecorded days accurately lower the rate.
+    attendance_rate = calculate_attendance_rate(attendance_records, total_school_days=total_school_days) or 0.0
     first_absence_date = find_first_absence_date(attendance_records)
     recent_activity_summary = generate_recent_activity_summary(attendance_records)
 
@@ -1058,10 +1059,11 @@ def get_bulk_attendance_report(
 
         # Calculate totals using utility functions
         attendance_stats = get_attendance_statistics(attendance_records)
-        attendance_rate = calculate_attendance_rate(attendance_records) or 0.0
+        # Use school-days denominator so unrecorded days accurately lower the rate.
+        attendance_rate = calculate_attendance_rate(attendance_records, total_school_days=total_school_days) or 0.0
         first_absence_date = find_first_absence_date(attendance_records)
         recent_activity_summary = generate_recent_activity_summary(attendance_records)
-        
+
         student_summaries.append(
             schemas.AttendanceReportSummary(
                 student_id=student.id,

@@ -62,6 +62,9 @@ const ReportsContainer: React.FC = () => {
     bulkAttendanceReport,
     attendanceLoading,
     generateAttendanceReport,
+    selectedStudentCalendarReport,
+    calendarStudentLoading,
+    fetchStudentCalendar,
     assignmentReport,
     assignmentLoading,
     reportCard,
@@ -176,6 +179,9 @@ const ReportsContainer: React.FC = () => {
               attendanceLoading={attendanceLoading}
               generateAttendanceReport={generateAttendanceReport}
               isAdmin={isAdmin}
+              selectedStudentCalendarReport={selectedStudentCalendarReport}
+              calendarStudentLoading={calendarStudentLoading}
+              fetchStudentCalendar={fetchStudentCalendar}
             />
           )}
 
