@@ -4,7 +4,7 @@
 
 OurSchool is a self-hosted homeschool management system for families who take attendance seriously, grade assignments carefully, and really don't want to maintain a pile of spreadsheets. It handles the administrative grind — attendance, subjects, assignments, grading, reports, and a shameless gamification points system — so you can spend more time on the actual teaching.
 
-> **Beta — `v1.0.0-beta.2`**  
+> **Beta — `v1.0.0-beta.5`**  
 > Pre-stable software. The database schema may have breaking changes until the planned 2026–2027 stable release. Use the built-in system backup/restore (with dry-run preview) to safeguard your data between updates.
 
 
@@ -201,6 +201,9 @@ Full endpoint reference: **http://localhost:8000/docs**
 
 
 ## 🧑‍💻 Development
+
+
+> At this point most of the code in this app has been built with the help of AI (Claude, DeepSeek, and Qwen models have all been used). This is the same type of workflow I use at my job as well and while I think it is great for velocity I understand that some persons have reservations about interacting with projects which use this technology in their development, so I wanted to be clear about it. I'm sharing this project because it has been immensely useful to my family as we navigate our own homeschool journey and I sincerely hope that it may be useful for another family in a similar position. 
 
 ### Database migrations
 
