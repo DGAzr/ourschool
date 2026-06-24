@@ -70,6 +70,7 @@ const GradeAssignmentModal: React.FC<GradeAssignmentModalProps> = ({
   const [teacherFeedback, setTeacherFeedback] = useState<string>(assignment.teacher_feedback || '')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [detailsOpen, setDetailsOpen] = useState(false)
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -214,6 +215,46 @@ const GradeAssignmentModal: React.FC<GradeAssignmentModalProps> = ({
           <textarea value={teacherFeedback} onChange={(e) => setTeacherFeedback(e.target.value)}
             rows={4} className={FIELD} placeholder="Provide feedback on the student's work..." />
         </div>
+
+        {(assignment.template?.description || assignment.template?.instructions || assignment.custom_instructions) && (
+          <div className="bg-panel-2 border border-line rounded-[11px] overflow-hidden">
+            <button
+              type="button"
+              onClick={() => setDetailsOpen(o => !o)}
+              className="w-full flex items-center justify-between px-4 py-3 text-left hover:bg-panel transition-colors"
+            >
+              <p className="text-[11px] font-semibold text-muted uppercase tracking-wide">Assignment Info</p>
+              <svg
+                className={`w-4 h-4 text-muted transition-transform ${detailsOpen ? 'rotate-180' : ''}`}
+                fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}
+              >
+                <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+              </svg>
+            </button>
+            {detailsOpen && (
+              <div className="px-4 pb-4 space-y-3 border-t border-line pt-3">
+                {assignment.template?.description && (
+                  <div>
+                    <p className="text-[11px] font-semibold text-muted uppercase tracking-wide mb-1">Description</p>
+                    <p className="text-[13px] text-ink whitespace-pre-wrap">{assignment.template.description}</p>
+                  </div>
+                )}
+                {assignment.template?.instructions && (
+                  <div>
+                    <p className="text-[11px] font-semibold text-muted uppercase tracking-wide mb-1">Instructions</p>
+                    <p className="text-[13px] text-ink whitespace-pre-wrap">{assignment.template.instructions}</p>
+                  </div>
+                )}
+                {assignment.custom_instructions && (
+                  <div>
+                    <p className="text-[11px] font-semibold text-muted uppercase tracking-wide mb-1">Custom Instructions</p>
+                    <p className="text-[13px] text-ink whitespace-pre-wrap">{assignment.custom_instructions}</p>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        )}
       </form>
     </Modal>
   )

@@ -240,10 +240,11 @@ const Admin: React.FC = () => {
   const load = useCallback(async () => {
     setLoading(true)
     try {
-      const [grouped, pts, presetData, subs, trms, usrs, atypes] = await Promise.allSettled([
+      const [grouped, pts, presetData, journalPts, subs, trms, usrs, atypes] = await Promise.allSettled([
         settingsApi.getGroupedSettings(),
         pointsApi.getSystemStatus(),
         pointsApi.getPresets(),
+        pointsApi.getJournalPoints(),
         subjectsApi.getAll(),
         termsApi.getAll(),
         usersApi.getAll(),
@@ -260,6 +261,7 @@ const Admin: React.FC = () => {
       }
       if (pts.status === 'fulfilled') setPointsStatus(pts.value)
       if (presetData.status === 'fulfilled') setPresets(presetData.value)
+      if (journalPts.status === 'fulfilled') setPtsJournal(journalPts.value)
       if (subs.status === 'fulfilled') setSubjects(subs.value)
       if (trms.status === 'fulfilled') setTerms(trms.value)
       if (usrs.status === 'fulfilled') setUsers(usrs.value)
@@ -947,9 +949,9 @@ const Admin: React.FC = () => {
             </SettingRow>
             <SettingRow label="Points per journaling day" desc="Awarded once per day a student journals.">
               <div className="flex items-center gap-2">
-                <button onClick={() => setPtsJournal(v => Math.max(0, v - 1))} className="w-7 h-7 rounded-field border border-btn-border flex items-center justify-center text-ink-2 hover:bg-track">–</button>
+                <button onClick={() => { const v = Math.max(0, ptsJournal - 1); setPtsJournal(v); pointsApi.setJournalPoints(v) }} className="w-7 h-7 rounded-field border border-btn-border flex items-center justify-center text-ink-2 hover:bg-track">–</button>
                 <span className="w-8 text-center font-mono text-[14px] font-semibold text-ink">{ptsJournal}</span>
-                <button onClick={() => setPtsJournal(v => v + 1)} className="w-7 h-7 rounded-field border border-btn-border flex items-center justify-center text-ink-2 hover:bg-track">+</button>
+                <button onClick={() => { const v = ptsJournal + 1; setPtsJournal(v); pointsApi.setJournalPoints(v) }} className="w-7 h-7 rounded-field border border-btn-border flex items-center justify-center text-ink-2 hover:bg-track">+</button>
               </div>
             </SettingRow>
           </div>

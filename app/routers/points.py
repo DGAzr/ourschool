@@ -302,3 +302,32 @@ async def set_award_presets(
         db.add(setting)
     db.commit()
     return presets
+
+
+@router.get("/journal-points")
+async def get_journal_points(
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db)
+):
+    """Get points awarded per journaling day (admin only)."""
+    if current_user.role != UserRole.ADMIN:
+        raise HTTPException(status_code=403, detail="Not authorized")
+    setting = points_crud.get_system_setting(db, "journal_points_per_entry")
+    value = int(setting.setting_value) if setting else 5
+    return {"value": value}
+
+
+@router.put("/journal-points")
+async def set_journal_points(
+    payload: dict,
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db)
+):
+    """Set points awarded per journaling day (admin only)."""
+    if current_user.role != UserRole.ADMIN:
+        raise HTTPException(status_code=403, detail="Not authorized")
+    value = payload.get("value")
+    if not isinstance(value, int) or value < 0:
+        raise HTTPException(status_code=422, detail="value must be a non-negative integer")
+    points_crud.update_system_setting(db, "journal_points_per_entry", str(value))
+    return {"value": value}
