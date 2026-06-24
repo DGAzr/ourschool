@@ -72,7 +72,7 @@ class AssignmentTemplateResponse(AssignmentTemplateBase):
     """Schema for responding with assignment templates."""
 
     id: int
-    created_by: int
+    created_by: Optional[int] = None  # Null when created via API key (no user)
     created_at: datetime
     updated_at: datetime
     is_archived: bool
@@ -197,7 +197,7 @@ class StudentAssignmentResponse(StudentAssignmentBase):
     submission_notes: Optional[str] = None
     submission_artifacts: Optional[List[str]] = None
     time_spent_minutes: int = 0
-    assigned_by: int
+    assigned_by: Optional[int] = None  # Null when assigned via API key (no user)
     created_at: datetime
     updated_at: datetime
 

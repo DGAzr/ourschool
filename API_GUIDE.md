@@ -185,10 +185,21 @@ current set is:
 | Permission | Backing endpoint(s) |
 |------------|---------------------|
 | `students:read` | `GET /api/users/students/lookup`, `GET /api/users/students/{id}/info` |
-| `assignments:read` | `GET /api/integrations/assignments/{id}` |
+| `assignments:read` | `GET /api/integrations/assignments/{id}`; `GET /api/assignments/templates`; `GET /api/assignments/all-assignments`; `GET /api/assignments/students/{id}/progress` |
+| `assignments:write` | `POST`/`PUT /api/assignments/templates`; `POST /api/assignments/assign` |
 | `assignments:grade` | `POST /api/integrations/assignments/{id}/grade` |
-| `points:read` | `GET /api/students/{id}/points` (+ ledger, overview) |
-| `points:write` | `POST /api/students/{id}/points/adjust` |
+| `attendance:read` | `GET /api/attendance`, `GET /api/attendance/students` |
+| `attendance:write` | `POST`/`PUT`/`DELETE /api/attendance`, `POST /api/attendance/bulk` |
+| `points:read` | `GET /api/points/student/{id}/balance` (+ ledger, `GET /api/points/admin/overview`) |
+| `points:write` | `POST /api/points/adjust` |
+
+Most of these are **dual-auth** endpoints (`require_admin_or_permission` /
+`require_user_or_permission` in `app/core/dual_auth.py`): the same endpoint
+serves the web UI (admin/student session) **and** an API key carrying the
+matching permission. The original `/api/integrations/*` endpoints remain
+API-key-only. Records written by an API key have **null audit fields**
+(`created_by` / `assigned_by` / `graded_by` are `None`, since there is no
+backing user) — response schemas mark these `Optional`.
 
 These endpoints:
 - Are registered at the top-level prefix (e.g., `prefix="/api"`) not under a domain prefix
@@ -236,6 +247,67 @@ Permission: assignments:read
 Response 200: assignment detail JSON (see integrations.py for fields)
 Errors: 404, 403, 401
 ```
+
+### AI-workflow endpoints (dual-auth)
+
+Beyond the dedicated `/integrations` endpoints above, the following existing
+domain endpoints accept an API key (via `X-API-Key`) carrying the matching
+permission, so an external/AI workflow can run an end-to-end loop. All also
+continue to serve normal user sessions unchanged.
+
+| Capability | Method & path | Permission |
+|------------|---------------|------------|
+| List/browse templates | `GET /api/assignments/templates` | `assignments:read` |
+| Discover student assignments (filter by `status`, `student_id`, `subject_id`) | `GET /api/assignments/all-assignments` | `assignments:read` |
+| Read a student's progress summary | `GET /api/assignments/students/{id}/progress` | `assignments:read` |
+| Create / update a template | `POST` / `PUT /api/assignments/templates` | `assignments:write` |
+| Assign a template to students | `POST /api/assignments/assign` | `assignments:write` |
+| Read attendance | `GET /api/attendance`, `GET /api/attendance/students` | `attendance:read` |
+| Record / update / bulk attendance | `POST`/`PUT`/`DELETE /api/attendance`, `POST /api/attendance/bulk` | `attendance:write` |
+| Student totals / list balances / ledger | `GET /api/points/student/{id}/balance`, `/ledger`, `GET /api/points/admin/overview` | `points:read` |
+| Grant / deduct points | `POST /api/points/adjust` | `points:write` |
+
+**Typical agent loop** (find ungraded work and grade it):
+
+1. `GET /api/users/students/lookup?username=...` → resolve `student_id`
+2. `GET /api/assignments/all-assignments?student_id=…&status=submitted` → find work
+3. `POST /api/integrations/assignments/{id}/grade` → grade it
+
+**Authoring loop** (build and distribute coursework):
+
+1. `POST /api/assignments/templates` → create a template
+2. `POST /api/assignments/assign` → assign it (an active term must exist)
+3. `POST /api/attendance/bulk` → record the day's attendance
+
+> Use `GET /api/meta` to discover valid `assignment_types`, `assignment_statuses`,
+> and the full `permissions` list before constructing requests.
+
+### Acting on behalf of a user (attribution)
+
+By default, records written by an API key have null audit fields — grades,
+point adjustments, and authored content show up unattributed ("API
+Integration"). To attribute a write to a real person, send the
+**`X-On-Behalf-Of`** header alongside `X-API-Key`:
+
+```
+POST /api/points/adjust
+Header: X-API-Key: os_xxxxxxxx...
+Header: X-On-Behalf-Of: jsmith        # user ID or username
+
+→ the transaction's admin_id / a grade's graded_by / a template's created_by
+  is set to that user, and the UI shows e.g. "Graded by Jane Smith".
+```
+
+Rules:
+- The value is a **numeric user ID or a username** (numeric values are tried as
+  an ID first, then as a username).
+- The referenced user must be an **active admin**. An unknown, inactive, or
+  non-admin value **rejects the whole request with `400`** — no partial writes,
+  no silent mis-attribution.
+- The header is honored **only** for API-key auth. Normal user sessions are
+  always attributed to the logged-in user; the header is ignored for them.
+- The advertised header name is discoverable via `GET /api/meta`
+  (`on_behalf_of_header`).
 
 ## 📝 Endpoint Standards
 

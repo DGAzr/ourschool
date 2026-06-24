@@ -28,6 +28,7 @@ from app.core.dual_auth import (
     get_current_user_or_api_key,
     require_admin_or_permission,
     can_access_student_data,
+    get_actor_name_from_auth,
     get_auth_context_for_logging,
     get_user_id_from_auth,
 )
@@ -222,12 +223,9 @@ async def adjust_student_points(
     # Add names to response
     transaction.student_name = f"{student.first_name} {student.last_name}"
     
-    # Add admin name if it's a user session
-    if admin_id and isinstance(auth_user, User):
-        transaction.admin_name = f"{auth_user.first_name} {auth_user.last_name}"
-    else:
-        # For API keys, use the API key name
-        transaction.admin_name = f"API: {auth_user.name}"
+    # Attribute to the acting admin (user session, or API key acting
+    # on-behalf-of a user); otherwise fall back to the API key name.
+    transaction.admin_name = get_actor_name_from_auth(auth_user)
     
     # Log the adjustment with context
     auth_context = get_auth_context_for_logging(auth_user)
@@ -304,3 +302,32 @@ async def set_award_presets(
         db.add(setting)
     db.commit()
     return presets
+
+
+@router.get("/journal-points")
+async def get_journal_points(
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db)
+):
+    """Get points awarded per journaling day (admin only)."""
+    if current_user.role != UserRole.ADMIN:
+        raise HTTPException(status_code=403, detail="Not authorized")
+    setting = points_crud.get_system_setting(db, "journal_points_per_entry")
+    value = int(setting.setting_value) if setting else 5
+    return {"value": value}
+
+
+@router.put("/journal-points")
+async def set_journal_points(
+    payload: dict,
+    current_user: User = Depends(get_current_active_user),
+    db: Session = Depends(get_db)
+):
+    """Set points awarded per journaling day (admin only)."""
+    if current_user.role != UserRole.ADMIN:
+        raise HTTPException(status_code=403, detail="Not authorized")
+    value = payload.get("value")
+    if not isinstance(value, int) or value < 0:
+        raise HTTPException(status_code=422, detail="value must be a non-negative integer")
+    points_crud.update_system_setting(db, "journal_points_per_entry", str(value))
+    return {"value": value}

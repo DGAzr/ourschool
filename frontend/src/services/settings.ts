@@ -29,6 +29,8 @@ export interface SystemSetting {
 
 export interface AttendanceSettings {
   required_days_of_instruction: number
+  skip_weekends: boolean
+  count_excused: boolean
 }
 
 export interface GradeBand {
@@ -77,5 +79,13 @@ export const settingsApi = {
   updateGradeScale: async (scale: GradeBand[]): Promise<GradingSettings> => {
     const response = await api.put('/settings/grading/scale', { scale })
     return response
-  }
+  },
+
+  updateSkipWeekends: async (value: boolean): Promise<SystemSetting> => {
+    return await api.put(`/settings/attendance/skip-weekends?skip_weekends=${value}`, {})
+  },
+
+  updateCountExcused: async (value: boolean): Promise<SystemSetting> => {
+    return await api.put(`/settings/attendance/count-excused?count_excused=${value}`, {})
+  },
 }

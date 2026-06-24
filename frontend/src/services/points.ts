@@ -123,4 +123,14 @@ export const pointsApi = {
   setPresets: async (presets: AwardPreset[]): Promise<AwardPreset[]> => {
     return await api.put('/points/presets', presets)
   },
+
+  getJournalPoints: async (): Promise<number> => {
+    const r = await api.get('/points/journal-points')
+    return r.value
+  },
+
+  setJournalPoints: async (value: number): Promise<number> => {
+    const r = await api.put('/points/journal-points', { value })
+    return r.value
+  },
 }

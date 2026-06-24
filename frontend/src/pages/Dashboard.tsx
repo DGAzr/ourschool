@@ -480,10 +480,6 @@ const Dashboard: React.FC = () => {
                     <span className="w-7 h-7 rounded-[7px] bg-accent-soft flex items-center justify-center text-[14px]">✏️</span>
                     New assignment template
                   </button>
-                  <Link to="/users" className="flex items-center gap-3 px-3 py-2.5 rounded-[9px] text-[13.5px] font-semibold text-ink hover:bg-track transition-colors">
-                    <span className="w-7 h-7 rounded-[7px] bg-accent-soft flex items-center justify-center text-[14px]">👤</span>
-                    Manage students
-                  </Link>
                 </>
               ) : (
                 <>

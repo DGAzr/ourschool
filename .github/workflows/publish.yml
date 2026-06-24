@@ -2,7 +2,7 @@ name: Publish
 
 on:
   push:
-    branches: [dev]
+    branches: [main, dev]
     tags: ["v*"]
 
 env:
@@ -19,6 +19,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
       - name: Log in to GHCR
         uses: docker/login-action@v3
         with:
@@ -32,10 +38,11 @@ jobs:
         with:
           images: ${{ env.REGISTRY }}/${{ env.OWNER }}/ourschool-backend
           tags: |
-            type=semver,pattern={{version}}
+            type=semver,pattern=v{{version}}
             type=semver,pattern={{major}}.{{minor}}
             type=ref,event=branch
             type=sha,prefix=sha-,format=short
+            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
 
       - name: Extract metadata (frontend)
         id: meta-frontend
@@ -43,10 +50,11 @@ jobs:
         with:
           images: ${{ env.REGISTRY }}/${{ env.OWNER }}/ourschool-frontend
           tags: |
-            type=semver,pattern={{version}}
+            type=semver,pattern=v{{version}}
             type=semver,pattern={{major}}.{{minor}}
             type=ref,event=branch
             type=sha,prefix=sha-,format=short
+            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
 
       - name: Build and push backend
         uses: docker/build-push-action@v6
@@ -54,6 +62,7 @@ jobs:
           context: .
           file: Dockerfile.backend
           push: true
+          platforms: linux/amd64,linux/arm64
           tags: ${{ steps.meta-backend.outputs.tags }}
           labels: ${{ steps.meta-backend.outputs.labels }}
 
@@ -63,5 +72,6 @@ jobs:
           context: .
           file: Dockerfile.frontend
           push: true
+          platforms: linux/amd64,linux/arm64
           tags: ${{ steps.meta-frontend.outputs.tags }}
           labels: ${{ steps.meta-frontend.outputs.labels }}

@@ -198,11 +198,16 @@ def get_system_api_key_stats(db: Session) -> Dict[str, Any]:
 # Only permissions backed by a real integration endpoint are listed, so the
 # /api/meta discovery contract never advertises capabilities that don't exist.
 AVAILABLE_PERMISSIONS = [
-    "students:read",     # GET /api/users/students/lookup, /students/{id}/info
-    "assignments:read",  # GET /api/integrations/assignments/{id}
-    "assignments:grade", # POST /api/integrations/assignments/{id}/grade
-    "points:read",       # GET /api/students/{id}/points (+ ledger, overview)
-    "points:write",      # POST /api/students/{id}/points/adjust
+    "students:read",      # GET /api/users/students/lookup, /students/{id}/info
+    "assignments:read",   # GET /api/integrations/assignments/{id};
+                          #     GET /api/assignments/templates, /all-assignments,
+                          #     /students/{id}/progress
+    "assignments:write",  # POST/PUT /api/assignments/templates; POST /api/assignments/assign
+    "assignments:grade",  # POST /api/integrations/assignments/{id}/grade
+    "attendance:read",    # GET /api/attendance, /api/attendance/students
+    "attendance:write",   # POST/PUT/DELETE /api/attendance, POST /api/attendance/bulk
+    "points:read",        # GET /api/students/{id}/points (+ ledger, overview)
+    "points:write",       # POST /api/students/{id}/points/adjust
 ]
 
 

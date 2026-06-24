@@ -36,7 +36,7 @@ def get_terms(
     current_user: Annotated[User, Depends(get_current_active_user)],
 ):
     """Get all terms."""
-    return db.query(Term).order_by(Term.academic_year.desc(), Term.term_order).all()
+    return db.query(Term).order_by(Term.start_date.desc()).all()
 
 
 @router.get("/active", response_model=TermResponse)
@@ -88,25 +88,6 @@ def create_term(
             detail="Start date must be before end date",
         )
 
-    # Check for overlapping terms in the same academic year
-    existing_term = (
-        db.query(Term)
-        .filter(
-            Term.academic_year == term_data.academic_year,
-            Term.term_order == term_data.term_order,
-        )
-        .first()
-    )
-
-    if existing_term:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=(
-                f"A term with order {term_data.term_order} already exists for "
-                f"academic year {term_data.academic_year}"
-            ),
-        )
-
     # Create the term
     try:
         db_term = Term(**term_data.dict(), created_by=current_user.id)
@@ -153,27 +134,6 @@ def update_term(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Start date must be before end date",
         )
-
-    # Check for conflicts with term order in the same academic year
-    if term_data.academic_year and term_data.term_order:
-        existing_term = (
-            db.query(Term)
-            .filter(
-                Term.academic_year == term_data.academic_year,
-                Term.term_order == term_data.term_order,
-                Term.id != term_id,
-            )
-            .first()
-        )
-
-        if existing_term:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail=(
-                    f"A term with order {term_data.term_order} already exists for "
-                    f"academic year {term_data.academic_year}"
-                ),
-            )
 
     # Update the term
     update_data = term_data.dict(exclude_unset=True)

@@ -25,7 +25,6 @@ export interface Term {
   academic_year: string
   term_type: 'semester' | 'quarter' | 'trimester' | 'custom'
   is_active: boolean
-  term_order: number
   created_at: string
   updated_at: string
   created_by: number
@@ -38,7 +37,6 @@ export interface TermCreate {
   end_date: string
   academic_year: string
   term_type: 'semester' | 'quarter' | 'trimester' | 'custom'
-  term_order: number
 }
 
 export interface TermUpdate {
@@ -49,5 +47,4 @@ export interface TermUpdate {
   academic_year?: string
   term_type?: 'semester' | 'quarter' | 'trimester' | 'custom'
   is_active?: boolean
-  term_order?: number
 }

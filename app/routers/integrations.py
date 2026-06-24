@@ -25,6 +25,7 @@ from sqlalchemy.orm import Session
 
 from app.core.api_auth import require_permission
 from app.core.database import get_db
+from app.core.dual_auth import get_user_id_from_auth
 from app.models.assignment import StudentAssignment
 from app.models.user import User, UserRole
 from app.schemas.assignment import StudentAssignmentGrade
@@ -86,8 +87,9 @@ def grade_assignment_via_api(
     assignment.is_graded = True
     assignment.graded_date = date.today()
     
-    # For API grading, graded_by stays None (no user); API key is logged separately
-    assignment.graded_by = None
+    # Attribute the grade to the acting admin if an X-On-Behalf-Of header was
+    # supplied; otherwise it stays None (the API key is logged separately).
+    assignment.graded_by = get_user_id_from_auth(api_key_user)
 
     # Calculate percentage
     percentage = assignment.calculate_percentage_grade()

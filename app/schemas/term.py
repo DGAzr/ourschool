@@ -33,7 +33,6 @@ class TermBase(BaseModel):
     end_date: date = Field(..., description="Term end date")
     academic_year: str = Field(..., description="Academic year (e.g., '2025' or '2025-2026')")
     term_type: TermType = Field(default=TermType.CUSTOM, description="Type of term")
-    term_order: int = Field(default=0, description="Order within academic year")
 
     @validator('academic_year')
     def validate_academic_year(cls, v):
@@ -85,7 +84,6 @@ class TermUpdate(BaseModel):
     end_date: Optional[date] = None
     academic_year: Optional[str] = None
     term_type: Optional[TermType] = None
-    term_order: Optional[int] = None
     is_active: Optional[bool] = None
 
 

@@ -50,7 +50,7 @@ import {
 const CATS = [
   { key: 'overview',    label: 'Overview',               icon: LayoutDashboard },
   { key: 'attendance',  label: 'Attendance & compliance', icon: Calendar },
-  { key: 'grading',     label: 'Grading scale',           icon: BookOpen },
+  { key: 'grading',     label: 'Grading',                  icon: BookOpen },
   { key: 'points',      label: 'Points & rewards',        icon: Coins },
   { key: 'terms',       label: 'Terms & calendar',        icon: BookMarked },
   { key: 'subjects',    label: 'Subjects',                icon: Tag },
@@ -144,8 +144,9 @@ const Admin: React.FC = () => {
   const [editingTerm, setEditingTerm] = useState<Term | null>(null)
   const [termFormData, setTermFormData] = useState<TermCreate>({
     name: '', description: '', start_date: '', end_date: '',
-    academic_year: '', term_type: 'semester', term_order: 1,
+    academic_year: '', term_type: 'semester',
   })
+  const [termFilter, setTermFilter] = useState('')
   const [termValidationErrors, setTermValidationErrors] = useState<Record<string, string>>({})
   const [termError, setTermError] = useState<string | null>(null)
 
@@ -239,10 +240,11 @@ const Admin: React.FC = () => {
   const load = useCallback(async () => {
     setLoading(true)
     try {
-      const [grouped, pts, presetData, subs, trms, usrs, atypes] = await Promise.allSettled([
+      const [grouped, pts, presetData, journalPts, subs, trms, usrs, atypes] = await Promise.allSettled([
         settingsApi.getGroupedSettings(),
         pointsApi.getSystemStatus(),
         pointsApi.getPresets(),
+        pointsApi.getJournalPoints(),
         subjectsApi.getAll(),
         termsApi.getAll(),
         usersApi.getAll(),
@@ -252,6 +254,8 @@ const Admin: React.FC = () => {
         const days = grouped.value.attendance.required_days_of_instruction
         setRequiredDays(days)
         setRequiredDaysDraft(String(days))
+        setSkipWeekends(grouped.value.attendance.skip_weekends ?? true)
+        setCountExcused(grouped.value.attendance.count_excused ?? true)
         const scale = grouped.value.grading?.scale
         if (scale && scale.length > 0) {
           setGrades(scale.map((b: GradeBand) => [b.letter, b.min_percent] as [string, number]))
@@ -259,6 +263,7 @@ const Admin: React.FC = () => {
       }
       if (pts.status === 'fulfilled') setPointsStatus(pts.value)
       if (presetData.status === 'fulfilled') setPresets(presetData.value)
+      if (journalPts.status === 'fulfilled') setPtsJournal(journalPts.value)
       if (subs.status === 'fulfilled') setSubjects(subs.value)
       if (trms.status === 'fulfilled') setTerms(trms.value)
       if (usrs.status === 'fulfilled') setUsers(usrs.value)
@@ -488,8 +493,7 @@ const Admin: React.FC = () => {
 
   const resetTermForm = () => {
     const yr = `${new Date().getFullYear()}-${new Date().getFullYear() + 1}`
-    const nextOrder = Math.max(...terms.filter(t => t.academic_year === yr).map(t => t.term_order), 0) + 1
-    setTermFormData({ name: '', description: '', start_date: '', end_date: '', academic_year: yr, term_type: 'semester', term_order: nextOrder })
+    setTermFormData({ name: '', description: '', start_date: '', end_date: '', academic_year: yr, term_type: 'semester' })
     setEditingTerm(null)
     setShowTermForm(false)
     setTermError(null)
@@ -498,7 +502,7 @@ const Admin: React.FC = () => {
 
   const openTermEdit = (term: Term) => {
     setEditingTerm(term)
-    setTermFormData({ name: term.name, description: term.description || '', start_date: term.start_date, end_date: term.end_date, academic_year: term.academic_year, term_type: term.term_type, term_order: term.term_order })
+    setTermFormData({ name: term.name, description: term.description || '', start_date: term.start_date, end_date: term.end_date, academic_year: term.academic_year, term_type: term.term_type })
     setShowTermForm(true)
   }
 
@@ -510,10 +514,10 @@ const Admin: React.FC = () => {
     try {
       if (editingTerm) {
         const updated = await termsApi.update(editingTerm.id, termFormData)
-        setTerms(prev => prev.map(t => t.id === editingTerm.id ? updated : t).sort((a, b) => a.term_order - b.term_order))
+        setTerms(prev => prev.map(t => t.id === editingTerm.id ? updated : t).sort((a, b) => b.start_date.localeCompare(a.start_date)))
       } else {
         const created = await termsApi.create(termFormData)
-        setTerms(prev => [...prev, created].sort((a, b) => a.term_order - b.term_order))
+        setTerms(prev => [...prev, created].sort((a, b) => b.start_date.localeCompare(a.start_date)))
       }
       resetTermForm()
       toast(editingTerm ? 'Term updated' : 'Term created')
@@ -734,21 +738,6 @@ const Admin: React.FC = () => {
               </div>
             ))}
           </div>
-          <div className="bg-panel border border-line rounded-card p-5">
-            <p className="text-[11px] font-semibold text-faint uppercase tracking-[.06em] mb-3">Recent configuration changes</p>
-            <div className="space-y-2.5">
-              {[
-                { text: 'Required days set to 180', when: 'Jun 12' },
-                { text: 'Points system enabled', when: 'Jun 8' },
-                { text: 'Added subject: Spanish', when: 'May 30' },
-              ].map((c, i) => (
-                <div key={i} className="flex items-center justify-between">
-                  <p className="text-[13px] text-ink-2">{c.text}</p>
-                  <p className="text-[12px] font-mono text-faint">{c.when}</p>
-                </div>
-              ))}
-            </div>
-          </div>
         </div>
       )
 
@@ -776,10 +765,18 @@ const Admin: React.FC = () => {
               </div>
             </div>
             <SettingRow label="Skip weekends" desc="Don't count Saturdays and Sundays toward instructional days.">
-              <Toggle checked={skipWeekends} onChange={setSkipWeekends} />
+              <Toggle checked={skipWeekends} onChange={async (v) => {
+                setSkipWeekends(v)
+                try { await settingsApi.updateSkipWeekends(v); toast('Setting saved') }
+                catch { toast('Failed to save', 'danger'); setSkipWeekends(!v) }
+              }} />
             </SettingRow>
             <SettingRow label="Count excused days as instruction" desc="Excused absences still count toward the required-days total.">
-              <Toggle checked={countExcused} onChange={setCountExcused} />
+              <Toggle checked={countExcused} onChange={async (v) => {
+                setCountExcused(v)
+                try { await settingsApi.updateCountExcused(v); toast('Setting saved') }
+                catch { toast('Failed to save', 'danger'); setCountExcused(!v) }
+              }} />
             </SettingRow>
           </div>
         </div>
@@ -787,7 +784,7 @@ const Admin: React.FC = () => {
 
       case 'grading': return (
         <div>
-          <SectionHeader title="Grading scale" desc="Define how percentages map to letter grades." />
+          <SectionHeader title="Grading" desc="Define letter-grade thresholds and assignment-type weighting." />
           <div className="bg-panel border border-line rounded-card p-5 mb-4">
             <SettingRow label="Mastery-based grading" desc="Track standards met instead of percentages.">
               <Toggle checked={mastery} onChange={setMastery} />
@@ -949,7 +946,7 @@ const Admin: React.FC = () => {
           <SectionHeader title="Points & rewards" desc={`Configure the optional gamification system. ${pointsStatus?.enabled ? 'Currently on.' : 'Currently off.'}`} />
 
           {/* Configuration */}
-          <div className="bg-panel border border-line rounded-card divide-y divide-line-2">
+          <div className="bg-panel border border-line rounded-card divide-y divide-line-2 px-5">
             <SettingRow label="Points & rewards system" desc="Gamified points for students.">
               <div className="flex items-center gap-3">
                 <span className={`text-[12px] font-semibold ${pointsStatus?.enabled ? 'text-pos-fg' : 'text-muted'}`}>
@@ -962,9 +959,9 @@ const Admin: React.FC = () => {
             </SettingRow>
             <SettingRow label="Points per journaling day" desc="Awarded once per day a student journals.">
               <div className="flex items-center gap-2">
-                <button onClick={() => setPtsJournal(v => Math.max(0, v - 1))} className="w-7 h-7 rounded-field border border-btn-border flex items-center justify-center text-ink-2 hover:bg-track">–</button>
+                <button onClick={() => { const v = Math.max(0, ptsJournal - 1); setPtsJournal(v); pointsApi.setJournalPoints(v) }} className="w-7 h-7 rounded-field border border-btn-border flex items-center justify-center text-ink-2 hover:bg-track">–</button>
                 <span className="w-8 text-center font-mono text-[14px] font-semibold text-ink">{ptsJournal}</span>
-                <button onClick={() => setPtsJournal(v => v + 1)} className="w-7 h-7 rounded-field border border-btn-border flex items-center justify-center text-ink-2 hover:bg-track">+</button>
+                <button onClick={() => { const v = ptsJournal + 1; setPtsJournal(v); pointsApi.setJournalPoints(v) }} className="w-7 h-7 rounded-field border border-btn-border flex items-center justify-center text-ink-2 hover:bg-track">+</button>
               </div>
             </SettingRow>
           </div>
@@ -1191,7 +1188,7 @@ const Admin: React.FC = () => {
         const TLABEL = 'block text-[12px] font-semibold text-muted uppercase tracking-wide mb-1.5'
         return (
           <div>
-            <div className="flex items-center justify-between mb-6">
+            <div className="flex items-center justify-between mb-4">
               <div>
                 <h2 className="text-[18px] font-semibold text-ink tracking-[-0.01em]">Terms & calendar</h2>
                 <p className="mt-0.5 text-[13px] text-muted">Manage academic terms and grading periods.</p>
@@ -1202,6 +1199,16 @@ const Admin: React.FC = () => {
               >
                 <Plus className="w-4 h-4" /> Add Term
               </button>
+            </div>
+
+            <div className="mb-6">
+              <input
+                type="text"
+                placeholder="Filter terms…"
+                value={termFilter}
+                onChange={e => setTermFilter(e.target.value)}
+                className="w-full max-w-xs bg-field-bg border border-field-border rounded-field px-3 py-2 text-[13.5px] text-ink focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent placeholder:text-faintest"
+              />
             </div>
 
             {termError && <div className="bg-neg-bg text-neg-fg px-4 py-3 rounded-field text-[13px] mb-4">{termError}</div>}
@@ -1226,9 +1233,17 @@ const Admin: React.FC = () => {
                   <Plus className="w-4 h-4" /> Create First Term
                 </button>
               </div>
-            ) : (
+            ) : (() => {
+              const q = termFilter.trim().toLowerCase()
+              const filtered = q
+                ? terms.filter(t => t.name.toLowerCase().includes(q) || t.academic_year.toLowerCase().includes(q))
+                : terms
+              if (filtered.length === 0) return (
+                <p className="text-[13px] text-muted py-8 text-center">No terms match "{termFilter}"</p>
+              )
+              return (
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {terms.map(term => {
+                {filtered.map(term => {
                   const { progress, daysRemaining } = calcTermProgress(term.start_date, term.end_date)
                   return (
                     <div key={term.id} className={`bg-panel border rounded-card-lg overflow-hidden flex flex-col transition-shadow hover:shadow-md ${term.is_active ? 'border-accent/40' : 'border-line'}`}>
@@ -1264,10 +1279,6 @@ const Admin: React.FC = () => {
                           {term.is_active && (
                             <p className="text-[12px] text-muted pl-5">{progress}% complete · {daysRemaining} day{daysRemaining !== 1 ? 's' : ''} remaining</p>
                           )}
-                          <div className="flex items-center gap-2 text-[13px]">
-                            <span className="w-3.5 h-3.5 shrink-0 flex items-center justify-center text-[10px] font-bold text-faint">#{term.term_order}</span>
-                            <span className="text-muted">Term order</span>
-                          </div>
                         </div>
 
                         <div className="flex items-center justify-between pt-3 mt-auto border-t border-line">
@@ -1309,7 +1320,8 @@ const Admin: React.FC = () => {
                   )
                 })}
               </div>
-            )}
+              )
+            })()}
 
             {/* Term form modal */}
             {showTermForm && (
@@ -1350,8 +1362,7 @@ const Admin: React.FC = () => {
                           type="text" required value={termFormData.academic_year}
                           onChange={e => {
                             const v = e.target.value
-                            const nextOrder = Math.max(...terms.filter(t => t.academic_year === v).map(t => t.term_order), 0) + 1
-                            setTermFormData(p => ({ ...p, academic_year: v, term_order: nextOrder }))
+                            setTermFormData(p => ({ ...p, academic_year: v }))
                             if (termValidationErrors.academic_year) setTermValidationErrors(p => ({ ...p, academic_year: '' }))
                           }}
                           className={termValidationErrors.academic_year ? TFIELD.replace('border-field-border', 'border-[var(--neg-fg)]') : TFIELD}
@@ -1362,20 +1373,14 @@ const Admin: React.FC = () => {
                           : <p className="mt-1.5 text-[12px] text-faint">Single year (e.g., "2025") or range (e.g., "2025-2026")</p>
                         }
                       </div>
-                      <div className="grid grid-cols-2 gap-3">
-                        <div>
-                          <label className={TLABEL}>Term Type</label>
-                          <select value={termFormData.term_type} onChange={e => setTermFormData(p => ({ ...p, term_type: e.target.value as any }))} className={TFIELD}>
-                            <option value="semester">Semester</option>
-                            <option value="quarter">Quarter</option>
-                            <option value="trimester">Trimester</option>
-                            <option value="custom">Custom</option>
-                          </select>
-                        </div>
-                        <div>
-                          <label className={TLABEL}>Order <span className="text-neg-fg normal-case">*</span></label>
-                          <input type="number" required min="1" value={termFormData.term_order} onChange={e => setTermFormData(p => ({ ...p, term_order: parseInt(e.target.value) }))} className={TFIELD} />
-                        </div>
+                      <div>
+                        <label className={TLABEL}>Term Type</label>
+                        <select value={termFormData.term_type} onChange={e => setTermFormData(p => ({ ...p, term_type: e.target.value as any }))} className={TFIELD}>
+                          <option value="semester">Semester</option>
+                          <option value="quarter">Quarter</option>
+                          <option value="trimester">Trimester</option>
+                          <option value="custom">Custom</option>
+                        </select>
                       </div>
                     </div>
                     <div className="flex items-center justify-end gap-2 px-6 py-4 border-t border-line bg-panel-2">

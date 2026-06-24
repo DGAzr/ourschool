@@ -42,4 +42,7 @@ def get_meta(db: Annotated[Session, Depends(get_db)]):
         "assignment_types": [t.key for t in active_types],
         "assignment_statuses": [s.value for s in AssignmentStatus],
         "permissions": list(AVAILABLE_PERMISSIONS),
+        # API-key writes may attribute to a real admin via this header
+        # (value: user ID or username; must be an active admin).
+        "on_behalf_of_header": "X-On-Behalf-Of",
     }

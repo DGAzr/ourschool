@@ -66,7 +66,11 @@ interface UseReportsDataReturn {
   bulkAttendanceReport: BulkAttendanceReport | null
   attendanceLoading: boolean
   generateAttendanceReport: () => Promise<void>
-  
+  // Per-student day-level data for admin calendar picker
+  selectedStudentCalendarReport: StudentAttendanceReport | null
+  calendarStudentLoading: boolean
+  fetchStudentCalendar: (studentId: number) => Promise<void>
+
   // Assignment report data
   assignmentReport: AssignmentReport | null
   assignmentLoading: boolean
@@ -109,6 +113,9 @@ export const useReportsData = (): UseReportsDataReturn => {
   const [attendanceReport, setAttendanceReport] = useState<StudentAttendanceReport | null>(null)
   const [bulkAttendanceReport, setBulkAttendanceReport] = useState<BulkAttendanceReport | null>(null)
   const [attendanceLoading, setAttendanceLoading] = useState(false)
+  // Per-student day-level report for the admin calendar picker
+  const [selectedStudentCalendarReport, setSelectedStudentCalendarReport] = useState<StudentAttendanceReport | null>(null)
+  const [calendarStudentLoading, setCalendarStudentLoading] = useState(false)
   
   // Assignment report states
   const [assignmentReport, setAssignmentReport] = useState<AssignmentReport | null>(null)
@@ -228,6 +235,26 @@ export const useReportsData = (): UseReportsDataReturn => {
       setError('Failed to generate report card: ' + (err.message || 'Unknown error'))
     } finally {
       setReportCardLoading(false)
+    }
+  }
+
+  // Fetch per-day records for a single student, using the same date range as the
+  // current bulk report.  Used by the admin calendar picker.
+  const fetchStudentCalendar = async (studentId: number) => {
+    if (!bulkAttendanceReport) return
+    try {
+      setCalendarStudentLoading(true)
+      const data = await reportsApi.getStudentAttendanceReport({
+        student_id: studentId,
+        start_date: String(bulkAttendanceReport.start_date),
+        end_date: String(bulkAttendanceReport.end_date),
+      })
+      setSelectedStudentCalendarReport(data)
+    } catch {
+      // Non-fatal: calendar just stays empty
+      setSelectedStudentCalendarReport(null)
+    } finally {
+      setCalendarStudentLoading(false)
     }
   }
 
@@ -355,6 +382,9 @@ export const useReportsData = (): UseReportsDataReturn => {
     bulkAttendanceReport,
     attendanceLoading,
     generateAttendanceReport,
+    selectedStudentCalendarReport,
+    calendarStudentLoading,
+    fetchStudentCalendar,
     assignmentReport,
     assignmentLoading,
     reportCard,
