@@ -254,6 +254,8 @@ const Admin: React.FC = () => {
         const days = grouped.value.attendance.required_days_of_instruction
         setRequiredDays(days)
         setRequiredDaysDraft(String(days))
+        setSkipWeekends(grouped.value.attendance.skip_weekends ?? true)
+        setCountExcused(grouped.value.attendance.count_excused ?? true)
         const scale = grouped.value.grading?.scale
         if (scale && scale.length > 0) {
           setGrades(scale.map((b: GradeBand) => [b.letter, b.min_percent] as [string, number]))
@@ -763,10 +765,18 @@ const Admin: React.FC = () => {
               </div>
             </div>
             <SettingRow label="Skip weekends" desc="Don't count Saturdays and Sundays toward instructional days.">
-              <Toggle checked={skipWeekends} onChange={setSkipWeekends} />
+              <Toggle checked={skipWeekends} onChange={async (v) => {
+                setSkipWeekends(v)
+                try { await settingsApi.updateSkipWeekends(v); toast('Setting saved') }
+                catch { toast('Failed to save', 'danger'); setSkipWeekends(!v) }
+              }} />
             </SettingRow>
             <SettingRow label="Count excused days as instruction" desc="Excused absences still count toward the required-days total.">
-              <Toggle checked={countExcused} onChange={setCountExcused} />
+              <Toggle checked={countExcused} onChange={async (v) => {
+                setCountExcused(v)
+                try { await settingsApi.updateCountExcused(v); toast('Setting saved') }
+                catch { toast('Failed to save', 'danger'); setCountExcused(!v) }
+              }} />
             </SettingRow>
           </div>
         </div>

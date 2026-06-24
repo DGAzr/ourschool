@@ -26,14 +26,16 @@ from app.models.term import Term
 from app.crud import settings as crud_settings
 
 
-def calculate_school_days(start_date: date, end_date: date) -> int:
-    """Calculate number of school days (Monday-Friday) between two dates."""
+def calculate_school_days(start_date: date, end_date: date, skip_weekends: bool = True) -> int:
+    """Calculate number of school days between two dates."""
     current_date = start_date
     school_days = 0
 
     while current_date <= end_date:
-        # Monday = 0, Sunday = 6, so weekdays are 0-4
-        if current_date.weekday() < 5:  # Monday to Friday
+        if skip_weekends:
+            if current_date.weekday() < 5:  # Monday–Friday only
+                school_days += 1
+        else:
             school_days += 1
         current_date += timedelta(days=1)
 
@@ -86,12 +88,13 @@ def resolve_date_range_from_academic_year(
 def calculate_attendance_rate(
     attendance_records: list,
     total_school_days: Optional[int] = None,
+    count_excused: bool = True,
 ) -> Optional[float]:
     """
     Calculate attendance rate from recorded attendance days.
 
-    When ``total_school_days`` is provided (the number of Mon–Fri weekdays in
-    the reporting period), that figure is used as the denominator so that
+    When ``total_school_days`` is provided (the number of school days in the
+    reporting period), that figure is used as the denominator so that
     un-recorded days lower the rate — giving an accurate picture of how many
     school days the student was actually in attendance.  This is the preferred
     mode for compliance reporting.
@@ -103,8 +106,10 @@ def calculate_attendance_rate(
 
     Args:
         attendance_records: List of AttendanceRecord objects
-        total_school_days: Optional calendar school-day count (Mon–Fri) for
-            the reporting period; when provided this is used as the denominator.
+        total_school_days: Optional calendar school-day count for the reporting
+            period; when provided this is used as the denominator.
+        count_excused: When True (default), excused absences count as
+            acceptable attendance. When False, they do not.
 
     Returns:
         Attendance rate as a percentage (0-100), or None if denominator is zero.
@@ -119,8 +124,7 @@ def calculate_attendance_rate(
         1 for r in attendance_records if r.status == AttendanceStatus.EXCUSED
     )
 
-    # present + late + excused count as acceptable attendance
-    acceptable_days = present_days + late_days + excused_days
+    acceptable_days = present_days + late_days + (excused_days if count_excused else 0)
 
     if total_school_days is not None:
         # Accurate rate: unrecorded school days count against the student
@@ -206,13 +210,25 @@ def generate_recent_activity_summary(attendance_records: list, limit: int = 3) -
 def get_required_days_of_instruction(db: Session) -> int:
     """
     Get the required days of instruction from system settings.
-    
+
     Args:
         db: Database session
-        
+
     Returns:
         Required days of instruction (default: 180)
     """
     return crud_settings.get_setting_value(
         db, "attendance.required_days_of_instruction", default_value=180, value_type=int
     )
+
+
+def get_attendance_settings(db: Session) -> dict:
+    """Return skip_weekends and count_excused booleans from system settings."""
+    return {
+        "skip_weekends": crud_settings.get_setting_value(
+            db, "attendance.skip_weekends", default_value=True, value_type=bool
+        ),
+        "count_excused": crud_settings.get_setting_value(
+            db, "attendance.count_excused", default_value=True, value_type=bool
+        ),
+    }

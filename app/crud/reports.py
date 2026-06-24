@@ -40,6 +40,7 @@ from app.utils.attendance import (
     find_first_absence_date,
     generate_recent_activity_summary,
     get_required_days_of_instruction,
+    get_attendance_settings,
 )
 from app.utils.performance import track_query_performance
 
@@ -971,13 +972,14 @@ def get_student_attendance_report(
     )
 
     # Calculate totals using utility functions
-    total_school_days = calculate_school_days(start_date, end_date)
+    att_settings = get_attendance_settings(db)
+    total_school_days = calculate_school_days(start_date, end_date, skip_weekends=att_settings["skip_weekends"])
     required_days_of_instruction = get_required_days_of_instruction(db)
-    
+
     # Get attendance statistics
     attendance_stats = get_attendance_statistics(attendance_records)
     # Use school-days denominator so unrecorded days accurately lower the rate.
-    attendance_rate = calculate_attendance_rate(attendance_records, total_school_days=total_school_days) or 0.0
+    attendance_rate = calculate_attendance_rate(attendance_records, total_school_days=total_school_days, count_excused=att_settings["count_excused"]) or 0.0
     first_absence_date = find_first_absence_date(attendance_records)
     recent_activity_summary = generate_recent_activity_summary(attendance_records)
 
@@ -1040,7 +1042,8 @@ def get_bulk_attendance_report(
     students = students_query.all()
 
     # Calculate total school days and get required instruction days
-    total_school_days = calculate_school_days(start_date, end_date)
+    att_settings = get_attendance_settings(db)
+    total_school_days = calculate_school_days(start_date, end_date, skip_weekends=att_settings["skip_weekends"])
     required_days_of_instruction = get_required_days_of_instruction(db)
 
     student_summaries = []
@@ -1060,7 +1063,7 @@ def get_bulk_attendance_report(
         # Calculate totals using utility functions
         attendance_stats = get_attendance_statistics(attendance_records)
         # Use school-days denominator so unrecorded days accurately lower the rate.
-        attendance_rate = calculate_attendance_rate(attendance_records, total_school_days=total_school_days) or 0.0
+        attendance_rate = calculate_attendance_rate(attendance_records, total_school_days=total_school_days, count_excused=att_settings["count_excused"]) or 0.0
         first_absence_date = find_first_absence_date(attendance_records)
         recent_activity_summary = generate_recent_activity_summary(attendance_records)
 

@@ -16,7 +16,7 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { useAuth } from '../contexts/AuthContext'
 import { assignmentsApi } from '../services/assignments'
 import { useAssignments } from '../hooks/useAssignments'
@@ -26,6 +26,8 @@ import { SegmentedControl, StatTile, Pill, SubjectDot, statusToPillVariant, useT
 import GradeAssignmentModal from '../components/assignments/GradeAssignmentModal'
 import { StudentAssignment } from '../types'
 import { isPastDateOnly } from '../utils/formatters'
+import { termsApi } from '../services/terms'
+import { Term } from '../types'
 
 type Subject = { id: number; name: string; color?: string }
 type Student = { id: number; first_name: string; last_name: string }
@@ -181,7 +183,10 @@ const DetailPanel: React.FC<DetailPanelProps> = ({
   onEditGrade,
   isMobile,
   onBack,
-}) => (
+}) => {
+  const [assignmentInfoOpen, setAssignmentInfoOpen] = useState(false)
+
+  return (
   <div className="bg-panel border border-line rounded-card flex flex-col min-h-0 overflow-y-auto">
     {!selectedAssignment ? (
       <div className="flex-1 flex flex-col items-center justify-center gap-3 text-center px-10 py-16 text-faint">
@@ -198,7 +203,7 @@ const DetailPanel: React.FC<DetailPanelProps> = ({
       const sub = selectedAssignment.template?.subject_id
         ? getSubjectById(selectedAssignment.template.subject_id)
         : undefined
-      const maxPts = selectedAssignment.template?.max_points ?? 100
+      const maxPts = selectedAssignment.custom_max_points ?? selectedAssignment.template?.max_points ?? 100
       const curIdx = queueIds.indexOf(selectedAssignment.id)
       const hasNext = curIdx >= 0 && curIdx < queueIds.length - 1
       const ptsNum = parseFloat(gradeInput)
@@ -256,6 +261,46 @@ const DetailPanel: React.FC<DetailPanelProps> = ({
                       {af}
                     </span>
                   ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {(selectedAssignment.template?.description || selectedAssignment.template?.instructions || selectedAssignment.custom_instructions) && (
+            <div className="bg-panel-2 border border-line rounded-[11px] overflow-hidden">
+              <button
+                type="button"
+                onClick={() => setAssignmentInfoOpen(o => !o)}
+                className="w-full flex items-center justify-between px-4 py-3 text-left hover:bg-panel transition-colors"
+              >
+                <p className="text-[11px] font-semibold text-muted uppercase tracking-wide">Assignment Info</p>
+                <svg
+                  className={`w-4 h-4 text-muted transition-transform ${assignmentInfoOpen ? 'rotate-180' : ''}`}
+                  fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}
+                >
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+                </svg>
+              </button>
+              {assignmentInfoOpen && (
+                <div className="px-4 pb-4 space-y-3 border-t border-line pt-3">
+                  {selectedAssignment.template?.description && (
+                    <div>
+                      <p className="text-[11px] font-semibold text-muted uppercase tracking-wide mb-1">Description</p>
+                      <p className="text-[13px] text-ink whitespace-pre-wrap">{selectedAssignment.template.description}</p>
+                    </div>
+                  )}
+                  {selectedAssignment.template?.instructions && (
+                    <div>
+                      <p className="text-[11px] font-semibold text-muted uppercase tracking-wide mb-1">Instructions</p>
+                      <p className="text-[13px] text-ink whitespace-pre-wrap">{selectedAssignment.template.instructions}</p>
+                    </div>
+                  )}
+                  {selectedAssignment.custom_instructions && (
+                    <div>
+                      <p className="text-[11px] font-semibold text-muted uppercase tracking-wide mb-1">Custom Instructions</p>
+                      <p className="text-[13px] text-ink whitespace-pre-wrap">{selectedAssignment.custom_instructions}</p>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
@@ -362,7 +407,8 @@ const DetailPanel: React.FC<DetailPanelProps> = ({
       )
     })()}
   </div>
-)
+  )
+}
 
 const Grading: React.FC = () => {
   const { user } = useAuth()
@@ -376,6 +422,11 @@ const Grading: React.FC = () => {
   const [feedbackInput, setFeedbackInput] = useState('')
   const [showGradeModal, setShowGradeModal] = useState(false)
   const [gradingAssignment, setGradingAssignment] = useState<StudentAssignment | null>(null)
+  const [activeTerm, setActiveTerm] = useState<Term | null>(null)
+
+  useEffect(() => {
+    termsApi.getActive().then(setActiveTerm)
+  }, [])
 
   const {
     selectedSubject,
@@ -404,7 +455,11 @@ const Grading: React.FC = () => {
 
   const needsGrading = allAssignments.filter(a => a.status === 'submitted' && !a.is_graded)
   const overdueAssignments = allAssignments.filter(a => a.status !== 'graded' && isPastDateOnly(a.due_date))
-  const gradedCount = allAssignments.filter(a => a.is_graded).length
+  const gradedCount = allAssignments.filter(a => {
+    if (!a.is_graded) return false
+    if (!activeTerm || !a.graded_date) return a.is_graded
+    return a.graded_date >= activeTerm.start_date && a.graded_date <= activeTerm.end_date
+  }).length
   const inProgressCount = allAssignments.filter(a => a.status === 'in_progress').length
 
   const filteredAllAssignments = filterGradingAssignments(allAssignments)

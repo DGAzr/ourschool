@@ -65,13 +65,27 @@ def get_grouped_settings(
         default_value=180,
         value_type=int
     )
+    skip_weekends = crud_settings.get_setting_value(
+        db,
+        "attendance.skip_weekends",
+        default_value=True,
+        value_type=bool
+    )
+    count_excused = crud_settings.get_setting_value(
+        db,
+        "attendance.count_excused",
+        default_value=True,
+        value_type=bool
+    )
 
     raw_scale = crud_settings.get_grade_scale(db)
     grade_bands = [GradeBand(letter=l, min_percent=m) for l, m in raw_scale]
 
     return SystemSettingsGroup(
         attendance=AttendanceSettings(
-            required_days_of_instruction=required_days
+            required_days_of_instruction=required_days,
+            skip_weekends=skip_weekends,
+            count_excused=count_excused,
         ),
         grading=GradingSettings(scale=grade_bands)
     )
@@ -178,4 +192,42 @@ def update_required_days_of_instruction(
         str(required_days),
         "integer",
         "Required number of instructional days per academic year for attendance calculations"
+    )
+
+
+@router.put("/attendance/skip-weekends", response_model=SystemSetting)
+def update_skip_weekends(
+    skip_weekends: bool,
+    db: Annotated[Session, Depends(get_db)],
+    current_user: Annotated[User, Depends(get_current_active_user)],
+):
+    """Update whether weekends are excluded from instructional day counts (admin only)."""
+    if current_user.role != UserRole.ADMIN:
+        raise HTTPException(status_code=403, detail="Not authorized")
+
+    return crud_settings.upsert_setting(
+        db,
+        "attendance.skip_weekends",
+        str(skip_weekends).lower(),
+        "boolean",
+        "Exclude Saturdays and Sundays from instructional day counts"
+    )
+
+
+@router.put("/attendance/count-excused", response_model=SystemSetting)
+def update_count_excused(
+    count_excused: bool,
+    db: Annotated[Session, Depends(get_db)],
+    current_user: Annotated[User, Depends(get_current_active_user)],
+):
+    """Update whether excused absences count toward required instruction days (admin only)."""
+    if current_user.role != UserRole.ADMIN:
+        raise HTTPException(status_code=403, detail="Not authorized")
+
+    return crud_settings.upsert_setting(
+        db,
+        "attendance.count_excused",
+        str(count_excused).lower(),
+        "boolean",
+        "Count excused absences as instructional days toward the required-days total"
     )

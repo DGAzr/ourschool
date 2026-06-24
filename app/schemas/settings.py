@@ -51,6 +51,8 @@ class SystemSetting(SystemSettingBase):
 class AttendanceSettings(BaseModel):
     """Schema for attendance-specific settings."""
     required_days_of_instruction: int
+    skip_weekends: bool = True
+    count_excused: bool = True
 
 
 class GradeBand(BaseModel):

@@ -2,7 +2,7 @@ name: Publish
 
 on:
   push:
-    branches: [dev]
+    branches: [main, dev]
     tags: ["v*"]
 
 env:
@@ -42,6 +42,7 @@ jobs:
             type=semver,pattern={{major}}.{{minor}}
             type=ref,event=branch
             type=sha,prefix=sha-,format=short
+            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
 
       - name: Extract metadata (frontend)
         id: meta-frontend
@@ -53,6 +54,7 @@ jobs:
             type=semver,pattern={{major}}.{{minor}}
             type=ref,event=branch
             type=sha,prefix=sha-,format=short
+            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
 
       - name: Build and push backend
         uses: docker/build-push-action@v6
