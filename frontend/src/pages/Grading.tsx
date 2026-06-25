@@ -17,6 +17,7 @@
  */
 
 import React, { useState, useEffect } from 'react'
+import { useLocation } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { assignmentsApi } from '../services/assignments'
 import { useAssignments } from '../hooks/useAssignments'
@@ -24,10 +25,11 @@ import { useAssignmentFilters } from '../hooks/useAssignmentFilters'
 import { useIsMobile } from '../hooks/useMediaQuery'
 import { SegmentedControl, StatTile, Pill, SubjectDot, statusToPillVariant, useToast } from '../components/ui'
 import GradeAssignmentModal from '../components/assignments/GradeAssignmentModal'
-import { StudentAssignment } from '../types'
-import { isPastDateOnly } from '../utils/formatters'
+import { StudentAssignment, Term } from '../types'
+import { isPastDateOnly, formatDateOnly } from '../utils/formatters'
+import { letterGrade, gradeColor } from '../utils/grading'
 import { termsApi } from '../services/terms'
-import { Term } from '../types'
+
 
 type Subject = { id: number; name: string; color?: string }
 type Student = { id: number; first_name: string; last_name: string }
@@ -123,7 +125,7 @@ const QueuePanel: React.FC<QueuePanelProps> = ({
           >
             <div className="flex items-center justify-between gap-2">
               <span className="flex items-center gap-1.5 min-w-0">
-                <SubjectDot color={(sub as any)?.color ?? '#8B7355'} size={8} />
+                <SubjectDot color={(sub as any)?.color ?? '#74716A'} size={8} />
                 <span className="font-semibold text-[13.5px] text-ink truncate">
                   {stu ? `${stu.first_name} ${stu.last_name}` : 'Student'}
                 </span>
@@ -148,12 +150,7 @@ const QueuePanel: React.FC<QueuePanelProps> = ({
   </div>
 )
 
-const letterGrade = (p: number) => {
-  if (p >= 93) return 'A'; if (p >= 90) return 'A−'; if (p >= 87) return 'B+'
-  if (p >= 83) return 'B'; if (p >= 80) return 'B−'; if (p >= 77) return 'C+'
-  if (p >= 73) return 'C'; if (p >= 70) return 'C−'; if (p >= 67) return 'D+'
-  if (p >= 63) return 'D'; if (p >= 60) return 'D−'; return 'F'
-}
+// letterGrade and gradeColor imported from src/utils/grading.ts
 
 interface DetailPanelProps {
   selectedAssignment: StudentAssignment | undefined
@@ -209,9 +206,7 @@ const DetailPanel: React.FC<DetailPanelProps> = ({
       const ptsNum = parseFloat(gradeInput)
       const hasPts = !isNaN(ptsNum) && gradeInput !== ''
       const pct = hasPts ? Math.round((Math.max(0, Math.min(maxPts, ptsNum)) / maxPts) * 100) : null
-      const gradeColor = pct != null
-        ? pct >= 90 ? 'var(--grade-a)' : pct >= 80 ? 'var(--grade-b)' : pct >= 70 ? 'var(--grade-c)' : 'var(--grade-f)'
-        : 'var(--check-border)'
+      const currentGradeColor = pct != null ? gradeColor(pct) : 'var(--check-border)'
 
       return (
         <div className="p-6 space-y-5">
@@ -229,7 +224,7 @@ const DetailPanel: React.FC<DetailPanelProps> = ({
           <div className="flex items-start justify-between gap-4">
             <div className="min-w-0">
               <div className="flex items-center gap-2 text-[12.5px] text-muted mb-1.5">
-                {sub && <SubjectDot color={(sub as any)?.color ?? '#8B7355'} size={9} />}
+                {sub && <SubjectDot color={(sub as any)?.color ?? '#74716A'} size={9} />}
                 <span>{sub?.name ?? 'Assignment'}</span>
                 <span className="text-check-border">·</span>
                 <span>{selectedAssignment.template?.assignment_type ?? 'Assignment'}</span>
@@ -256,10 +251,10 @@ const DetailPanel: React.FC<DetailPanelProps> = ({
               {selectedAssignment.submission_artifacts && selectedAssignment.submission_artifacts.length > 0 && (
                 <div className="flex gap-2 mt-3 flex-wrap">
                   {selectedAssignment.submission_artifacts.map((af, i) => (
-                    <span key={i} className="inline-flex items-center gap-1.5 px-2.5 py-1.5 bg-panel border border-line rounded-[8px] text-[12.5px] text-ink-2">
-                      <span className="w-1.5 h-1.5 rounded-[1px] bg-faint" />
+                    <a key={i} href={af} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1.5 px-2.5 py-1.5 bg-panel border border-line rounded-[8px] text-[12.5px] text-accent hover:underline">
+                      <svg width="10" height="10" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" /></svg>
                       {af}
-                    </span>
+                    </a>
                   ))}
                 </div>
               )}
@@ -348,8 +343,8 @@ const DetailPanel: React.FC<DetailPanelProps> = ({
                   <div className="flex flex-col items-center gap-1.5">
                     <span className="text-[11px] font-semibold text-faint uppercase tracking-[.06em]">Grade</span>
                     <div className="flex items-baseline gap-2">
-                      <span className="font-mono text-[30px] font-semibold tracking-[-0.02em]" style={{ color: gradeColor }}>
-                        {letterGrade(pct)}
+                      <span className="font-mono text-[30px] font-semibold tracking-[-0.02em]" style={{ color: currentGradeColor }}>
+                        {pct != null ? letterGrade(ptsNum, maxPts) : ''}
                       </span>
                       <span className="font-mono text-[16px] text-faint">{pct}%</span>
                     </div>
@@ -415,9 +410,14 @@ const Grading: React.FC = () => {
   const isAdmin = user?.role === 'admin'
   const isMobile = useIsMobile()
 
-  const [queueFilter, setQueueFilter] = useState<'needs' | 'overdue' | 'all'>('needs')
-  const [selectedQueueId, setSelectedQueueId] = useState<number | null>(null)
-  const [mobileView, setMobileView] = useState<'queue' | 'detail'>('queue')
+  const location = useLocation()
+  const incomingId: number | undefined = (location.state as any)?.assignmentId
+
+  const [queueFilter, setQueueFilter] = useState<'needs' | 'overdue' | 'all'>(
+    incomingId ? 'all' : 'needs'
+  )
+  const [selectedQueueId, setSelectedQueueId] = useState<number | null>(incomingId ?? null)
+  const [mobileView, setMobileView] = useState<'queue' | 'detail'>(incomingId ? 'detail' : 'queue')
   const [gradeInput, setGradeInput] = useState('')
   const [feedbackInput, setFeedbackInput] = useState('')
   const [showGradeModal, setShowGradeModal] = useState(false)
@@ -425,7 +425,7 @@ const Grading: React.FC = () => {
   const [activeTerm, setActiveTerm] = useState<Term | null>(null)
 
   useEffect(() => {
-    termsApi.getActive().then(setActiveTerm)
+    termsApi.getActive().then(setActiveTerm).catch(() => {})
   }, [])
 
   const {
@@ -433,7 +433,6 @@ const Grading: React.FC = () => {
     setSelectedSubject,
     selectedStudent,
     setSelectedStudent,
-    filterGradingAssignments,
   } = useAssignmentFilters()
 
   const {
@@ -454,15 +453,21 @@ const Grading: React.FC = () => {
   const getSubjectById = (id: number) => subjects.find(s => s.id === id)
 
   const needsGrading = allAssignments.filter(a => a.status === 'submitted' && !a.is_graded)
-  const overdueAssignments = allAssignments.filter(a => a.status !== 'graded' && isPastDateOnly(a.due_date))
-  const gradedCount = allAssignments.filter(a => {
-    if (!a.is_graded) return false
-    if (!activeTerm || !a.graded_date) return a.is_graded
-    return a.graded_date >= activeTerm.start_date && a.graded_date <= activeTerm.end_date
-  }).length
-  const inProgressCount = allAssignments.filter(a => a.status === 'in_progress').length
+  const overdueAssignments = allAssignments.filter(a => a.status !== 'graded' && a.status !== 'excused' && isPastDateOnly(a.due_date))
+  const awaitingSubmission = allAssignments.filter(a => a.status === 'not_started' || a.status === 'in_progress').length
 
-  const filteredAllAssignments = filterGradingAssignments(allAssignments)
+  const termDateRange = activeTerm
+    ? `${formatDateOnly(activeTerm.start_date, { month: 'short', day: 'numeric' })} – ${formatDateOnly(activeTerm.end_date, { month: 'short', day: 'numeric', year: 'numeric' })}`
+    : null
+
+  // "All" shows every assignment without status filtering (search/subject/student still apply)
+  const filteredAllAssignments = allAssignments.filter(a => {
+    const template = a.template
+    const matchesSearch = !template || template.name.toLowerCase().includes('')
+    const matchesSubject = !selectedSubject || template?.subject_id === selectedSubject
+    const matchesStudent = !selectedStudent || a.student_id === selectedStudent
+    return matchesSearch && matchesSubject && matchesStudent
+  })
 
   const queueItems = queueFilter === 'needs' ? needsGrading
     : queueFilter === 'overdue' ? overdueAssignments
@@ -478,6 +483,9 @@ const Grading: React.FC = () => {
     if (!selectedAssignment) return
     const pts = parseFloat(gradeInput)
     if (isNaN(pts)) return
+    // Capture the next id now, before the queue shifts on refetch
+    const curIdx = queueIds.indexOf(selectedAssignment.id)
+    const nextId = advance && curIdx >= 0 ? (queueIds[curIdx + 1] ?? null) : null
     try {
       await assignmentsApi.gradeStudentAssignment(selectedAssignment.id, {
         points_earned: pts,
@@ -486,12 +494,8 @@ const Grading: React.FC = () => {
       toast('Grade saved')
       setGradeInput('')
       setFeedbackInput('')
+      if (advance) setSelectedQueueId(nextId)
       refetch()
-      if (advance) {
-        const curIdx = queueIds.indexOf(selectedAssignment.id)
-        const next = queueIds[curIdx + 1] ?? null
-        setSelectedQueueId(next)
-      }
     } catch {
       toast('Failed to save grade', 'danger')
     }
@@ -537,8 +541,8 @@ const Grading: React.FC = () => {
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-5 flex-none">
             <StatTile label="Awaiting grade" value={String(needsGrading.length)} accent={needsGrading.length > 0} />
             <StatTile label="Overdue" value={String(overdueAssignments.length)} />
-            <StatTile label="In progress" value={String(inProgressCount)} />
-            <StatTile label="Graded" value={String(gradedCount)} />
+            <StatTile label="Awaiting submission" value={String(awaitingSubmission)} />
+            <StatTile label="Current term" value={activeTerm?.name ?? '—'} sub={termDateRange ?? undefined} />
           </div>
 
           {/* ── Desktop: side-by-side split ── */}

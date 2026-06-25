@@ -179,6 +179,27 @@ async def read_users_me(
     return current_user
 
 
+@router.put("/me", response_model=UserSchema)
+def update_me(
+    user_update: UserUpdate,
+    db: Annotated[Session, Depends(get_db)],
+    current_user: Annotated[User, Depends(get_current_active_user)],
+):
+    """Allow users to update their own profile (first name, last name, email)."""
+    update_data = user_update.model_dump(exclude_unset=True)
+    disallowed = set(update_data) - SELF_EDITABLE_FIELDS
+    if disallowed:
+        raise HTTPException(
+            status_code=403,
+            detail=f"You may not modify: {', '.join(sorted(disallowed))}",
+        )
+    for field, value in update_data.items():
+        setattr(current_user, field, value)
+    db.commit()
+    db.refresh(current_user)
+    return current_user
+
+
 @router.get("/students", response_model=List[UserSchema])
 def list_students(
     db: Annotated[Session, Depends(get_db)],
