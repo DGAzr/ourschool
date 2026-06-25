@@ -189,50 +189,6 @@ const Assignments: React.FC = () => {
     return true
   })
 
-  // ── CSV Export ──
-  const handleExport = () => {
-    const rows = sortedAssignments
-    const headers = ['Student', 'Assignment', 'Subject', 'Type', 'Assigned', 'Due', 'Status', 'Points', 'Max Points', 'Grade', 'Letter Grade']
-    const escape = (v: string | number | null | undefined) => {
-      const s = String(v ?? '')
-      return s.includes(',') || s.includes('"') || s.includes('\n') ? `"${s.replace(/"/g, '""')}"` : s
-    }
-    const csvRows = [
-      headers.join(','),
-      ...rows.map(a => {
-        const stu = students.find(s => s.id === a.student_id)
-        const sub = a.template?.subject_id ? getSubjectById(a.template.subject_id) : undefined
-        const maxPts = a.custom_max_points ?? a.template?.max_points ?? 100
-        const isOverdue = isPastDateOnly(a.due_date) && a.status !== 'graded' && a.status !== 'submitted' && a.status !== 'excused'
-        const displayStatus = isOverdue ? 'overdue' : a.status
-        const grade = a.is_graded && a.points_earned != null
-          ? letterGrade(a.points_earned, maxPts)
-          : ''
-        return [
-          escape(stu ? `${stu.first_name} ${stu.last_name}` : ''),
-          escape(a.template?.name),
-          escape(sub?.name),
-          escape(a.template?.assignment_type),
-          escape(a.assigned_date ? formatDateOnly(a.assigned_date, { month: 'short', day: 'numeric', year: 'numeric' }) : ''),
-          escape(a.due_date ? formatDateOnly(a.due_date, { month: 'short', day: 'numeric', year: 'numeric' }) : ''),
-          escape(displayStatus.replace('_', ' ')),
-          escape(a.points_earned),
-          escape(maxPts),
-          escape(a.is_graded && a.points_earned != null ? `${a.points_earned}/${maxPts}` : ''),
-          escape(a.letter_grade ?? grade),
-        ].join(',')
-      }),
-    ]
-    const blob = new Blob([csvRows.join('\n')], { type: 'text/csv;charset=utf-8;' })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    const termName = terms.find(t => t.id === selectedTerm)?.name ?? 'all-terms'
-    a.download = `assignments-${termName.toLowerCase().replace(/\s+/g, '-')}.csv`
-    a.click()
-    URL.revokeObjectURL(url)
-  }
-
   // ── Handlers ──
   const handleExcuseAssignment = async (assignment: StudentAssignment) => {
     try {
