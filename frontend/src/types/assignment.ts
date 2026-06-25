@@ -70,6 +70,7 @@ export interface AssignmentTemplate {
   prerequisites?: string
   materials_needed?: string
   is_exportable: boolean
+  is_archived: boolean
   created_by: number
   created_at: string
   updated_at: string

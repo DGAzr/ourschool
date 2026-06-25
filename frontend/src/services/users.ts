@@ -47,6 +47,12 @@ export const usersApi = {
   
   resetPassword: (id: number) => api.post(`/users/${id}/reset-password`, {}),
   
+  updateMe: (data: {
+    first_name?: string
+    last_name?: string
+    email?: string
+  }) => api.put('/users/me', data),
+
   changeMyPassword: (passwordData: {
     current_password: string
     new_password: string

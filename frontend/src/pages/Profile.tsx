@@ -16,16 +16,17 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { Lock, Eye, EyeOff, Save } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 import { usersApi } from '../services/users'
 
 const FIELD = 'w-full bg-field-bg border border-field-border rounded-field px-3 py-2 text-[13.5px] text-ink focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent placeholder:text-faintest'
+const FIELD_DISABLED = 'w-full bg-panel-2 border border-field-border rounded-field px-3 py-2 text-[13.5px] text-ink cursor-not-allowed'
 const LABEL = 'block text-[12px] font-semibold text-muted uppercase tracking-wide mb-1.5'
 
 const Profile: React.FC = () => {
-  const { user } = useAuth()
+  const { user, updateUser } = useAuth()
   const [showPasswordForm, setShowPasswordForm] = useState(false)
   const [showCurrentPassword, setShowCurrentPassword] = useState(false)
   const [showNewPassword, setShowNewPassword] = useState(false)
@@ -33,6 +34,39 @@ const Profile: React.FC = () => {
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
   const [passwordLoading, setPasswordLoading] = useState(false)
+  const [profileLoading, setProfileLoading] = useState(false)
+
+  const [profileData, setProfileData] = useState({
+    first_name: '',
+    last_name: '',
+    email: '',
+  })
+
+  useEffect(() => {
+    if (user) {
+      setProfileData({
+        first_name: user.first_name,
+        last_name: user.last_name,
+        email: user.email,
+      })
+    }
+  }, [user])
+
+  const handleProfileUpdate = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setError(null)
+    setSuccess(null)
+    try {
+      setProfileLoading(true)
+      const response = await usersApi.updateMe(profileData)
+      updateUser(response.data)
+      setSuccess('Profile updated successfully')
+    } catch (err: any) {
+      setError(err.response?.data?.detail || 'Failed to update profile')
+    } finally {
+      setProfileLoading(false)
+    }
+  }
 
   const [passwordData, setPasswordData] = useState({
     current_password: '',
@@ -92,39 +126,71 @@ const Profile: React.FC = () => {
       )}
 
       {/* Profile information */}
-      <div className="bg-panel border border-line rounded-card p-6 space-y-5">
+      <form onSubmit={handleProfileUpdate} className="bg-panel border border-line rounded-card p-6 space-y-5">
         <h2 className="text-[15px] font-semibold text-ink">Profile Information</h2>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
-            <p className={LABEL}>First Name</p>
-            <div className="bg-panel-2 border border-field-border rounded-field px-3 py-2 text-[13.5px] text-ink">{user.first_name}</div>
+            <label className={LABEL}>First Name</label>
+            <input
+              type="text"
+              value={profileData.first_name}
+              onChange={e => setProfileData({ ...profileData, first_name: e.target.value })}
+              className={FIELD}
+              required
+            />
           </div>
           <div>
-            <p className={LABEL}>Last Name</p>
-            <div className="bg-panel-2 border border-field-border rounded-field px-3 py-2 text-[13.5px] text-ink">{user.last_name}</div>
+            <label className={LABEL}>Last Name</label>
+            <input
+              type="text"
+              value={profileData.last_name}
+              onChange={e => setProfileData({ ...profileData, last_name: e.target.value })}
+              className={FIELD}
+              required
+            />
           </div>
           <div>
-            <p className={LABEL}>Email</p>
-            <div className="bg-panel-2 border border-field-border rounded-field px-3 py-2 text-[13.5px] text-ink">{user.email}</div>
+            <label className={LABEL}>Email</label>
+            <input
+              type="email"
+              value={profileData.email}
+              onChange={e => setProfileData({ ...profileData, email: e.target.value })}
+              className={FIELD}
+              required
+            />
           </div>
           <div>
-            <p className={LABEL}>Username</p>
-            <div className="bg-panel-2 border border-field-border rounded-field px-3 py-2 text-[13.5px] text-ink">{user.username}</div>
+            <label className={LABEL}>Username</label>
+            <div className={FIELD_DISABLED}>{user.username}</div>
+            <p className="mt-1.5 text-[12px] text-faint">Username cannot be changed</p>
           </div>
           <div>
-            <p className={LABEL}>Role</p>
-            <div className="bg-panel-2 border border-field-border rounded-field px-3 py-2 text-[13.5px] text-ink">
+            <label className={LABEL}>Role</label>
+            <div className={FIELD_DISABLED}>
               {user.role === 'admin' ? 'Administrator' : 'Student'}
             </div>
           </div>
           {user.role === 'student' && user.grade_level && (
             <div>
-              <p className={LABEL}>Grade Level</p>
-              <div className="bg-panel-2 border border-field-border rounded-field px-3 py-2 text-[13.5px] text-ink">{user.grade_level}</div>
+              <label className={LABEL}>Grade Level</label>
+              <div className={FIELD_DISABLED}>{user.grade_level}</div>
             </div>
           )}
         </div>
-      </div>
+        <div className="flex justify-end pt-1">
+          <button
+            type="submit"
+            disabled={profileLoading}
+            className="h-[34px] px-4 rounded-field bg-btn-primary-bg text-btn-primary-fg text-[13.5px] font-semibold hover:opacity-90 disabled:opacity-50 transition-opacity flex items-center gap-2"
+          >
+            {profileLoading
+              ? <div className="w-4 h-4 border-2 border-btn-primary-fg border-t-transparent rounded-full animate-spin" />
+              : <Save className="w-4 h-4" />
+            }
+            Update Profile
+          </button>
+        </div>
+      </form>
 
       {/* Password */}
       <div className="bg-panel border border-line rounded-card p-6">

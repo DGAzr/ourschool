@@ -25,12 +25,13 @@ interface UseAssignmentsProps {
   isAdmin: boolean
   adminViewMode: 'templates' | 'grading'
   selectedSubject: number | null
+  includeArchived?: boolean
 }
 
-export const useAssignments = ({ isAdmin, adminViewMode, selectedSubject }: UseAssignmentsProps) => {
+export const useAssignments = ({ isAdmin, adminViewMode, selectedSubject, includeArchived }: UseAssignmentsProps) => {
   const [templates, setTemplates] = useState<AssignmentTemplate[]>([])
   const [studentAssignments, setStudentAssignments] = useState<StudentAssignment[]>([])
-  const [submittedAssignments, setSubmittedAssignments] = useState<StudentAssignment[]>([])
+  const [submittedAssignments] = useState<StudentAssignment[]>([])
   const [allAssignments, setAllAssignments] = useState<StudentAssignment[]>([])
   const [subjects, setSubjects] = useState<Subject[]>([])
   const [students, setStudents] = useState<User[]>([])
@@ -46,6 +47,7 @@ export const useAssignments = ({ isAdmin, adminViewMode, selectedSubject }: UseA
         const [templatesData, subjectsData, studentsData] = await Promise.all([
           assignmentsApi.getAll({
             subject_id: selectedSubject || undefined,
+            include_archived: includeArchived || undefined,
           }),
           subjectsApi.getAll(),
           assignmentsApi.getStudents()
@@ -58,21 +60,12 @@ export const useAssignments = ({ isAdmin, adminViewMode, selectedSubject }: UseA
         // If we're in grading mode, fetch all assignments for admin control
         if (adminViewMode === 'grading') {
           try {
-            // Fetch ALL assignments (not just submitted ones) for full admin control
             const allAssignmentsData = await assignmentsApi.getAllAssignmentsForGrading({
               subject_id: selectedSubject || undefined
             })
             setAllAssignments(allAssignmentsData || [])
-            
-            // Also fetch just submitted assignments for backward compatibility
-            const submittedData = await assignmentsApi.getSubmittedAssignments({
-              status: 'submitted',
-              subject_id: selectedSubject || undefined
-            })
-            setSubmittedAssignments(submittedData || [])
           } catch (err) {
             setAllAssignments([])
-            setSubmittedAssignments([])
           }
         }
       } else {
@@ -98,7 +91,7 @@ export const useAssignments = ({ isAdmin, adminViewMode, selectedSubject }: UseA
     } finally {
       setLoading(false)
     }
-  }, [isAdmin, selectedSubject, adminViewMode])
+  }, [isAdmin, selectedSubject, adminViewMode, includeArchived])
 
   useEffect(() => {
     fetchData()

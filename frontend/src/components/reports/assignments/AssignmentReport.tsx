@@ -108,7 +108,7 @@ const AssignmentReport: React.FC<AssignmentReportProps> = ({ assignmentReport, l
     const notStarted = filteredAssignments.filter((a) => a.status === 'not_started').length
     const submitted = filteredAssignments.filter((a) => a.status === 'submitted').length
     const overdue = filteredAssignments.filter(
-      (a) => isPastDateOnly(a.due_date) && a.status !== 'graded',
+      (a) => isPastDateOnly(a.due_date) && a.status !== 'graded' && a.status !== 'excused',
     ).length
     const graded = filteredAssignments.filter((a) => a.percentage_grade != null)
     const avgGrade =

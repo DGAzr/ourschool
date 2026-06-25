@@ -34,15 +34,17 @@ export const assignmentsApi = {
     subject_id?: number
     skip?: number
     limit?: number
+    include_archived?: boolean
   }): Promise<AssignmentTemplate[]> {
     const searchParams = new URLSearchParams()
     if (params?.subject_id) searchParams.append('subject_id', params.subject_id.toString())
     if (params?.skip) searchParams.append('skip', params.skip.toString())
     if (params?.limit) searchParams.append('limit', params.limit.toString())
-    
+    if (params?.include_archived) searchParams.append('include_archived', 'true')
+
     const queryString = searchParams.toString()
     const url = `/assignments/templates${queryString ? `?${queryString}` : ''}`
-    
+
     const response = await api.get(url)
     return response
   },

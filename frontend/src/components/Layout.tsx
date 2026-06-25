@@ -36,6 +36,7 @@ import {
   Sun,
   Moon,
   Monitor,
+  BookOpen,
 } from 'lucide-react'
 
 const OurSchoolMark: React.FC = () => (
@@ -88,6 +89,7 @@ const Layout: React.FC = () => {
       ? [
           { name: 'Attendance', href: '/attendance', icon: Calendar },
           { name: 'Assignments', href: '/assignments', icon: ClipboardList },
+          { name: 'Templates', href: '/templates', icon: BookOpen },
           { name: 'Grading', href: '/grading', icon: GraduationCap },
           { name: 'Journal', href: '/journal', icon: PenTool },
           { name: 'Reports', href: '/reports', icon: BarChart3 },

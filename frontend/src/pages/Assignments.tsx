@@ -16,220 +16,254 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useRef } from 'react'
+import { useNavigate, Link } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { assignmentsApi } from '../services/assignments'
-
-// Hooks
-import { useAssignments } from '../hooks/useAssignments'
-import { useAssignmentFilters } from '../hooks/useAssignmentFilters'
-
-// Components
-import { SubjectDot, Icon } from '../components/ui'
-import ConfirmDialog from '../components/ui/ConfirmDialog'
+import { termsApi } from '../services/terms'
+import { subjectsApi } from '../services/subjects'
+import { Pill, statusToPillVariant, SubjectDot, useToast } from '../components/ui'
 import StudentAssignmentCard from '../components/assignments/StudentAssignmentCard'
-import CreateTemplateModal from '../components/assignments/CreateTemplateModal'
-import EditTemplateModal from '../components/assignments/EditTemplateModal'
-import AssignTemplateModal from '../components/assignments/AssignTemplateModal'
-import { ExportAssignmentModal } from '../components/assignments/ExportAssignmentModal'
-import { ImportAssignmentModal } from '../components/assignments/ImportAssignmentModal'
 import SubmissionDialog from '../components/assignments/SubmissionDialog'
 import QuickAssignModal from '../components/assignments/QuickAssignModal'
+import { StudentAssignment, Subject, Term } from '../types'
+import { formatDateOnly, isPastDateOnly } from '../utils/formatters'
+import { letterGrade } from '../utils/grading'
 
-// Types
-import { AssignmentTemplate, StudentAssignment } from '../types'
+type StatusFilter = 'all' | 'open' | 'to_grade' | 'graded' | 'excused'
 
 const Assignments: React.FC = () => {
   const { user } = useAuth()
   const isAdmin = user?.role === 'admin'
+  const { toast } = useToast()
+  const navigate = useNavigate()
 
-  // Modal states
-  const [showCreateModal, setShowCreateModal] = useState(false)
-  const [showQuickAssignModal, setShowQuickAssignModal] = useState(false)
-  const [showEditModal, setShowEditModal] = useState(false)
-  const [showAssignModal, setShowAssignModal] = useState(false)
-  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
-  const [showArchiveConfirm, setShowArchiveConfirm] = useState(false)
-  const [showExportModal, setShowExportModal] = useState(false)
-  const [showImportModal, setShowImportModal] = useState(false)
-  const [showSubmissionDialog, setShowSubmissionDialog] = useState(false)
-  const [editingTemplate, setEditingTemplate] = useState<AssignmentTemplate | null>(null)
-  const [assigningTemplate, setAssigningTemplate] = useState<AssignmentTemplate | null>(null)
-  const [deletingTemplate, setDeletingTemplate] = useState<AssignmentTemplate | null>(null)
-  const [archivingTemplate, setArchivingTemplate] = useState<AssignmentTemplate | null>(null)
-  const [deletingLoading, setDeletingLoading] = useState(false)
-  const [archivingLoading, setArchivingLoading] = useState(false)
-  const [exportingTemplate, setExportingTemplate] = useState<AssignmentTemplate | null>(null)
-  const [submittingAssignment, setSubmittingAssignment] = useState<StudentAssignment | null>(null)
-  const [selectedTemplates, setSelectedTemplates] = useState<Set<number>>(new Set())
-  const [collapsedShelves, setCollapsedShelves] = useState<Set<string>>(() => {
-    try {
-      const raw = localStorage.getItem('assignments.collapsedShelves')
-      return new Set<string>(raw ? JSON.parse(raw) : [])
-    } catch { return new Set() }
-  })
+  // ── Data ──
+  const [allAssignments, setAllAssignments] = useState<StudentAssignment[]>([])
+  const [subjects, setSubjects] = useState<Subject[]>([])
+  const [students, setStudents] = useState<{ id: number; first_name: string; last_name: string }[]>([])
+  const [terms, setTerms] = useState<Term[]>([])
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+
+  // Student view data
+  const [myAssignments, setMyAssignments] = useState<StudentAssignment[]>([])
+
+  // ── Filters ──
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>('all')
+  const [selectedStudent, setSelectedStudent] = useState<number | null>(null)
+  const [selectedSubject, setSelectedSubject] = useState<number | null>(null)
+  // undefined = not yet initialized (will default to active term); null = user explicitly chose "All terms"
+  const [selectedTerm, setSelectedTerm] = useState<number | null | undefined>(undefined)
+  const [searchTerm, setSearchTerm] = useState('')
+
+  // ── Selection ──
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set())
   const [menuOpenId, setMenuOpenId] = useState<number | null>(null)
+  const [expandedId, setExpandedId] = useState<number | null>(null)
 
+  // ── Bulk action state ──
+  const [bulkLoading, setBulkLoading] = useState(false)
+
+  // ── Modals ──
+  const [showQuickAssign, setShowQuickAssign] = useState(false)
+  const [submittingAssignment, setSubmittingAssignment] = useState<StudentAssignment | null>(null)
+  const [showSubmissionDialog, setShowSubmissionDialog] = useState(false)
+
+  const menuRef = useRef<HTMLDivElement>(null)
+
+  const fetchData = async () => {
+    try {
+      setLoading(true)
+      if (isAdmin) {
+        const [assignmentsData, subjectsData, studentsData, termsData] = await Promise.all([
+          assignmentsApi.getAllAssignmentsForGrading(),
+          subjectsApi.getAll(),
+          assignmentsApi.getStudents(),
+          termsApi.getAll(),
+        ])
+        setAllAssignments(assignmentsData || [])
+        setSubjects(subjectsData || [])
+        setStudents(studentsData || [])
+        setTerms(termsData || [])
+        // Default to active term on first load (undefined = not yet set)
+        const activeTerm = termsData?.find(t => t.is_active)
+        if (activeTerm) setSelectedTerm(prev => prev === undefined ? activeTerm.id : prev)
+      } else {
+        const [assignmentsData, subjectsData] = await Promise.all([
+          assignmentsApi.getMyAssignments(),
+          subjectsApi.getAll(),
+        ])
+        setMyAssignments(assignmentsData || [])
+        setSubjects(subjectsData || [])
+      }
+      setError(null)
+    } catch {
+      setError('Failed to load assignments.')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => { fetchData() }, [isAdmin]) // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Close menu on outside click
   useEffect(() => {
-    localStorage.setItem('assignments.collapsedShelves', JSON.stringify([...collapsedShelves]))
-  }, [collapsedShelves])
+    const handler = (e: MouseEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setMenuOpenId(null)
+      }
+    }
+    document.addEventListener('mousedown', handler)
+    return () => document.removeEventListener('mousedown', handler)
+  }, [])
 
-  // Filters
-  const {
-    searchTerm,
-    setSearchTerm,
-    selectedSubject,
-    setSelectedSubject,
-    selectedType,
-    setSelectedType,
-    filterTemplates,
-    filterStudentAssignments,
-    filterGradingAssignments
-  } = useAssignmentFilters()
-
-  // Data
-  const {
-    templates,
-    studentAssignments,
-    submittedAssignments,
-    subjects,
-    students,
-    loading,
-    error,
-    refetch,
-    setTemplates,
-    setError
-  } = useAssignments({
-    isAdmin,
-    adminViewMode: 'templates',
-    selectedSubject,
-  })
-
-  // Utility functions
   const getSubjectById = (id: number) => subjects.find(s => s.id === id)
 
-  // Event handlers
-  const handleCreateTemplate = () => {
-    setShowCreateModal(true)
-  }
+  // ── Filter logic ──
+  const filteredAssignments = allAssignments.filter(a => {
+    const isOverdue = isPastDateOnly(a.due_date) && a.status !== 'graded' && a.status !== 'submitted' && a.status !== 'excused'
+    const stu = students.find(s => s.id === a.student_id)
+    const stuName = stu ? `${stu.first_name} ${stu.last_name}`.toLowerCase() : ''
+    const tplName = a.template?.name?.toLowerCase() ?? ''
 
-  const handleEditTemplate = (template: AssignmentTemplate) => {
-    setEditingTemplate(template)
-    setShowEditModal(true)
-  }
-
-  const handleDeleteTemplate = (template: AssignmentTemplate) => {
-    setDeletingTemplate(template)
-    setShowDeleteConfirm(true)
-  }
-
-  const handleAssignTemplate = (template: AssignmentTemplate) => {
-    setAssigningTemplate(template)
-    setShowAssignModal(true)
-  }
-
-  const handleArchiveTemplate = (template: AssignmentTemplate) => {
-    setArchivingTemplate(template)
-    setShowArchiveConfirm(true)
-  }
-
-  const handleExportTemplate = (template: AssignmentTemplate) => {
-    setExportingTemplate(template)
-    setSelectedTemplates(new Set())
-    setShowExportModal(true)
-  }
-
-  const handleBulkExport = () => {
-    if (selectedTemplates.size === 0) return
-    setExportingTemplate(null)
-    setShowExportModal(true)
-  }
-
-  const handleImportTemplate = () => {
-    setShowImportModal(true)
-  }
-
-  const performTemplateExport = async (templateId: number) => {
-    return await assignmentsApi.exportTemplate(templateId)
-  }
-
-  const performBulkExport = async (templateIds: number[]) => {
-    return await assignmentsApi.bulkExportTemplates(templateIds)
-  }
-
-  const performTemplateImport = async (data: any) => {
-    return await assignmentsApi.importTemplate(data)
-  }
-
-  const toggleTemplateSelection = (templateId: number) => {
-    const newSelected = new Set(selectedTemplates)
-    if (newSelected.has(templateId)) {
-      newSelected.delete(templateId)
-    } else {
-      newSelected.add(templateId)
+    if (searchTerm && !stuName.includes(searchTerm.toLowerCase()) && !tplName.includes(searchTerm.toLowerCase())) return false
+    if (selectedStudent && a.student_id !== selectedStudent) return false
+    if (selectedSubject && a.template?.subject_id !== selectedSubject) return false
+    if (selectedTerm) {
+      const term = terms.find(t => t.id === selectedTerm)
+      if (term && a.assigned_date) {
+        if (a.assigned_date < term.start_date || a.assigned_date > term.end_date) return false
+      }
     }
-    setSelectedTemplates(newSelected)
-  }
 
-  const toggleShelf = (key: string) => {
-    const next = new Set(collapsedShelves)
-    if (next.has(key)) {
-      next.delete(key)
-    } else {
-      next.add(key)
+    switch (statusFilter) {
+      case 'open': return a.status === 'not_started' || a.status === 'in_progress' || isOverdue
+      case 'to_grade': return a.status === 'submitted' && !a.is_graded
+      case 'graded': return a.is_graded || a.status === 'graded'
+      case 'excused': return a.status === 'excused'
+      default: return true
     }
-    setCollapsedShelves(next)
-  }
+  })
 
-  const toggleShelfSelection = (templateIds: number[], allSelected: boolean) => {
-    const next = new Set(selectedTemplates)
-    if (allSelected) {
-      templateIds.forEach(id => next.delete(id))
-    } else {
-      templateIds.forEach(id => next.add(id))
+  // Sort by due date ascending (null last)
+  const sortedAssignments = [...filteredAssignments].sort((a, b) => {
+    if (!a.due_date && !b.due_date) return 0
+    if (!a.due_date) return 1
+    if (!b.due_date) return -1
+    return a.due_date.localeCompare(b.due_date)
+  })
+
+  // Status tab counts (across all assignments, ignoring status filter but respecting other filters)
+  const baseFiltered = allAssignments.filter(a => {
+    const stu = students.find(s => s.id === a.student_id)
+    const stuName = stu ? `${stu.first_name} ${stu.last_name}`.toLowerCase() : ''
+    const tplName = a.template?.name?.toLowerCase() ?? ''
+    if (searchTerm && !stuName.includes(searchTerm.toLowerCase()) && !tplName.includes(searchTerm.toLowerCase())) return false
+    if (selectedStudent && a.student_id !== selectedStudent) return false
+    if (selectedSubject && a.template?.subject_id !== selectedSubject) return false
+    if (selectedTerm) {
+      const term = terms.find(t => t.id === selectedTerm)
+      if (term && a.assigned_date) {
+        if (a.assigned_date < term.start_date || a.assigned_date > term.end_date) return false
+      }
     }
-    setSelectedTemplates(next)
+    return true
+  })
+
+  const tabCounts = {
+    all: baseFiltered.length,
+    open: baseFiltered.filter(a => {
+      const isOverdue = isPastDateOnly(a.due_date) && a.status !== 'graded' && a.status !== 'submitted' && a.status !== 'excused'
+      return a.status === 'not_started' || a.status === 'in_progress' || isOverdue
+    }).length,
+    to_grade: baseFiltered.filter(a => a.status === 'submitted' && !a.is_graded).length,
+    graded: baseFiltered.filter(a => a.is_graded || a.status === 'graded').length,
+    excused: baseFiltered.filter(a => a.status === 'excused').length,
   }
 
-  const confirmDelete = async () => {
-    if (!deletingTemplate) return
+  // ── Student view filters ──
+  const filteredStudentAssignments = myAssignments.filter(a => {
+    if (selectedSubject && a.template?.subject_id !== selectedSubject) return false
+    if (searchTerm && !a.template?.name?.toLowerCase().includes(searchTerm.toLowerCase())) return false
+    return true
+  })
 
+  // ── CSV Export ──
+  const handleExport = () => {
+    const rows = sortedAssignments
+    const headers = ['Student', 'Assignment', 'Subject', 'Type', 'Assigned', 'Due', 'Status', 'Points', 'Max Points', 'Grade', 'Letter Grade']
+    const escape = (v: string | number | null | undefined) => {
+      const s = String(v ?? '')
+      return s.includes(',') || s.includes('"') || s.includes('\n') ? `"${s.replace(/"/g, '""')}"` : s
+    }
+    const csvRows = [
+      headers.join(','),
+      ...rows.map(a => {
+        const stu = students.find(s => s.id === a.student_id)
+        const sub = a.template?.subject_id ? getSubjectById(a.template.subject_id) : undefined
+        const maxPts = a.custom_max_points ?? a.template?.max_points ?? 100
+        const isOverdue = isPastDateOnly(a.due_date) && a.status !== 'graded' && a.status !== 'submitted' && a.status !== 'excused'
+        const displayStatus = isOverdue ? 'overdue' : a.status
+        const grade = a.is_graded && a.points_earned != null
+          ? letterGrade(a.points_earned, maxPts)
+          : ''
+        return [
+          escape(stu ? `${stu.first_name} ${stu.last_name}` : ''),
+          escape(a.template?.name),
+          escape(sub?.name),
+          escape(a.template?.assignment_type),
+          escape(a.assigned_date ? formatDateOnly(a.assigned_date, { month: 'short', day: 'numeric', year: 'numeric' }) : ''),
+          escape(a.due_date ? formatDateOnly(a.due_date, { month: 'short', day: 'numeric', year: 'numeric' }) : ''),
+          escape(displayStatus.replace('_', ' ')),
+          escape(a.points_earned),
+          escape(maxPts),
+          escape(a.is_graded && a.points_earned != null ? `${a.points_earned}/${maxPts}` : ''),
+          escape(a.letter_grade ?? grade),
+        ].join(',')
+      }),
+    ]
+    const blob = new Blob([csvRows.join('\n')], { type: 'text/csv;charset=utf-8;' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    const termName = terms.find(t => t.id === selectedTerm)?.name ?? 'all-terms'
+    a.download = `assignments-${termName.toLowerCase().replace(/\s+/g, '-')}.csv`
+    a.click()
+    URL.revokeObjectURL(url)
+  }
+
+  // ── Handlers ──
+  const handleExcuseAssignment = async (assignment: StudentAssignment) => {
     try {
-      setDeletingLoading(true)
-      await assignmentsApi.delete(deletingTemplate.id)
-      setTemplates(templates.filter(t => t.id !== deletingTemplate.id))
-      setShowDeleteConfirm(false)
-      setDeletingTemplate(null)
-    } catch (error: any) {
-      const errorMessage = error.message || 'Failed to delete assignment template'
-      setError(errorMessage)
-      setShowDeleteConfirm(false)
-      setDeletingTemplate(null)
-    } finally {
-      setDeletingLoading(false)
+      await assignmentsApi.updateStudentAssignment(assignment.id, { status: 'excused' })
+      fetchData()
+      setMenuOpenId(null)
+      toast('Assignment excused')
+    } catch {
+      toast('Failed to excuse assignment', 'danger')
     }
   }
 
-  const confirmArchive = async () => {
-    if (!archivingTemplate) return
+  const handleUnassignAssignment = async (assignment: StudentAssignment) => {
+    const stu = students.find(s => s.id === assignment.student_id)
+    const name = stu ? `${stu.first_name} ${stu.last_name}` : 'this student'
+    if (!confirm(`Remove "${assignment.template?.name ?? 'this assignment'}" from ${name}?`)) return
     try {
-      setArchivingLoading(true)
-      await assignmentsApi.archiveTemplate(archivingTemplate.id)
-      refetch()
-    } catch (err) {
-      setError('Failed to archive template')
-    } finally {
-      setArchivingLoading(false)
-      setShowArchiveConfirm(false)
-      setArchivingTemplate(null)
+      await assignmentsApi.deleteStudentAssignment(assignment.id)
+      fetchData()
+      setMenuOpenId(null)
+      toast('Assignment removed')
+    } catch {
+      toast('Failed to unassign assignment', 'danger')
     }
   }
 
   const handleStartAssignment = async (assignmentId: number) => {
     try {
       await assignmentsApi.startAssignment(assignmentId)
-      refetch()
-    } catch (err) {
+      fetchData()
+    } catch {
       setError('Failed to start assignment')
     }
   }
@@ -241,132 +275,121 @@ const Assignments: React.FC = () => {
     }
   }
 
-  const handleSubmitAssignment = async (submissionData: {
-    submission_notes?: string
-    submission_artifacts?: string[]
-  }) => {
+  const handleSubmitAssignment = async (submissionData: { submission_notes?: string; submission_artifacts?: string[] }) => {
     if (!submittingAssignment) return
-
     try {
-      await assignmentsApi.updateStudentAssignment(submittingAssignment.id, {
-        status: 'submitted',
-        ...submissionData
-      })
+      await assignmentsApi.updateStudentAssignment(submittingAssignment.id, { status: 'submitted', ...submissionData })
       setShowSubmissionDialog(false)
       setSubmittingAssignment(null)
-      refetch()
-    } catch (err) {
+      fetchData()
+    } catch {
       setError('Failed to submit assignment')
     }
   }
 
-  const handleArchiveStudentAssignment = async (assignment: StudentAssignment) => {
-    try {
-      await assignmentsApi.archiveStudentAssignment(assignment.id)
-      refetch()
-    } catch (err) {
-      setError('Failed to archive assignment')
-    }
-  }
-
   const handleDeleteStudentAssignment = async (assignment: StudentAssignment) => {
-    const student = students.find(s => s.id === assignment.student_id)
-    const studentName = student ? `${student.first_name} ${student.last_name}` : 'this student'
-    
-    if (!confirm(`Are you sure you want to delete this assignment for ${studentName}?`)) {
-      return
-    }
-
+    const stu = students.find(s => s.id === assignment.student_id)
+    const name = stu ? `${stu.first_name} ${stu.last_name}` : 'this student'
+    if (!confirm(`Remove "${assignment.template?.name ?? 'this assignment'}" from ${name}?`)) return
     try {
       await assignmentsApi.deleteStudentAssignment(assignment.id)
-      refetch()
-    } catch (err) {
-      setError('Failed to delete assignment')
+      fetchData()
+    } catch {
+      setError('Failed to remove assignment')
     }
   }
 
-  // Apply filters
-  const filteredTemplates = filterTemplates(templates)
-  const filteredStudentAssignments = filterStudentAssignments(studentAssignments)
+  // ── Bulk handlers ──
+  const handleBulkExcuse = async () => {
+    const ids = Array.from(selectedIds)
+    setBulkLoading(true)
+    try {
+      await Promise.all(ids.map(id => assignmentsApi.updateStudentAssignment(id, { status: 'excused' })))
+      toast(`${ids.length} assignment${ids.length !== 1 ? 's' : ''} excused`)
+      setSelectedIds(new Set())
+      fetchData()
+    } catch {
+      toast('Some assignments could not be excused', 'danger')
+    } finally {
+      setBulkLoading(false)
+    }
+  }
 
-  void filterGradingAssignments
+  const handleBulkUnassign = async () => {
+    const ids = Array.from(selectedIds)
+    if (!confirm(`Remove ${ids.length} assignment${ids.length !== 1 ? 's' : ''}? This cannot be undone.`)) return
+    setBulkLoading(true)
+    try {
+      await Promise.all(ids.map(id => assignmentsApi.deleteStudentAssignment(id)))
+      toast(`${ids.length} assignment${ids.length !== 1 ? 's' : ''} removed`)
+      setSelectedIds(new Set())
+      fetchData()
+    } catch {
+      toast('Some assignments could not be removed', 'danger')
+    } finally {
+      setBulkLoading(false)
+    }
+  }
+
+  const toggleSelect = (id: number) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev)
+      next.has(id) ? next.delete(id) : next.add(id)
+      return next
+    })
+  }
+
+  const toggleSelectAll = () => {
+    if (selectedIds.size === sortedAssignments.length && sortedAssignments.length > 0) {
+      setSelectedIds(new Set())
+    } else {
+      setSelectedIds(new Set(sortedAssignments.map(a => a.id)))
+    }
+  }
+
+  const allSelected = sortedAssignments.length > 0 && sortedAssignments.every(a => selectedIds.has(a.id))
 
   if (!user) {
     return (
       <div className="flex items-center justify-center py-16">
-        <svg className="h-6 w-6 animate-spin text-accent" fill="none" viewBox="0 0 24 24">
-          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
-        </svg>
+        <div className="w-6 h-6 border-2 border-line border-t-accent rounded-full animate-spin" />
       </div>
     )
   }
 
-  /* ── derived data ── */
-  // Group templates by subject for Shelves view
-  const templateGroups = (() => {
-    const groups: { subjectId: number | null; name: string; color: string; icon?: string | null; templates: typeof filteredTemplates }[] = []
-    const seen = new Map<string, typeof groups[0]>()
-    for (const t of filteredTemplates) {
-      const sub = getSubjectById(t.subject_id ?? 0)
-      const key = sub ? String(sub.id) : 'none'
-      if (!seen.has(key)) {
-        const g = { subjectId: sub?.id ?? null, name: sub?.name ?? 'No Subject', color: (sub as any)?.color ?? '#8B7355', icon: sub?.icon, templates: [] as typeof filteredTemplates }
-        seen.set(key, g)
-        groups.push(g)
-      }
-      seen.get(key)!.templates.push(t)
-    }
-    return groups
-  })()
-
-  const TYPE_LABELS: Record<string, string> = {
-    homework: 'Homework', quiz: 'Quiz', test: 'Test', project: 'Project',
-    essay: 'Essay', lab: 'Lab', presentation: 'Presentation', other: 'Other',
-  }
+  /* ── STATUS TABS ── */
+  const STATUS_TABS: { key: StatusFilter; label: string }[] = [
+    { key: 'all', label: 'All' },
+    { key: 'open', label: 'Open' },
+    { key: 'to_grade', label: 'To grade' },
+    { key: 'graded', label: 'Graded' },
+    { key: 'excused', label: 'Excused' },
+  ]
 
   return (
     <div>
       {/* ── Page header ── */}
-      <div className="flex items-start justify-between mb-8">
+      <div className="flex items-start justify-between mb-6">
         <div>
-          <p className="text-[11px] font-semibold text-faint uppercase tracking-[.06em] mb-1">
-            {isAdmin ? 'Library' : 'My Work'}
+          <p className="text-[11px] font-semibold text-faint uppercase tracking-[.08em] mb-1.5">
+            {isAdmin ? 'Live work' : 'My work'}
           </p>
           <h1 className="text-[27px] font-bold text-ink tracking-[-0.02em] leading-none">Assignments</h1>
-          {isAdmin && (
+          {isAdmin && !loading && (
             <p className="mt-1.5 text-[13px] text-muted">
-              <span className="font-mono">{filteredTemplates.length}</span> template{filteredTemplates.length !== 1 ? 's' : ''}
-              {submittedAssignments.length > 0 && (
-                <> · <span className="font-mono text-accent">{submittedAssignments.length}</span> awaiting grade</>
+              Every assignment given to a student — current and past.{' '}
+              <span className="font-mono">{baseFiltered.length}</span> shown
+              {tabCounts.to_grade > 0 && (
+                <>
+                  {' · '}
+                  <Link to="/grading" className="text-accent font-semibold hover:underline">
+                    {tabCounts.to_grade} to grade
+                  </Link>
+                </>
               )}
             </p>
           )}
         </div>
-        {isAdmin && (
-          <div className="flex flex-wrap items-center gap-2 mt-1">
-            {selectedTemplates.size > 0 && (
-              <button
-                onClick={handleBulkExport}
-                className="h-[34px] px-3 text-[13px] font-semibold rounded-field border border-btn-border bg-panel text-ink hover:bg-track transition-colors"
-              >
-                Export {selectedTemplates.size}
-              </button>
-            )}
-            <button
-              onClick={handleImportTemplate}
-              className="h-[34px] px-3 text-[13px] font-semibold rounded-field border border-btn-border bg-panel text-ink hover:bg-track transition-colors"
-            >
-              Import
-            </button>
-            <button
-              onClick={handleCreateTemplate}
-              className="h-[34px] px-4 text-[13px] font-semibold rounded-field bg-btn-primary-bg text-btn-primary-fg hover:opacity-90 transition-opacity flex items-center gap-1.5"
-            >
-              <span className="text-[17px] leading-none" style={{ marginTop: -1 }}>+</span> New template
-            </button>
-          </div>
-        )}
       </div>
 
       {/* ── Error ── */}
@@ -379,196 +402,418 @@ const Assignments: React.FC = () => {
       {/* ── Loading ── */}
       {loading && (
         <div className="flex items-center justify-center py-16">
-          <svg className="h-6 w-6 animate-spin text-accent" fill="none" viewBox="0 0 24 24">
-            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
-          </svg>
+          <div className="w-6 h-6 border-2 border-line border-t-accent rounded-full animate-spin" />
         </div>
       )}
 
       {/* ════════════════════════════════════════
-          ADMIN — LIBRARY (templates)
+          ADMIN VIEW
       ════════════════════════════════════════ */}
       {!loading && isAdmin && (
         <>
-          {/* Toolbar */}
-          <div className="flex flex-col sm:flex-row sm:items-center gap-3 mb-8">
-            <div className="relative w-full sm:max-w-[280px]">
+          {/* Status filter tabs */}
+          <div className="flex items-center gap-1.5 mb-4 flex-wrap">
+            {STATUS_TABS.map(tab => {
+              const count = tabCounts[tab.key]
+              const isActive = statusFilter === tab.key
+              return (
+                <button
+                  key={tab.key}
+                  onClick={() => setStatusFilter(tab.key)}
+                  className={`h-[34px] px-3.5 text-[13px] font-semibold rounded-[8px] flex items-center gap-1.5 transition-colors ${
+                    isActive
+                      ? 'bg-ink text-btn-primary-fg'
+                      : 'bg-panel border border-line text-muted hover:text-ink hover:bg-track'
+                  }`}
+                >
+                  {tab.label}
+                  {count > 0 && tab.key !== 'all' && (
+                    <span className={`font-mono text-[11px] font-semibold ${isActive ? 'text-btn-primary-fg/70' : 'text-faint'}`}>
+                      {count}
+                    </span>
+                  )}
+                </button>
+              )
+            })}
+          </div>
+
+          {/* Filter row */}
+          <div className="flex items-center gap-2.5 mb-5 flex-wrap">
+            <div className="relative flex-1 min-w-[220px]">
               <svg className="absolute left-3 top-1/2 -translate-y-1/2 text-faint" width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
                 <circle cx="11" cy="11" r="8" /><path d="m21 21-4.35-4.35" />
               </svg>
               <input
                 type="text"
-                placeholder="Search templates…"
+                placeholder="Search student or assignment…"
                 value={searchTerm}
                 onChange={e => setSearchTerm(e.target.value)}
-                className="w-full pl-8 pr-3 py-2 bg-field-bg border border-field-border rounded-field text-[13px] text-ink placeholder:text-faintest focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent"
+                className="w-full pl-8 pr-3 h-[38px] bg-field-bg border border-field-border rounded-[9px] text-[13.5px] text-ink placeholder:text-faintest focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent"
               />
             </div>
-            <div className="flex items-center gap-3">
+            <select
+              value={selectedStudent ?? ''}
+              onChange={e => setSelectedStudent(e.target.value ? parseInt(e.target.value) : null)}
+              className="h-[38px] px-3 pr-8 bg-field-bg border border-field-border rounded-[9px] text-[13.5px] text-ink-2 focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent"
+            >
+              <option value="">All students</option>
+              {students.map(s => (
+                <option key={s.id} value={s.id}>{s.first_name} {s.last_name}</option>
+              ))}
+            </select>
             <select
               value={selectedSubject ?? ''}
               onChange={e => setSelectedSubject(e.target.value ? parseInt(e.target.value) : null)}
-              className="h-[34px] px-3 bg-field-bg border border-field-border rounded-field text-[13px] text-ink focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent"
+              className="h-[38px] px-3 pr-8 bg-field-bg border border-field-border rounded-[9px] text-[13.5px] text-ink-2 focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent"
             >
-              <option value="">All Subjects</option>
+              <option value="">All subjects</option>
               {subjects.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
             </select>
-            <select
-              value={selectedType ?? ''}
-              onChange={e => setSelectedType(e.target.value || null)}
-              className="h-[34px] px-3 bg-field-bg border border-field-border rounded-field text-[13px] text-ink focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent"
-            >
-              <option value="">All Types</option>
-              {Object.entries(TYPE_LABELS).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
-            </select>
-            </div>
+            {terms.length > 0 && (
+              <select
+                value={selectedTerm ?? ''}
+                onChange={e => setSelectedTerm(e.target.value ? parseInt(e.target.value) : null)}
+                className="h-[38px] px-3 pr-8 bg-field-bg border border-field-border rounded-[9px] text-[13.5px] text-ink-2 focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent"
+              >
+                <option value="">All terms</option>
+                {terms.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+              </select>
+            )}
           </div>
 
-          {/* ── Shelves view ── */}
+          {/* Table */}
           <div className="bg-panel border border-line rounded-card overflow-hidden">
-            {templateGroups.length === 0 ? (
+            {sortedAssignments.length === 0 ? (
               <div className="py-14 text-center">
-                <p className="text-[15px] font-semibold text-ink-2 mb-1">No templates match your filters</p>
-                <p className="text-[13px] text-faint">Try clearing search, subject, or type.</p>
+                <p className="text-[15px] font-semibold text-ink-2 mb-1">No assignments match your filters</p>
+                <p className="text-[13px] text-faint">Try adjusting the status tab or filters above.</p>
               </div>
-            ) : templateGroups.map((group, gi) => {
-              const shelfKey = group.subjectId != null ? String(group.subjectId) : 'none'
-              const isCollapsed = collapsedShelves.has(shelfKey)
-              const shelfIds = group.templates.map(t => t.id)
-              const allSelected = shelfIds.length > 0 && shelfIds.every(id => selectedTemplates.has(id))
-              return (
-                <div key={shelfKey}>
-                  {/* Subject header — click to collapse/expand */}
-                  <button
-                    onClick={() => toggleShelf(shelfKey)}
-                    className="w-full flex items-center gap-2.5 px-4 py-2.5 bg-panel-2 border-b border-line-3 text-left hover:bg-faintest/30 transition-colors"
-                  >
-                    {/* Per-shelf select-all checkbox */}
-                    <span
-                      role="checkbox"
-                      aria-checked={allSelected}
-                      onClick={e => { e.stopPropagation(); toggleShelfSelection(shelfIds, allSelected) }}
-                      className={`w-4 h-4 rounded border flex-none flex items-center justify-center transition-colors cursor-pointer ${
-                        allSelected ? 'bg-accent border-accent text-white' : 'border-check-border bg-field-bg'
-                      }`}
-                    >
-                      {allSelected && (
-                        <svg width="9" height="7" fill="none" viewBox="0 0 9 7"><path d="M1 3.5 3.5 6 8 1" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" /></svg>
-                      )}
-                    </span>
-                    {group.icon
-                      ? <Icon name={group.icon} color={group.color} size={15} className="flex-shrink-0" />
-                      : <SubjectDot color={group.color} size={10} />
-                    }
-                    <span className="font-bold text-[13.5px] tracking-[-0.01em] text-ink">{group.name}</span>
-                    <span className="font-mono text-[11.5px] text-faint">{group.templates.length}</span>
-                    {/* Collapse chevron */}
-                    <svg
-                      className={`ml-auto text-faint transition-transform duration-150 ${isCollapsed ? '-rotate-90' : ''}`}
-                      width="12" height="12" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5"
-                    >
-                      <path d="M19 9l-7 7-7-7" strokeLinecap="round" strokeLinejoin="round" />
-                    </svg>
-                  </button>
-                  {!isCollapsed && group.templates.map((template, ri) => (
-                    <div
-                      key={template.id}
-                      className={`relative flex items-center gap-3 px-4 py-3.5 group ${
-                        ri < group.templates.length - 1 || gi < templateGroups.length - 1 ? 'border-b border-line-2' : ''
-                      } hover:bg-faintest/40 transition-colors`}
-                    >
-                      {/* Checkbox */}
+            ) : (
+              <table className="w-full border-collapse">
+                <thead>
+                  <tr className="bg-panel-2 border-b border-line">
+                    <th className="w-10 pl-4 py-3">
                       <button
-                        onClick={() => toggleTemplateSelection(template.id)}
-                        className={`w-4 h-4 rounded border flex-none flex items-center justify-center transition-colors ${
-                          selectedTemplates.has(template.id)
-                            ? 'bg-accent border-accent text-white'
-                            : 'border-check-border bg-field-bg'
+                        onClick={toggleSelectAll}
+                        className={`w-[18px] h-[18px] rounded-[5px] border-[1.5px] flex items-center justify-center transition-colors ${
+                          allSelected ? 'bg-accent border-accent text-white' : 'border-check-border bg-field-bg'
                         }`}
                       >
-                        {selectedTemplates.has(template.id) && (
-                          <svg width="9" height="7" fill="none" viewBox="0 0 9 7"><path d="M1 3.5 3.5 6 8 1" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" /></svg>
+                        {allSelected && (
+                          <svg width="9" height="7" fill="none" viewBox="0 0 9 7">
+                            <path d="M1 3.5 3.5 6 8 1" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                          </svg>
                         )}
                       </button>
-                      {/* Name + desc + mobile metadata */}
-                      <div className="flex-1 min-w-0">
-                        <div className="font-semibold text-[14px] text-ink tracking-[-0.01em]">{template.name}</div>
-                        {template.description && (
-                          <div className="text-[12px] text-faint mt-0.5 truncate">{template.description}</div>
-                        )}
-                        {/* Mobile-only metadata row (hidden on desktop) */}
-                        <div className="flex items-center gap-2 mt-1 lg:hidden">
-                          <span className="inline-block px-2 py-[2px] rounded-pill bg-track text-ink-2 text-[11px] font-semibold">
-                            {TYPE_LABELS[template.assignment_type] ?? template.assignment_type}
-                          </span>
-                          {template.max_points != null && (
-                            <span className="text-[11.5px] font-mono text-ink-2">{template.max_points} pts</span>
-                          )}
-                          {template.estimated_duration_minutes ? (
-                            <span className="text-[11.5px] font-mono text-muted">{template.estimated_duration_minutes}m</span>
-                          ) : null}
-                          {(template.total_assigned ?? 0) > 0 && (
-                            <span className="px-1.5 py-0.5 rounded bg-accent-soft text-accent text-[11px] font-mono font-semibold">
-                              {template.total_assigned} assigned
-                            </span>
-                          )}
-                        </div>
-                      </div>
-                      {/* Type pill — desktop only */}
-                      <span className="hidden lg:inline-block flex-none px-2.5 py-[3px] rounded-pill bg-track text-ink-2 text-[11.5px] font-semibold">
-                        {TYPE_LABELS[template.assignment_type] ?? template.assignment_type}
-                      </span>
-                      {/* Points — desktop only */}
-                      <span className="hidden lg:inline flex-none w-[62px] text-right font-mono tabular-nums text-[13px] text-ink-2">
-                        {template.max_points ?? '—'} pts
-                      </span>
-                      {/* Duration — desktop only */}
-                      <span className="hidden lg:inline flex-none w-[52px] text-right font-mono tabular-nums text-[13px] text-muted">
-                        {template.estimated_duration_minutes ? `${template.estimated_duration_minutes}m` : '—'}
-                      </span>
-                      {/* Assigned count — desktop only */}
-                      <span className="hidden lg:flex flex-none w-[40px] justify-center">
-                        {(template.total_assigned ?? 0) > 0 ? (
-                          <span className="px-1.5 py-0.5 rounded bg-accent-soft text-accent text-[11px] font-mono font-semibold">
-                            {template.total_assigned}
-                          </span>
-                        ) : (
-                          <span className="text-[11px] text-faintest">—</span>
-                        )}
-                      </span>
-                      {/* Actions — always visible on mobile, hover-revealed on desktop */}
-                      <div className="flex-none w-[96px] flex justify-end gap-1.5 opacity-100 lg:opacity-0 lg:group-hover:opacity-100 transition-opacity">
-                        <button
-                          onClick={() => handleAssignTemplate(template)}
-                          className="h-[30px] px-3 border border-btn-border bg-panel rounded-[7px] text-[12.5px] font-semibold text-ink hover:bg-track transition-colors"
-                        >
-                          Assign
-                        </button>
-                        <div className="relative">
+                    </th>
+                    <th className="px-3 py-3 text-left text-[11px] font-semibold text-faint uppercase tracking-[.05em] w-[180px]">Student</th>
+                    <th className="px-3 py-3 text-left text-[11px] font-semibold text-faint uppercase tracking-[.05em]">Assignment</th>
+                    <th className="px-3 py-3 text-left text-[11px] font-semibold text-faint uppercase tracking-[.05em] w-[90px]">Due</th>
+                    <th className="px-3 py-3 text-left text-[11px] font-semibold text-faint uppercase tracking-[.05em] w-[120px]">Status</th>
+                    <th className="px-3 py-3 text-left text-[11px] font-semibold text-faint uppercase tracking-[.05em] w-[140px]">Grade</th>
+                    <th className="w-10 pr-4" />
+                  </tr>
+                </thead>
+                <tbody>
+                  {sortedAssignments.map((assignment, idx) => {
+                    const stu = students.find(s => s.id === assignment.student_id)
+                    const sub = assignment.template?.subject_id ? getSubjectById(assignment.template.subject_id) : undefined
+                    const isOverdue = isPastDateOnly(assignment.due_date) &&
+                      assignment.status !== 'graded' && assignment.status !== 'submitted' && assignment.status !== 'excused'
+                    const effectiveStatus = isOverdue ? 'overdue' : assignment.status
+                    const isSelected = selectedIds.has(assignment.id)
+                    const isLast = idx === sortedAssignments.length - 1
+                    const initials = stu ? `${stu.first_name[0]}${stu.last_name[0]}` : '?'
+                    const maxPts = assignment.custom_max_points ?? assignment.template?.max_points ?? 100
+                    const isExpanded = expandedId === assignment.id
+                    // Active = not yet completed/resolved; these get Excuse + Unassign + Grade
+                    const isActive = !assignment.is_graded && assignment.status !== 'excused'
+
+                    return (
+                      <React.Fragment key={assignment.id}>
+                      <tr
+                        onClick={e => {
+                          // Don't expand if clicking checkbox or menu
+                          const target = e.target as HTMLElement
+                          if (target.closest('button') || target.closest('[role="menu"]')) return
+                          setExpandedId(isExpanded ? null : assignment.id)
+                        }}
+                        className={`group transition-colors cursor-pointer ${
+                          isSelected ? 'bg-accent-soft' : isExpanded ? 'bg-panel-2' : 'hover:bg-panel-2'
+                        } ${!isLast || isExpanded ? 'border-b border-line-2' : ''}`}
+                      >
+                        {/* Checkbox */}
+                        <td className="pl-4 py-3.5 w-10">
                           <button
-                            onClick={() => setMenuOpenId(menuOpenId === template.id ? null : template.id)}
-                            className="w-[30px] h-[30px] border border-line bg-panel rounded-[7px] text-muted flex items-center justify-center text-[16px] leading-none hover:bg-track transition-colors"
+                            onClick={() => toggleSelect(assignment.id)}
+                            className={`w-[18px] h-[18px] rounded-[5px] border-[1.5px] flex items-center justify-center transition-colors ${
+                              isSelected ? 'bg-accent border-accent text-white' : 'border-check-border bg-field-bg'
+                            }`}
                           >
-                            ⋯
+                            {isSelected && (
+                              <svg width="9" height="7" fill="none" viewBox="0 0 9 7">
+                                <path d="M1 3.5 3.5 6 8 1" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                              </svg>
+                            )}
                           </button>
-                          {menuOpenId === template.id && (
-                            <div className="absolute right-0 top-[34px] z-20 bg-panel border border-field-border rounded-[10px] shadow-menu p-1 w-40 animate-pop">
-                              <button onClick={() => { handleEditTemplate(template); setMenuOpenId(null) }} className="w-full text-left px-2.5 py-2 text-[13px] text-ink-2 hover:bg-track rounded-[6px]">Edit</button>
-                              <button onClick={() => { handleExportTemplate(template); setMenuOpenId(null) }} className="w-full text-left px-2.5 py-2 text-[13px] text-ink-2 hover:bg-track rounded-[6px]">Export</button>
-                              <button onClick={() => { handleArchiveTemplate(template); setMenuOpenId(null) }} className="w-full text-left px-2.5 py-2 text-[13px] text-ink-2 hover:bg-track rounded-[6px]">Archive</button>
-                              <div className="h-px bg-line-2 my-1 mx-1.5" />
-                              <button onClick={() => { handleDeleteTemplate(template); setMenuOpenId(null) }} className="w-full text-left px-2.5 py-2 text-[13px] text-danger hover:bg-track rounded-[6px]">Delete</button>
+                        </td>
+
+                        {/* Student */}
+                        <td className="px-3 py-3.5">
+                          <div className="flex items-center gap-2.5">
+                            <div className="w-7 h-7 rounded-full bg-track flex items-center justify-center flex-shrink-0">
+                              <span className="text-[10.5px] font-semibold text-ink-2 font-mono">{initials}</span>
                             </div>
+                            <span className="text-[13.5px] font-semibold text-ink">
+                              {stu ? `${stu.first_name} ${stu.last_name}` : '—'}
+                            </span>
+                          </div>
+                        </td>
+
+                        {/* Assignment */}
+                        <td className="px-3 py-3.5 min-w-0">
+                          <div className="flex items-center gap-2 min-w-0">
+                            <SubjectDot color={(sub as any)?.color ?? '#74716A'} size={9} className="flex-none" />
+                            <div className="min-w-0">
+                              <div className="text-[14px] font-semibold text-ink tracking-[-0.01em] truncate">
+                                {assignment.template?.name ?? '—'}
+                              </div>
+                              <div className="text-[12px] text-faint mt-0.5">
+                                {sub?.name ?? '—'}
+                                {assignment.template?.assignment_type && (
+                                  <> · <span className="capitalize">{assignment.template.assignment_type}</span></>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        </td>
+
+                        {/* Due */}
+                        <td className="px-3 py-3.5">
+                          {assignment.due_date ? (
+                            <span className={`font-mono text-[13px] tabular-nums ${isOverdue ? 'text-neg-fg' : 'text-ink-2'}`}>
+                              {formatDateOnly(assignment.due_date, { month: 'short', day: 'numeric' })}
+                            </span>
+                          ) : (
+                            <span className="text-faintest text-[13px]">—</span>
                           )}
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )
-            })}
+                        </td>
+
+                        {/* Status */}
+                        <td className="px-3 py-3.5">
+                          <Pill variant={statusToPillVariant(effectiveStatus)}>
+                            {effectiveStatus.replace('_', ' ')}
+                          </Pill>
+                        </td>
+
+                        {/* Grade */}
+                        <td className="px-3 py-3.5">
+                          {assignment.is_graded && assignment.points_earned != null ? (
+                            <span className="font-mono tabular-nums text-[13px] text-ink-2">
+                              {assignment.points_earned}/{maxPts}
+                              {' '}·{' '}
+                              <span className="text-ink font-semibold">
+                                {assignment.letter_grade ?? letterGrade(assignment.points_earned, maxPts)}
+                              </span>
+                            </span>
+                          ) : assignment.status === 'excused' ? (
+                            <span className="text-[13px] text-exc-fg font-medium">Excused</span>
+                          ) : (
+                            <span className="text-faintest font-mono text-[13px]">—</span>
+                          )}
+                        </td>
+
+                        {/* ⋯ Menu */}
+                        <td className="pr-4 py-3.5 w-10">
+                          <div className="relative flex justify-end" ref={menuOpenId === assignment.id ? menuRef : undefined}>
+                            <button
+                              onClick={() => setMenuOpenId(menuOpenId === assignment.id ? null : assignment.id)}
+                              className="w-[30px] h-[30px] rounded-[7px] border border-line text-muted flex items-center justify-center text-[16px] opacity-0 group-hover:opacity-100 transition-opacity hover:bg-track"
+                            >
+                              ⋯
+                            </button>
+                            {menuOpenId === assignment.id && (
+                              <div className="absolute right-0 top-[34px] z-20 bg-panel border border-field-border rounded-[10px] shadow-menu p-1 w-36 animate-pop">
+                                {isActive && (
+                                  <>
+                                    <button
+                                      onClick={() => { setMenuOpenId(null); navigate('/grading', { state: { assignmentId: assignment.id } }) }}
+                                      className="w-full text-left px-2.5 py-2 text-[13px] text-ink-2 hover:bg-track rounded-[6px]"
+                                    >
+                                      Grade
+                                    </button>
+                                    <button
+                                      onClick={() => handleExcuseAssignment(assignment)}
+                                      className="w-full text-left px-2.5 py-2 text-[13px] text-ink-2 hover:bg-track rounded-[6px]"
+                                    >
+                                      Excuse
+                                    </button>
+                                    <div className="h-px bg-line-2 my-1 mx-1.5" />
+                                  </>
+                                )}
+                                <button
+                                  onClick={() => handleUnassignAssignment(assignment)}
+                                  className="w-full text-left px-2.5 py-2 text-[13px] text-danger hover:bg-track rounded-[6px]"
+                                >
+                                  Unassign
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+
+                      {/* ── Expanded detail row ── */}
+                      {isExpanded && (
+                        <tr className={`${!isLast ? 'border-b border-line-2' : ''}`}>
+                          <td colSpan={7} className="px-6 pb-5 pt-0 bg-panel-2">
+                            <div className="pt-4 space-y-4">
+                              {/* Meta row */}
+                              <div className="flex items-center gap-3 flex-wrap text-[12.5px] text-muted">
+                                {sub && <SubjectDot color={(sub as any)?.color ?? '#74716A'} size={9} />}
+                                <span>{sub?.name ?? '—'}</span>
+                                {assignment.template?.assignment_type && (
+                                  <>
+                                    <span className="text-check-border">·</span>
+                                    <span className="capitalize">{assignment.template.assignment_type}</span>
+                                  </>
+                                )}
+                                {assignment.assigned_date && (
+                                  <>
+                                    <span className="text-check-border">·</span>
+                                    <span>Assigned {formatDateOnly(assignment.assigned_date, { month: 'short', day: 'numeric' })}</span>
+                                  </>
+                                )}
+                                {assignment.submitted_date && (
+                                  <>
+                                    <span className="text-check-border">·</span>
+                                    <span>Submitted {formatDateOnly(assignment.submitted_date, { month: 'short', day: 'numeric' })}</span>
+                                  </>
+                                )}
+                                {isActive && (
+                                  <button
+                                    onClick={() => navigate('/grading', { state: { assignmentId: assignment.id } })}
+                                    className="ml-auto h-[28px] px-3 text-[12.5px] font-semibold rounded-[7px] bg-btn-primary-bg text-btn-primary-fg hover:opacity-90 transition-opacity flex items-center gap-1.5"
+                                  >
+                                    <svg width="12" height="12" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2.5"><path strokeLinecap="round" strokeLinejoin="round" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
+                                    Grade
+                                  </button>
+                                )}
+                              </div>
+
+                              <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                                {/* Assignment info */}
+                                {(assignment.template?.description || assignment.template?.instructions || assignment.custom_instructions) && (
+                                  <div className="space-y-3">
+                                    {assignment.template?.description && (
+                                      <div>
+                                        <p className="text-[11px] font-semibold text-faint uppercase tracking-[.06em] mb-1">Description</p>
+                                        <p className="text-[13px] text-ink-2 leading-relaxed whitespace-pre-wrap">{assignment.template.description}</p>
+                                      </div>
+                                    )}
+                                    {assignment.template?.instructions && (
+                                      <div>
+                                        <p className="text-[11px] font-semibold text-faint uppercase tracking-[.06em] mb-1">Instructions</p>
+                                        <p className="text-[13px] text-ink-2 leading-relaxed whitespace-pre-wrap">{assignment.template.instructions}</p>
+                                      </div>
+                                    )}
+                                    {assignment.custom_instructions && (
+                                      <div>
+                                        <p className="text-[11px] font-semibold text-faint uppercase tracking-[.06em] mb-1">Custom instructions</p>
+                                        <p className="text-[13px] text-ink-2 leading-relaxed whitespace-pre-wrap">{assignment.custom_instructions}</p>
+                                      </div>
+                                    )}
+                                  </div>
+                                )}
+
+                                {/* Submission + grade */}
+                                <div className="space-y-3">
+                                  {assignment.submission_notes && (
+                                    <div className="bg-panel border border-line-3 rounded-[10px] p-3.5">
+                                      <p className="text-[11px] font-semibold text-faint uppercase tracking-[.06em] mb-1.5">Student submission</p>
+                                      <p className="text-[13px] text-ink-2 leading-relaxed">{assignment.submission_notes}</p>
+                                      {assignment.submission_artifacts && assignment.submission_artifacts.length > 0 && (
+                                        <div className="flex gap-2 mt-2.5 flex-wrap">
+                                          {assignment.submission_artifacts.map((af, i) => (
+                                            <a
+                                              key={i}
+                                              href={af}
+                                              target="_blank"
+                                              rel="noopener noreferrer"
+                                              className="inline-flex items-center gap-1.5 px-2.5 py-1.5 bg-panel-2 border border-line rounded-[7px] text-[12px] text-accent hover:underline"
+                                            >
+                                              <svg width="10" height="10" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" /></svg>
+                                              {af}
+                                            </a>
+                                          ))}
+                                        </div>
+                                      )}
+                                    </div>
+                                  )}
+
+                                  {assignment.is_graded && assignment.points_earned != null && (
+                                    <div className="bg-pos-bg border border-pos-fg/20 rounded-[10px] p-3.5">
+                                      <p className="text-[11px] font-semibold text-faint uppercase tracking-[.05em] mb-1">Grade recorded</p>
+                                      <p className="font-mono text-[20px] font-semibold text-pos-fg">
+                                        {assignment.points_earned} / {maxPts}
+                                        {(assignment.letter_grade ?? letterGrade(assignment.points_earned, maxPts)) && (
+                                          <span className="ml-2 text-[15px]">
+                                            ({assignment.letter_grade ?? letterGrade(assignment.points_earned, maxPts)})
+                                          </span>
+                                        )}
+                                      </p>
+                                      {assignment.teacher_feedback && (
+                                        <p className="text-[13px] text-ink-2 mt-2 leading-relaxed">{assignment.teacher_feedback}</p>
+                                      )}
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+                          </td>
+                        </tr>
+                      )}
+                      </React.Fragment>
+                    )
+                  })}
+                </tbody>
+              </table>
+            )}
           </div>
+
+          {/* Bulk action bar */}
+          {selectedIds.size > 0 && (
+            <div
+              className="fixed bottom-6 left-1/2 -translate-x-1/2 z-40 flex items-center gap-1.5 rounded-[13px] px-4 py-2.5 animate-slide-up"
+              style={{ background: 'var(--btn-primary-bg)', boxShadow: '0 16px 40px var(--shadow-lg)' }}
+            >
+              <span className="text-[13.5px] font-semibold text-btn-primary-fg">
+                {selectedIds.size} selected
+              </span>
+              <span className="w-px h-[22px] mx-2 bg-btn-primary-fg/20" />
+              <button
+                onClick={handleBulkExcuse}
+                disabled={bulkLoading}
+                className="h-[30px] px-3 text-[12.5px] font-semibold text-btn-primary-fg/80 hover:text-btn-primary-fg rounded-[7px] hover:bg-btn-primary-fg/10 transition-colors disabled:opacity-50"
+              >
+                Excuse
+              </button>
+              <button
+                onClick={handleBulkUnassign}
+                disabled={bulkLoading}
+                className="h-[30px] px-3 text-[12.5px] font-semibold text-btn-primary-fg/80 hover:text-btn-primary-fg rounded-[7px] hover:bg-btn-primary-fg/10 transition-colors disabled:opacity-50"
+              >
+                Unassign
+              </button>
+              <span className="w-px h-[22px] mx-1 bg-btn-primary-fg/20" />
+              <button
+                onClick={() => setSelectedIds(new Set())}
+                className="w-[30px] h-[30px] flex items-center justify-center rounded-[7px] text-[16px] text-btn-primary-fg/60 hover:text-btn-primary-fg transition-colors"
+              >
+                ✕
+              </button>
+            </div>
+          )}
         </>
       )}
 
@@ -577,9 +822,8 @@ const Assignments: React.FC = () => {
       ════════════════════════════════════════ */}
       {!loading && !isAdmin && (
         <>
-          {/* Toolbar */}
           <div className="flex items-center gap-3 mb-4">
-            <div className="relative flex-1 max-w-[260px]">
+            <div className="relative flex-1 max-w-[280px]">
               <svg className="absolute left-3 top-1/2 -translate-y-1/2 text-faint" width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
                 <circle cx="11" cy="11" r="8" /><path d="m21 21-4.35-4.35" />
               </svg>
@@ -616,10 +860,9 @@ const Assignments: React.FC = () => {
                 key={assignment.id}
                 assignment={assignment}
                 subject={assignment.template?.subject_id ? getSubjectById(assignment.template.subject_id) : undefined}
-                isAdmin={isAdmin}
+                isAdmin={false}
                 onStart={handleStartAssignment}
                 onComplete={handleCompleteAssignment}
-                onArchive={handleArchiveStudentAssignment}
                 onDelete={handleDeleteStudentAssignment}
               />
             ))}
@@ -628,129 +871,19 @@ const Assignments: React.FC = () => {
       )}
 
       {/* ── Modals ── */}
-
-      {/* Quick Assign Modal */}
-      {showQuickAssignModal && (
+      {showQuickAssign && (
         <QuickAssignModal
-          isOpen={showQuickAssignModal}
-          onClose={() => setShowQuickAssignModal(false)}
-          onSuccess={() => { setShowQuickAssignModal(false); refetch() }}
+          isOpen={showQuickAssign}
+          onClose={() => setShowQuickAssign(false)}
+          onSuccess={() => { setShowQuickAssign(false); fetchData() }}
         />
       )}
 
-      {/* Create Template Modal */}
-      {showCreateModal && (
-        <CreateTemplateModal
-          subjects={subjects}
-            onClose={() => setShowCreateModal(false)}
-          onSuccess={() => {
-            setShowCreateModal(false)
-            refetch()
-          }}
-        />
-      )}
-
-      {/* Edit Template Modal */}
-      {showEditModal && editingTemplate && (
-        <EditTemplateModal
-          template={editingTemplate}
-          subjects={subjects}
-          onClose={() => {
-            setShowEditModal(false)
-            setEditingTemplate(null)
-          }}
-          onSuccess={() => {
-            setShowEditModal(false)
-            setEditingTemplate(null)
-            refetch()
-          }}
-        />
-      )}
-
-      {/* Assign Template Modal */}
-      {showAssignModal && assigningTemplate && (
-        <AssignTemplateModal
-          template={assigningTemplate}
-          students={students}
-          onClose={() => {
-            setShowAssignModal(false)
-            setAssigningTemplate(null)
-          }}
-          onSuccess={() => {
-            setShowAssignModal(false)
-            setAssigningTemplate(null)
-            refetch()
-          }}
-        />
-      )}
-
-      {/* Delete Confirmation */}
-      <ConfirmDialog
-        isOpen={showDeleteConfirm && !!deletingTemplate}
-        onClose={() => { setShowDeleteConfirm(false); setDeletingTemplate(null) }}
-        onConfirm={confirmDelete}
-        tone="danger"
-        title="Delete assignment template"
-        message={<>Are you sure you want to delete <strong className="text-ink">"{deletingTemplate?.name}"</strong>? This action cannot be undone.</>}
-        note={deletingTemplate?.total_assigned && deletingTemplate.total_assigned > 0
-          ? <>This template is currently assigned to <strong className="text-danger">{deletingTemplate.total_assigned} student{deletingTemplate.total_assigned !== 1 ? 's' : ''}</strong>. Their existing assignments will be removed too.</>
-          : undefined}
-        confirmLabel="Delete template"
-        loading={deletingLoading}
-      />
-
-      {/* Archive Confirmation */}
-      <ConfirmDialog
-        isOpen={showArchiveConfirm && !!archivingTemplate}
-        onClose={() => { setShowArchiveConfirm(false); setArchivingTemplate(null) }}
-        onConfirm={confirmArchive}
-        tone="warn"
-        title="Archive assignment template"
-        message={<>Archive <strong className="text-ink">"{archivingTemplate?.name}"</strong>? It will be hidden from the assignment-creation list, but existing assignments are preserved.</>}
-        confirmLabel="Archive template"
-        loading={archivingLoading}
-      />
-
-      {/* Export Modal */}
-      {showExportModal && (
-        <ExportAssignmentModal
-          isOpen={showExportModal}
-          onClose={() => {
-            setShowExportModal(false)
-            setExportingTemplate(null)
-            setSelectedTemplates(new Set())
-          }}
-          templateId={exportingTemplate?.id || 0}
-          templateName={exportingTemplate?.name || ''}
-          onExport={performTemplateExport}
-          onBulkExport={performBulkExport}
-          selectedTemplateIds={Array.from(selectedTemplates)}
-          isBulkMode={!exportingTemplate && selectedTemplates.size > 0}
-        />
-      )}
-
-      {/* Import Modal */}
-      {showImportModal && (
-        <ImportAssignmentModal
-          isOpen={showImportModal}
-          onClose={() => {
-            setShowImportModal(false)
-            refetch()
-          }}
-          onImport={performTemplateImport}
-          subjects={subjects}
-          />
-      )}
-
-      {/* Submission Dialog */}
       {showSubmissionDialog && submittingAssignment && (
         <SubmissionDialog
           assignment={submittingAssignment}
           isOpen={showSubmissionDialog}
-          onClose={() => {
-            setShowSubmissionDialog(false)
-            setSubmittingAssignment(null)
-          }}
+          onClose={() => { setShowSubmissionDialog(false); setSubmittingAssignment(null) }}
           onSubmit={handleSubmitAssignment}
           loading={false}
         />
