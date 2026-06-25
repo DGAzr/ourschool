@@ -31,7 +31,6 @@ import { StatTile } from '../components/ui'
 import Modal from '../components/ui/Modal'
 import Button from '../components/ui/Button'
 import BulkAttendanceModal from '../components/BulkAttendanceModal'
-import QuickCreateTemplateModal from '../components/QuickCreateTemplateModal'
 import AssignmentDetailModal from '../components/assignments/AssignmentDetailModal'
 
 // Quick Award Points Modal Component
@@ -219,7 +218,6 @@ const Dashboard: React.FC = () => {
   const [activityLoading, setActivityLoading] = useState(true)
   const [showAwardModal, setShowAwardModal] = useState(false)
   const [showBulkAttendanceModal, setShowBulkAttendanceModal] = useState(false)
-  const [showCreateTemplateModal, setShowCreateTemplateModal] = useState(false)
   const [showAssignmentDetailModal, setShowAssignmentDetailModal] = useState(false)
   const [selectedAssignmentId, setSelectedAssignmentId] = useState<number | null>(null)
   
@@ -230,10 +228,6 @@ const Dashboard: React.FC = () => {
   }
 
   const handleAttendanceSuccess = () => {
-    // Optionally refresh dashboard data or show success message
-  }
-
-  const handleTemplateSuccess = () => {
     // Optionally refresh dashboard data or show success message
   }
 
@@ -366,22 +360,6 @@ const Dashboard: React.FC = () => {
             {activeTerm && <> · {activeTerm.name}</>}
           </p>
         </div>
-        {isAdmin && (
-          <div className="flex flex-wrap gap-2 mt-1">
-            <button
-              onClick={() => setShowBulkAttendanceModal(true)}
-              className="h-[34px] px-3 text-[13px] font-semibold rounded-field border border-btn-border bg-panel text-ink hover:bg-track transition-colors"
-            >
-              Mark attendance
-            </button>
-            <button
-              onClick={() => setShowCreateTemplateModal(true)}
-              className="h-[34px] px-4 text-[13px] font-semibold rounded-field bg-btn-primary-bg text-btn-primary-fg hover:opacity-90 transition-opacity"
-            >
-              + New assignment
-            </button>
-          </div>
-        )}
       </div>
 
       {/* ── Health tiles ── */}
@@ -476,10 +454,6 @@ const Dashboard: React.FC = () => {
                     <span className="w-7 h-7 rounded-[7px] bg-accent-soft flex items-center justify-center text-[14px]">📋</span>
                     Mark attendance
                   </button>
-                  <button onClick={() => setShowCreateTemplateModal(true)} className="w-full flex items-center gap-3 px-3 py-2.5 rounded-[9px] text-[13.5px] font-semibold text-ink hover:bg-track transition-colors text-left">
-                    <span className="w-7 h-7 rounded-[7px] bg-accent-soft flex items-center justify-center text-[14px]">✏️</span>
-                    New assignment template
-                  </button>
                 </>
               ) : (
                 <>
@@ -535,11 +509,6 @@ const Dashboard: React.FC = () => {
         isOpen={showBulkAttendanceModal}
         onClose={() => setShowBulkAttendanceModal(false)}
         onSuccess={handleAttendanceSuccess}
-      />
-      <QuickCreateTemplateModal
-        isOpen={showCreateTemplateModal}
-        onClose={() => setShowCreateTemplateModal(false)}
-        onSuccess={handleTemplateSuccess}
       />
       {showAssignmentDetailModal && selectedAssignmentId && (
         <AssignmentDetailModal

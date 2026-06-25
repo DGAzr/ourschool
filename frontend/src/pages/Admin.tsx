@@ -112,7 +112,6 @@ const Admin: React.FC = () => {
 
   // ── Grading ──
   const [grades, setGrades] = useState<[string, number][]>(DEFAULT_GRADES)
-  const [mastery, setMastery] = useState(false)
   const [savingGrades, setSavingGrades] = useState(false)
 
   // ── Assignment types & weighting ──
@@ -726,7 +725,6 @@ const Admin: React.FC = () => {
           <div className="grid grid-cols-2 sm:grid-cols-3 gap-3 mb-6">
             {[
               { label: 'Required days', value: String(requiredDays) },
-              { label: 'Grading', value: mastery ? 'Mastery' : 'Standard' },
               { label: 'Points system', value: pointsStatus?.enabled ? 'Enabled' : 'Disabled', accent: pointsStatus?.enabled },
               { label: 'Students', value: String(users.filter(u => u.role !== 'admin').length) },
               { label: 'Subjects', value: String(subjects.length) },
@@ -786,10 +784,7 @@ const Admin: React.FC = () => {
         <div>
           <SectionHeader title="Grading" desc="Define letter-grade thresholds and assignment-type weighting." />
           <div className="bg-panel border border-line rounded-card p-5 mb-4">
-            <SettingRow label="Mastery-based grading" desc="Track standards met instead of percentages.">
-              <Toggle checked={mastery} onChange={setMastery} />
-            </SettingRow>
-            <p className="text-[11px] font-semibold text-faint uppercase tracking-[.06em] mt-5 mb-3">Letter-grade thresholds — minimum % for each grade</p>
+            <p className="text-[11px] font-semibold text-faint uppercase tracking-[.06em] mb-3">Letter-grade thresholds — minimum % for each grade</p>
             <div className="space-y-2">
               {grades.map(([letter, min], i) => (
                 <div key={letter} className="flex items-center gap-3">

@@ -20,6 +20,7 @@ import React, { useState } from 'react'
 import { assignmentsApi } from '../../services/assignments'
 import { StudentAssignment, User as UserType } from '../../types'
 import { formatDateOnly } from '../../utils/formatters'
+import { letterGrade as sharedLetterGrade } from '../../utils/grading'
 import Modal from '../ui/Modal'
 import Button from '../ui/Button'
 
@@ -43,23 +44,7 @@ const GradeAssignmentModal: React.FC<GradeAssignmentModalProps> = ({
       ? assignment.points_earned
       : maxPoints
   )
-  const calculateLetterGrade = (points: number) => {
-    if (maxPoints === 0) return 'F'
-    const percentage = Math.round((points / maxPoints) * 100)
-    if (percentage >= 97) return 'A+'
-    if (percentage >= 93) return 'A'
-    if (percentage >= 90) return 'A-'
-    if (percentage >= 87) return 'B+'
-    if (percentage >= 83) return 'B'
-    if (percentage >= 80) return 'B-'
-    if (percentage >= 77) return 'C+'
-    if (percentage >= 73) return 'C'
-    if (percentage >= 70) return 'C-'
-    if (percentage >= 67) return 'D+'
-    if (percentage >= 63) return 'D'
-    if (percentage >= 60) return 'D-'
-    return 'F'
-  }
+  const calculateLetterGrade = (points: number) => sharedLetterGrade(points, maxPoints)
 
   const [letterGrade, setLetterGrade] = useState<string>(
     assignment.letter_grade ||

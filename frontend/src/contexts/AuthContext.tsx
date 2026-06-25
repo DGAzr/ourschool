@@ -33,6 +33,7 @@ interface AuthContextType {
   user: User | null
   login: (token: string, userData: User) => void
   logout: (reason?: string) => void
+  updateUser: (userData: User) => void
   isLoading: boolean
   isTokenValid: boolean
   timeRemaining: string
@@ -274,6 +275,11 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     }
   }, [])
 
+  const updateUser = useCallback((userData: User) => {
+    setUser(userData)
+    localStorage.setItem(STORAGE_KEYS.USER, JSON.stringify(userData))
+  }, [])
+
   // Enhanced login function with token validation
   const login = useCallback((token: string, userData: User) => {
     // Validate token before storing
@@ -299,6 +305,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     user,
     login,
     logout,
+    updateUser,
     isLoading,
     isTokenValid,
     timeRemaining,
