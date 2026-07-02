@@ -319,8 +319,10 @@ def reset_user_password(
     # Generate a temporary password
     temp_password = generate_temporary_password()
 
-    # Hash and update the password
+    # Hash and update the password; the temporary password must be rotated
+    # by the user on their next login.
     target_user.hashed_password = get_password_hash(temp_password)
+    target_user.must_change_password = True
 
     db.commit()
     db.refresh(target_user)
@@ -376,6 +378,7 @@ def change_my_password(
 
     # Update password
     current_user.hashed_password = get_password_hash(new_password)
+    current_user.must_change_password = False
     db.commit()
     db.refresh(current_user)
 

@@ -24,7 +24,10 @@ from app.core.config import settings
 
 def get_engine():
     """Get the database engine."""
-    return create_engine(settings.effective_database_url)
+    # pool_pre_ping validates connections before use so the app recovers
+    # transparently from DB/container restarts instead of serving stale
+    # connections.
+    return create_engine(settings.effective_database_url, pool_pre_ping=True)
 
 
 # Initialize these as None initially

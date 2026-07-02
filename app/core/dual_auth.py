@@ -58,9 +58,11 @@ async def get_current_user_optional(
             user = get_user_by_username(db, username)
             if user and user.is_active:
                 return user
-    except:
+    except HTTPException:
+        # Invalid/expired token just means "not authenticated" here;
+        # the API-key fallback in get_current_user_or_api_key may still apply.
         pass
-    
+
     return None
 
 

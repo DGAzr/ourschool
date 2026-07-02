@@ -35,7 +35,7 @@ class Subject(Base):
     description = Column(Text)
     color = Column(String, default="#3B82F6")
     icon = Column(String, nullable=True)
-    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
     assignment_templates = relationship("AssignmentTemplate", back_populates="subject")
     term_subjects = relationship("TermSubject", back_populates="subject")

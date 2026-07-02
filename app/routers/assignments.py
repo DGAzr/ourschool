@@ -493,6 +493,16 @@ def get_student_assignment(
     return assignment
 
 
+# Fields a student may modify on their own assignment; everything else
+# (due dates, assigned date, instructions, max points) is admin-only.
+STUDENT_EDITABLE_ASSIGNMENT_FIELDS = {
+    "status",
+    "student_notes",
+    "submission_notes",
+    "submission_artifacts",
+}
+
+
 @router.put(
     "/student-assignments/{assignment_id}", response_model=StudentAssignmentResponse
 )
@@ -528,9 +538,19 @@ def update_student_assignment(
             raise HTTPException(
                 status_code=403, detail="Students can only update their own assignments"
             )
+    else:
+        raise HTTPException(status_code=403, detail="Access denied")
 
     update_data = assignment_update.dict(exclude_unset=True)
-    
+
+    if current_user.role == UserRole.STUDENT:
+        disallowed = set(update_data) - STUDENT_EDITABLE_ASSIGNMENT_FIELDS
+        if disallowed:
+            raise HTTPException(
+                status_code=403,
+                detail=f"You may not modify: {', '.join(sorted(disallowed))}",
+            )
+
     # Handle submission_artifacts JSON serialization
     if "submission_artifacts" in update_data and update_data["submission_artifacts"] is not None:
         update_data["submission_artifacts"] = json.dumps(update_data["submission_artifacts"])

@@ -51,16 +51,14 @@ class Settings(BaseSettings):
         default=10 * 1024 * 1024, env="MAX_REQUEST_BODY_BYTES"
     )
     # Expose interactive API docs (/docs, /redoc, /openapi.json).
-    enable_api_docs: bool = Field(default=True, env="ENABLE_API_DOCS")
+    # Off by default so a fresh deploy doesn't publish the API schema;
+    # set ENABLE_API_DOCS=true to turn them on.
+    enable_api_docs: bool = Field(default=False, env="ENABLE_API_DOCS")
 
     # Backend server configuration
     # Default to loopback; set BACKEND_HOST=0.0.0.0 only behind a reverse proxy.
     backend_host: str = Field(default="127.0.0.1", env="BACKEND_HOST")
     backend_port: int = Field(default=8000, env="BACKEND_PORT")
-
-    # Frontend server configuration (for development/reference)
-    frontend_host: str = Field(default="127.0.0.1", env="FRONTEND_HOST")
-    frontend_port: int = Field(default=5173, env="FRONTEND_PORT")
 
     # Logging configuration
     log_level: str = Field(default="INFO", env="LOG_LEVEL")

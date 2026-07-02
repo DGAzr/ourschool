@@ -57,8 +57,12 @@ class User(Base):
     date_of_birth = Column(Date, nullable=True)
     grade_level = Column(Integer, nullable=True)
 
-    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
-    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
+    # Forces a password change on next login (seeded default credentials,
+    # admin-issued temporary passwords).
+    must_change_password = Column(Boolean, default=False, nullable=False)
+
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+    updated_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
 
     # Relationships for parent role (when this user is an admin managing students)
     # This user manages students (one-to-many: one parent manages many students)

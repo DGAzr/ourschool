@@ -92,10 +92,10 @@ def import_system_data(
         backup_dict = sanitize_import_data(backup_data.model_dump())
         backup_data = SystemBackup(**backup_dict)
 
-        # TODO: Implement "clean_import" option — truncate all data tables in reverse
-        # dependency order before importing, preserving only the current admin session user.
-        # This is the more honest restore semantics vs. the current merge behavior which
-        # allows duplicate records on re-import. Wire to a checkbox in the UI with a warning.
+        # Restore semantics are MERGE, not replace: existing records (matched by
+        # external_id, then by natural key) are skipped or updated per
+        # import_options; nothing is deleted. A wipe-and-restore mode is a
+        # possible post-1.0 feature.
 
         # Import in dependency order
         _import_users(db, backup_data.users, result, import_options, dry_run)

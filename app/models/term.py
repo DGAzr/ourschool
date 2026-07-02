@@ -72,8 +72,8 @@ class Term(Base):
     term_order = Column(Integer, default=0)  # Order within academic year
 
     # Audit fields
-    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
-    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+    updated_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
     created_by = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
 
     # Relationships
@@ -128,7 +128,7 @@ class TermSubject(Base):
     teacher_notes = Column(Text)  # Teacher notes for this subject this term
 
     # Audit fields
-    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
     # Relationships
     term = relationship("Term", back_populates="term_subjects")
@@ -188,9 +188,9 @@ class StudentTermGrade(Base):
     strengths = Column(Text)
 
     # Audit fields
-    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
-    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
-    last_calculated = Column(DateTime)  # When grades were last recalculated
+    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+    updated_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
+    last_calculated = Column(DateTime(timezone=True))  # When grades were last recalculated
 
     # Relationships
     student = relationship("User", foreign_keys=[student_id])
@@ -254,7 +254,7 @@ class GradeHistory(Base):
 
     # Who and when
     changed_by = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
-    changed_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    changed_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
     # Assignment context (if the change was due to a specific assignment)
     assignment_id = Column(Integer, ForeignKey("student_assignments.id"))

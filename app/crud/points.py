@@ -88,9 +88,12 @@ def get_or_create_student_points(db: Session, student_id: int) -> StudentPoints:
             total_spent=0
         )
         db.add(student_points)
-        db.commit()
+        # Flush (not commit) so this is safe inside callers' transactions —
+        # bulk-grade wraps each item in a SAVEPOINT and a commit here would
+        # close it. Callers that need persistence commit themselves.
+        db.flush()
         db.refresh(student_points)
-    
+
     return student_points
 
 
