@@ -60,6 +60,7 @@ const Templates: React.FC = () => {
   const [archivingLoading, setArchivingLoading] = useState(false)
   const [exportingTemplate, setExportingTemplate] = useState<AssignmentTemplate | null>(null)
   const [submittingAssignment, setSubmittingAssignment] = useState<StudentAssignment | null>(null)
+  const [deletingStudentAssignment, setDeletingStudentAssignment] = useState<StudentAssignment | null>(null)
   const [selectedTemplates, setSelectedTemplates] = useState<Set<number>>(new Set())
   const [collapsedShelves, setCollapsedShelves] = useState<Set<string>>(() => {
     try {
@@ -280,21 +281,28 @@ const Templates: React.FC = () => {
     }
   }
 
-  const handleDeleteStudentAssignment = async (assignment: StudentAssignment) => {
-    const student = students.find(s => s.id === assignment.student_id)
-    const studentName = student ? `${student.first_name} ${student.last_name}` : 'this student'
-    
-    if (!confirm(`Are you sure you want to delete this assignment for ${studentName}?`)) {
-      return
-    }
+  const handleDeleteStudentAssignment = (assignment: StudentAssignment) => {
+    setDeletingStudentAssignment(assignment)
+  }
 
+  const confirmDeleteStudentAssignment = async () => {
+    if (!deletingStudentAssignment) return
     try {
-      await assignmentsApi.deleteStudentAssignment(assignment.id)
+      await assignmentsApi.deleteStudentAssignment(deletingStudentAssignment.id)
       refetch()
     } catch (err) {
       setError('Failed to delete assignment')
+    } finally {
+      setDeletingStudentAssignment(null)
     }
   }
+
+  const deletingStudentAssignmentName = (() => {
+    const student = deletingStudentAssignment
+      ? students.find(s => s.id === deletingStudentAssignment.student_id)
+      : undefined
+    return student ? `${student.first_name} ${student.last_name}` : 'this student'
+  })()
 
   // Apply filters — when showArchived is on, restrict to only archived templates
   const filteredTemplates = filterTemplates(templates).filter(t => showArchived ? t.is_archived : !t.is_archived)
@@ -470,6 +478,7 @@ const Templates: React.FC = () => {
                     <span
                       role="checkbox"
                       aria-checked={allSelected}
+                      aria-label={`Select all templates in ${group.name}`}
                       onClick={e => { e.stopPropagation(); toggleShelfSelection(shelfIds, allSelected) }}
                       className={`w-4 h-4 rounded border flex-none flex items-center justify-center transition-colors cursor-pointer ${
                         allSelected ? 'bg-accent border-accent text-white' : 'border-check-border bg-field-bg'
@@ -503,6 +512,7 @@ const Templates: React.FC = () => {
                       {/* Checkbox */}
                       <button
                         onClick={() => toggleTemplateSelection(template.id)}
+                        aria-label={`${selectedTemplates.has(template.id) ? 'Deselect' : 'Select'} ${template.name}`}
                         className={`w-4 h-4 rounded border flex-none flex items-center justify-center transition-colors ${
                           selectedTemplates.has(template.id)
                             ? 'bg-accent border-accent text-white'
@@ -572,6 +582,7 @@ const Templates: React.FC = () => {
                         <div className="relative">
                           <button
                             onClick={() => setMenuOpenId(menuOpenId === template.id ? null : template.id)}
+                            aria-label={`Actions for ${template.name}`}
                             className="w-[30px] h-[30px] border border-line bg-panel rounded-[7px] text-muted flex items-center justify-center text-[16px] leading-none hover:bg-track transition-colors"
                           >
                             ⋯
@@ -734,6 +745,17 @@ const Templates: React.FC = () => {
         message={<>Archive <strong className="text-ink">"{archivingTemplate?.name}"</strong>? It will be hidden from the assignment-creation list, but existing assignments are preserved.</>}
         confirmLabel="Archive template"
         loading={archivingLoading}
+      />
+
+      {/* Delete Student Assignment Confirmation */}
+      <ConfirmDialog
+        isOpen={!!deletingStudentAssignment}
+        onClose={() => setDeletingStudentAssignment(null)}
+        onConfirm={confirmDeleteStudentAssignment}
+        tone="danger"
+        title="Delete assignment"
+        message={<>Are you sure you want to delete this assignment for <strong className="text-ink">{deletingStudentAssignmentName}</strong>?</>}
+        confirmLabel="Delete assignment"
       />
 
       {/* Export Modal */}

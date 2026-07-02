@@ -18,6 +18,7 @@
 
 import React, { Component, ReactNode } from 'react'
 import { AlertTriangle, RefreshCw } from 'lucide-react'
+import { Button } from './ui'
 
 interface ErrorBoundaryState {
   hasError: boolean
@@ -88,47 +89,43 @@ class ErrorBoundary extends Component<ErrorBoundaryProps, ErrorBoundaryState> {
       return (
         <div className="min-h-[400px] flex items-center justify-center p-8">
           <div className="text-center max-w-md mx-auto">
-            <div className="bg-red-100 dark:bg-red-900/20 rounded-full p-4 w-20 h-20 mx-auto mb-6">
-              <AlertTriangle className="w-12 h-12 text-red-600 dark:text-red-400" />
+            <div className="bg-neg-bg rounded-full p-4 w-20 h-20 mx-auto mb-6">
+              <AlertTriangle className="w-12 h-12 text-neg-fg" />
             </div>
-            
-            <h2 className="text-2xl font-bold text-gray-900 dark:text-gray-100 mb-4">
+
+            <h2 className="text-[20px] font-semibold text-ink mb-4">
               Something went wrong
             </h2>
-            
-            <p className="text-gray-600 dark:text-gray-400 mb-6">
-              An unexpected error occurred while loading this component. 
+
+            <p className="text-[13.5px] text-muted mb-6">
+              An unexpected error occurred while loading this component.
               You can try refreshing the page or contact support if the problem persists.
             </p>
 
             {/* Retry Button */}
-            <button
-              onClick={this.handleRetry}
-              className="inline-flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 transition-colors"
-            >
-              <RefreshCw className="w-4 h-4 mr-2" />
+            <Button onClick={this.handleRetry} icon={<RefreshCw className="w-4 h-4" />}>
               Try Again
-            </button>
+            </Button>
 
             {/* Detailed Error Information (Development Only) */}
             {this.props.showDetails && this.state.error && (
               <details className="mt-8 text-left">
-                <summary className="text-sm text-gray-500 dark:text-gray-400 cursor-pointer hover:text-gray-700 dark:hover:text-gray-300">
+                <summary className="text-[12.5px] text-faint cursor-pointer hover:text-muted">
                   Show error details (development only)
                 </summary>
-                <div className="mt-4 p-4 bg-gray-100 dark:bg-gray-800 rounded-lg text-xs font-mono text-left overflow-auto">
-                  <div className="text-red-600 dark:text-red-400 font-bold mb-2">
+                <div className="mt-4 p-4 bg-panel-2 border border-line rounded-card text-xs font-mono text-left overflow-auto">
+                  <div className="text-neg-fg font-bold mb-2">
                     {this.state.error.name}: {this.state.error.message}
                   </div>
-                  <pre className="text-gray-700 dark:text-gray-300 whitespace-pre-wrap">
+                  <pre className="text-ink-2 whitespace-pre-wrap">
                     {this.state.error.stack}
                   </pre>
                   {this.state.errorInfo && (
                     <>
-                      <div className="text-red-600 dark:text-red-400 font-bold mt-4 mb-2">
+                      <div className="text-neg-fg font-bold mt-4 mb-2">
                         Component Stack:
                       </div>
-                      <pre className="text-gray-700 dark:text-gray-300 whitespace-pre-wrap">
+                      <pre className="text-ink-2 whitespace-pre-wrap">
                         {this.state.errorInfo.componentStack}
                       </pre>
                     </>

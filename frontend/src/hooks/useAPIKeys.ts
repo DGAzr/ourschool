@@ -48,6 +48,11 @@ export const useAPIKeys = () => {
   const [autoRefresh, setAutoRefresh] = useState(false)
   const [lastRefresh, setLastRefresh] = useState<Date>(new Date())
 
+  // Delete-intent state: the consuming component renders the confirmation
+  // dialog and calls confirmDeleteAPIKey / cancelDeleteAPIKey.
+  const [pendingDelete, setPendingDelete] = useState<APIKey | null>(null)
+  const [deleting, setDeleting] = useState(false)
+
   /**
    * Load API keys and system statistics from the server.
    * 
@@ -115,42 +120,62 @@ export const useAPIKeys = () => {
   }, [loadData])
 
   /**
-   * Delete an API key after confirmation.
-   * 
+   * Request deletion of an API key. Records the delete intent in
+   * `pendingDelete` — the consuming component should render a ConfirmDialog
+   * and call `confirmDeleteAPIKey` (or `cancelDeleteAPIKey`) to resolve it.
+   *
    * @param apiKeyId - The ID of the API key to delete
-   * @returns Promise<boolean> - Whether the deletion was successful
    */
-  const deleteAPIKey = useCallback(async (apiKeyId: number): Promise<boolean> => {
+  const deleteAPIKey = useCallback((apiKeyId: number) => {
     const apiKey = apiKeys.find(key => key.id === apiKeyId)
-    
+
     if (!apiKey) {
       setError('API key not found')
-      return false
+      return
     }
 
-    if (!confirm(`Are you sure you want to delete the API key "${apiKey.name}"? This action cannot be undone.`)) {
-      return false
-    }
+    setPendingDelete(apiKey)
+  }, [apiKeys])
+
+  /**
+   * Cancel a pending API key deletion.
+   */
+  const cancelDeleteAPIKey = useCallback(() => {
+    setPendingDelete(null)
+  }, [])
+
+  /**
+   * Perform the deletion of the pending API key.
+   *
+   * @returns Promise<boolean> - Whether the deletion was successful
+   */
+  const confirmDeleteAPIKey = useCallback(async (): Promise<boolean> => {
+    if (!pendingDelete) return false
+    const apiKeyId = pendingDelete.id
 
     try {
+      setDeleting(true)
       setError(null)
-      
+
       // Optimistic update
       setApiKeys(prevKeys => prevKeys.filter(key => key.id !== apiKeyId))
-      
+
       await apiKeysApi.deleteAPIKey(apiKeyId)
-      
+
       // Reload data to update statistics
       await loadData(true)
-      
+
       return true
     } catch (err: any) {
       setError(err.response?.data?.detail || 'Failed to delete API key')
       // Revert optimistic update on error
       await loadData(true)
       return false
+    } finally {
+      setDeleting(false)
+      setPendingDelete(null)
     }
-  }, [apiKeys, loadData])
+  }, [pendingDelete, loadData])
 
   /**
    * Toggle the expanded stats view for an API key.
@@ -214,12 +239,16 @@ export const useAPIKeys = () => {
     expandedStats,
     autoRefresh,
     lastRefresh,
-    
+    pendingDelete,
+    deleting,
+
     // Actions
     loadData,
     refreshData,
     toggleAPIKeyActive,
     deleteAPIKey,
+    confirmDeleteAPIKey,
+    cancelDeleteAPIKey,
     toggleStatsExpanded,
     toggleAutoRefresh,
     clearError,

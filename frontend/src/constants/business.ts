@@ -118,7 +118,6 @@ export const REPORT_TYPES = {
 // Default values
 export const DEFAULTS = {
   ASSIGNMENT_MAX_POINTS: 100,
-  LESSON_DURATION: 45, // minutes
   TERM_LENGTH: 18, // weeks
   SCHOOL_YEAR_START: 'September',
   GRADING_SCALE: 'standard'

@@ -28,6 +28,7 @@ import { useAuth } from '../contexts/AuthContext'
 import { format, parseISO } from 'date-fns'
 import MarkdownRenderer from '../components/common/MarkdownRenderer'
 import { IconPickerButton, Icon } from '../components/ui'
+import ConfirmDialog from '../components/ui/ConfirmDialog'
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
@@ -664,6 +665,8 @@ const Journal: React.FC = () => {
   const [selectedStudentId, setSelectedStudentId] = useState<number | null>(null)
   const [searchTerm, setSearchTerm] = useState('')
   const [error, setError] = useState<string | null>(null)
+  const [deletingEntryId, setDeletingEntryId] = useState<number | null>(null)
+  const [deleteLoading, setDeleteLoading] = useState(false)
 
   const isAdmin = user?.role === 'admin'
 
@@ -695,13 +698,19 @@ const Journal: React.FC = () => {
     }
   }, [user, isAdmin, fetchEntries])
 
-  const handleDelete = async (id: number) => {
-    if (!confirm('Are you sure you want to delete this journal entry?')) return
+  const handleDelete = (id: number) => setDeletingEntryId(id)
+
+  const confirmDelete = async () => {
+    if (deletingEntryId === null) return
+    setDeleteLoading(true)
     try {
-      await journalApi.delete(id)
-      setEntries(prev => prev.filter(e => e.id !== id))
+      await journalApi.delete(deletingEntryId)
+      setEntries(prev => prev.filter(e => e.id !== deletingEntryId))
     } catch (err: any) {
       setError(`Failed to delete entry: ${err.response?.data?.detail || err.message}`)
+    } finally {
+      setDeleteLoading(false)
+      setDeletingEntryId(null)
     }
   }
 
@@ -982,6 +991,18 @@ const Journal: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* Delete confirmation */}
+      <ConfirmDialog
+        isOpen={deletingEntryId !== null}
+        onClose={() => setDeletingEntryId(null)}
+        onConfirm={confirmDelete}
+        tone="danger"
+        title="Delete journal entry"
+        message="Are you sure you want to delete this journal entry? This action cannot be undone."
+        confirmLabel="Delete entry"
+        loading={deleteLoading}
+      />
     </div>
   )
 }

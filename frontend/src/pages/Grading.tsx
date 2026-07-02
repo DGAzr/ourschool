@@ -324,9 +324,10 @@ const DetailPanel: React.FC<DetailPanelProps> = ({
             <>
               <div className="flex gap-5 flex-wrap items-end">
                 <div>
-                  <label className="block text-[11px] font-semibold text-faint uppercase tracking-[.06em] mb-1.5">Points earned</label>
+                  <label htmlFor="grading-points-earned" className="block text-[11px] font-semibold text-faint uppercase tracking-[.06em] mb-1.5">Points earned</label>
                   <div className="flex items-center gap-2">
                     <input
+                      id="grading-points-earned"
                       type="number"
                       inputMode="decimal"
                       min={0}
@@ -364,8 +365,9 @@ const DetailPanel: React.FC<DetailPanelProps> = ({
               </div>
 
               <div>
-                <label className="block text-[11px] font-semibold text-faint uppercase tracking-[.06em] mb-1.5">Feedback to student</label>
+                <label htmlFor="grading-feedback" className="block text-[11px] font-semibold text-faint uppercase tracking-[.06em] mb-1.5">Feedback to student</label>
                 <textarea
+                  id="grading-feedback"
                   value={feedbackInput}
                   onChange={e => setFeedbackInput(e.target.value)}
                   rows={3}

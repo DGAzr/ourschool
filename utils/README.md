@@ -47,4 +47,4 @@ These utilities help ensure compliance with the GNU Affero General Public Licens
 - Including proper license references
 - Maintaining consistent attribution across the codebase
 
-For more information about AGPL compliance, see `../AGPL_COMPLIANCE.md`.
+The full license text lives in the repo-root `LICENSE` file.

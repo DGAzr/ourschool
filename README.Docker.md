@@ -236,7 +236,7 @@ docker compose -f docker-compose.ghcr.yml --profile local-db up -d
 
 ## Backup and Restore
 
-OurSchool has a built-in backup/restore system (Admin → Backup) with dry-run preview, cross-version compatibility, and stable external IDs. That's the recommended way to back up application data.
+OurSchool has a built-in backup/restore system (Admin → Backup) with dry-run preview, cross-version compatibility, and stable external IDs. That's the recommended way to back up application data. Restores are **merges**: existing records are matched and skipped/updated, deleted records are recreated — nothing is wiped first.
 
 For a raw PostgreSQL dump:
 
@@ -251,6 +251,23 @@ docker compose -f docker-compose.ghcr.yml exec -T db \
   psql -U postgres ourschool < backup.sql
 docker compose -f docker-compose.ghcr.yml start backend
 ```
+
+### Back up on a schedule
+
+Nothing backs your data up automatically — set up a schedule. These records
+are your family's academic history; a weekly cron job is cheap insurance.
+Example (host crontab, Sunday 2am, keeping 8 weeks):
+
+```bash
+crontab -e
+# m h dom mon dow command
+0 2 * * 0 cd /path/to/ourschool && docker compose -f docker-compose.ghcr.yml exec -T db pg_dump -U postgres ourschool | gzip > backups/ourschool_$(date +\%Y\%m\%d).sql.gz && ls -t backups/ourschool_*.sql.gz | tail -n +9 | xargs -r rm
+
+# Restore test: periodically verify a dump actually restores (into a throwaway
+# database) — an unverified backup is a hope, not a backup.
+```
+
+Also take a manual backup **before every upgrade** (see [MIGRATIONS.md](MIGRATIONS.md)).
 
 
 ## Monitoring

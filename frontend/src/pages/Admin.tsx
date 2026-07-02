@@ -21,6 +21,7 @@ import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { useToast } from '../components/ui/Toast'
 import Toggle from '../components/ui/Toggle'
+import ConfirmDialog from '../components/ui/ConfirmDialog'
 import { Button, Input, Select, SegmentedControl, Pill, IconPickerButton, Icon } from '../components/ui'
 import { useAPIKeys } from '../hooks/useAPIKeys'
 import { APIKeyTable, CreateAPIKeyModal } from '../components/api-keys'
@@ -60,6 +61,14 @@ const CATS = [
 ] as const
 
 type SectionKey = typeof CATS[number]['key']
+
+// Pending destructive action awaiting confirmation via ConfirmDialog
+type PendingAction =
+  | { kind: 'delete-type'; type: AssignmentTypeConfig }
+  | { kind: 'delete-term'; id: number }
+  | { kind: 'delete-subject'; id: number }
+  | { kind: 'delete-user'; id: number }
+  | { kind: 'reset-password'; id: number; username: string }
 
 // ── Shared section chrome ──────────────────────────────────────────────────
 const SectionHeader: React.FC<{ title: string; desc: string }> = ({ title, desc }) => (
@@ -102,6 +111,7 @@ const Admin: React.FC = () => {
   const navigate = useNavigate()
   const { refresh: refreshAssignmentTypes } = useAssignmentTypes()
   const [section, setSection] = useState<SectionKey>('overview')
+  const [pendingAction, setPendingAction] = useState<PendingAction | null>(null)
 
   // ── Attendance settings ──
   const [requiredDays, setRequiredDays] = useState(180)
@@ -444,12 +454,15 @@ const Admin: React.FC = () => {
     }
   }
 
-  const deleteType = async (t: AssignmentTypeConfig) => {
+  const deleteType = (t: AssignmentTypeConfig) => {
     if (t.usage_count > 0) {
       toast(`"${t.name}" is used by ${t.usage_count} template(s). Deactivate it instead.`, 'danger')
       return
     }
-    if (!confirm(`Delete assignment type "${t.name}"?`)) return
+    setPendingAction({ kind: 'delete-type', type: t })
+  }
+
+  const performDeleteType = async (t: AssignmentTypeConfig) => {
     try {
       await assignmentTypesApi.delete(t.id)
       setAssignmentTypes(prev => prev.filter(x => x.id !== t.id))
@@ -527,8 +540,9 @@ const Admin: React.FC = () => {
     }
   }
 
-  const handleTermDelete = async (id: number) => {
-    if (!confirm('Delete this term?')) return
+  const handleTermDelete = (id: number) => setPendingAction({ kind: 'delete-term', id })
+
+  const performTermDelete = async (id: number) => {
     try {
       await termsApi.delete(id)
       setTerms(prev => prev.filter(t => t.id !== id))
@@ -564,8 +578,9 @@ const Admin: React.FC = () => {
     } catch (err: any) { setSubjectError(err.message || 'Failed to save subject') }
   }
 
-  const handleSubjectDelete = async (id: number) => {
-    if (!confirm('Delete this subject? This cannot be undone.')) return
+  const handleSubjectDelete = (id: number) => setPendingAction({ kind: 'delete-subject', id })
+
+  const performSubjectDelete = async (id: number) => {
     try {
       await subjectsApi.delete(id)
       setSubjects(prev => prev.filter(s => s.id !== id))
@@ -630,8 +645,9 @@ const Admin: React.FC = () => {
     } catch (err: any) { setUserError(err.message || 'Failed to update user') }
   }
 
-  const handleDeleteUser = async (id: number) => {
-    if (!confirm('Delete this user?')) return
+  const handleDeleteUser = (id: number) => setPendingAction({ kind: 'delete-user', id })
+
+  const performDeleteUser = async (id: number) => {
     try {
       await usersApi.delete(id)
       setUsers(prev => prev.filter(u => u.id !== id))
@@ -639,8 +655,9 @@ const Admin: React.FC = () => {
     } catch (err: any) { setUserError(err.message || 'Failed to delete user') }
   }
 
-  const handleResetPassword = async (id: number, username: string) => {
-    if (!confirm(`Reset password for ${username}? This will generate a temporary password.`)) return
+  const handleResetPassword = (id: number, username: string) => setPendingAction({ kind: 'reset-password', id, username })
+
+  const performResetPassword = async (id: number, username: string) => {
     try {
       const r = await usersApi.resetPassword(id)
       alert(`Temporary password for ${username}: ${r.temporary_password}\n\nShare this securely and ask them to change it on next login.`)
@@ -714,6 +731,56 @@ const Admin: React.FC = () => {
     } catch (err: any) { setLedgerError(err.message || 'Failed to load ledger') }
     finally { setLedgerLoading(false) }
   }
+
+  // ── Confirm-dialog dispatch ───────────────────────────────────────────────
+  const runPendingAction = () => {
+    if (!pendingAction) return
+    const action = pendingAction
+    setPendingAction(null)
+    switch (action.kind) {
+      case 'delete-type': performDeleteType(action.type); break
+      case 'delete-term': performTermDelete(action.id); break
+      case 'delete-subject': performSubjectDelete(action.id); break
+      case 'delete-user': performDeleteUser(action.id); break
+      case 'reset-password': performResetPassword(action.id, action.username); break
+    }
+  }
+
+  const confirmDialogProps = ((): { title: string; message: React.ReactNode; confirmLabel: string; tone: 'danger' | 'warn' } | null => {
+    if (!pendingAction) return null
+    switch (pendingAction.kind) {
+      case 'delete-type': return {
+        title: 'Delete assignment type',
+        message: <>Delete assignment type <strong className="text-ink">"{pendingAction.type.name}"</strong>?</>,
+        confirmLabel: 'Delete type',
+        tone: 'danger',
+      }
+      case 'delete-term': return {
+        title: 'Delete term',
+        message: 'Are you sure you want to delete this term?',
+        confirmLabel: 'Delete term',
+        tone: 'danger',
+      }
+      case 'delete-subject': return {
+        title: 'Delete subject',
+        message: 'Are you sure you want to delete this subject? This cannot be undone.',
+        confirmLabel: 'Delete subject',
+        tone: 'danger',
+      }
+      case 'delete-user': return {
+        title: 'Delete user',
+        message: 'Are you sure you want to delete this user?',
+        confirmLabel: 'Delete user',
+        tone: 'danger',
+      }
+      case 'reset-password': return {
+        title: 'Reset password',
+        message: <>Reset password for <strong className="text-ink">{pendingAction.username}</strong>? This will generate a temporary password.</>,
+        confirmLabel: 'Reset password',
+        tone: 'warn',
+      }
+    }
+  })()
 
   // ── Section content ───────────────────────────────────────────────────────
   const renderSection = () => {
@@ -1670,6 +1737,16 @@ const Admin: React.FC = () => {
               setError={apiKeysHook.setError}
             />
           </ErrorBoundary>
+          <ConfirmDialog
+            isOpen={!!apiKeysHook.pendingDelete}
+            onClose={apiKeysHook.cancelDeleteAPIKey}
+            onConfirm={apiKeysHook.confirmDeleteAPIKey}
+            tone="danger"
+            title="Delete API key"
+            message={<>Are you sure you want to delete the API key <strong className="text-ink">"{apiKeysHook.pendingDelete?.name}"</strong>? This action cannot be undone.</>}
+            confirmLabel="Delete key"
+            loading={apiKeysHook.deleting}
+          />
         </div>
       )
 
@@ -1847,6 +1924,16 @@ const Admin: React.FC = () => {
           ) : renderSection()}
         </div>
       </main>
+
+      {/* Shared destructive-action confirmation */}
+      {confirmDialogProps && (
+        <ConfirmDialog
+          isOpen
+          onClose={() => setPendingAction(null)}
+          onConfirm={runPendingAction}
+          {...confirmDialogProps}
+        />
+      )}
     </div>
   )
 }
