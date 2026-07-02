@@ -24,14 +24,16 @@ interface ToggleProps {
   label?: string
   disabled?: boolean
   className?: string
+  'aria-label'?: string
 }
 
-const Toggle: React.FC<ToggleProps> = ({ checked, onChange, label, disabled = false, className = '' }) => (
+const Toggle: React.FC<ToggleProps> = ({ checked, onChange, label, disabled = false, className = '', 'aria-label': ariaLabel }) => (
   <label className={`inline-flex items-center gap-2.5 cursor-pointer select-none ${disabled ? 'opacity-50 cursor-not-allowed' : ''} ${className}`}>
     <button
       type="button"
       role="switch"
       aria-checked={checked}
+      aria-label={ariaLabel}
       disabled={disabled}
       onClick={() => !disabled && onChange(!checked)}
       className={[

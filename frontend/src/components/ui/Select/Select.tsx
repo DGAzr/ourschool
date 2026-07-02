@@ -16,7 +16,7 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-import { SelectHTMLAttributes, forwardRef, ReactNode } from 'react'
+import { SelectHTMLAttributes, forwardRef, ReactNode, useId } from 'react'
 import { INPUT_STYLES } from '../../../constants'
 
 interface SelectOption {
@@ -47,6 +47,8 @@ const Select = forwardRef<HTMLSelectElement, SelectProps>(({
   children,
   ...props
 }, ref) => {
+  const autoId = useId()
+  const selectId = props.id ?? autoId
   const getSelectClasses = () => {
     const baseClasses = INPUT_STYLES.base
     const errorClasses = error ? INPUT_STYLES.error : ''
@@ -61,7 +63,7 @@ const Select = forwardRef<HTMLSelectElement, SelectProps>(({
   return (
     <div className={fullWidth ? 'w-full' : ''}>
       {label && (
-        <label className="block text-[12px] font-semibold text-faint uppercase tracking-wide mb-1.5">
+        <label htmlFor={selectId} className="block text-[12px] font-semibold text-faint uppercase tracking-wide mb-1.5">
           {label}
           {props.required && <span className="text-danger ml-0.5">*</span>}
         </label>
@@ -71,6 +73,7 @@ const Select = forwardRef<HTMLSelectElement, SelectProps>(({
         className={getSelectClasses()}
         disabled={disabled}
         {...props}
+        id={selectId}
       >
         {placeholder && (
           <option value="" disabled>

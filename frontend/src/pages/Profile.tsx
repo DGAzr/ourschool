@@ -130,8 +130,9 @@ const Profile: React.FC = () => {
         <h2 className="text-[15px] font-semibold text-ink">Profile Information</h2>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
-            <label className={LABEL}>First Name</label>
+            <label htmlFor="profile-first-name" className={LABEL}>First Name</label>
             <input
+              id="profile-first-name"
               type="text"
               value={profileData.first_name}
               onChange={e => setProfileData({ ...profileData, first_name: e.target.value })}
@@ -140,8 +141,9 @@ const Profile: React.FC = () => {
             />
           </div>
           <div>
-            <label className={LABEL}>Last Name</label>
+            <label htmlFor="profile-last-name" className={LABEL}>Last Name</label>
             <input
+              id="profile-last-name"
               type="text"
               value={profileData.last_name}
               onChange={e => setProfileData({ ...profileData, last_name: e.target.value })}
@@ -150,8 +152,9 @@ const Profile: React.FC = () => {
             />
           </div>
           <div>
-            <label className={LABEL}>Email</label>
+            <label htmlFor="profile-email" className={LABEL}>Email</label>
             <input
+              id="profile-email"
               type="email"
               value={profileData.email}
               onChange={e => setProfileData({ ...profileData, email: e.target.value })}
@@ -216,9 +219,10 @@ const Profile: React.FC = () => {
             )}
 
             <div>
-              <label className={LABEL}>Current Password</label>
+              <label htmlFor="profile-current-password" className={LABEL}>Current Password</label>
               <div className="relative">
                 <input
+                  id="profile-current-password"
                   type={showCurrentPassword ? 'text' : 'password'}
                   value={passwordData.current_password}
                   onChange={e => setPasswordData({ ...passwordData, current_password: e.target.value })}
@@ -228,6 +232,7 @@ const Profile: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => setShowCurrentPassword(!showCurrentPassword)}
+                  aria-label={showCurrentPassword ? 'Hide current password' : 'Show current password'}
                   className="absolute inset-y-0 right-0 pr-3 flex items-center text-faint hover:text-muted"
                 >
                   {showCurrentPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
@@ -236,9 +241,10 @@ const Profile: React.FC = () => {
             </div>
 
             <div>
-              <label className={LABEL}>New Password</label>
+              <label htmlFor="profile-new-password" className={LABEL}>New Password</label>
               <div className="relative">
                 <input
+                  id="profile-new-password"
                   type={showNewPassword ? 'text' : 'password'}
                   value={passwordData.new_password}
                   onChange={e => setPasswordData({ ...passwordData, new_password: e.target.value })}
@@ -249,6 +255,7 @@ const Profile: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => setShowNewPassword(!showNewPassword)}
+                  aria-label={showNewPassword ? 'Hide new password' : 'Show new password'}
                   className="absolute inset-y-0 right-0 pr-3 flex items-center text-faint hover:text-muted"
                 >
                   {showNewPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
@@ -258,9 +265,10 @@ const Profile: React.FC = () => {
             </div>
 
             <div>
-              <label className={LABEL}>Confirm New Password</label>
+              <label htmlFor="profile-confirm-password" className={LABEL}>Confirm New Password</label>
               <div className="relative">
                 <input
+                  id="profile-confirm-password"
                   type={showConfirmPassword ? 'text' : 'password'}
                   value={passwordData.confirm_password}
                   onChange={e => setPasswordData({ ...passwordData, confirm_password: e.target.value })}
@@ -270,6 +278,7 @@ const Profile: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                  aria-label={showConfirmPassword ? 'Hide confirmed password' : 'Show confirmed password'}
                   className="absolute inset-y-0 right-0 pr-3 flex items-center text-faint hover:text-muted"
                 >
                   {showConfirmPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}

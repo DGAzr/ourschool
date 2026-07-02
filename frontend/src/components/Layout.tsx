@@ -63,6 +63,7 @@ const ThemeCycler: React.FC = () => {
     <button
       onClick={cycle}
       title={`Theme: ${theme}`}
+      aria-label={`Switch theme (current: ${theme})`}
       className="w-8 h-8 flex items-center justify-center rounded-field text-muted hover:text-ink hover:bg-track transition-colors duration-150"
     >
       <Icon size={15} />
@@ -172,6 +173,7 @@ const Layout: React.FC = () => {
           <button
             onClick={handleLogout}
             title="Sign out"
+            aria-label="Sign out"
             className="w-8 h-8 flex items-center justify-center rounded-field text-muted hover:text-danger hover:bg-neg-bg transition-colors duration-150"
           >
             <LogOut size={15} />
@@ -202,6 +204,7 @@ const Layout: React.FC = () => {
         {/* Mobile close */}
         <button
           onClick={() => setSidebarOpen(false)}
+          aria-label="Close sidebar"
           className="absolute top-3 right-3 lg:hidden w-8 h-8 flex items-center justify-center rounded-field text-muted hover:text-ink"
         >
           <X size={16} />
@@ -215,6 +218,7 @@ const Layout: React.FC = () => {
         <div className="lg:hidden h-12 px-4 bg-panel border-b border-line flex items-center justify-between flex-shrink-0">
           <button
             onClick={() => setSidebarOpen(true)}
+            aria-label="Open sidebar"
             className="w-8 h-8 flex items-center justify-center rounded-field text-muted hover:text-ink hover:bg-track"
           >
             <Menu size={16} />

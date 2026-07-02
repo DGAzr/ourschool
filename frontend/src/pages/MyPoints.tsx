@@ -211,6 +211,7 @@ const MyPoints: React.FC = () => {
             onClick={() => setBalanceVisible(v => !v)}
             className="mt-0.5 p-1.5 rounded-field text-muted hover:text-ink hover:bg-panel-2 transition-colors"
             title={balanceVisible ? 'Hide balance' : 'Show balance'}
+            aria-label={balanceVisible ? 'Hide balance' : 'Show balance'}
           >
             {balanceVisible ? <EyeOff size={16} /> : <Eye size={16} />}
           </button>
@@ -311,6 +312,7 @@ const MyPoints: React.FC = () => {
               <button
                 onClick={() => setCurrentPage(p => p - 1)}
                 disabled={currentPage === 1}
+                aria-label="Previous page"
                 className="w-8 h-8 flex items-center justify-center rounded-field border border-btn-border text-muted hover:text-ink hover:bg-panel disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
               >
                 <ChevronLeft size={15} />
@@ -318,6 +320,7 @@ const MyPoints: React.FC = () => {
               <button
                 onClick={() => setCurrentPage(p => p + 1)}
                 disabled={currentPage === ledger.total_pages}
+                aria-label="Next page"
                 className="w-8 h-8 flex items-center justify-center rounded-field border border-btn-border text-muted hover:text-ink hover:bg-panel disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
               >
                 <ChevronRight size={15} />

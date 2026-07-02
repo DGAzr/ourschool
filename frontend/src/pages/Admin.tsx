@@ -830,14 +830,14 @@ const Admin: React.FC = () => {
               </div>
             </div>
             <SettingRow label="Skip weekends" desc="Don't count Saturdays and Sundays toward instructional days.">
-              <Toggle checked={skipWeekends} onChange={async (v) => {
+              <Toggle aria-label="Skip weekends" checked={skipWeekends} onChange={async (v) => {
                 setSkipWeekends(v)
                 try { await settingsApi.updateSkipWeekends(v); toast('Setting saved') }
                 catch { toast('Failed to save', 'danger'); setSkipWeekends(!v) }
               }} />
             </SettingRow>
             <SettingRow label="Count excused days as instruction" desc="Excused absences still count toward the required-days total.">
-              <Toggle checked={countExcused} onChange={async (v) => {
+              <Toggle aria-label="Count excused days as instruction" checked={countExcused} onChange={async (v) => {
                 setCountExcused(v)
                 try { await settingsApi.updateCountExcused(v); toast('Setting saved') }
                 catch { toast('Failed to save', 'danger'); setCountExcused(!v) }
@@ -946,11 +946,12 @@ const Admin: React.FC = () => {
                             <span className="w-20 text-[11px] text-faint text-right hidden sm:block">
                               {t.usage_count > 0 ? `${t.usage_count} in use` : 'unused'}
                             </span>
-                            <Toggle checked={t.is_active} onChange={v => updateTypeField(t.id, { is_active: v })} />
+                            <Toggle aria-label={`${t.name} active`} checked={t.is_active} onChange={v => updateTypeField(t.id, { is_active: v })} />
                             <button
                               onClick={() => deleteType(t)}
                               className="w-7 h-7 flex items-center justify-center rounded-field text-faint hover:text-danger hover:bg-track transition-colors flex-shrink-0"
                               title={t.usage_count > 0 ? 'In use — deactivate instead' : 'Delete type'}
+                              aria-label={`Delete ${t.name} assignment type`}
                             >
                               <Trash2 className="w-3.5 h-3.5" />
                             </button>
@@ -1015,15 +1016,15 @@ const Admin: React.FC = () => {
                   {pointsStatus?.enabled ? 'On' : 'Off'}
                 </span>
                 {pointsStatus?.can_toggle && (
-                  <Toggle checked={!!pointsStatus?.enabled} onChange={togglePoints} disabled={togglingPoints} />
+                  <Toggle aria-label="Points and rewards system" checked={!!pointsStatus?.enabled} onChange={togglePoints} disabled={togglingPoints} />
                 )}
               </div>
             </SettingRow>
             <SettingRow label="Points per journaling day" desc="Awarded once per day a student journals.">
               <div className="flex items-center gap-2">
-                <button onClick={() => { const v = Math.max(0, ptsJournal - 1); setPtsJournal(v); pointsApi.setJournalPoints(v) }} className="w-7 h-7 rounded-field border border-btn-border flex items-center justify-center text-ink-2 hover:bg-track">–</button>
+                <button aria-label="Decrease points per journaling day" onClick={() => { const v = Math.max(0, ptsJournal - 1); setPtsJournal(v); pointsApi.setJournalPoints(v) }} className="w-7 h-7 rounded-field border border-btn-border flex items-center justify-center text-ink-2 hover:bg-track">–</button>
                 <span className="w-8 text-center font-mono text-[14px] font-semibold text-ink">{ptsJournal}</span>
-                <button onClick={() => { const v = ptsJournal + 1; setPtsJournal(v); pointsApi.setJournalPoints(v) }} className="w-7 h-7 rounded-field border border-btn-border flex items-center justify-center text-ink-2 hover:bg-track">+</button>
+                <button aria-label="Increase points per journaling day" onClick={() => { const v = ptsJournal + 1; setPtsJournal(v); pointsApi.setJournalPoints(v) }} className="w-7 h-7 rounded-field border border-btn-border flex items-center justify-center text-ink-2 hover:bg-track">+</button>
               </div>
             </SettingRow>
           </div>
@@ -1037,7 +1038,7 @@ const Admin: React.FC = () => {
                   <span className="text-[13.5px] text-ink">{p.label}</span>
                   <div className="flex items-center gap-2">
                     <span className="font-mono text-[13px] text-pos-fg font-semibold">+{p.amount}</span>
-                    <button onClick={() => removePreset(i)} className="text-faintest hover:text-danger text-[14px] leading-none">✕</button>
+                    <button aria-label={`Remove ${p.label} preset`} onClick={() => removePreset(i)} className="text-faintest hover:text-danger text-[14px] leading-none">✕</button>
                   </div>
                 </div>
               ))}
@@ -1131,7 +1132,7 @@ const Admin: React.FC = () => {
                     <h3 className="text-[15px] font-semibold text-ink">Adjust Points</h3>
                     <p className="text-[12px] text-muted mt-0.5">{selectedStudentPoints.student_name} · {selectedStudentPoints.current_balance.toLocaleString()} current balance</p>
                   </div>
-                  <button onClick={() => setShowAdjustModal(false)} className="w-7 h-7 flex items-center justify-center rounded-full text-faint hover:text-ink hover:bg-track transition-colors"><X className="w-4 h-4" /></button>
+                  <button aria-label="Close dialog" onClick={() => setShowAdjustModal(false)} className="w-7 h-7 flex items-center justify-center rounded-full text-faint hover:text-ink hover:bg-track transition-colors"><X className="w-4 h-4" /></button>
                 </div>
                 <form onSubmit={handleAdjustSubmit} className="flex flex-col">
                   <div className="px-6 py-5 space-y-4">
@@ -1168,7 +1169,7 @@ const Admin: React.FC = () => {
                     <h3 className="text-[15px] font-semibold text-ink">Points Ledger</h3>
                     <p className="text-[12px] text-muted mt-0.5">{selectedStudentPoints.student_name} · {selectedStudentPoints.current_balance.toLocaleString()} balance</p>
                   </div>
-                  <button onClick={() => setShowLedgerModal(false)} className="w-7 h-7 flex items-center justify-center rounded-full text-faint hover:text-ink hover:bg-track transition-colors"><X className="w-4 h-4" /></button>
+                  <button aria-label="Close dialog" onClick={() => setShowLedgerModal(false)} className="w-7 h-7 flex items-center justify-center rounded-full text-faint hover:text-ink hover:bg-track transition-colors"><X className="w-4 h-4" /></button>
                 </div>
 
                 <div className="flex-1 overflow-y-auto px-6 py-5">
@@ -1365,6 +1366,7 @@ const Admin: React.FC = () => {
                               onClick={() => openTermEdit(term)}
                               className="w-7 h-7 flex items-center justify-center rounded-field text-faint hover:text-ink hover:bg-track transition-colors"
                               title="Edit"
+                              aria-label="Edit term"
                             >
                               <Edit2 className="w-3.5 h-3.5" />
                             </button>
@@ -1372,6 +1374,7 @@ const Admin: React.FC = () => {
                               onClick={() => handleTermDelete(term.id)}
                               className="w-7 h-7 flex items-center justify-center rounded-field text-faint hover:text-neg-fg hover:bg-neg-bg transition-colors"
                               title="Delete"
+                              aria-label="Delete term"
                             >
                               <Trash2 className="w-3.5 h-3.5" />
                             </button>
@@ -1394,7 +1397,7 @@ const Admin: React.FC = () => {
                       <h3 className="text-[15px] font-semibold text-ink">{editingTerm ? 'Edit Term' : 'New Term'}</h3>
                       <p className="text-[12px] text-muted mt-0.5">{editingTerm ? 'Update term details' : 'Add a new academic term'}</p>
                     </div>
-                    <button onClick={resetTermForm} className="w-7 h-7 flex items-center justify-center rounded-full text-faint hover:text-ink hover:bg-track transition-colors">
+                    <button aria-label="Close dialog" onClick={resetTermForm} className="w-7 h-7 flex items-center justify-center rounded-full text-faint hover:text-ink hover:bg-track transition-colors">
                       <X className="w-4 h-4" />
                     </button>
                   </div>
@@ -1507,8 +1510,8 @@ const Admin: React.FC = () => {
                         </div>
                       </div>
                       <div className="flex items-center gap-0.5 flex-shrink-0 ml-2">
-                        <button onClick={() => openSubjectEdit(s)} className="w-7 h-7 flex items-center justify-center rounded-field text-faint hover:text-ink hover:bg-track transition-colors" title="Edit"><Edit2 className="w-3.5 h-3.5" /></button>
-                        <button onClick={() => handleSubjectDelete(s.id)} className="w-7 h-7 flex items-center justify-center rounded-field text-faint hover:text-neg-fg hover:bg-neg-bg transition-colors" title="Delete"><Trash2 className="w-3.5 h-3.5" /></button>
+                        <button aria-label="Edit subject" onClick={() => openSubjectEdit(s)} className="w-7 h-7 flex items-center justify-center rounded-field text-faint hover:text-ink hover:bg-track transition-colors" title="Edit"><Edit2 className="w-3.5 h-3.5" /></button>
+                        <button aria-label="Delete subject" onClick={() => handleSubjectDelete(s.id)} className="w-7 h-7 flex items-center justify-center rounded-field text-faint hover:text-neg-fg hover:bg-neg-bg transition-colors" title="Delete"><Trash2 className="w-3.5 h-3.5" /></button>
                       </div>
                     </div>
                   </div>
@@ -1524,7 +1527,7 @@ const Admin: React.FC = () => {
                       <h3 className="text-[15px] font-semibold text-ink">{editingSubject ? 'Edit Subject' : 'New Subject'}</h3>
                       <p className="text-[12px] text-muted mt-0.5">{editingSubject ? 'Update subject details' : 'Add a new subject'}</p>
                     </div>
-                    <button onClick={resetSubjectForm} className="w-7 h-7 flex items-center justify-center rounded-full text-faint hover:text-ink hover:bg-track transition-colors"><X className="w-4 h-4" /></button>
+                    <button aria-label="Close dialog" onClick={resetSubjectForm} className="w-7 h-7 flex items-center justify-center rounded-full text-faint hover:text-ink hover:bg-track transition-colors"><X className="w-4 h-4" /></button>
                   </div>
                   <form onSubmit={handleSubjectSubmit} className="flex flex-col">
                     <div className="px-6 py-5 space-y-4">
@@ -1617,9 +1620,9 @@ const Admin: React.FC = () => {
                         <td className="px-5 py-3.5 whitespace-nowrap"><Pill variant={u.is_active ? 'pos' : 'neg'}>{u.is_active ? 'Active' : 'Inactive'}</Pill></td>
                         <td className="px-5 py-3.5 whitespace-nowrap">
                           <div className="flex items-center gap-2">
-                            <button onClick={() => openEditUser(u)} className="text-muted hover:text-ink transition-colors" title="Edit"><Edit2 className="h-4 w-4" /></button>
-                            <button onClick={() => handleResetPassword(u.id, u.username)} className="text-muted hover:text-sub-fg transition-colors" title="Reset password"><Key className="h-4 w-4" /></button>
-                            <button onClick={() => handleDeleteUser(u.id)} className="text-muted hover:text-neg-fg transition-colors" title="Delete"><Trash2 className="h-4 w-4" /></button>
+                            <button aria-label={`Edit user ${u.username}`} onClick={() => openEditUser(u)} className="text-muted hover:text-ink transition-colors" title="Edit"><Edit2 className="h-4 w-4" /></button>
+                            <button aria-label={`Reset password for ${u.username}`} onClick={() => handleResetPassword(u.id, u.username)} className="text-muted hover:text-sub-fg transition-colors" title="Reset password"><Key className="h-4 w-4" /></button>
+                            <button aria-label={`Delete user ${u.username}`} onClick={() => handleDeleteUser(u.id)} className="text-muted hover:text-neg-fg transition-colors" title="Delete"><Trash2 className="h-4 w-4" /></button>
                           </div>
                         </td>
                       </tr>
@@ -1637,7 +1640,7 @@ const Admin: React.FC = () => {
                       <h3 className="text-[15px] font-semibold text-ink">Add New User</h3>
                       <p className="text-[12px] text-muted mt-0.5">Create an administrator or student account</p>
                     </div>
-                    <button onClick={() => { setShowAddUser(false); setNewUserErrors({}) }} className="w-7 h-7 flex items-center justify-center rounded-full text-faint hover:text-ink hover:bg-track transition-colors"><X className="w-4 h-4" /></button>
+                    <button aria-label="Close dialog" onClick={() => { setShowAddUser(false); setNewUserErrors({}) }} className="w-7 h-7 flex items-center justify-center rounded-full text-faint hover:text-ink hover:bg-track transition-colors"><X className="w-4 h-4" /></button>
                   </div>
                   <div className="px-6 py-5 space-y-4 max-h-[70vh] overflow-y-auto">
                     <div className="grid grid-cols-2 gap-3">
@@ -1671,7 +1674,7 @@ const Admin: React.FC = () => {
                       <h3 className="text-[15px] font-semibold text-ink">Edit User</h3>
                       <p className="text-[12px] text-muted mt-0.5">{editingUser.first_name} {editingUser.last_name}</p>
                     </div>
-                    <button onClick={() => { setShowEditUser(false); setEditingUser(null); setEditUserErrors({}) }} className="w-7 h-7 flex items-center justify-center rounded-full text-faint hover:text-ink hover:bg-track transition-colors"><X className="w-4 h-4" /></button>
+                    <button aria-label="Close dialog" onClick={() => { setShowEditUser(false); setEditingUser(null); setEditUserErrors({}) }} className="w-7 h-7 flex items-center justify-center rounded-full text-faint hover:text-ink hover:bg-track transition-colors"><X className="w-4 h-4" /></button>
                   </div>
                   <div className="px-6 py-5 space-y-4 max-h-[70vh] overflow-y-auto">
                     <div className="grid grid-cols-2 gap-3">
