@@ -6,21 +6,17 @@ release procedure); they're the backlog for 1.x.
 
 ## Code health
 
-- **Split the two oversized backend modules**: `app/routers/assignments.py`
-  (~1,600 lines: templates + student assignments + grading + bulk-grade) and
-  `app/crud/reports.py` (~1,500 lines). Mechanical extraction, but touch it
-  with test coverage in place (grading/report tests now exist).
-- **Frontend type-safety burn-down**: ~90 `any` usages remain (top offenders:
-  `services/terms.ts`, `types/reports.ts`, `services/assignments.ts`,
-  import/export modals, `Admin.tsx`). Re-tighten the eslint rules currently
-  downgraded to `warn` in `frontend/eslint.config.js` (react-hooks suite +
-  `no-explicit-any`) once the count is near zero.
-- **Make lint/format blocking in CI**: `ruff`/`black`/`vulture` (backend) and
-  `lint`/`knip` (frontend) run with `continue-on-error: true` in
-  `.github/workflows/ci.yml`. Clean up the pre-existing debt, then flip them
-  to gating.
-- Hoist the function-local imports scattered through hot paths
-  (`assignments.py`, `integrations.py`, `main.py`).
+Most of the original code-health backlog shipped on 2026-07-02 (module
+splits, `any` elimination with `no-explicit-any` at error, full lint/format
+CI gating for both backend and frontend, knip clean). What remains:
+
+- **React-hooks compiler-suite warnings**: 39 warnings across
+  `set-state-in-effect` (23), `immutability` (7), `only-export-components`
+  (5), and singles (`static-components`, `purity`, `refs`,
+  `preserve-manual-memoization`). These rules stay at `warn` in
+  `frontend/eslint.config.js` because fixing them means real component
+  refactors with regression risk. Burn down file by file, then flip the
+  rules to `error`.
 
 ## UX polish
 
