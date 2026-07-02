@@ -38,20 +38,3 @@ export const STORAGE_KEYS = {
   LAST_ACTIVITY: 'ourschool_last_activity',
   SESSION_EXTENDED: 'ourschool_session_extended'
 } as const
-
-// User roles
-export const USER_ROLES = {
-  ADMIN: 'admin',
-  STUDENT: 'student'
-} as const
-
-// Authentication messages
-export const AUTH_MESSAGES = {
-  TOKEN_EXPIRED: 'Your session has expired. Please log in again.',
-  TOKEN_EXPIRING: 'Your session will expire soon. Would you like to extend it?',
-  INVALID_CREDENTIALS: 'Invalid email or password.',
-  UNAUTHORIZED: 'You are not authorized to access this resource.',
-  SESSION_EXTENDED: 'Your session has been extended.',
-  LOGGED_OUT: 'You have been logged out successfully.',
-  INACTIVITY_WARNING: 'You\'ve been inactive. Your session will expire soon.'
-} as const

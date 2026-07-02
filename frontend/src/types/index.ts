@@ -48,5 +48,3 @@ export * from './backup'
 // API and error handling types
 export * from './api'
 
-// UI component prop types
-export * from './ui'

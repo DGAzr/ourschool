@@ -286,8 +286,18 @@ const Admin: React.FC = () => {
     }
   }, [])
 
+  const loadPointsOverview = useCallback(async () => {
+    if (!pointsStatus?.enabled) return
+    try {
+      setPointsOverviewLoading(true)
+      const data = await pointsApi.getAdminOverview()
+      setPointsOverview(data)
+    } catch { /* silent */ } finally { setPointsOverviewLoading(false) }
+  }, [pointsStatus?.enabled])
+
   useEffect(() => { load() }, [load])
-  useEffect(() => { if (section === 'points' && pointsStatus?.enabled && !pointsOverview) loadPointsOverview() }, [section, pointsStatus?.enabled])
+  // Guarded by `!pointsOverview`, so the pointsOverview dep can't retrigger a fetch loop.
+  useEffect(() => { if (section === 'points' && pointsStatus?.enabled && !pointsOverview) loadPointsOverview() }, [section, pointsStatus?.enabled, pointsOverview, loadPointsOverview])
 
   useEffect(() => {
     const handleEscape = (e: KeyboardEvent) => { if (e.key === 'Escape' && showTermForm) resetTermForm() }
@@ -673,15 +683,6 @@ const Admin: React.FC = () => {
   }
 
   // ── Points management handlers ────────────────────────────────────────────
-  const loadPointsOverview = async () => {
-    if (!pointsStatus?.enabled) return
-    try {
-      setPointsOverviewLoading(true)
-      const data = await pointsApi.getAdminOverview()
-      setPointsOverview(data)
-    } catch { /* silent */ } finally { setPointsOverviewLoading(false) }
-  }
-
   const openAdjustModal = (s: StudentPoints) => {
     setSelectedStudentPoints(s)
     setAdjustAmount('')

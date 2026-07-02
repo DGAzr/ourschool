@@ -21,37 +21,6 @@
  */
 
 /**
- * Format a percentage value, showing 'N/A' for null/undefined values
- * @param value - The percentage value (0-100)
- * @param decimals - Number of decimal places to show (default: 1)
- * @returns Formatted percentage string with % symbol
- */
-export const formatPercentage = (value: number | null | undefined, decimals = 1): string => {
-  if (value === null || value === undefined) {
-    return 'N/A';
-  }
-  return `${value.toFixed(decimals)}%`;
-};
-
-/**
- * Format attendance rate specifically
- * @param attendanceRate - The attendance rate (0-100)
- * @returns Formatted attendance rate string
- */
-export const formatAttendanceRate = (attendanceRate: number | null | undefined): string => {
-  return formatPercentage(attendanceRate, 1);
-};
-
-/**
- * Format grade percentage
- * @param grade - The grade percentage (0-100)
- * @returns Formatted grade string
- */
-export const formatGrade = (grade: number | null | undefined): string => {
-  return formatPercentage(grade, 1);
-};
-
-/**
  * Format a date string (YYYY-MM-DD) without timezone issues
  * This function avoids timezone conversion by parsing the date components directly
  * instead of relying on Date constructor with ISO strings
@@ -86,7 +55,7 @@ export const formatDateOnly = (
  * Avoids `new Date('YYYY-MM-DD')` which parses as UTC and shifts the day
  * for users behind UTC.
  */
-export const parseDateOnly = (dateString?: string): Date | null => {
+const parseDateOnly = (dateString?: string): Date | null => {
   if (!dateString) return null;
   const [year, month, day] = dateString.split('-').map(Number);
   if (!year || !month || !day) return null;

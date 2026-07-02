@@ -23,7 +23,7 @@
  */
 
 /** Object counts summary the backend attaches to each backup (`system_info`). */
-export type BackupSystemInfo = Record<string, number>
+type BackupSystemInfo = Record<string, number>
 
 /**
  * A system backup file, as produced by GET /backup/export and re-uploaded for

@@ -308,7 +308,8 @@ const Dashboard: React.FC = () => {
     }
     
     loadDashboardData()
-  }, [isAdmin])
+    // setLoading is a stable useState setter returned by usePageLayout
+  }, [isAdmin, setLoading])
 
   // Load activity data separately
   useEffect(() => {

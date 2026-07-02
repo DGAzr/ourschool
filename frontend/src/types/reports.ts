@@ -34,7 +34,7 @@ export interface TermGrade {
   completed_count: number
 }
 
-export interface TrendDataPoint {
+interface TrendDataPoint {
   date: string
   average_grade: number
   assignments_count: number
@@ -88,7 +88,7 @@ export interface MetricTrend {
   delta_positive: boolean
 }
 
-export interface SubjectAverage {
+interface SubjectAverage {
   subject_id: number
   subject_name: string
   subject_color: string
@@ -97,7 +97,7 @@ export interface SubjectAverage {
   flagged: boolean
 }
 
-export interface StudentGlanceRow {
+interface StudentGlanceRow {
   student_id: number
   name: string
   grade: number
@@ -144,7 +144,7 @@ export interface AcademicYear {
 }
 
 
-export interface AssignmentReportItem {
+interface AssignmentReportItem {
   assignment_id: number
   template_id: number
   assignment_name: string
@@ -170,7 +170,7 @@ export interface AssignmentReportItem {
   assigned_by_name: string
 }
 
-export interface AssignmentReportSummary {
+interface AssignmentReportSummary {
   total_assignments: number
   completed_assignments: number
   in_progress_assignments: number
@@ -203,7 +203,7 @@ export interface ReportCardSubjectGrade {
   comments?: string
 }
 
-export interface ReportCardSummary {
+interface ReportCardSummary {
   overall_percentage: number
   overall_letter_grade: string
   total_assignments: number

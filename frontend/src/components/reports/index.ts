@@ -18,21 +18,3 @@
 
 // Main container
 export { default as ReportsContainer } from './ReportsContainer'
-
-// Overview components
-export { default as OverviewReport } from './overview/OverviewReport'
-export { default as OverviewMetrics } from './overview/OverviewMetrics'
-export { default as OverviewPerformance } from './overview/OverviewPerformance'
-
-// Shared components
-export { default as ReportHeader } from './shared/ReportHeader'
-export { default as ReportsNavigation } from './shared/ReportsNavigation'
-export { default as ExportButton } from './shared/ExportButton'
-export { default as LoadingSpinner } from './shared/LoadingSpinner'
-
-// Hooks
-export { useReportsData } from './hooks/useReportsData'
-export { useAttendanceReport } from './hooks/useAttendanceReport'
-export { useAssignmentReport } from './hooks/useAssignmentReport'
-export { useReportCard } from './hooks/useReportCard'
-export type { ReportView } from './hooks/useReportsData'

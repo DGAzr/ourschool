@@ -25,7 +25,7 @@ interface TokenExpiryWarningProps {
   onExtendSession?: () => void
 }
 
-export const TokenExpiryWarning: React.FC<TokenExpiryWarningProps> = ({
+const TokenExpiryWarning: React.FC<TokenExpiryWarningProps> = ({
   onDismiss,
   onExtendSession
 }) => {

@@ -22,7 +22,7 @@ import { useState, useEffect } from 'react'
  * Returns true when the media query matches. Defaults to false before the
  * first browser measurement so the desktop layout is never flashed on mount.
  */
-export function useMediaQuery(query: string): boolean {
+function useMediaQuery(query: string): boolean {
   const [matches, setMatches] = useState(false)
 
   useEffect(() => {

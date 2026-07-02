@@ -33,7 +33,7 @@ const ToastContext = createContext<ToastContextValue>({ toast: () => {} })
 
 let _nextId = 0
 
-export const ToastProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
+const ToastProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [toasts, setToasts] = useState<ToastItem[]>([])
 
   const toast = useCallback((message: string, variant: 'default' | 'danger' = 'default') => {

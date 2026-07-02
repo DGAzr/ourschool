@@ -21,7 +21,7 @@ import { Check, ChevronDown } from 'lucide-react'
 import { INPUT_STYLES } from '../../../constants'
 import Icon from '../Icon/Icon'
 
-export interface IconSelectOption {
+interface IconSelectOption {
   value: string | number
   label: string
   icon?: string | null

@@ -20,14 +20,6 @@
  * API response and error handling types
  */
 
-export interface ApiErrorResponse {
-  detail?: string
-  message?: string
-  error?: string
-  errors?: string[]
-  statusText?: string
-}
-
 export interface JournalGoal {
   id: number
   text: string
@@ -42,7 +34,7 @@ export interface JournalReply {
   created_at: string
 }
 
-export interface JournalEntry {
+interface JournalEntry {
   id: number
   student_id: number
   author_id: number

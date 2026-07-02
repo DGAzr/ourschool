@@ -158,7 +158,7 @@ export interface AssignmentAssignmentResponse {
  * Metadata attached to exported templates (`export_metadata`).
  * Mirrors the ad-hoc dict built in app/routers/assignments/templates.py.
  */
-export interface AssignmentTemplateExportMetadata {
+interface AssignmentTemplateExportMetadata {
   format_version?: string
   exported_by?: string
   export_timestamp?: string
@@ -212,7 +212,7 @@ export interface AssignmentTemplateBulkExport {
   }
 }
 
-export interface SubjectProgress {
+interface SubjectProgress {
   subject_id: number
   subject_name: string
   subject_color: string

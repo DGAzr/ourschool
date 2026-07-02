@@ -16,7 +16,7 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback, useEffectEvent } from 'react'
 import { useAuth } from '../../../contexts/AuthContext'
 import { reportsApi } from '../../../services/reports'
 import {
@@ -242,7 +242,7 @@ export const useReportsData = (): UseReportsDataReturn => {
 
   // Fetch per-day records for a single student, using the same date range as the
   // current bulk report.  Used by the admin calendar picker.
-  const fetchStudentCalendar = async (studentId: number) => {
+  const fetchStudentCalendar = useCallback(async (studentId: number) => {
     if (!bulkAttendanceReport) return
     try {
       setCalendarStudentLoading(true)
@@ -258,7 +258,7 @@ export const useReportsData = (): UseReportsDataReturn => {
     } finally {
       setCalendarStudentLoading(false)
     }
-  }
+  }, [bulkAttendanceReport])
 
   const generateAttendanceReport = async () => {
     try {
@@ -350,17 +350,29 @@ export const useReportsData = (): UseReportsDataReturn => {
     await fetchDataForView()
   }
 
+  // Effect event: reads the latest fetchDataForView without making every piece
+  // of state it captures (selected dates, term, ...) a refetch trigger.
+  const loadViewData = useEffectEvent(() => {
+    fetchDataForView()
+  })
+
   useEffect(() => {
     if (user) {
-      fetchDataForView()
+      loadViewData()
     }
   }, [selectedView, user, isAdmin])
 
+  // Effect event: term changes should only reload student progress; the other
+  // captured values (view, admin flag, terms) must not retrigger the effect.
+  const reloadProgressForTerm = useEffectEvent((termId: number | null) => {
+    if (selectedView === 'students' && isAdmin && terms.length > 0) {
+      refreshStudentProgress(termId)
+    }
+  })
+
   // Reload student progress when term selection changes
   useEffect(() => {
-    if (selectedView === 'students' && isAdmin && terms.length > 0) {
-      refreshStudentProgress(selectedTermId)
-    }
+    reloadProgressForTerm(selectedTermId)
   }, [selectedTermId])
 
   return {

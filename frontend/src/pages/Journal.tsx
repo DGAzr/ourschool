@@ -16,7 +16,7 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-import React, { useState, useEffect, useRef, useCallback } from 'react'
+import React, { useState, useEffect, useRef, useCallback, useEffectEvent } from 'react'
 import { journalApi } from '../services/journal'
 import {
   JournalEntryWithAuthor,
@@ -695,6 +695,12 @@ const Journal: React.FC = () => {
     }
   }, [isAdmin])
 
+  // Effect event: reads the latest selectedStudentId without making it a
+  // refetch trigger (student switching is filtered client-side, not refetched).
+  const fetchEntriesForSelectedStudent = useEffectEvent(() => {
+    fetchEntries(selectedStudentId)
+  })
+
   useEffect(() => {
     if (!user) return
     // Admin: only re-fetch from server on mount (selectedStudentId filter is client-side)
@@ -702,7 +708,7 @@ const Journal: React.FC = () => {
       fetchEntries(null)
       journalApi.getStudents().then(s => setStudents(Array.isArray(s) ? s : [])).catch(() => {})
     } else {
-      fetchEntries(selectedStudentId)
+      fetchEntriesForSelectedStudent()
       journalApi.getComposerData().then(setComposerData).catch(() => {})
     }
   }, [user, isAdmin, fetchEntries])

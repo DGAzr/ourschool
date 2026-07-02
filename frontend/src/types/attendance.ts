@@ -53,7 +53,7 @@ export interface AttendanceReportSummary {
   recent_activity_summary?: string
 }
 
-export interface AttendanceReportDetail {
+interface AttendanceReportDetail {
   date: string
   status: string
   notes?: string

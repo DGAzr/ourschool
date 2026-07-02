@@ -83,6 +83,35 @@ const CreateAPIKeyModal: React.FC<CreateAPIKeyModalProps> = ({
     }
   }, [createForm, setError, onSuccess])
 
+  const resetModal = useCallback(() => {
+    setCreateForm({ name: '', permissions: [], expires_at: undefined })
+    setCreatedKey(null)
+    setCopiedKey(false)
+    setCreating(false)
+    setError?.(null)
+  }, [setError])
+
+  const handleClose = useCallback(() => {
+    resetModal()
+    onClose()
+  }, [resetModal, onClose])
+
+  const copyAPIKey = useCallback(async () => {
+    if (!createdKey) return
+    try {
+      await navigator.clipboard.writeText(createdKey.api_key)
+    } catch {
+      const ta = document.createElement('textarea')
+      ta.value = createdKey.api_key
+      document.body.appendChild(ta)
+      ta.select()
+      document.execCommand('copy')
+      document.body.removeChild(ta)
+    }
+    setCopiedKey(true)
+    setTimeout(() => setCopiedKey(false), 2000)
+  }, [createdKey])
+
   const handleKeyDown = useCallback((event: KeyboardEvent) => {
     if (!isOpen) return
     switch (event.key) {
@@ -100,7 +129,7 @@ const CreateAPIKeyModal: React.FC<CreateAPIKeyModalProps> = ({
         }
         break
     }
-  }, [isOpen, createdKey, handleCreateAPIKey])
+  }, [isOpen, createdKey, handleCreateAPIKey, handleClose, copyAPIKey])
 
   useEffect(() => {
     if (!isOpen) return
@@ -117,47 +146,19 @@ const CreateAPIKeyModal: React.FC<CreateAPIKeyModalProps> = ({
     }
   }, [isOpen, handleKeyDown])
 
-  useEffect(() => {
-    if (isOpen && !availablePermissions) loadPermissions()
-  }, [isOpen, availablePermissions])
-
-  const loadPermissions = async () => {
+  const loadPermissions = useCallback(async () => {
     try {
       const permissions = await apiKeysApi.getAvailablePermissions()
       setAvailablePermissions(permissions)
     } catch (err) {
       setError?.(getErrorMessage(err, 'Failed to load permissions'))
     }
-  }
+  }, [setError])
 
-  const resetModal = () => {
-    setCreateForm({ name: '', permissions: [], expires_at: undefined })
-    setCreatedKey(null)
-    setCopiedKey(false)
-    setCreating(false)
-    setError?.(null)
-  }
-
-  const handleClose = () => {
-    resetModal()
-    onClose()
-  }
-
-  const copyAPIKey = async () => {
-    if (!createdKey) return
-    try {
-      await navigator.clipboard.writeText(createdKey.api_key)
-    } catch {
-      const ta = document.createElement('textarea')
-      ta.value = createdKey.api_key
-      document.body.appendChild(ta)
-      ta.select()
-      document.execCommand('copy')
-      document.body.removeChild(ta)
-    }
-    setCopiedKey(true)
-    setTimeout(() => setCopiedKey(false), 2000)
-  }
+  useEffect(() => {
+    // Guarded by `!availablePermissions`, so re-runs are no-ops once loaded.
+    if (isOpen && !availablePermissions) loadPermissions()
+  }, [isOpen, availablePermissions, loadPermissions])
 
   const togglePermission = (permission: string) => {
     setCreateForm(prev => ({

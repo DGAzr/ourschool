@@ -23,7 +23,7 @@ import { api } from './api'
  * `details` dicts built in app/routers/activity.py; which fields are present
  * depends on the activity type, so all are optional.
  */
-export interface ActivityDetails {
+interface ActivityDetails {
   assignment_id?: number
   student_assignment_id?: number
   template_name?: string
@@ -46,7 +46,7 @@ export interface ActivityItem {
   time_ago: string
 }
 
-export interface ActivityResponse {
+interface ActivityResponse {
   activities: ActivityItem[]
   total: number
   date_range: {
@@ -55,7 +55,7 @@ export interface ActivityResponse {
   }
 }
 
-export interface ActivityFilters {
+interface ActivityFilters {
   limit?: number
   days?: number
 }

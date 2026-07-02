@@ -34,7 +34,7 @@ export type ButtonVariant = 'primary' | 'secondary' | 'danger' | 'success' | 'ou
  * - `md`: Medium button for general use (default)
  * - `lg`: Large button for prominent actions
  */
-export type ButtonSize = 'sm' | 'md' | 'lg'
+type ButtonSize = 'sm' | 'md' | 'lg'
 
 /**
  * Props for the Button component

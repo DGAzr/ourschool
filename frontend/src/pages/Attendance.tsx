@@ -131,11 +131,11 @@ const Attendance: React.FC = () => {
   }, [records])
 
   // Display status: collapses 'late' → 'present' for the P/A/E UI
-  const statusForStudent = (studentId: number, iso: string): Status | undefined => {
+  const statusForStudent = useCallback((studentId: number, iso: string): Status | undefined => {
     const raw = attendanceMap[`${studentId}-${iso}`]
     if (!raw) return undefined
     return (raw === 'late' ? 'present' : raw) as Status
-  }
+  }, [attendanceMap])
 
   // ── per-student compliance ────────────────────────────────────────────
   // Counts days a student received instruction (present | late | excused),
@@ -171,7 +171,7 @@ const Attendance: React.FC = () => {
     const a = students.filter(s => statusForStudent(s.id, activeDate) === 'absent').length
     const e = students.filter(s => statusForStudent(s.id, activeDate) === 'excused').length
     return { present: p, absent: a, excused: e }
-  }, [students, activeDate, attendanceMap])
+  }, [students, activeDate, statusForStudent])
 
   const allMarked = students.length > 0 && students.every(s => !!statusForStudent(s.id, activeDate))
   const dayComplete = allMarked && !isFuture(activeDate)
@@ -236,7 +236,8 @@ const Attendance: React.FC = () => {
     }).finally(() => {
       setRecordsLoading(false)
     })
-  }, [selectedYear, academicYears])
+    // toast is a stable useCallback from ToastProvider
+  }, [selectedYear, academicYears, toast])
 
   // ── mark student ──────────────────────────────────────────────────────
   const markStudent = async (studentId: number, iso: string, status: Status) => {

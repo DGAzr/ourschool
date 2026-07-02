@@ -70,7 +70,7 @@ export interface SystemAPIKeyStats {
   recently_used_keys: number
 }
 
-export interface PermissionInfo {
+interface PermissionInfo {
   permission: string
   description: string
   category: string
@@ -129,16 +129,6 @@ export const apiKeysApi = {
   }
 }
 
-// Permission categories and descriptions
-export const PERMISSION_CATEGORIES = {
-  'Students': 'Access to student information and profiles',
-  'Attendance': 'Access to attendance records and tracking',
-  'Assignments': 'Access to assignment data and submissions',
-  'Points': 'Access to student points and gamification system',
-  'Reports': 'Access to reports and analytics',
-  'Administration': 'Administrative system access'
-}
-
 // Helper functions
 export const formatLastUsed = (lastUsedAt?: string): string => {
   if (!lastUsedAt) return 'Never'
@@ -182,23 +172,6 @@ export const formatExpiration = (expiresAt?: string): string => {
   if (diffDays < 365) return `Expires in ${Math.floor(diffDays / 30)} months`
   
   return date.toLocaleDateString()
-}
-
-export const getStatusColor = (apiKey: APIKey): string => {
-  if (!apiKey.is_active) return 'text-gray-500'
-  if (apiKey.is_expired) return 'text-red-600'
-  
-  // Check if expiring soon (within 30 days)
-  if (apiKey.expires_at) {
-    const expiryDate = new Date(apiKey.expires_at)
-    const thirtyDaysFromNow = new Date()
-    // Use proper date arithmetic that handles month boundaries correctly
-    thirtyDaysFromNow.setTime(thirtyDaysFromNow.getTime() + (30 * 24 * 60 * 60 * 1000))
-    
-    if (expiryDate < thirtyDaysFromNow) return 'text-yellow-600'
-  }
-  
-  return 'text-green-600'
 }
 
 export const getStatusText = (apiKey: APIKey): string => {

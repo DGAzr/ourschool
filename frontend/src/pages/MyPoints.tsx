@@ -17,7 +17,7 @@
  */
 
 import { getErrorMessage } from '../services/api'
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useCallback } from 'react'
 import { useAuth } from '../contexts/AuthContext'
 import { pointsApi, type PointsLedger } from '../services/points'
 import { useAssignmentTypes } from '../contexts/AssignmentTypesContext'
@@ -48,11 +48,7 @@ const MyPoints: React.FC = () => {
   const [systemEnabled, setSystemEnabled] = useState(false)
   const [balanceVisible, setBalanceVisible] = useState(true)
 
-  useEffect(() => {
-    loadLedger(currentPage)
-  }, [currentPage])
-
-  const loadLedger = async (page: number) => {
+  const loadLedger = useCallback(async (page: number) => {
     if (!user || user.role !== 'student') {
       setError('Only students can view their points ledger')
       setLoading(false)
@@ -78,7 +74,11 @@ const MyPoints: React.FC = () => {
     } finally {
       setLoading(false)
     }
-  }
+  }, [user])
+
+  useEffect(() => {
+    loadLedger(currentPage)
+  }, [currentPage, loadLedger])
 
   const getTransactionIcon = (transactionType: string, assignmentTypeKey?: string) => {
     if (transactionType === 'assignment') {
