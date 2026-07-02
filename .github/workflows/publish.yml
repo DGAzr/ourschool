@@ -10,7 +10,12 @@ env:
   OWNER: dgazr
 
 jobs:
+  # Images are only published if the full CI suite passes on the same commit.
+  ci:
+    uses: ./.github/workflows/ci.yml
+
   publish:
+    needs: ci
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -75,3 +80,5 @@ jobs:
           platforms: linux/amd64,linux/arm64
           tags: ${{ steps.meta-frontend.outputs.tags }}
           labels: ${{ steps.meta-frontend.outputs.labels }}
+          build-args: |
+            APP_VERSION=${{ github.ref_name }}

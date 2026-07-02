@@ -47,7 +47,7 @@ docker compose -f docker-compose.ghcr.yml up -d
 
 ### Choosing an image tag
 
-`IMAGE_TAG` in `.env` controls which release is pulled (default: `v1.0.0-beta.1`). To upgrade, update `IMAGE_TAG` and pull fresh images:
+`IMAGE_TAG` in `.env` controls which release is pulled (default: the release the compose file shipped with). To upgrade, **back up your database first** (see [Backup and Restore](#backup-and-restore)), then update `IMAGE_TAG` and pull fresh images:
 
 ```bash
 # Update IMAGE_TAG in .env, then:

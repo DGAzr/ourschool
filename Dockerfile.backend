@@ -2,10 +2,13 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
-# Install system dependencies
-RUN apt-get update && apt-get install -y \
+# System dependencies: libpq for psycopg, postgresql-client for pg_isready,
+# curl for the container healthcheck.
+RUN apt-get update && apt-get install -y --no-install-recommends \
     libpq-dev \
     gcc \
+    postgresql-client \
+    curl \
     && rm -rf /var/lib/apt/lists/*
 
 # Copy requirements first for better caching
@@ -20,9 +23,7 @@ COPY alembic/ ./alembic/
 COPY alembic.ini .
 COPY start.sh .
 COPY seed_data.py .
-
-# Install postgresql-client for pg_isready and curl for healthcheck
-RUN apt-get update && apt-get install -y postgresql-client curl && rm -rf /var/lib/apt/lists/*
+COPY VERSION .
 
 # Make start script executable and create non-root user
 RUN chmod +x start.sh && \

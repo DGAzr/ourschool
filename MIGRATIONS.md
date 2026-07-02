@@ -1,180 +1,93 @@
 # Database Migration Guide
 
-This document outlines how to use Alembic for database migrations in the OurSchool project.
+OurSchool uses [Alembic](https://alembic.sqlalchemy.org/) for schema migrations.
 
-## Setup Complete ✅
+**Migrations run automatically.** On every container start, `start.sh` waits
+for the database and runs `alembic upgrade head` before starting the API — a
+normal upgrade (new `IMAGE_TAG`, `docker compose pull`, `up -d`) migrates the
+database without any manual steps.
 
-The migration system has been set up with:
-- Alembic initialized and configured
-- Baseline migration from existing database schema
-- Integration with application models and configuration
-- Database backup created
+> ⚠️ **Back up before upgrading.** A failed migration can leave the database
+> in an intermediate state. Take a backup before pulling a new release:
+>
+> ```bash
+> docker compose -f docker-compose.ghcr.yml exec db \
+>   pg_dump -U postgres ourschool > backup_$(date +%Y%m%d_%H%M%S).sql
+> ```
+>
+> See "Backup and Restore" in [README.Docker.md](README.Docker.md) for the
+> full backup/restore story, including the built-in JSON export.
 
-## Common Migration Commands
+## Checking migration status
 
-### Check Current Migration Status
 ```bash
+# Inside the backend container (Docker):
+docker compose -f docker-compose.ghcr.yml exec backend alembic current
+docker compose -f docker-compose.ghcr.yml exec backend alembic history
+
+# From a source checkout:
 python -m alembic current
-```
-
-### View Migration History
-```bash
 python -m alembic history
 ```
 
-### Create a New Migration
+`alembic current` should report the same revision as the newest file in
+`alembic/versions/` (the head). The authoritative list of revisions and what
+each one does is the migration files themselves — each has a docstring
+describing its purpose.
 
-**Auto-generate from model changes:**
+## Applying and rolling back
+
 ```bash
-python -m alembic revision --autogenerate -m "description_of_changes"
-```
-
-**Create empty migration for custom SQL:**
-```bash
-python -m alembic revision -m "description_of_changes"
-```
-
-### Apply Migrations
-
-**Upgrade to latest:**
-```bash
+# Upgrade to latest (normally automatic on container start)
 python -m alembic upgrade head
-```
 
-**Upgrade to specific revision:**
-```bash
-python -m alembic upgrade revision_id
-```
+# Upgrade/downgrade to a specific revision
+python -m alembic upgrade <revision_id>
+python -m alembic downgrade <revision_id>
 
-### Rollback Migrations
-
-**Downgrade by one revision:**
-```bash
+# Step back one revision
 python -m alembic downgrade -1
 ```
 
-**Downgrade to specific revision:**
-```bash
-python -m alembic downgrade revision_id
-```
+> ⚠️ Some migrations are destructive on downgrade (e.g.
+> `remove_lessons_feature` cannot restore dropped lesson data). Downgrading
+> is a development tool, not an upgrade-recovery strategy — restore from
+> backup instead.
 
-## Best Practices
+## If a migration fails on upgrade
 
-### 1. Always Review Auto-Generated Migrations
-- Check that the migration captures your intended changes
-- Review for any data loss operations
-- Test on a copy of production data
+1. Read the backend logs: `docker compose -f docker-compose.ghcr.yml logs backend`
+2. Do **not** retry blindly — note the failing revision in the error output.
+3. Restore the pre-upgrade backup, pin `IMAGE_TAG` back to the previous
+   release, and start the stack again.
+4. Report the failure (see [SECURITY.md](SECURITY.md) for contact, or open a
+   GitHub issue) with the log output and your previous version.
 
-### 2. Backup Before Major Changes
-```bash
-pg_dump "postgresql://user:pass@host/db" > backup_$(date +%Y%m%d_%H%M%S).sql
-```
+## For contributors: creating migrations
 
-### 3. Model Change Workflow
-1. Make changes to SQLAlchemy models
-2. Generate migration: `alembic revision --autogenerate -m "description"`
-3. Review the generated migration file
-4. Test the migration on development database
-5. Apply to production: `alembic upgrade head`
+1. Change the SQLAlchemy models in `app/models/`.
+2. Generate: `alembic revision --autogenerate -m "description_of_changes"`
+   (or `alembic revision -m "..."` for hand-written SQL).
+3. **Review the generated file** — autogenerate misses server defaults,
+   custom SQL, and can emit destructive operations.
+4. Test against a real PostgreSQL: `alembic upgrade head`, then
+   `alembic downgrade -1 && alembic upgrade head` to prove reversibility.
+5. CI applies the full chain to a fresh database on every PR; a broken chain
+   fails the build.
 
-### 4. Data Migration Considerations
-- For complex data transformations, create custom migrations
-- Use batch operations for large table changes
-- Consider downtime requirements for production
+Conventions:
+- Filenames are timestamped: `YYYY_MM_DD_HHMM-revision_id_description.py`.
+- Use readable revision ids (e.g. `add_icon_to_entities`) rather than hashes.
+- Keep the chain linear — one head, no branches.
+- New datetime columns must be `DateTime(timezone=True)`; the schema was
+  standardized on `timestamptz` in `standardize_timestamptz`.
 
-## Migration File Structure
+## Environment integration
 
-```
-alembic/
-├── versions/
-│   └── YYYY_MM_DD_HHMM-revision_id_description.py
-├── env.py          # Migration environment configuration
-├── script.py.mako  # Migration template
-└── README          # Alembic documentation
+The migration environment (`alembic/env.py`):
+- Loads the database URL from the same settings/env vars as the application
+  (`DATABASE_URL` or the individual `DATABASE_*` vars).
+- Imports all application models automatically, so autogenerate sees the
+  full schema.
 
-alembic.ini         # Alembic configuration file
-```
-
-## Environment Integration
-
-The migration system is configured to:
-- Load database URL from environment variables (`.env` file)
-- Import all application models automatically
-- Use the same database connection as the application
-- Generate timestamped migration filenames
-
-## Baseline Migration
-
-- **Revision ID:** `74e3c52e185b`
-- **Description:** `initial_database_schema`
-- **Date:** 2025-08-07
-- **Purpose:** Establishes the initial database schema
-
-This baseline includes all tables created by the initial schema migration.
-
-## Beta-Release Migrations
-
-### Revision: `remove_lessons_feature`
-**Date:** 2026-06-17
-**Down Revision:** `1287465beeb7`
-**Purpose:** Removes the Lessons feature entirely.
-**Changes:**
-- Drops `lesson_assignments` junction table
-- Drops `lessons` table
-- Removes `lesson_id` and `order_in_lesson` columns from `assignment_templates`
-
-### Revision: `add_external_id_backup`
-**Date:** 2026-06-19
-**Down Revision:** `remove_lessons_feature`
-**Purpose:** Adds stable cross-version identity for backup resolution.
-**Changes:**
-- Adds `external_id` (UUID) column to `users`, `subjects`, `terms`, `assignment_templates`
-- Backfills existing rows with `gen_random_uuid()`
-- Enforces NOT NULL and unique constraint on `external_id`
-
-### Revision: `journal_rich_fields`
-**Date:** 2026-06-19
-**Down Revision:** `add_external_id_backup`
-**Purpose:** Adds rich journal fields and the `journal_replies` table.
-
-### Revision: `restore_indexes_tz`
-**Date:** 2026-06-20
-**Down Revision:** `journal_rich_fields`
-**Purpose:** Recreates the reporting indexes (dropped by an earlier autogenerated
-migration) plus missing FK indexes, converts `api_keys` datetime columns to
-`TIMESTAMPTZ`, and adds a DB server default for `external_id`.
-
-**Current head revision:** `restore_indexes_tz`
-
-## Emergency Procedures
-
-### If Migration Fails
-1. Check the error message in the alembic output
-2. Rollback to previous working state: `alembic downgrade -1`
-3. Fix the issue in the migration file
-4. Retry the migration
-
-### Reset Migration History (Development Only)
-⚠️ **WARNING: Only use in development environments**
-
-```bash
-# Drop alembic version table
-psql -d database_url -c "DROP TABLE alembic_version;"
-
-# Re-stamp baseline
-python -m alembic stamp 74e3c52e185b
-```
-
-## Production Deployment
-
-For production deployments, always:
-1. Create a database backup
-2. Test migrations on a copy of production data
-3. Plan for potential downtime
-4. Have a rollback plan ready
-5. Monitor the migration process
-
----
-
-*Migration system established: August 2025*
-*Baseline revision: 74e3c52e185b*
+Baseline revision: `74e3c52e185b` (`initial_database_schema`, 2025-08-07).

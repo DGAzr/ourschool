@@ -31,6 +31,7 @@ from app.models.user import User
 from app.routers.auth import get_current_admin_user
 from app.routers import activity, api_keys, assignment_types, assignments, attendance, auth, backup, integrations, journal, meta, performance, points, reports, subjects, terms, users
 from app.routers import settings as settings_router
+from app.version import __version__
 
 
 @asynccontextmanager
@@ -41,7 +42,7 @@ async def lifespan(app: FastAPI):
     logger = get_logger("startup")
     logger.info("OurSchool API starting up", extra={
         "application": "ourschool",
-        "version": "1.0.0-beta.1",
+        "version": __version__,
         "event": "startup"
     })
     
@@ -57,7 +58,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="OurSchool - Homeschool Tracking System",
     description="A comprehensive homeschool management platform",
-    version="1.0.0-beta.1",
+    version=__version__,
     lifespan=lifespan,
     docs_url="/docs" if settings.enable_api_docs else None,
     redoc_url="/redoc" if settings.enable_api_docs else None,
