@@ -2,9 +2,11 @@ name: CI
 
 on:
   push:
-    branches: [main, beta-release]
+    branches: [main, dev]
+  # All PRs, regardless of target branch (release branches vary per cycle).
   pull_request:
-    branches: [main, beta-release]
+  # Allows publish.yml to run CI as a gating prerequisite.
+  workflow_call:
 
 jobs:
   backend:
@@ -75,7 +77,10 @@ jobs:
         run: npm ci
 
       - name: Type-check
-        run: npx tsc --noEmit
+        run: npm run typecheck
+
+      - name: Test
+        run: npm test
 
       - name: Lint
         run: npm run lint

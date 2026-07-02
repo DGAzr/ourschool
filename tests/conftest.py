@@ -4,6 +4,7 @@ Requires a reachable PostgreSQL instance. Point DATABASE_URL (or
 TEST_DATABASE_URL) at a throwaway database; tables are created/dropped per
 session via the ORM metadata. SECRET_KEY must also be set.
 """
+import itertools
 import os
 
 import pytest
@@ -85,3 +86,124 @@ def admin_token(client):
     )
     assert r.status_code == 200, r.text
     return r.json()["access_token"]
+
+
+# Tables persist for the whole test session, so every created entity needs a
+# unique name/username across all test files.
+_unique_seq = itertools.count(1)
+
+
+@pytest.fixture()
+def admin_headers(admin_token):
+    return {"Authorization": f"Bearer {admin_token}"}
+
+
+@pytest.fixture()
+def student_factory(client, admin_headers):
+    """Create a student (as admin) and log them in.
+
+    Returns a callable producing (student_json, auth_headers) tuples.
+    """
+
+    def make(password="studentpass123"):
+        n = next(_unique_seq)
+        r = client.post(
+            "/api/users/",
+            json={
+                "email": f"student{n}@test.local",
+                "username": f"student{n}",
+                "first_name": "Stu",
+                "last_name": f"Dent{n}",
+                "role": "student",
+                "password": password,
+            },
+            headers=admin_headers,
+        )
+        assert r.status_code == 200, r.text
+        student = r.json()
+        r = client.post(
+            "/api/auth/login",
+            data={"username": student["username"], "password": password},
+        )
+        assert r.status_code == 200, r.text
+        return student, {"Authorization": f"Bearer {r.json()['access_token']}"}
+
+    return make
+
+
+@pytest.fixture()
+def classroom(client, admin_headers, db_session):
+    """Subject + 'homework' assignment type + active term (auto-linked) + template."""
+    from app.models.assignment_type import AssignmentTypeConfig
+
+    if (
+        db_session.query(AssignmentTypeConfig)
+        .filter(AssignmentTypeConfig.key == "homework")
+        .first()
+        is None
+    ):
+        db_session.add(
+            AssignmentTypeConfig(key="homework", name="Homework", is_active=True)
+        )
+        db_session.commit()
+
+    n = next(_unique_seq)
+    r = client.post(
+        "/api/subjects/", json={"name": f"Subject {n}"}, headers=admin_headers
+    )
+    assert r.status_code == 200, r.text
+    subject = r.json()
+
+    r = client.post(
+        "/api/terms/",
+        json={
+            "name": f"Term {n}",
+            "start_date": "2026-01-05",
+            "end_date": "2026-06-05",
+            "academic_year": "2025-2026",
+        },
+        headers=admin_headers,
+    )
+    assert r.status_code == 200, r.text
+    term = r.json()
+    r = client.post(f"/api/terms/{term['id']}/activate", headers=admin_headers)
+    assert r.status_code == 200, r.text
+    r = client.post(
+        f"/api/terms/{term['id']}/auto-link-subjects", headers=admin_headers
+    )
+    assert r.status_code == 200, r.text
+
+    r = client.post(
+        "/api/assignments/templates",
+        json={
+            "name": f"Worksheet {n}",
+            "subject_id": subject["id"],
+            "assignment_type": "homework",
+            "max_points": 100,
+        },
+        headers=admin_headers,
+    )
+    assert r.status_code == 200, r.text
+    return {"subject": subject, "term": term, "template": r.json()}
+
+
+@pytest.fixture()
+def assign(client, admin_headers):
+    """Assign a template to a student; returns the created student assignment."""
+
+    def do(template_id, student_id, **kwargs):
+        r = client.post(
+            "/api/assignments/assign",
+            json={
+                "template_id": template_id,
+                "student_ids": [student_id],
+                **kwargs,
+            },
+            headers=admin_headers,
+        )
+        assert r.status_code == 200, r.text
+        body = r.json()
+        assert body["success_count"] == 1, body
+        return body["created_assignments"][0]
+
+    return do
