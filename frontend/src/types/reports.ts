@@ -188,9 +188,6 @@ export interface AssignmentReport {
   available_subjects: Array<{id: number, name: string, color: string}>
   available_students: Array<{id: number, name: string}>
   available_terms: Array<{id: number, name: string, academic_year: string}>
-  by_subject: any[]
-  by_student: any[]
-  recent_activity: any[]
 }
 
 export interface ReportCardSubjectGrade {

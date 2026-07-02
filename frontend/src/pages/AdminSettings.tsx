@@ -22,6 +22,7 @@ import { settingsApi } from '../services/settings'
 import { pointsApi, type PointsSystemStatus } from '../services/points'
 import { Settings, Save, AlertTriangle, CheckCircle, Calendar, Coins, Key, ExternalLink } from 'lucide-react'
 import { Button, Input, Spinner } from '../components/ui'
+import { getErrorMessage } from '../services/api'
 
 const AdminSettings: React.FC = () => {
   const { user } = useAuth()
@@ -46,8 +47,8 @@ const AdminSettings: React.FC = () => {
       // Load points system status
       const pointsSystemStatus = await pointsApi.getSystemStatus()
       setPointsStatus(pointsSystemStatus)
-    } catch (err: any) {
-      setError(`Failed to load settings: ${err.message || 'Unknown error'}`)
+    } catch (err) {
+      setError(`Failed to load settings: ${getErrorMessage(err, 'Unknown error')}`)
     } finally {
       setLoading(false)
     }
@@ -69,8 +70,8 @@ const AdminSettings: React.FC = () => {
 
       // Reload settings to get the updated values
       await loadSettings()
-    } catch (err: any) {
-      setError(`Failed to update setting: ${err.message || 'Unknown error'}`)
+    } catch (err) {
+      setError(`Failed to update setting: ${getErrorMessage(err, 'Unknown error')}`)
     } finally {
       setSaving(false)
     }
@@ -87,8 +88,8 @@ const AdminSettings: React.FC = () => {
 
       // Reload settings to get the updated status
       await loadSettings()
-    } catch (err: any) {
-      setError(`Failed to toggle points system: ${err.message || 'Unknown error'}`)
+    } catch (err) {
+      setError(`Failed to toggle points system: ${getErrorMessage(err, 'Unknown error')}`)
     } finally {
       setTogglingPoints(false)
     }

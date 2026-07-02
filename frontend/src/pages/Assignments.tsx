@@ -522,7 +522,7 @@ const Assignments: React.FC = () => {
                         {/* Assignment */}
                         <td className="px-3 py-3.5 min-w-0">
                           <div className="flex items-center gap-2 min-w-0">
-                            <SubjectDot color={(sub as any)?.color ?? '#74716A'} size={9} className="flex-none" />
+                            <SubjectDot color={sub?.color ?? '#74716A'} size={9} className="flex-none" />
                             <div className="min-w-0">
                               <div className="text-[14px] font-semibold text-ink tracking-[-0.01em] truncate">
                                 {assignment.template?.name ?? '—'}
@@ -620,7 +620,7 @@ const Assignments: React.FC = () => {
                             <div className="pt-4 space-y-4">
                               {/* Meta row */}
                               <div className="flex items-center gap-3 flex-wrap text-[12.5px] text-muted">
-                                {sub && <SubjectDot color={(sub as any)?.color ?? '#74716A'} size={9} />}
+                                {sub && <SubjectDot color={sub?.color ?? '#74716A'} size={9} />}
                                 <span>{sub?.name ?? '—'}</span>
                                 {assignment.template?.assignment_type && (
                                   <>

@@ -16,6 +16,7 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
+import { getErrorMessage } from '../services/api'
 import React, { useState, useEffect } from 'react'
 import { useAuth } from '../contexts/AuthContext'
 import { pointsApi, type PointsLedger } from '../services/points'
@@ -72,8 +73,8 @@ const MyPoints: React.FC = () => {
 
       const ledgerData = await pointsApi.getMyLedger(page, 20)
       setLedger(ledgerData)
-    } catch (err: any) {
-      setError(err.response?.data?.detail || 'Failed to load points ledger')
+    } catch (err) {
+      setError(getErrorMessage(err, 'Failed to load points ledger'))
     } finally {
       setLoading(false)
     }

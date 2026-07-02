@@ -20,6 +20,7 @@ import React, { useState, useEffect } from 'react'
 import { Lock, Eye, EyeOff, Save } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 import { usersApi } from '../services/users'
+import { getErrorMessage } from '../services/api'
 
 const FIELD = 'w-full bg-field-bg border border-field-border rounded-field px-3 py-2 text-[13.5px] text-ink focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent placeholder:text-faintest'
 const FIELD_DISABLED = 'w-full bg-panel-2 border border-field-border rounded-field px-3 py-2 text-[13.5px] text-ink cursor-not-allowed'
@@ -61,8 +62,8 @@ const Profile: React.FC = () => {
       const response = await usersApi.updateMe(profileData)
       updateUser(response.data)
       setSuccess('Profile updated successfully')
-    } catch (err: any) {
-      setError(err.response?.data?.detail || 'Failed to update profile')
+    } catch (err) {
+      setError(getErrorMessage(err, 'Failed to update profile'))
     } finally {
       setProfileLoading(false)
     }
@@ -98,8 +99,8 @@ const Profile: React.FC = () => {
       setSuccess('Password changed successfully')
       setPasswordData({ current_password: '', new_password: '', confirm_password: '' })
       setShowPasswordForm(false)
-    } catch (err: any) {
-      setError(err.response?.data?.detail || 'Failed to change password')
+    } catch (err) {
+      setError(getErrorMessage(err, 'Failed to change password'))
     } finally {
       setPasswordLoading(false)
     }

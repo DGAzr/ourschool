@@ -20,15 +20,35 @@ import { useState, useRef } from 'react'
 import { Upload, AlertTriangle, CheckCircle } from 'lucide-react'
 import Modal from '../ui/Modal'
 import Button from '../ui/Button'
+import { getErrorMessage } from '../../services/api'
+import { isAssignmentTemplateExport } from '../../services/assignments'
+import {
+  AssignmentTemplateExport,
+  AssignmentTemplateImportRequest,
+  AssignmentTemplateImportResult
+} from '../../types'
 
 interface ImportAssignmentModalProps {
   isOpen: boolean
   onClose: () => void
-  onImport: (data: {
-    assignment_data: any
-    target_subject_id?: number
-  }) => Promise<any>
+  onImport: (data: AssignmentTemplateImportRequest) => Promise<AssignmentTemplateImportResult>
   subjects: Array<{ id: number; name: string }>
+}
+
+/**
+ * Parse pasted/uploaded JSON into a template export. Accepts either a single
+ * exported template or a bulk export package (first template is used).
+ */
+const parseTemplateExport = (raw: string): AssignmentTemplateExport => {
+  const data: unknown = JSON.parse(raw)
+  const candidate: unknown =
+    typeof data === 'object' && data !== null && 'templates' in data && Array.isArray(data.templates)
+      ? data.templates[0]
+      : data
+  if (!isAssignmentTemplateExport(candidate)) {
+    throw new Error('Invalid assignment template format')
+  }
+  return candidate
 }
 
 export function ImportAssignmentModal({
@@ -39,9 +59,9 @@ export function ImportAssignmentModal({
 }: ImportAssignmentModalProps) {
   const [step, setStep] = useState<'upload' | 'configure' | 'result'>('upload')
   const [isLoading, setIsLoading] = useState(false)
-  const [assignmentData, setAssignmentData] = useState<any>(null)
+  const [assignmentData, setAssignmentData] = useState<AssignmentTemplateExport | null>(null)
   const [targetSubjectId, setTargetSubjectId] = useState<number | undefined>()
-  const [importResult, setImportResult] = useState<any>(null)
+  const [importResult, setImportResult] = useState<AssignmentTemplateImportResult | null>(null)
   const [error, setError] = useState<string | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
@@ -52,16 +72,7 @@ export function ImportAssignmentModal({
     const reader = new FileReader()
     reader.onload = (e) => {
       try {
-        const data = JSON.parse(e.target?.result as string)
-
-        let templateData
-        if (data.templates && Array.isArray(data.templates)) {
-          templateData = data.templates[0]
-        } else if (data.assignment_type && data.name) {
-          templateData = data
-        } else {
-          throw new Error('Invalid assignment template format')
-        }
+        const templateData = parseTemplateExport(e.target?.result as string)
 
         setAssignmentData(templateData)
         setError(null)
@@ -83,16 +94,7 @@ export function ImportAssignmentModal({
 
   const handleTextImport = (text: string) => {
     try {
-      const data = JSON.parse(text)
-
-      let templateData
-      if (data.templates && Array.isArray(data.templates)) {
-        templateData = data.templates[0]
-      } else if (data.assignment_type && data.name) {
-        templateData = data
-      } else {
-        throw new Error('Invalid assignment template format')
-      }
+      const templateData = parseTemplateExport(text)
 
       setAssignmentData(templateData)
       setError(null)
@@ -122,8 +124,8 @@ export function ImportAssignmentModal({
 
       setImportResult(result)
       setStep('result')
-    } catch (err: any) {
-      setError(err.message || 'Import failed')
+    } catch (err) {
+      setError(getErrorMessage(err, 'Import failed'))
     } finally {
       setIsLoading(false)
     }

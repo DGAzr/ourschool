@@ -16,10 +16,16 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
+import { getErrorMessage } from '../../../services/api'
 import { useState } from 'react'
-import { reportsApi } from '../../../services/reports'
+import {
+  reportsApi,
+  BulkAttendanceReportOptions,
+  StudentAttendanceReportOptions
+} from '../../../services/reports'
 import { useAuth } from '../../../contexts/AuthContext'
 import {
+  AcademicYear,
   StudentAttendanceReport,
   BulkAttendanceReport
 } from '../../../types'
@@ -44,7 +50,7 @@ interface UseAttendanceReportReturn {
   setCustomStartDate: (date: string) => void
   setCustomEndDate: (date: string) => void
   setUseCustomDates: (use: boolean) => void
-  generateAttendanceReport: (isAdmin: boolean, academicYears?: any[]) => Promise<void>
+  generateAttendanceReport: (isAdmin: boolean, academicYears?: AcademicYear[]) => Promise<void>
   clearReport: () => void
 }
 
@@ -63,7 +69,7 @@ export const useAttendanceReport = (): UseAttendanceReportReturn => {
   const [customEndDate, setCustomEndDate] = useState<string>('')
   const [useCustomDates, setUseCustomDates] = useState(false)
 
-  const generateAttendanceReport = async (isAdmin: boolean, academicYears?: any[]) => {
+  const generateAttendanceReport = async (isAdmin: boolean, academicYears?: AcademicYear[]) => {
     try {
       setLoading(true)
       setError(null)
@@ -106,7 +112,7 @@ export const useAttendanceReport = (): UseAttendanceReportReturn => {
           return
         }
         
-        const options: any = {
+        const options: BulkAttendanceReportOptions = {
           start_date: startDate,
           end_date: endDate
         }
@@ -130,7 +136,7 @@ export const useAttendanceReport = (): UseAttendanceReportReturn => {
           return
         }
         
-        const options: any = {
+        const options: StudentAttendanceReportOptions = {
           student_id: user.id,
           start_date: startDate,
           end_date: endDate
@@ -142,8 +148,8 @@ export const useAttendanceReport = (): UseAttendanceReportReturn => {
         setAttendanceReport(data)
         setBulkAttendanceReport(null)
       }
-    } catch (err: any) {
-      setError(`Failed to generate attendance report: ${err.message || 'Unknown error'}`)
+    } catch (err) {
+      setError(`Failed to generate attendance report: ${getErrorMessage(err, 'Unknown error')}`)
     } finally {
       setLoading(false)
     }

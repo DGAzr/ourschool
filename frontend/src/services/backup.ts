@@ -17,26 +17,36 @@
  */
 
 import { api } from './api'
+import {
+  BackupImportOptions,
+  SystemBackupFile,
+  SystemBackupImportResult
+} from '../types'
+
+/**
+ * Type guard for data parsed from an uploaded backup file. Checks the
+ * metadata the frontend relies on; the backend fully validates the rest.
+ */
+export const isSystemBackupFile = (value: unknown): value is SystemBackupFile => {
+  if (typeof value !== 'object' || value === null) return false
+  const record = value as Record<string, unknown>
+  return typeof record.format_version === 'string' && typeof record.backup_timestamp === 'string'
+}
 
 export const backupApi = {
   // System backup export
-  exportSystemBackup: () => api.get('/backup/export'),
-  
+  exportSystemBackup: (): Promise<SystemBackupFile> => api.get('/backup/export'),
+
   // System backup import
   importSystemBackup: (data: {
-    backup_data: any
-    import_options?: {
-      skip_existing_users?: boolean
-      update_existing_data?: boolean
-      preserve_ids?: boolean
-      dry_run?: boolean
-    }
-  }) => api.post('/backup/import', data),
+    backup_data: SystemBackupFile
+    import_options?: BackupImportOptions
+  }): Promise<SystemBackupImportResult> => api.post('/backup/import', data),
 }
 
 // Utility functions for backup handling
 export const backupUtils = {
-  downloadBackup: (backupData: any, filename?: string) => {
+  downloadBackup: (backupData: SystemBackupFile, filename?: string) => {
     const blob = new Blob([JSON.stringify(backupData, null, 2)], {
       type: 'application/json'
     })
@@ -58,27 +68,28 @@ export const backupUtils = {
     return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i]
   },
 
-  validateBackupData: (data: any): { valid: boolean; errors: string[] } => {
+  validateBackupData: (data: unknown): { valid: boolean; errors: string[] } => {
     const errors: string[] = []
-    
-    if (!data) {
+
+    if (!data || typeof data !== 'object') {
       errors.push('Backup data is empty')
       return { valid: false, errors }
     }
+    const record = data as Record<string, unknown>
 
-    if (!data.format_version) {
+    if (!record.format_version) {
       errors.push('Missing format version')
     }
 
-    if (!data.backup_timestamp) {
+    if (!record.backup_timestamp) {
       errors.push('Missing backup timestamp')
     }
 
-    if (!data.users || !Array.isArray(data.users)) {
+    if (!Array.isArray(record.users)) {
       errors.push('Invalid or missing users data')
     }
 
-    if (!data.subjects || !Array.isArray(data.subjects)) {
+    if (!Array.isArray(record.subjects)) {
       errors.push('Invalid or missing subjects data')
     }
 

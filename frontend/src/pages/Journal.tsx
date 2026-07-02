@@ -29,6 +29,7 @@ import { format, parseISO } from 'date-fns'
 import MarkdownRenderer from '../components/common/MarkdownRenderer'
 import { IconPickerButton, Icon } from '../components/ui'
 import ConfirmDialog from '../components/ui/ConfirmDialog'
+import { getErrorMessage } from '../services/api'
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
@@ -147,8 +148,8 @@ const StudentComposer: React.FC<ComposerProps> = ({ composerData, onSaved }) => 
       if (editorRef.current) editorRef.current.innerHTML = ''
       setOpen(false)
       onSaved(entry)
-    } catch (err: any) {
-      setSaveError(err.response?.data?.detail || 'Failed to save entry. Please try again.')
+    } catch (err) {
+      setSaveError(getErrorMessage(err, 'Failed to save entry. Please try again.'))
     } finally {
       setSaving(false)
     }
@@ -686,8 +687,8 @@ const Journal: React.FC = () => {
       const raw = await journalApi.getAll(isAdmin ? undefined : (studentId ?? undefined))
       const data: JournalEntryWithAuthor[] = Array.isArray(raw) ? raw : []
       setEntries(data)
-    } catch (err: any) {
-      setError(`Failed to load journal entries: ${err.response?.data?.detail || err.message}`)
+    } catch (err) {
+      setError(`Failed to load journal entries: ${getErrorMessage(err)}`)
       setEntries([])
     } finally {
       setLoading(false)
@@ -714,8 +715,8 @@ const Journal: React.FC = () => {
     try {
       await journalApi.delete(deletingEntryId)
       setEntries(prev => prev.filter(e => e.id !== deletingEntryId))
-    } catch (err: any) {
-      setError(`Failed to delete entry: ${err.response?.data?.detail || err.message}`)
+    } catch (err) {
+      setError(`Failed to delete entry: ${getErrorMessage(err)}`)
     } finally {
       setDeleteLoading(false)
       setDeletingEntryId(null)

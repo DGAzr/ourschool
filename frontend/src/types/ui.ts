@@ -50,16 +50,16 @@ export interface CardProps {
   padding?: 'sm' | 'md' | 'lg'
 }
 
-export interface TableColumn<T = any> {
+export interface TableColumn<T = Record<string, unknown>> {
   key: string
   label: string
   sortable?: boolean
-  render?: (value: any, row: T) => React.ReactNode
+  render?: (value: unknown, row: T) => React.ReactNode
   width?: string
   align?: 'left' | 'center' | 'right'
 }
 
-export interface TableProps<T = any> {
+export interface TableProps<T = Record<string, unknown>> {
   data: T[]
   columns: TableColumn<T>[]
   loading?: boolean

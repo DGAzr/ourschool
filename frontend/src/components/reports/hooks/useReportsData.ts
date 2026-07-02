@@ -27,9 +27,11 @@ import {
   AcademicYear,
   StudentAttendanceReport,
   BulkAttendanceReport,
-  AssignmentReport
+  AssignmentReport,
+  ReportCard
 } from '../../../types'
 import { Term } from '../../../types/term'
+import { getErrorMessage } from '../../../services/api'
 
 export type ReportView = 'overview' | 'terms' | 'subjects' | 'students' | 'attendance' | 'assignments' | 'reportcard'
 
@@ -76,7 +78,7 @@ interface UseReportsDataReturn {
   assignmentLoading: boolean
   
   // Report card data
-  reportCard: any | null
+  reportCard: ReportCard | null
   reportCardStudentId: string
   setReportCardStudentId: (id: string) => void
   reportCardTermId: string
@@ -122,7 +124,7 @@ export const useReportsData = (): UseReportsDataReturn => {
   const [assignmentLoading, setAssignmentLoading] = useState(false)
   
   // Report card states
-  const [reportCard, setReportCard] = useState<any | null>(null)
+  const [reportCard, setReportCard] = useState<ReportCard | null>(null)
   const [reportCardStudentId, setReportCardStudentId] = useState<string>('')
   const [reportCardTermId, setReportCardTermId] = useState<string>('')
   const [reportCardLoading, setReportCardLoading] = useState(false)
@@ -169,8 +171,8 @@ export const useReportsData = (): UseReportsDataReturn => {
       } else if (selectedView === 'reportcard') {
         await loadReportCardOptions()
       }
-    } catch (err: any) {
-      setError(`Failed to load report data: ${err.message || 'Unknown error'}`)
+    } catch (err) {
+      setError(`Failed to load report data: ${getErrorMessage(err, 'Unknown error')}`)
     } finally {
       setLoading(false)
     }
@@ -181,7 +183,7 @@ export const useReportsData = (): UseReportsDataReturn => {
       setAssignmentLoading(true)
       const data = await reportsApi.getAssignmentReport()
       setAssignmentReport(data)
-    } catch (err: any) {
+    } catch (err) {
       setError('Failed to load assignment report')
     } finally {
       setAssignmentLoading(false)
@@ -211,8 +213,8 @@ export const useReportsData = (): UseReportsDataReturn => {
         }])
         setReportCardStudentId(user!.id.toString())
       }
-    } catch (err: any) {
-      setError('Failed to load report card options: ' + (err.message || 'Unknown error'))
+    } catch (err) {
+      setError('Failed to load report card options: ' + (getErrorMessage(err, 'Unknown error')))
     }
   }
 
@@ -231,8 +233,8 @@ export const useReportsData = (): UseReportsDataReturn => {
 
       const data = await reportsApi.getReportCard(studentId, termId)
       setReportCard(data)
-    } catch (err: any) {
-      setError('Failed to generate report card: ' + (err.message || 'Unknown error'))
+    } catch (err) {
+      setError('Failed to generate report card: ' + (getErrorMessage(err, 'Unknown error')))
     } finally {
       setReportCardLoading(false)
     }
@@ -323,7 +325,7 @@ export const useReportsData = (): UseReportsDataReturn => {
           setAttendanceReport(data)
         }
       }
-    } catch (err: any) {
+    } catch (err) {
       setError('Failed to generate attendance report')
     } finally {
       setAttendanceLoading(false)
@@ -336,8 +338,8 @@ export const useReportsData = (): UseReportsDataReturn => {
         setLoading(true)
         const data = await reportsApi.getAllStudentsProgress(termId || undefined)
         setStudentProgress(data)
-      } catch (err: any) {
-        setError(`Failed to load student progress: ${err.message || 'Unknown error'}`)
+      } catch (err) {
+        setError(`Failed to load student progress: ${getErrorMessage(err, 'Unknown error')}`)
       } finally {
         setLoading(false)
       }

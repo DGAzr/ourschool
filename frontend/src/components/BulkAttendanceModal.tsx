@@ -18,9 +18,10 @@
 
 import React, { useState, useEffect } from 'react'
 import { attendanceApi } from '../services/attendance'
-import { User } from '../types'
+import { AttendanceStatus, User } from '../types'
 import Modal from './ui/Modal'
 import Button from './ui/Button'
+import { getErrorMessage } from '../services/api'
 
 interface BulkAttendanceModalProps {
   isOpen: boolean
@@ -46,16 +47,20 @@ const BulkAttendanceModal: React.FC<BulkAttendanceModalProps> = ({
   const [error, setError] = useState<string | null>(null)
   const [selectedStudents, setSelectedStudents] = useState<number[]>([])
 
-  const [bulkRecord, setBulkRecord] = useState({
+  const [bulkRecord, setBulkRecord] = useState<{
+    date: string
+    status: AttendanceStatus
+    notes: string
+  }>({
     date: getLocalDateString(),
-    status: 'present' as const,
+    status: 'present',
     notes: ''
   })
 
   useEffect(() => {
     if (isOpen) {
       fetchStudents()
-      setBulkRecord({ date: getLocalDateString(), status: 'present' as const, notes: '' })
+      setBulkRecord({ date: getLocalDateString(), status: 'present', notes: '' })
       setSelectedStudents([])
       setError(null)
     }
@@ -93,8 +98,8 @@ const BulkAttendanceModal: React.FC<BulkAttendanceModalProps> = ({
       })
       onSuccess?.()
       onClose()
-    } catch (err: any) {
-      setError(err.message || 'Failed to record attendance')
+    } catch (err) {
+      setError(getErrorMessage(err, 'Failed to record attendance'))
     } finally {
       setLoading(false)
     }
@@ -147,7 +152,7 @@ const BulkAttendanceModal: React.FC<BulkAttendanceModalProps> = ({
             <select
               id="bulk-attendance-status"
               value={bulkRecord.status}
-              onChange={e => setBulkRecord(r => ({ ...r, status: e.target.value as any }))}
+              onChange={e => setBulkRecord(r => ({ ...r, status: e.target.value as AttendanceStatus }))}
               className={FIELD}
               disabled={loading}
             >

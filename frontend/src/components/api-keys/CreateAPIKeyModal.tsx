@@ -34,6 +34,7 @@ import {
 } from 'lucide-react'
 import Modal from '../ui/Modal'
 import Button from '../ui/Button'
+import { getErrorMessage } from '../../services/api'
 
 const FIELD = 'bg-field-bg border border-field-border rounded-field px-3 py-2 text-[13.5px] text-ink focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent placeholder:text-faintest w-full'
 const LABEL = 'block text-[12px] font-semibold text-muted uppercase tracking-wide mb-1.5'
@@ -75,8 +76,8 @@ const CreateAPIKeyModal: React.FC<CreateAPIKeyModalProps> = ({
       const newKey = await apiKeysApi.createAPIKey(createForm)
       setCreatedKey(newKey)
       onSuccess()
-    } catch (err: any) {
-      setError?.(err.message || 'Failed to create API key')
+    } catch (err) {
+      setError?.(getErrorMessage(err, 'Failed to create API key'))
     } finally {
       setCreating(false)
     }
@@ -124,8 +125,8 @@ const CreateAPIKeyModal: React.FC<CreateAPIKeyModalProps> = ({
     try {
       const permissions = await apiKeysApi.getAvailablePermissions()
       setAvailablePermissions(permissions)
-    } catch (err: any) {
-      setError?.(err.message || 'Failed to load permissions')
+    } catch (err) {
+      setError?.(getErrorMessage(err, 'Failed to load permissions'))
     }
   }
 

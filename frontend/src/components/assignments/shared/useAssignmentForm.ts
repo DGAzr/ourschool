@@ -17,6 +17,7 @@
  */
 
 import { useState, useCallback } from 'react'
+import { getErrorMessage } from '../../../services/api'
 
 interface UseAssignmentFormOptions<T> {
   initialData: T
@@ -28,7 +29,7 @@ interface UseAssignmentFormReturn<T> {
   formData: T
   loading: boolean
   error: string | null
-  updateField: (field: keyof T, value: any) => void
+  updateField: <K extends keyof T>(field: K, value: T[K]) => void
   handleSubmit: (e: React.FormEvent) => Promise<void>
   setError: (error: string | null) => void
   resetForm: () => void
@@ -43,7 +44,7 @@ export function useAssignmentForm<T>({
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  const updateField = useCallback((field: keyof T, value: any) => {
+  const updateField = useCallback(<K extends keyof T>(field: K, value: T[K]) => {
     setFormData(prev => ({ ...prev, [field]: value }))
   }, [])
 
@@ -63,8 +64,8 @@ export function useAssignmentForm<T>({
       setLoading(true)
       setError(null)
       await onSubmit(formData)
-    } catch (err: any) {
-      setError(err.response?.data?.detail || err.message || 'An error occurred')
+    } catch (err) {
+      setError(getErrorMessage(err, 'An error occurred'))
     } finally {
       setLoading(false)
     }

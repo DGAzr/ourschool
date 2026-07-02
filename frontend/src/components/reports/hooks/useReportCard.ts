@@ -19,6 +19,7 @@
 import { useState, useEffect } from 'react'
 import { reportsApi } from '../../../services/reports'
 import { ReportCard } from '../../../types'
+import { getErrorMessage } from '../../../services/api'
 
 interface ReportCardOptions {
   students: Array<{ id: number; name: string }>
@@ -92,8 +93,8 @@ export const useReportCard = (): UseReportCardReturn => {
           terms: termOptions
         })
       }
-    } catch (err: any) {
-      setError(`Failed to load report card options: ${err.message || 'Unknown error'}`)
+    } catch (err) {
+      setError(`Failed to load report card options: ${getErrorMessage(err, 'Unknown error')}`)
     }
   }
 
@@ -112,8 +113,8 @@ export const useReportCard = (): UseReportCardReturn => {
       
       const data = await reportsApi.getReportCard(studentId, termId)
       setReportCard(data)
-    } catch (err: any) {
-      setError(`Failed to generate report card: ${err.message || 'Unknown error'}`)
+    } catch (err) {
+      setError(`Failed to generate report card: ${getErrorMessage(err, 'Unknown error')}`)
     } finally {
       setLoading(false)
     }

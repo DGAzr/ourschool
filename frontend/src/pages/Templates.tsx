@@ -37,7 +37,8 @@ import { ImportAssignmentModal } from '../components/assignments/ImportAssignmen
 import SubmissionDialog from '../components/assignments/SubmissionDialog'
 
 // Types
-import { AssignmentTemplate, StudentAssignment } from '../types'
+import { AssignmentTemplate, AssignmentTemplateImportRequest, StudentAssignment } from '../types'
+import { getErrorMessage } from '../services/api'
 
 const Templates: React.FC = () => {
   const { user } = useAuth()
@@ -169,7 +170,7 @@ const Templates: React.FC = () => {
     return await assignmentsApi.bulkExportTemplates(templateIds)
   }
 
-  const performTemplateImport = async (data: any) => {
+  const performTemplateImport = async (data: AssignmentTemplateImportRequest) => {
     return await assignmentsApi.importTemplate(data)
   }
 
@@ -212,8 +213,8 @@ const Templates: React.FC = () => {
       setTemplates(templates.filter(t => t.id !== deletingTemplate.id))
       setShowDeleteConfirm(false)
       setDeletingTemplate(null)
-    } catch (error: any) {
-      const errorMessage = error.message || 'Failed to delete assignment template'
+    } catch (error) {
+      const errorMessage = getErrorMessage(error, 'Failed to delete assignment template')
       setError(errorMessage)
       setShowDeleteConfirm(false)
       setDeletingTemplate(null)
@@ -330,7 +331,7 @@ const Templates: React.FC = () => {
       const sub = getSubjectById(t.subject_id ?? 0)
       const key = sub ? String(sub.id) : 'none'
       if (!seen.has(key)) {
-        const g = { subjectId: sub?.id ?? null, name: sub?.name ?? 'No Subject', color: (sub as any)?.color ?? '#8B7355', icon: sub?.icon, templates: [] as typeof filteredTemplates }
+        const g = { subjectId: sub?.id ?? null, name: sub?.name ?? 'No Subject', color: sub?.color ?? '#8B7355', icon: sub?.icon, templates: [] as typeof filteredTemplates }
         seen.set(key, g)
         groups.push(g)
       }

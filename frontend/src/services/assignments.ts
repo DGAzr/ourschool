@@ -25,8 +25,22 @@ import {
   AssignmentAssignmentRequest,
   AssignmentAssignmentResponse,
   StudentAssignmentProgressSummary,
+  AssignmentTemplateExport,
+  AssignmentTemplateImportRequest,
+  AssignmentTemplateImportResult,
+  AssignmentTemplateBulkExport,
   User
 } from '../types'
+
+/**
+ * Type guard for data parsed from an uploaded template export file. Checks
+ * the fields the frontend relies on; the backend fully validates the rest.
+ */
+export const isAssignmentTemplateExport = (value: unknown): value is AssignmentTemplateExport => {
+  if (typeof value !== 'object' || value === null) return false
+  const record = value as Record<string, unknown>
+  return typeof record.name === 'string' && typeof record.assignment_type === 'string'
+}
 
 export const assignmentsApi = {
   // Assignment Template Management
@@ -216,20 +230,17 @@ export const assignmentsApi = {
   },
 
   // Import/Export functionality
-  async exportTemplate(templateId: number): Promise<any> {
+  async exportTemplate(templateId: number): Promise<AssignmentTemplateExport> {
     const response = await api.get(`/assignments/templates/${templateId}/export`)
     return response
   },
 
-  async importTemplate(data: {
-    assignment_data: any
-    target_subject_id?: number
-  }): Promise<any> {
+  async importTemplate(data: AssignmentTemplateImportRequest): Promise<AssignmentTemplateImportResult> {
     const response = await api.post('/assignments/templates/import', data)
     return response
   },
 
-  async bulkExportTemplates(templateIds: number[]): Promise<any> {
+  async bulkExportTemplates(templateIds: number[]): Promise<AssignmentTemplateBulkExport> {
     const response = await api.post('/assignments/templates/bulk-export', { template_ids: templateIds })
     return response
   }

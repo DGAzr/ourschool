@@ -154,6 +154,64 @@ export interface AssignmentAssignmentResponse {
   created_assignments: StudentAssignment[]
 }
 
+/**
+ * Metadata attached to exported templates (`export_metadata`).
+ * Mirrors the ad-hoc dict built in app/routers/assignments/templates.py.
+ */
+export interface AssignmentTemplateExportMetadata {
+  format_version?: string
+  exported_by?: string
+  export_timestamp?: string
+  template_id?: number
+  [key: string]: unknown
+}
+
+/**
+ * An exported assignment template.
+ * Mirrors AssignmentTemplateExport in app/schemas/assignment.py.
+ */
+export interface AssignmentTemplateExport {
+  name: string
+  description?: string | null
+  instructions?: string | null
+  assignment_type: string
+  subject_name: string
+  icon?: string | null
+  max_points: number
+  estimated_duration_minutes?: number | null
+  prerequisites?: string | null
+  materials_needed?: string | null
+  export_metadata?: AssignmentTemplateExportMetadata
+}
+
+/**
+ * Request body for POST /assignments/templates/import.
+ * Mirrors AssignmentTemplateImport in app/schemas/assignment.py.
+ */
+export interface AssignmentTemplateImportRequest {
+  assignment_data: AssignmentTemplateExport
+  target_subject_id?: number
+}
+
+/** Response of POST /assignments/templates/import. */
+export interface AssignmentTemplateImportResult {
+  success: boolean
+  template_id: number
+  message: string
+}
+
+/** Response of POST /assignments/templates/bulk-export. */
+export interface AssignmentTemplateBulkExport {
+  format_version: string
+  export_timestamp: string
+  exported_by: string
+  templates: AssignmentTemplateExport[]
+  metadata: {
+    template_count: number
+    subjects: string[]
+  }
+}
+
 export interface SubjectProgress {
   subject_id: number
   subject_name: string

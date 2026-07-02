@@ -22,6 +22,7 @@ import { AssignmentTemplate, User, StudentAssignment } from '../../types'
 import { formatDateOnly } from '../../utils/formatters'
 import Modal from '../ui/Modal'
 import Button from '../ui/Button'
+import { getErrorMessage } from '../../services/api'
 
 interface AssignTemplateModalProps {
   template: AssignmentTemplate
@@ -99,8 +100,8 @@ const AssignTemplateModal: React.FC<AssignTemplateModalProps> = ({
       setActiveTab('manage')
 
       onSuccess()
-    } catch (err: any) {
-      setError(err.message || 'Failed to assign template to students')
+    } catch (err) {
+      setError(getErrorMessage(err, 'Failed to assign template to students'))
     } finally {
       setLoading(false)
     }
@@ -121,8 +122,8 @@ const AssignTemplateModal: React.FC<AssignTemplateModalProps> = ({
       if (activeAssignments.length === 0) {
         setActiveTab('assign')
       }
-    } catch (err: any) {
-      setError(err.message || 'Failed to unassign student')
+    } catch (err) {
+      setError(getErrorMessage(err, 'Failed to unassign student'))
     } finally {
       setUnassignLoading(false)
     }

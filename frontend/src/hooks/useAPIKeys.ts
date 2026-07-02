@@ -16,6 +16,7 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
+import { getErrorMessage } from '../services/api'
 import { useState, useEffect, useCallback } from 'react'
 import { 
   apiKeysApi, 
@@ -75,8 +76,8 @@ export const useAPIKeys = () => {
       setApiKeys(keysData)
       setStats(statsData)
       setLastRefresh(new Date())
-    } catch (err: any) {
-      setError(err.response?.data?.detail || 'Failed to load API keys')
+    } catch (err) {
+      setError(getErrorMessage(err, 'Failed to load API keys'))
     } finally {
       setLoading(false)
       setRefreshing(false)
@@ -112,8 +113,8 @@ export const useAPIKeys = () => {
       
       // Reload data to ensure consistency
       await loadData(true)
-    } catch (err: any) {
-      setError(err.response?.data?.detail || 'Failed to update API key')
+    } catch (err) {
+      setError(getErrorMessage(err, 'Failed to update API key'))
       // Revert optimistic update on error
       await loadData(true)
     }
@@ -166,8 +167,8 @@ export const useAPIKeys = () => {
       await loadData(true)
 
       return true
-    } catch (err: any) {
-      setError(err.response?.data?.detail || 'Failed to delete API key')
+    } catch (err) {
+      setError(getErrorMessage(err, 'Failed to delete API key'))
       // Revert optimistic update on error
       await loadData(true)
       return false

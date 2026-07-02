@@ -42,6 +42,9 @@ export * from './attendance'
 // Reporting and analytics types
 export * from './reports'
 
+// System backup and restore types
+export * from './backup'
+
 // API and error handling types
 export * from './api'
 

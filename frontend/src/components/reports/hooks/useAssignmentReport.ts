@@ -19,6 +19,7 @@
 import { useState, useCallback } from 'react'
 import { reportsApi } from '../../../services/reports'
 import { AssignmentReport } from '../../../types'
+import { getErrorMessage } from '../../../services/api'
 
 interface AssignmentFilters {
   subjectId: string
@@ -77,8 +78,8 @@ export const useAssignmentReport = (): UseAssignmentReportReturn => {
 
       const data = await reportsApi.getAssignmentReport(subjectId, studentId, termId, status)
       setAssignmentReport(data)
-    } catch (err: any) {
-      setError(`Failed to load assignment report: ${err.message || 'Unknown error'}`)
+    } catch (err) {
+      setError(`Failed to load assignment report: ${getErrorMessage(err, 'Unknown error')}`)
     } finally {
       setLoading(false)
     }

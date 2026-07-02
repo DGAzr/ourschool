@@ -23,6 +23,7 @@ import { formatDateOnly } from '../../utils/formatters'
 import { letterGrade as sharedLetterGrade } from '../../utils/grading'
 import Modal from '../ui/Modal'
 import Button from '../ui/Button'
+import { getErrorMessage } from '../../services/api'
 
 interface GradeAssignmentModalProps {
   assignment: StudentAssignment
@@ -76,8 +77,8 @@ const GradeAssignmentModal: React.FC<GradeAssignmentModalProps> = ({
       })
 
       onSuccess()
-    } catch (err: any) {
-      setError(err.message || 'Failed to grade assignment')
+    } catch (err) {
+      setError(getErrorMessage(err, 'Failed to grade assignment'))
     } finally {
       setLoading(false)
     }

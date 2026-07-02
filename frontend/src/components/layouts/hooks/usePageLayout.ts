@@ -17,6 +17,7 @@
  */
 
 import { useState, useCallback } from 'react'
+import { getErrorMessage } from '../../../services/api'
 
 interface PageLayoutState {
   loading: boolean
@@ -61,8 +62,8 @@ export const usePageLayout = (options: UsePageLayoutOptions = {}): UsePageLayout
       setActionInProgress(true)
       clearError()
       return await action()
-    } catch (err: any) {
-      const errorMessage = err.response?.data?.detail || err.message || 'An error occurred'
+    } catch (err) {
+      const errorMessage = getErrorMessage(err, 'An error occurred')
       handleError(errorMessage)
       return null
     } finally {
@@ -75,8 +76,8 @@ export const usePageLayout = (options: UsePageLayoutOptions = {}): UsePageLayout
       setLoading(true)
       clearError()
       return await action()
-    } catch (err: any) {
-      const errorMessage = err.response?.data?.detail || err.message || 'An error occurred'
+    } catch (err) {
+      const errorMessage = getErrorMessage(err, 'An error occurred')
       handleError(errorMessage)
       return null
     } finally {

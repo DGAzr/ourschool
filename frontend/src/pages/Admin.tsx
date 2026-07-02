@@ -16,6 +16,7 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
+import { getErrorMessage } from '../services/api'
 import React, { useState, useEffect, useCallback, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
@@ -34,11 +35,11 @@ import { useAssignmentTypes } from '../contexts/AssignmentTypesContext'
 import { type AssignmentTypeConfig } from '../types/assignment'
 import { termsApi } from '../services/terms'
 import { usersApi } from '../services/users'
-import { backupApi } from '../services/backup'
+import { backupApi, isSystemBackupFile } from '../services/backup'
 import { SystemBackupModal } from '../components/backup/SystemBackupModal'
 import { type Subject } from '../types/subject'
 import { type Term } from '../types/term'
-import { type User } from '../types'
+import { type SystemBackupFile, type SystemBackupImportResult, type User } from '../types'
 import { format, parseISO } from 'date-fns'
 import { type TermCreate } from '../types'
 import {
@@ -200,9 +201,9 @@ const Admin: React.FC = () => {
   // ── Backup management ──
   const [showBackupModal, setShowBackupModal] = useState(false)
   const [importStep, setImportStep] = useState<'idle' | 'configure' | 'loading' | 'result'>('idle')
-  const [importData, setImportData] = useState<any>(null)
+  const [importData, setImportData] = useState<SystemBackupFile | null>(null)
   const [importOptions, setImportOptions] = useState({ skip_existing_users: true, update_existing_data: false, preserve_ids: false, dry_run: true })
-  const [importResult, setImportResult] = useState<any>(null)
+  const [importResult, setImportResult] = useState<SystemBackupImportResult | null>(null)
   const [importError, setImportError] = useState<string | null>(null)
   const backupFileInputRef = useRef<HTMLInputElement>(null)
 
@@ -212,8 +213,8 @@ const Admin: React.FC = () => {
     const reader = new FileReader()
     reader.onload = (e) => {
       try {
-        const data = JSON.parse(e.target?.result as string)
-        if (!data.format_version || !data.backup_timestamp) throw new Error('Invalid backup format')
+        const data: unknown = JSON.parse(e.target?.result as string)
+        if (!isSystemBackupFile(data)) throw new Error('Invalid backup format')
         setImportData(data)
         setImportError(null)
         setImportStep('configure')
@@ -232,8 +233,8 @@ const Admin: React.FC = () => {
       const result = await backupApi.importSystemBackup({ backup_data: importData, import_options: importOptions })
       setImportResult(result)
       setImportStep('result')
-    } catch (err: any) {
-      setImportError(err.message || 'Import failed')
+    } catch (err) {
+      setImportError(getErrorMessage(err, 'Import failed'))
       setImportStep('result')
     }
   }
@@ -420,8 +421,8 @@ const Admin: React.FC = () => {
       })
       refreshAssignmentTypes()
       toast('Assignment types saved')
-    } catch (err: any) {
-      toast(err.message || 'Failed to save assignment types', 'danger')
+    } catch (err) {
+      toast(getErrorMessage(err, 'Failed to save assignment types'), 'danger')
     } finally {
       setSavingTypes(false)
     }
@@ -447,8 +448,8 @@ const Admin: React.FC = () => {
       setNewTypeIcon(undefined)
       refreshAssignmentTypes()
       toast('Assignment type added')
-    } catch (err: any) {
-      toast(err.message || 'Failed to add type', 'danger')
+    } catch (err) {
+      toast(getErrorMessage(err, 'Failed to add type'), 'danger')
     } finally {
       setAddingType(false)
     }
@@ -469,8 +470,8 @@ const Admin: React.FC = () => {
       setTypesBaseline(prev => { const n = { ...prev }; delete n[t.id]; return n })
       refreshAssignmentTypes()
       toast('Assignment type deleted')
-    } catch (err: any) {
-      toast(err.message || 'Failed to delete type', 'danger')
+    } catch (err) {
+      toast(getErrorMessage(err, 'Failed to delete type'), 'danger')
     }
   }
 
@@ -533,8 +534,8 @@ const Admin: React.FC = () => {
       }
       resetTermForm()
       toast(editingTerm ? 'Term updated' : 'Term created')
-    } catch (err: any) {
-      const detail = err.message || ''
+    } catch (err) {
+      const detail = getErrorMessage(err, '')
       if (detail.toLowerCase().includes('academic year')) setTermValidationErrors({ academic_year: detail })
       else setTermError(detail || 'Failed to save term')
     }
@@ -547,7 +548,7 @@ const Admin: React.FC = () => {
       await termsApi.delete(id)
       setTerms(prev => prev.filter(t => t.id !== id))
       toast('Term deleted')
-    } catch (err: any) { setTermError(err.message || 'Failed to delete term') }
+    } catch (err) { setTermError(getErrorMessage(err, 'Failed to delete term')) }
   }
 
   const handleTermActivate = async (id: number) => {
@@ -555,7 +556,7 @@ const Admin: React.FC = () => {
       await termsApi.activate(id)
       setTerms(prev => prev.map(t => ({ ...t, is_active: t.id === id })))
       toast('Term activated')
-    } catch (err: any) { setTermError(err.message || 'Failed to activate term') }
+    } catch (err) { setTermError(getErrorMessage(err, 'Failed to activate term')) }
   }
 
   // ── Subject handlers ──────────────────────────────────────────────────────
@@ -575,7 +576,7 @@ const Admin: React.FC = () => {
         toast('Subject created')
       }
       resetSubjectForm()
-    } catch (err: any) { setSubjectError(err.message || 'Failed to save subject') }
+    } catch (err) { setSubjectError(getErrorMessage(err, 'Failed to save subject')) }
   }
 
   const handleSubjectDelete = (id: number) => setPendingAction({ kind: 'delete-subject', id })
@@ -585,7 +586,7 @@ const Admin: React.FC = () => {
       await subjectsApi.delete(id)
       setSubjects(prev => prev.filter(s => s.id !== id))
       toast('Subject deleted')
-    } catch (err: any) { setSubjectError(err.message || 'Failed to delete subject') }
+    } catch (err) { setSubjectError(getErrorMessage(err, 'Failed to delete subject')) }
   }
 
   // ── User handlers ─────────────────────────────────────────────────────────
@@ -627,7 +628,7 @@ const Admin: React.FC = () => {
       setNewUserErrors({})
       setShowAddUser(false)
       toast('User created')
-    } catch (err: any) { setUserError(err.message || 'Failed to create user') }
+    } catch (err) { setUserError(getErrorMessage(err, 'Failed to create user')) }
   }
 
   const handleEditUser = async () => {
@@ -642,7 +643,7 @@ const Admin: React.FC = () => {
       setEditingUser(null)
       setEditUserErrors({})
       toast('User updated')
-    } catch (err: any) { setUserError(err.message || 'Failed to update user') }
+    } catch (err) { setUserError(getErrorMessage(err, 'Failed to update user')) }
   }
 
   const handleDeleteUser = (id: number) => setPendingAction({ kind: 'delete-user', id })
@@ -652,7 +653,7 @@ const Admin: React.FC = () => {
       await usersApi.delete(id)
       setUsers(prev => prev.filter(u => u.id !== id))
       toast('User deleted')
-    } catch (err: any) { setUserError(err.message || 'Failed to delete user') }
+    } catch (err) { setUserError(getErrorMessage(err, 'Failed to delete user')) }
   }
 
   const handleResetPassword = (id: number, username: string) => setPendingAction({ kind: 'reset-password', id, username })
@@ -661,7 +662,7 @@ const Admin: React.FC = () => {
     try {
       const r = await usersApi.resetPassword(id)
       alert(`Temporary password for ${username}: ${r.temporary_password}\n\nShare this securely and ask them to change it on next login.`)
-    } catch (err: any) { setUserError(`Failed to reset password: ${err.message}`) }
+    } catch (err) { setUserError(`Failed to reset password: ${getErrorMessage(err)}`) }
   }
 
   const openEditUser = (u: User) => {
@@ -702,7 +703,7 @@ const Admin: React.FC = () => {
       setShowAdjustModal(false)
       toast(`Points adjusted for ${selectedStudentPoints.student_name}`)
       loadPointsOverview()
-    } catch (err: any) { setAdjustError(err.message || 'Failed to adjust points') }
+    } catch (err) { setAdjustError(getErrorMessage(err, 'Failed to adjust points')) }
     finally { setAdjustLoading(false) }
   }
 
@@ -716,7 +717,7 @@ const Admin: React.FC = () => {
       setLedgerLoading(true)
       const data = await pointsApi.getStudentLedger(s.student_id, 1, 10)
       setLedger(data)
-    } catch (err: any) { setLedgerError(err.message || 'Failed to load ledger') }
+    } catch (err) { setLedgerError(getErrorMessage(err, 'Failed to load ledger')) }
     finally { setLedgerLoading(false) }
   }
 
@@ -728,7 +729,7 @@ const Admin: React.FC = () => {
       const data = await pointsApi.getStudentLedger(selectedStudentPoints.student_id, page, 10)
       setLedger(data)
       setLedgerPage(page)
-    } catch (err: any) { setLedgerError(err.message || 'Failed to load ledger') }
+    } catch (err) { setLedgerError(getErrorMessage(err, 'Failed to load ledger')) }
     finally { setLedgerLoading(false) }
   }
 
@@ -1440,7 +1441,7 @@ const Admin: React.FC = () => {
                       </div>
                       <div>
                         <label className={TLABEL}>Term Type</label>
-                        <select value={termFormData.term_type} onChange={e => setTermFormData(p => ({ ...p, term_type: e.target.value as any }))} className={TFIELD}>
+                        <select value={termFormData.term_type} onChange={e => setTermFormData(p => ({ ...p, term_type: e.target.value as TermCreate['term_type'] }))} className={TFIELD}>
                           <option value="semester">Semester</option>
                           <option value="quarter">Quarter</option>
                           <option value="trimester">Trimester</option>
@@ -1574,7 +1575,7 @@ const Admin: React.FC = () => {
 
       case 'users': {
         const filteredUsers = users.filter(u => userFilter === 'students' ? u.role === 'student' : userFilter === 'admins' ? u.role === 'admin' : true)
-        const filterOptions = [
+        const filterOptions: { label: string; value: 'all' | 'students' | 'admins' }[] = [
           { label: `All (${users.length})`, value: 'all' },
           { label: `Students (${users.filter(u => u.role === 'student').length})`, value: 'students' },
           { label: `Admins (${users.filter(u => u.role === 'admin').length})`, value: 'admins' },
@@ -1592,7 +1593,7 @@ const Admin: React.FC = () => {
             {userError && <div className="bg-neg-bg text-neg-fg px-4 py-3 rounded-field text-[13px] mb-4">{userError}</div>}
 
             <div className="mb-4">
-              <SegmentedControl segments={filterOptions} value={userFilter} onChange={v => setUserFilter(v as any)} />
+              <SegmentedControl segments={filterOptions} value={userFilter} onChange={v => setUserFilter(v)} />
             </div>
 
             {loading ? (
@@ -1650,7 +1651,7 @@ const Admin: React.FC = () => {
                     <Input label="Email" type="email" required value={newUser.email} error={newUserErrors.email} onChange={e => { setNewUser(p => ({ ...p, email: e.target.value })); setNewUserErrors(p => ({ ...p, email: '' })) }} />
                     <Input label="Username" required value={newUser.username} error={newUserErrors.username} onChange={e => { setNewUser(p => ({ ...p, username: e.target.value })); setNewUserErrors(p => ({ ...p, username: '' })) }} />
                     <Input label="Password" type="password" required value={newUser.password} error={newUserErrors.password} onChange={e => { setNewUser(p => ({ ...p, password: e.target.value })); setNewUserErrors(p => ({ ...p, password: '' })) }} />
-                    <Select label="Role" value={newUser.role} onChange={e => setNewUser(p => ({ ...p, role: e.target.value as any }))} options={[{ value: 'student', label: 'Student' }, { value: 'admin', label: 'Administrator' }]} />
+                    <Select label="Role" value={newUser.role} onChange={e => setNewUser(p => ({ ...p, role: e.target.value as 'admin' | 'student' }))} options={[{ value: 'student', label: 'Student' }, { value: 'admin', label: 'Administrator' }]} />
                     {newUser.role === 'student' && (
                       <>
                         <Input label="Date of Birth" type="date" value={newUser.date_of_birth} onChange={e => setNewUser(p => ({ ...p, date_of_birth: e.target.value }))} />
@@ -1853,7 +1854,7 @@ const Admin: React.FC = () => {
                           ))}
                         </div>
                       )}
-                      {importResult?.warnings?.length > 0 && (
+                      {importResult && importResult.warnings.length > 0 && (
                         <div className="bg-panel-2 border border-line rounded-card p-3 text-[11px] text-muted mb-3">
                           {importResult.warnings.slice(0, 3).map((w: string, i: number) => <div key={i}>• {w}</div>)}
                           {importResult.warnings.length > 3 && <div>…and {importResult.warnings.length - 3} more</div>}

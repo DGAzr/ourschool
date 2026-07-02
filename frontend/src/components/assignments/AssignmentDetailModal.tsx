@@ -37,6 +37,7 @@ import MarkdownRenderer from '../common/MarkdownRenderer'
 import { formatDateOnly } from '../../utils/formatters'
 import Modal from '../ui/Modal'
 import Button from '../ui/Button'
+import { getErrorMessage } from '../../services/api'
 
 interface AssignmentDetailModalProps {
   assignmentId: number
@@ -91,8 +92,8 @@ const AssignmentDetailModal: React.FC<AssignmentDetailModalProps> = ({
       } else {
         setError('Assignment template not found')
       }
-    } catch (err: any) {
-      setError(err.message || 'Failed to load assignment details')
+    } catch (err) {
+      setError(getErrorMessage(err, 'Failed to load assignment details'))
     } finally {
       setLoading(false)
     }

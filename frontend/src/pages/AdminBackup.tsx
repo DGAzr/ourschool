@@ -16,10 +16,12 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
+import { getErrorMessage } from '../services/api'
 import React, { useState, useRef } from 'react'
 import { useAuth } from '../contexts/AuthContext'
 import { SystemBackupModal } from '../components/backup/SystemBackupModal'
-import { backupApi } from '../services/backup'
+import { backupApi, isSystemBackupFile } from '../services/backup'
+import { SystemBackupFile, SystemBackupImportResult } from '../types'
 import { Button, Spinner } from '../components/ui'
 import {
   HardDrive,
@@ -41,14 +43,14 @@ const AdminBackup: React.FC = () => {
 
   // Import state
   const [importStep, setImportStep] = useState<'idle' | 'configure' | 'loading' | 'result'>('idle')
-  const [importData, setImportData] = useState<any>(null)
+  const [importData, setImportData] = useState<SystemBackupFile | null>(null)
   const [importOptions, setImportOptions] = useState({
     skip_existing_users: true,
     update_existing_data: false,
     preserve_ids: false,
     dry_run: true,
   })
-  const [importResult, setImportResult] = useState<any>(null)
+  const [importResult, setImportResult] = useState<SystemBackupImportResult | null>(null)
   const [importError, setImportError] = useState<string | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
@@ -62,8 +64,8 @@ const AdminBackup: React.FC = () => {
     const reader = new FileReader()
     reader.onload = (e) => {
       try {
-        const data = JSON.parse(e.target?.result as string)
-        if (!data.format_version || !data.backup_timestamp) throw new Error('Invalid backup format')
+        const data: unknown = JSON.parse(e.target?.result as string)
+        if (!isSystemBackupFile(data)) throw new Error('Invalid backup format')
         setImportData(data)
         setImportError(null)
         setImportStep('configure')
@@ -82,8 +84,8 @@ const AdminBackup: React.FC = () => {
       const result = await backupApi.importSystemBackup({ backup_data: importData, import_options: importOptions })
       setImportResult(result)
       setImportStep('result')
-    } catch (err: any) {
-      setImportError(err.message || 'Import failed')
+    } catch (err) {
+      setImportError(getErrorMessage(err, 'Import failed'))
       setImportStep('result')
     }
   }
@@ -292,10 +294,10 @@ const AdminBackup: React.FC = () => {
                     </div>
                     <div className="bg-pos-bg rounded-card p-3 text-[13px] text-pos-fg mb-3 grid grid-cols-2 gap-1">
                       {importResult?.imported_counts && Object.entries(importResult.imported_counts).map(([k, v]) => (
-                        <div key={k}>{importResult.dry_run ? 'Would import' : 'Imported'} {k}: {v as number}</div>
+                        <div key={k}>{importResult.dry_run ? 'Would import' : 'Imported'} {k}: {v}</div>
                       ))}
                     </div>
-                    {importResult?.warnings?.length > 0 && (
+                    {importResult && importResult.warnings.length > 0 && (
                       <div className="bg-warn-soft border border-warn-line rounded-card p-3 text-[12px] text-warn mb-3">
                         {importResult.warnings.slice(0, 3).map((w: string, i: number) => <div key={i}>• {w}</div>)}
                         {importResult.warnings.length > 3 && <div>…and {importResult.warnings.length - 3} more</div>}

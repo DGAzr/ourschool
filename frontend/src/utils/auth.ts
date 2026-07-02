@@ -27,7 +27,7 @@ export interface TokenPayload {
   iat?: number
   user_id?: number
   email?: string
-  [key: string]: any
+  [key: string]: unknown
 }
 
 /**

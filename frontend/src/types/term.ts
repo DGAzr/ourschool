@@ -48,3 +48,21 @@ export interface TermUpdate {
   term_type?: 'semester' | 'quarter' | 'trimester' | 'custom'
   is_active?: boolean
 }
+
+/** Result of POST /terms/{id}/auto-link-subjects (app/routers/terms.py). */
+export interface TermAutoLinkResult {
+  message: string
+  details: {
+    subjects_linked: number
+    term_subjects_created: number
+  }
+}
+
+/** Result of POST /terms/{id}/calculate-grades (app/routers/terms.py). */
+export interface TermGradeCalculationResult {
+  message: string
+  details: {
+    grades_calculated: number
+    students_processed: number
+  }
+}
