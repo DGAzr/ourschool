@@ -15,9 +15,20 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 """Attendance models."""
+
 from datetime import datetime, timezone
 
-from sqlalchemy import Column, Date, DateTime, Enum, ForeignKey, Index, Integer, Text, UniqueConstraint
+from sqlalchemy import (
+    Column,
+    Date,
+    DateTime,
+    Enum,
+    ForeignKey,
+    Index,
+    Integer,
+    Text,
+    UniqueConstraint,
+)
 from sqlalchemy.orm import relationship
 
 from app.core.database import Base
@@ -44,7 +55,13 @@ class AttendanceRecord(Base):
         nullable=False,
     )
     notes = Column(Text)
-    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
-    updated_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
+    created_at = Column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )
+    updated_at = Column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+    )
 
     student = relationship("User", back_populates="attendance_records")

@@ -15,6 +15,7 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 """Dual authentication system supporting both User sessions and API keys."""
+
 from typing import List, Optional, Union
 
 from fastapi import Depends, HTTPException, Request, status
@@ -24,8 +25,6 @@ from app.core.api_auth import APIKeyUser, get_api_key_auth
 from app.core.database import get_db
 from app.enums import UserRole
 from app.models.user import User
-from app.routers.auth import get_current_active_user
-
 
 # Type alias for dual authentication
 AuthUser = Union[User, APIKeyUser]
@@ -42,16 +41,16 @@ async def get_current_user_optional(
     from fastapi.security.utils import get_authorization_scheme_param
     from app.routers.auth import get_user_by_username
     from app.core.security import verify_token
-    
+
     # Extract authorization header
     authorization = request.headers.get("Authorization")
     if not authorization:
         return None
-    
+
     scheme, token = get_authorization_scheme_param(authorization)
     if scheme.lower() != "bearer":
         return None
-    
+
     try:
         username = verify_token(token)
         if username:
@@ -92,26 +91,26 @@ def require_admin_or_permission(permission: str):
     - Admin user role (for user sessions)
     - Specific permission (for API keys)
     """
+
     async def auth_dependency(
-        auth_user: AuthUser = Depends(get_current_user_or_api_key)
+        auth_user: AuthUser = Depends(get_current_user_or_api_key),
     ) -> AuthUser:
         if isinstance(auth_user, User):
             # User session - check admin role
             if auth_user.role != UserRole.ADMIN:
                 raise HTTPException(
-                    status_code=status.HTTP_403_FORBIDDEN,
-                    detail="Admin role required"
+                    status_code=status.HTTP_403_FORBIDDEN, detail="Admin role required"
                 )
         elif isinstance(auth_user, APIKeyUser):
             # API key - check permission
             if not auth_user.has_permission(permission):
                 raise HTTPException(
                     status_code=status.HTTP_403_FORBIDDEN,
-                    detail=f"Permission '{permission}' required"
+                    detail=f"Permission '{permission}' required",
                 )
-        
+
         return auth_user
-    
+
     return auth_dependency
 
 
@@ -121,26 +120,27 @@ def require_student_or_permission(permission: str):
     - Student user role accessing their own data (for user sessions)
     - Specific permission (for API keys)
     """
+
     async def auth_dependency(
-        auth_user: AuthUser = Depends(get_current_user_or_api_key)
+        auth_user: AuthUser = Depends(get_current_user_or_api_key),
     ) -> AuthUser:
         if isinstance(auth_user, User):
             # User session - must be student (additional checks needed in endpoint)
             if auth_user.role != UserRole.STUDENT:
                 raise HTTPException(
                     status_code=status.HTTP_403_FORBIDDEN,
-                    detail="Student role required or admin access needed"
+                    detail="Student role required or admin access needed",
                 )
         elif isinstance(auth_user, APIKeyUser):
             # API key - check permission
             if not auth_user.has_permission(permission):
                 raise HTTPException(
                     status_code=status.HTTP_403_FORBIDDEN,
-                    detail=f"Permission '{permission}' required"
+                    detail=f"Permission '{permission}' required",
                 )
-        
+
         return auth_user
-    
+
     return auth_dependency
 
 
@@ -151,26 +151,27 @@ def require_admin_or_student_self_or_permission(permission: str):
     - Student users (own data only - additional checks in endpoint)
     - API keys with specific permission
     """
+
     async def auth_dependency(
-        auth_user: AuthUser = Depends(get_current_user_or_api_key)
+        auth_user: AuthUser = Depends(get_current_user_or_api_key),
     ) -> AuthUser:
         if isinstance(auth_user, User):
             # User session - allow admin or student (self-access checked in endpoint)
             if auth_user.role not in [UserRole.ADMIN, UserRole.STUDENT]:
                 raise HTTPException(
                     status_code=status.HTTP_403_FORBIDDEN,
-                    detail="Admin or student role required"
+                    detail="Admin or student role required",
                 )
         elif isinstance(auth_user, APIKeyUser):
             # API key - check permission
             if not auth_user.has_permission(permission):
                 raise HTTPException(
                     status_code=status.HTTP_403_FORBIDDEN,
-                    detail=f"Permission '{permission}' required"
+                    detail=f"Permission '{permission}' required",
                 )
-        
+
         return auth_user
-    
+
     return auth_dependency
 
 
@@ -184,13 +185,16 @@ def require_user_or_permission(permission: str):
     - An API key with the specified permission (treated as an admin-equivalent
       reader by the endpoint's scoping logic).
     """
+
     async def auth_dependency(
-        auth_user: AuthUser = Depends(get_current_user_or_api_key)
+        auth_user: AuthUser = Depends(get_current_user_or_api_key),
     ) -> AuthUser:
-        if isinstance(auth_user, APIKeyUser) and not auth_user.has_permission(permission):
+        if isinstance(auth_user, APIKeyUser) and not auth_user.has_permission(
+            permission
+        ):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail=f"Permission '{permission}' required"
+                detail=f"Permission '{permission}' required",
             )
         return auth_user
 
@@ -202,15 +206,15 @@ def require_any_permission(permissions: List[str]):
     Dependency factory that requires any of the specified permissions for API keys,
     or admin role for user sessions.
     """
+
     async def auth_dependency(
-        auth_user: AuthUser = Depends(get_current_user_or_api_key)
+        auth_user: AuthUser = Depends(get_current_user_or_api_key),
     ) -> AuthUser:
         if isinstance(auth_user, User):
             # User session - check admin role
             if auth_user.role != UserRole.ADMIN:
                 raise HTTPException(
-                    status_code=status.HTTP_403_FORBIDDEN,
-                    detail="Admin role required"
+                    status_code=status.HTTP_403_FORBIDDEN, detail="Admin role required"
                 )
         elif isinstance(auth_user, APIKeyUser):
             # API key - check any permission
@@ -218,11 +222,11 @@ def require_any_permission(permissions: List[str]):
                 perms_str = "', '".join(permissions)
                 raise HTTPException(
                     status_code=status.HTTP_403_FORBIDDEN,
-                    detail=f"One of these permissions required: '{perms_str}'"
+                    detail=f"One of these permissions required: '{perms_str}'",
                 )
-        
+
         return auth_user
-    
+
     return auth_dependency
 
 
@@ -280,7 +284,7 @@ def can_access_student_data(auth_user: AuthUser, student_id: int) -> bool:
     elif isinstance(auth_user, APIKeyUser):
         # For API keys, access is controlled by permissions
         return True
-    
+
     return False
 
 
@@ -291,7 +295,7 @@ def get_auth_context_for_logging(auth_user: AuthUser) -> dict:
             "auth_type": "user_session",
             "user_id": auth_user.id,
             "username": auth_user.username,
-            "role": auth_user.role.value
+            "role": auth_user.role.value,
         }
     elif isinstance(auth_user, APIKeyUser):
         return {

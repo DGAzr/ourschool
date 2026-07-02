@@ -15,6 +15,7 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 """Performance monitoring utilities."""
+
 import time
 import functools
 from typing import Any, Callable, Dict
@@ -31,15 +32,16 @@ _stats_lock = threading.Lock()
 
 def track_query_performance(func_name: str):
     """Decorator to track database query performance without SQLAlchemy events."""
+
     def decorator(func: Callable) -> Callable:
         @functools.wraps(func)
         def wrapper(*args, **kwargs):
             start_time = time.time()
-            
+
             try:
                 result = func(*args, **kwargs)
                 execution_time = time.time() - start_time
-                
+
                 # Store performance stats in a thread-safe manner
                 with _stats_lock:
                     if func_name not in query_stats:
@@ -47,39 +49,36 @@ def track_query_performance(func_name: str):
                             "call_count": 0,
                             "total_time": 0,
                             "avg_time": 0,
-                            "min_time": float('inf'),
+                            "min_time": float("inf"),
                             "max_time": 0,
                         }
-                    
+
                     stats = query_stats[func_name]
                     stats["call_count"] += 1
                     stats["total_time"] += execution_time
                     stats["avg_time"] = stats["total_time"] / stats["call_count"]
                     stats["min_time"] = min(stats["min_time"], execution_time)
                     stats["max_time"] = max(stats["max_time"], execution_time)
-                
+
                 # Log performance info
                 if execution_time > 1.0:  # 1 second threshold
-                    logger.warning(
-                        f"Slow function {func_name}: {execution_time:.3f}s"
-                    )
+                    logger.warning(f"Slow function {func_name}: {execution_time:.3f}s")
                 elif execution_time > 0.5:  # 500ms info threshold
-                    logger.info(
-                        f"Function {func_name}: {execution_time:.3f}s"
-                    )
+                    logger.info(f"Function {func_name}: {execution_time:.3f}s")
                 else:
-                    logger.debug(
-                        f"Function {func_name}: {execution_time:.3f}s"
-                    )
-                
+                    logger.debug(f"Function {func_name}: {execution_time:.3f}s")
+
                 return result
-                
+
             except Exception as e:
                 execution_time = time.time() - start_time
-                logger.error(f"Function {func_name} failed after {execution_time:.3f}s: {e}")
+                logger.error(
+                    f"Function {func_name} failed after {execution_time:.3f}s: {e}"
+                )
                 raise
-        
+
         return wrapper
+
     return decorator
 
 
@@ -101,7 +100,7 @@ def log_performance_summary():
         if not query_stats:
             logger.info("No performance statistics available")
             return
-        
+
         logger.info("=== Performance Summary ===")
         for func_name, stats in query_stats.items():
             logger.info(
@@ -116,8 +115,8 @@ def find_slow_operations(min_avg_time: float = 0.5) -> Dict[str, Dict[str, Any]]
     """Find operations that are slower than the threshold."""
     with _stats_lock:
         return {
-            name: stats 
-            for name, stats in query_stats.items() 
+            name: stats
+            for name, stats in query_stats.items()
             if stats.get("avg_time", 0) >= min_avg_time
         }
 
@@ -126,7 +125,7 @@ def find_query_heavy_operations(min_avg_time: float = 0.1) -> Dict[str, Dict[str
     """Find operations that are slower than threshold (renamed for consistency)."""
     with _stats_lock:
         return {
-            name: stats 
-            for name, stats in query_stats.items() 
+            name: stats
+            for name, stats in query_stats.items()
             if stats.get("avg_time", 0) >= min_avg_time
         }

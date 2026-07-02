@@ -15,6 +15,7 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 """APIs for managing assignment types and their grade-book weights."""
+
 from typing import Annotated, List
 
 from fastapi import APIRouter, Depends, HTTPException

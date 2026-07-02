@@ -15,68 +15,83 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 """API key Pydantic schemas for API requests and responses."""
+
 from datetime import datetime
-from typing import Optional, List, Dict, Any
+from typing import Optional, List
 
 from pydantic import BaseModel, Field, validator
 
 
 class APIKeyCreate(BaseModel):
     """Schema for creating a new API key."""
-    name: str = Field(..., min_length=1, max_length=255, description="Human-readable name for the API key")
-    permissions: List[str] = Field(..., min_items=1, description="List of permissions for this API key")
+
+    name: str = Field(
+        ...,
+        min_length=1,
+        max_length=255,
+        description="Human-readable name for the API key",
+    )
+    permissions: List[str] = Field(
+        ..., min_items=1, description="List of permissions for this API key"
+    )
     expires_at: Optional[datetime] = Field(None, description="Optional expiration date")
-    
-    @validator('name')
+
+    @validator("name")
     def validate_name(cls, v):
         """Validate the API key name."""
         if not v.strip():
-            raise ValueError('Name cannot be empty or only whitespace')
+            raise ValueError("Name cannot be empty or only whitespace")
         return v.strip()
-    
-    @validator('permissions')
+
+    @validator("permissions")
     def validate_permissions(cls, v):
         """Validate permissions list."""
         if not v:
-            raise ValueError('At least one permission is required')
-        
+            raise ValueError("At least one permission is required")
+
         # Import here to avoid circular imports
-        from app.crud.api_keys import AVAILABLE_PERMISSIONS, validate_permissions
+        from app.crud.api_keys import validate_permissions
+
         return validate_permissions(v)
 
 
 class APIKeyUpdate(BaseModel):
     """Schema for updating an API key."""
+
     name: Optional[str] = Field(None, min_length=1, max_length=255)
     permissions: Optional[List[str]] = Field(None, min_items=1)
     is_active: Optional[bool] = None
     expires_at: Optional[datetime] = None
-    
-    @validator('name')
+
+    @validator("name")
     def validate_name(cls, v):
         """Validate the API key name."""
         if v is not None and not v.strip():
-            raise ValueError('Name cannot be empty or only whitespace')
+            raise ValueError("Name cannot be empty or only whitespace")
         return v.strip() if v else v
-    
-    @validator('permissions')
+
+    @validator("permissions")
     def validate_permissions(cls, v):
         """Validate permissions list."""
         if v is not None:
             if not v:
-                raise ValueError('At least one permission is required')
-            
+                raise ValueError("At least one permission is required")
+
             # Import here to avoid circular imports
-            from app.crud.api_keys import AVAILABLE_PERMISSIONS, validate_permissions
+            from app.crud.api_keys import validate_permissions
+
             return validate_permissions(v)
         return v
 
 
 class APIKeyResponse(BaseModel):
     """Schema for API key responses (without the secret key)."""
+
     id: int
     name: str
-    key_prefix: str = Field(..., description="First 8 characters of the API key for identification")
+    key_prefix: str = Field(
+        ..., description="First 8 characters of the API key for identification"
+    )
     permissions: List[str]
     is_active: bool
     created_by: int
@@ -84,22 +99,26 @@ class APIKeyResponse(BaseModel):
     expires_at: Optional[datetime] = None
     created_at: datetime
     updated_at: datetime
-    
+
     # Computed fields
     is_expired: bool = Field(..., description="Whether the API key has expired")
-    is_valid: bool = Field(..., description="Whether the API key is valid (active and not expired)")
-    
+    is_valid: bool = Field(
+        ..., description="Whether the API key is valid (active and not expired)"
+    )
+
     class Config:
         from_attributes = True
 
 
 class APIKeyWithSecret(APIKeyResponse):
     """Schema for API key with the secret (only returned on creation/regeneration)."""
+
     api_key: str = Field(..., description="The full API key - store this securely!")
 
 
 class APIKeyStats(BaseModel):
     """Schema for API key usage statistics."""
+
     id: int
     name: str
     created_at: datetime
@@ -112,6 +131,7 @@ class APIKeyStats(BaseModel):
 
 class SystemAPIKeyStats(BaseModel):
     """Schema for system-wide API key statistics."""
+
     total_keys: int
     active_keys: int
     inactive_keys: int
@@ -121,6 +141,7 @@ class SystemAPIKeyStats(BaseModel):
 
 class PermissionInfo(BaseModel):
     """Schema for permission information."""
+
     permission: str
     description: str
     category: str
@@ -128,6 +149,7 @@ class PermissionInfo(BaseModel):
 
 class AvailablePermissions(BaseModel):
     """Schema for available permissions response."""
+
     permissions: List[PermissionInfo]
     categories: List[str]
 
@@ -138,26 +160,26 @@ PERMISSION_DESCRIPTIONS = {
     "students:read": PermissionInfo(
         permission="students:read",
         description="Read student information and profiles",
-        category="Students"
+        category="Students",
     ),
     "assignments:read": PermissionInfo(
         permission="assignments:read",
         description="Read assignment data and submissions",
-        category="Assignments"
+        category="Assignments",
     ),
     "assignments:grade": PermissionInfo(
         permission="assignments:grade",
         description="Grade student assignments and provide feedback",
-        category="Assignments"
+        category="Assignments",
     ),
     "points:read": PermissionInfo(
         permission="points:read",
         description="Read student points and transaction history",
-        category="Points"
+        category="Points",
     ),
     "points:write": PermissionInfo(
         permission="points:write",
         description="Add or deduct student points with notes",
-        category="Points"
+        category="Points",
     ),
 }

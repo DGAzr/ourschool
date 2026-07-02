@@ -15,6 +15,7 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 """APIs for attendance."""
+
 from datetime import date
 from typing import Annotated, List, Optional
 
@@ -23,7 +24,6 @@ from sqlalchemy.orm import Session
 
 from app.core.database import get_db
 from app.core.logging import get_logger, log_business_event
-from app.core.error_tracking import track_error
 from app.models.attendance import AttendanceRecord
 
 # Student model no longer needed - using unified User model
@@ -53,7 +53,9 @@ router = APIRouter()
 def create_attendance_record(
     record: AttendanceRecordCreate,
     db: Annotated[Session, Depends(get_db)],
-    auth_user: Annotated[AuthUser, Depends(require_admin_or_permission("attendance:write"))],
+    auth_user: Annotated[
+        AuthUser, Depends(require_admin_or_permission("attendance:write"))
+    ],
 ):
     """Create a new attendance record (admin session or API key with attendance:write)."""
     # Verify the student exists
@@ -94,7 +96,9 @@ def create_attendance_record(
 @router.get("/", response_model=List[AttendanceRecordSchema])
 def read_attendance_records(
     db: Annotated[Session, Depends(get_db)],
-    auth_user: Annotated[AuthUser, Depends(require_user_or_permission("attendance:read"))],
+    auth_user: Annotated[
+        AuthUser, Depends(require_user_or_permission("attendance:read"))
+    ],
     student_id: Optional[int] = Query(None),
     start_date: Optional[date] = Query(None),
     end_date: Optional[date] = Query(None),
@@ -109,9 +113,8 @@ def read_attendance_records(
     requester_id = get_user_id_from_auth(auth_user)
     if is_admin_user(auth_user) or requester_id is None:
         # Admin or API key: all active students
-        student_ids = (
-            db.query(User.id)
-            .filter(User.role == UserRole.STUDENT, User.is_active)
+        student_ids = db.query(User.id).filter(
+            User.role == UserRole.STUDENT, User.is_active
         )
         query = query.filter(AttendanceRecord.student_id.in_(student_ids))
     else:
@@ -133,7 +136,9 @@ def update_attendance_record(
     record_id: int,
     record_update: AttendanceRecordUpdate,
     db: Annotated[Session, Depends(get_db)],
-    auth_user: Annotated[AuthUser, Depends(require_admin_or_permission("attendance:write"))],
+    auth_user: Annotated[
+        AuthUser, Depends(require_admin_or_permission("attendance:write"))
+    ],
 ):
     """Update an attendance record (admin session or API key with attendance:write)."""
     record = db.query(AttendanceRecord).filter(AttendanceRecord.id == record_id).first()
@@ -165,7 +170,9 @@ def update_attendance_record(
 def create_bulk_attendance_records(
     bulk_record: BulkAttendanceCreate,
     db: Annotated[Session, Depends(get_db)],
-    auth_user: Annotated[AuthUser, Depends(require_admin_or_permission("attendance:write"))],
+    auth_user: Annotated[
+        AuthUser, Depends(require_admin_or_permission("attendance:write"))
+    ],
 ):
     """Create multiple attendance records at once (admin session or API key with attendance:write)."""
     actor_id = get_user_id_from_auth(auth_user)  # None for API keys
@@ -173,7 +180,7 @@ def create_bulk_attendance_records(
         "bulk_attendance_request",
         user_id=str(actor_id) if actor_id is not None else "api_key",
         date=str(bulk_record.date),
-        student_count=len(bulk_record.student_ids)
+        student_count=len(bulk_record.student_ids),
     )
 
     try:
@@ -291,7 +298,9 @@ def create_bulk_attendance_records(
 @router.get("/students", response_model=List[dict])
 def get_students_for_attendance(
     db: Annotated[Session, Depends(get_db)],
-    auth_user: Annotated[AuthUser, Depends(require_admin_or_permission("attendance:read"))],
+    auth_user: Annotated[
+        AuthUser, Depends(require_admin_or_permission("attendance:read"))
+    ],
 ):
     """List active students for attendance (admin session or API key with attendance:read)."""
     students = (
@@ -319,7 +328,9 @@ def get_students_for_attendance(
 def delete_attendance_record(
     record_id: int,
     db: Annotated[Session, Depends(get_db)],
-    auth_user: Annotated[AuthUser, Depends(require_admin_or_permission("attendance:write"))],
+    auth_user: Annotated[
+        AuthUser, Depends(require_admin_or_permission("attendance:write"))
+    ],
 ):
     """Delete an attendance record (admin session or API key with attendance:write)."""
     record = db.query(AttendanceRecord).filter(AttendanceRecord.id == record_id).first()

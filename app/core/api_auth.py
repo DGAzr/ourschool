@@ -15,6 +15,7 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 """API key authentication utilities."""
+
 from datetime import datetime, timezone
 from typing import List, Optional, Union
 
@@ -46,15 +47,15 @@ class APIKeyUser:
         # X-On-Behalf-Of header so writes can be attributed to a real user.
         self.acting_user_id = acting_user_id
         self.acting_user_name = acting_user_name
-        
+
     def has_permission(self, permission: str) -> bool:
         """Check if this API key has a specific permission."""
         return permission in self.permissions
-        
+
     def has_any_permission(self, permissions: List[str]) -> bool:
         """Check if this API key has any of the specified permissions."""
         return any(self.has_permission(perm) for perm in permissions)
-        
+
     def has_all_permissions(self, permissions: List[str]) -> bool:
         """Check if this API key has all of the specified permissions."""
         return all(self.has_permission(perm) for perm in permissions)
@@ -87,7 +88,7 @@ def _resolve_acting_admin(db: Session, raw: str) -> User:
 async def get_api_key_auth(
     x_api_key: Optional[str] = Header(None, alias="X-API-Key"),
     x_on_behalf_of: Optional[str] = Header(None, alias="X-On-Behalf-Of"),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
 ) -> Optional[APIKeyUser]:
     """Authenticate via API key. Returns None if no API key provided."""
     if not x_api_key:
@@ -99,23 +100,22 @@ async def get_api_key_auth(
             detail="Invalid API key format",
             headers={"WWW-Authenticate": "Bearer"},
         )
-    
+
     # Extract prefix for efficient lookup
     prefix = x_api_key[:8]
-    
+
     # Find API key by prefix
-    api_key = db.query(APIKey).filter(
-        APIKey.key_prefix == prefix,
-        APIKey.is_active == True
-    ).first()
-    
+    api_key = (
+        db.query(APIKey).filter(APIKey.key_prefix == prefix, APIKey.is_active).first()
+    )
+
     if not api_key:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid API key",
             headers={"WWW-Authenticate": "Bearer"},
         )
-    
+
     # Verify the full API key
     if not verify_api_key(x_api_key, api_key.key_hash):
         raise HTTPException(
@@ -123,7 +123,7 @@ async def get_api_key_auth(
             detail="Invalid API key",
             headers={"WWW-Authenticate": "Bearer"},
         )
-    
+
     # Check if API key is expired
     if api_key.is_expired:
         raise HTTPException(
@@ -131,7 +131,7 @@ async def get_api_key_auth(
             detail="API key has expired",
             headers={"WWW-Authenticate": "Bearer"},
         )
-    
+
     # Update last used timestamp
     api_key.last_used_at = datetime.now(timezone.utc)
     db.commit()
@@ -154,7 +154,7 @@ async def get_api_key_auth(
 
 
 async def require_api_key_auth(
-    api_key_user: Optional[APIKeyUser] = Depends(get_api_key_auth)
+    api_key_user: Optional[APIKeyUser] = Depends(get_api_key_auth),
 ) -> APIKeyUser:
     """Require API key authentication."""
     if not api_key_user:
@@ -168,45 +168,51 @@ async def require_api_key_auth(
 
 def require_permission(permission: str):
     """Dependency factory to require a specific permission."""
+
     async def permission_dependency(
-        api_key_user: APIKeyUser = Depends(require_api_key_auth)
+        api_key_user: APIKeyUser = Depends(require_api_key_auth),
     ) -> APIKeyUser:
         if not api_key_user.has_permission(permission):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail=f"Permission '{permission}' required"
+                detail=f"Permission '{permission}' required",
             )
         return api_key_user
+
     return permission_dependency
 
 
 def require_any_permission(permissions: List[str]):
     """Dependency factory to require any of the specified permissions."""
+
     async def permission_dependency(
-        api_key_user: APIKeyUser = Depends(require_api_key_auth)
+        api_key_user: APIKeyUser = Depends(require_api_key_auth),
     ) -> APIKeyUser:
         if not api_key_user.has_any_permission(permissions):
             perms_str = "', '".join(permissions)
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail=f"One of these permissions required: '{perms_str}'"
+                detail=f"One of these permissions required: '{perms_str}'",
             )
         return api_key_user
+
     return permission_dependency
 
 
 def require_all_permissions(permissions: List[str]):
     """Dependency factory to require all of the specified permissions."""
+
     async def permission_dependency(
-        api_key_user: APIKeyUser = Depends(require_api_key_auth)
+        api_key_user: APIKeyUser = Depends(require_api_key_auth),
     ) -> APIKeyUser:
         if not api_key_user.has_all_permissions(permissions):
             perms_str = "', '".join(permissions)
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
-                detail=f"All of these permissions required: '{perms_str}'"
+                detail=f"All of these permissions required: '{perms_str}'",
             )
         return api_key_user
+
     return permission_dependency
 
 

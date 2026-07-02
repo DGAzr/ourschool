@@ -15,6 +15,7 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 """Security utilities."""
+
 import secrets
 from datetime import datetime, timedelta, timezone
 from typing import Optional, Tuple
@@ -39,7 +40,9 @@ def _normalize(secret: str) -> bytes:
 def verify_password(plain_password: str, hashed_password: str) -> bool:
     """Verify a password against a stored bcrypt hash."""
     try:
-        return bcrypt.checkpw(_normalize(plain_password), hashed_password.encode("utf-8"))
+        return bcrypt.checkpw(
+            _normalize(plain_password), hashed_password.encode("utf-8")
+        )
     except (ValueError, TypeError):
         return False
 
@@ -77,9 +80,7 @@ def create_access_token(
 def decode_token(token: str) -> dict:
     """Decode and verify a token, returning the full payload."""
     try:
-        return jwt.decode(
-            token, settings.secret_key, algorithms=[settings.algorithm]
-        )
+        return jwt.decode(token, settings.secret_key, algorithms=[settings.algorithm])
     except JWTError as e:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -105,13 +106,13 @@ def generate_api_key() -> Tuple[str, str]:
     """Generate a new API key and return (full_key, prefix)."""
     # Generate a secure random string
     random_part = secrets.token_urlsafe(32)
-    
+
     # Create the full API key with prefix
     full_key = f"os_{random_part}"
-    
+
     # Extract prefix (first 8 characters)
     prefix = full_key[:8]
-    
+
     return full_key, prefix
 
 

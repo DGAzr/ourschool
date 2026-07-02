@@ -19,12 +19,13 @@
 This module organizes backup-related endpoints into logical sub-modules:
 - database.py: Database backup and restore operations
 - exporters.py: Individual entity export logic
-- importers.py: Individual entity import logic  
+- importers.py: Individual entity import logic
 - shared/: Common utilities (permissions, validation)
 
 The backup router handles complete system backup and restore operations
 for data protection and migration between instances.
 """
+
 from fastapi import APIRouter
 
 from .database import router as database_router

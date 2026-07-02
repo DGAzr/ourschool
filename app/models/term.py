@@ -15,6 +15,7 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 """Term models."""
+
 import uuid
 from datetime import date, datetime, timezone
 
@@ -52,7 +53,9 @@ class Term(Base):
     )
 
     id = Column(Integer, primary_key=True, index=True)
-    external_id = Column(String(36), unique=True, nullable=False, default=lambda: str(uuid.uuid4()))
+    external_id = Column(
+        String(36), unique=True, nullable=False, default=lambda: str(uuid.uuid4())
+    )
     name = Column(String, nullable=False)  # e.g., "Fall 2024", "Spring Semester", "Q1"
     description = Column(Text)  # Optional description
 
@@ -72,9 +75,17 @@ class Term(Base):
     term_order = Column(Integer, default=0)  # Order within academic year
 
     # Audit fields
-    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
-    updated_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
-    created_by = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    created_at = Column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )
+    updated_at = Column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+    )
+    created_by = Column(
+        Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
 
     # Relationships
     creator = relationship("User", foreign_keys=[created_by])
@@ -128,7 +139,9 @@ class TermSubject(Base):
     teacher_notes = Column(Text)  # Teacher notes for this subject this term
 
     # Audit fields
-    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+    created_at = Column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )
 
     # Relationships
     term = relationship("Term", back_populates="term_subjects")
@@ -154,7 +167,9 @@ class StudentTermGrade(Base):
     )
 
     id = Column(Integer, primary_key=True, index=True)
-    student_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    student_id = Column(
+        Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )
     term_subject_id = Column(Integer, ForeignKey("term_subjects.id"), nullable=False)
 
     # Current term performance
@@ -188,9 +203,17 @@ class StudentTermGrade(Base):
     strengths = Column(Text)
 
     # Audit fields
-    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
-    updated_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
-    last_calculated = Column(DateTime(timezone=True))  # When grades were last recalculated
+    created_at = Column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )
+    updated_at = Column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+    )
+    last_calculated = Column(
+        DateTime(timezone=True)
+    )  # When grades were last recalculated
 
     # Relationships
     student = relationship("User", foreign_keys=[student_id])
@@ -253,8 +276,12 @@ class GradeHistory(Base):
     change_reason = Column(Text)  # Why the change was made
 
     # Who and when
-    changed_by = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
-    changed_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
+    changed_by = Column(
+        Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    changed_at = Column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )
 
     # Assignment context (if the change was due to a specific assignment)
     assignment_id = Column(Integer, ForeignKey("student_assignments.id"))

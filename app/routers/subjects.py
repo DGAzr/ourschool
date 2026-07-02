@@ -15,6 +15,7 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 """Subject management API."""
+
 from typing import Annotated, List
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -30,9 +31,13 @@ from app.schemas.subject import Subject as SubjectSchema, SubjectCreate, Subject
 router = APIRouter()
 
 
-def _require_admin(current_user: Annotated[User, Depends(get_current_active_user)]) -> User:
+def _require_admin(
+    current_user: Annotated[User, Depends(get_current_active_user)],
+) -> User:
     if current_user.role != UserRole.ADMIN:
-        raise HTTPException(status_code=403, detail="Only administrators can perform this action")
+        raise HTTPException(
+            status_code=403, detail="Only administrators can perform this action"
+        )
     return current_user
 
 

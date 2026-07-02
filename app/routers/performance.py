@@ -15,6 +15,7 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 """Performance monitoring APIs."""
+
 from typing import Annotated, Dict, Any
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -39,9 +40,10 @@ def get_performance_statistics(
     """Get current performance statistics (admin only)."""
     if current_user.role != UserRole.ADMIN:
         raise HTTPException(
-            status_code=403, detail="Only administrators can access performance statistics"
+            status_code=403,
+            detail="Only administrators can access performance statistics",
         )
-    
+
     return get_performance_stats()
 
 
@@ -52,9 +54,10 @@ def reset_performance_statistics(
     """Reset performance statistics (admin only)."""
     if current_user.role != UserRole.ADMIN:
         raise HTTPException(
-            status_code=403, detail="Only administrators can reset performance statistics"
+            status_code=403,
+            detail="Only administrators can reset performance statistics",
         )
-    
+
     reset_performance_stats()
     return {"message": "Performance statistics reset successfully"}
 
@@ -68,7 +71,7 @@ def performance_summary(
         raise HTTPException(
             status_code=403, detail="Only administrators can access performance summary"
         )
-    
+
     log_performance_summary()
     return {"message": "Performance summary logged"}
 
@@ -83,7 +86,7 @@ def get_slow_operations(
         raise HTTPException(
             status_code=403, detail="Only administrators can access performance data"
         )
-    
+
     return find_slow_operations(min_avg_time)
 
 
@@ -97,5 +100,5 @@ def get_query_heavy_operations(
         raise HTTPException(
             status_code=403, detail="Only administrators can access performance data"
         )
-    
+
     return find_query_heavy_operations(min_avg_time)

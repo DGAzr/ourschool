@@ -15,6 +15,7 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 """CRUD operations for system settings."""
+
 import json
 from typing import Dict, List, Optional, Any, Tuple
 from sqlalchemy.orm import Session
@@ -24,23 +25,27 @@ from app.schemas.settings import SystemSettingCreate, SystemSettingUpdate
 
 def get_setting(db: Session, setting_key: str) -> Optional[SystemSettings]:
     """Get a single system setting by key."""
-    return db.query(SystemSettings).filter(
-        SystemSettings.setting_key == setting_key,
-        SystemSettings.is_active == True
-    ).first()
+    return (
+        db.query(SystemSettings)
+        .filter(SystemSettings.setting_key == setting_key, SystemSettings.is_active)
+        .first()
+    )
 
 
 def get_all_settings(db: Session) -> List[SystemSettings]:
     """Get all active system settings."""
-    return db.query(SystemSettings).filter(SystemSettings.is_active == True).all()
+    return db.query(SystemSettings).filter(SystemSettings.is_active).all()
 
 
 def get_settings_by_prefix(db: Session, key_prefix: str) -> List[SystemSettings]:
     """Get all settings with a specific key prefix (e.g., 'attendance.')."""
-    return db.query(SystemSettings).filter(
-        SystemSettings.setting_key.like(f"{key_prefix}%"),
-        SystemSettings.is_active == True
-    ).all()
+    return (
+        db.query(SystemSettings)
+        .filter(
+            SystemSettings.setting_key.like(f"{key_prefix}%"), SystemSettings.is_active
+        )
+        .all()
+    )
 
 
 def create_setting(db: Session, setting: SystemSettingCreate) -> SystemSettings:
@@ -52,22 +57,30 @@ def create_setting(db: Session, setting: SystemSettingCreate) -> SystemSettings:
     return db_setting
 
 
-def update_setting(db: Session, setting_key: str, setting_update: SystemSettingUpdate) -> Optional[SystemSettings]:
+def update_setting(
+    db: Session, setting_key: str, setting_update: SystemSettingUpdate
+) -> Optional[SystemSettings]:
     """Update an existing system setting."""
     db_setting = get_setting(db, setting_key)
     if not db_setting:
         return None
-    
+
     update_data = setting_update.dict(exclude_unset=True)
     for field, value in update_data.items():
         setattr(db_setting, field, value)
-    
+
     db.commit()
     db.refresh(db_setting)
     return db_setting
 
 
-def upsert_setting(db: Session, setting_key: str, value: str, setting_type: str, description: str = None) -> SystemSettings:
+def upsert_setting(
+    db: Session,
+    setting_key: str,
+    value: str,
+    setting_type: str,
+    description: str = None,
+) -> SystemSettings:
     """Create or update a setting."""
     existing = get_setting(db, setting_key)
     if existing:
@@ -82,7 +95,7 @@ def upsert_setting(db: Session, setting_key: str, value: str, setting_type: str,
             setting_key=setting_key,
             setting_value=value,
             setting_type=setting_type,
-            description=description
+            description=description,
         )
         db.add(new_setting)
         db.commit()
@@ -90,18 +103,20 @@ def upsert_setting(db: Session, setting_key: str, value: str, setting_type: str,
         return new_setting
 
 
-def get_setting_value(db: Session, setting_key: str, default_value: Any = None, value_type: type = str) -> Any:
+def get_setting_value(
+    db: Session, setting_key: str, default_value: Any = None, value_type: type = str
+) -> Any:
     """Get a setting value with type conversion and default fallback."""
     setting = get_setting(db, setting_key)
     if not setting:
         return default_value
-    
+
     try:
-        if value_type == bool:
-            return setting.setting_value.lower() in ('true', '1', 'yes', 'on')
-        elif value_type == int:
+        if value_type is bool:
+            return setting.setting_value.lower() in ("true", "1", "yes", "on")
+        elif value_type is int:
             return int(setting.setting_value)
-        elif value_type == float:
+        elif value_type is float:
             return float(setting.setting_value)
         else:
             return setting.setting_value
@@ -134,10 +149,18 @@ def get_assignment_type_weights(db: Session) -> Dict[str, float]:
 
 
 DEFAULT_GRADE_SCALE: List[Tuple[str, int]] = [
-    ("A+", 97), ("A", 93), ("A-", 90),
-    ("B+", 87), ("B", 83), ("B-", 80),
-    ("C+", 77), ("C", 73), ("C-", 70),
-    ("D+", 67), ("D", 63), ("D-", 60),
+    ("A+", 97),
+    ("A", 93),
+    ("A-", 90),
+    ("B+", 87),
+    ("B", 83),
+    ("B-", 80),
+    ("C+", 77),
+    ("C", 73),
+    ("C-", 70),
+    ("D+", 67),
+    ("D", 63),
+    ("D-", 60),
     ("F", 0),
 ]
 
@@ -164,15 +187,15 @@ def initialize_default_settings(db: Session) -> None:
             "setting_key": "attendance.required_days_of_instruction",
             "setting_value": "180",
             "setting_type": "integer",
-            "description": "Required number of instructional days per academic year for attendance calculations"
+            "description": "Required number of instructional days per academic year for attendance calculations",
         },
         {
             # Must match the key read by crud.points.is_points_system_enabled
             "setting_key": "points_system_enabled",
             "setting_value": "true",
             "setting_type": "boolean",
-            "description": "Enable or disable the student points system"
-        }
+            "description": "Enable or disable the student points system",
+        },
     ]
 
     for default in defaults:

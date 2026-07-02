@@ -15,6 +15,7 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 """User schemas."""
+
 from datetime import date, datetime
 from typing import Optional
 

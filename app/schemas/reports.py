@@ -15,6 +15,7 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 """Report schemas."""
+
 from datetime import date
 from typing import List, Optional
 
@@ -44,14 +45,14 @@ class TermGrade(BaseModel):
 
 class TrendDataPoint(BaseModel):
     """Schema for trend data point."""
-    
+
     date: str  # ISO date string
     average_grade: float
     assignments_count: int
-    
+
     class Config:
         """Pydantic configuration."""
-        
+
         orm_mode = True
 
 
@@ -228,7 +229,7 @@ class StudentAttendanceReport(BaseModel):
 
 class BulkAttendanceReportOverallStats(BaseModel):
     """Schema for bulk attendance report overall statistics."""
-    
+
     total_students: int
     average_attendance_rate: float
     total_present: int

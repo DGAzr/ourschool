@@ -15,12 +15,14 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 """System settings schemas."""
+
 from typing import List, Optional
 from pydantic import BaseModel
 
 
 class SystemSettingBase(BaseModel):
     """Base schema for system settings."""
+
     setting_key: str
     setting_value: str
     setting_type: str  # 'boolean', 'string', 'integer', 'float', 'json'
@@ -30,11 +32,13 @@ class SystemSettingBase(BaseModel):
 
 class SystemSettingCreate(SystemSettingBase):
     """Schema for creating system settings."""
+
     pass
 
 
 class SystemSettingUpdate(BaseModel):
     """Schema for updating system settings."""
+
     setting_value: str
     description: Optional[str] = None
     is_active: Optional[bool] = None
@@ -42,14 +46,16 @@ class SystemSettingUpdate(BaseModel):
 
 class SystemSetting(SystemSettingBase):
     """Schema for system settings with all fields."""
+
     id: int
-    
+
     class Config:
         orm_mode = True
 
 
 class AttendanceSettings(BaseModel):
     """Schema for attendance-specific settings."""
+
     required_days_of_instruction: int
     skip_weekends: bool = True
     count_excused: bool = True
@@ -57,21 +63,25 @@ class AttendanceSettings(BaseModel):
 
 class GradeBand(BaseModel):
     """A single letter-grade threshold band."""
+
     letter: str
     min_percent: int
 
 
 class GradingSettings(BaseModel):
     """Schema for grading-specific settings."""
+
     scale: List[GradeBand]
 
 
 class GradeScaleUpdate(BaseModel):
     """Payload for updating the grading scale."""
+
     scale: List[GradeBand]
 
 
 class SystemSettingsGroup(BaseModel):
     """Schema for grouped system settings."""
+
     attendance: AttendanceSettings
     grading: GradingSettings

@@ -15,6 +15,7 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 """Application configuration."""
+
 from typing import Optional
 from pydantic import Field, computed_field, field_validator
 from pydantic_settings import BaseSettings
@@ -29,7 +30,7 @@ class Settings(BaseSettings):
     database_name: str = Field(default="ourschool", env="DATABASE_NAME")
     database_user: str = Field(default="ourschool", env="DATABASE_USER")
     database_password: str = Field(default="ourschool", env="DATABASE_PASSWORD")
-    
+
     # Legacy support - if DATABASE_URL is provided, it takes precedence
     database_url: Optional[str] = Field(default=None, env="DATABASE_URL")
 
@@ -40,9 +41,7 @@ class Settings(BaseSettings):
         default=30, env="ACCESS_TOKEN_EXPIRE_MINUTES"
     )
     # Absolute maximum lifetime a session may be extended to via /extend-session.
-    max_session_age_minutes: int = Field(
-        default=720, env="MAX_SESSION_AGE_MINUTES"
-    )
+    max_session_age_minutes: int = Field(default=720, env="MAX_SESSION_AGE_MINUTES")
 
     # Request hardening
     # Maximum accepted request body size in bytes (default 10 MiB). Protects
@@ -67,8 +66,7 @@ class Settings(BaseSettings):
 
     # CORS configuration
     allowed_origins: str = Field(
-        default="http://localhost:5173,http://127.0.0.1:5173",
-        env="ALLOWED_ORIGINS"
+        default="http://localhost:5173,http://127.0.0.1:5173", env="ALLOWED_ORIGINS"
     )
 
     @computed_field
@@ -77,13 +75,13 @@ class Settings(BaseSettings):
         """Get the effective database URL, building from components if needed."""
         if self.database_url:
             return self.database_url
-        
+
         # URL-encode the password and database name to handle special characters
         from urllib.parse import quote_plus
-        
+
         encoded_password = quote_plus(self.database_password)
         encoded_db_name = quote_plus(self.database_name)
-        
+
         return (
             f"postgresql+psycopg://{self.database_user}:{encoded_password}"
             f"@{self.database_host}:{self.database_port}/{encoded_db_name}"
@@ -107,12 +105,15 @@ class Settings(BaseSettings):
                 )
         return origins
 
-    @field_validator('secret_key')
+    @field_validator("secret_key")
     @classmethod
     def validate_secret_key(cls, v: str) -> str:
         """Reject placeholder/weak signing keys so the app fails fast."""
         weak_markers = (
-            "change-this", "change-me", "your-secret-key", "changeme",
+            "change-this",
+            "change-me",
+            "your-secret-key",
+            "changeme",
         )
         lowered = v.lower()
         if any(marker in lowered for marker in weak_markers):
@@ -124,24 +125,24 @@ class Settings(BaseSettings):
             raise ValueError("SECRET_KEY must be at least 16 characters long.")
         return v
 
-    @field_validator('log_level')
+    @field_validator("log_level")
     @classmethod
     def validate_log_level(cls, v: str) -> str:
         """Validate log level."""
-        valid_levels = {'DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL'}
+        valid_levels = {"DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"}
         v_upper = v.upper()
         if v_upper not in valid_levels:
-            raise ValueError(f'log_level must be one of {valid_levels}, got {v}')
+            raise ValueError(f"log_level must be one of {valid_levels}, got {v}")
         return v_upper
 
-    @field_validator('log_format')
+    @field_validator("log_format")
     @classmethod
     def validate_log_format(cls, v: str) -> str:
         """Validate log format."""
-        valid_formats = {'json', 'text'}
+        valid_formats = {"json", "text"}
         v_lower = v.lower()
         if v_lower not in valid_formats:
-            raise ValueError(f'log_format must be one of {valid_formats}, got {v}')
+            raise ValueError(f"log_format must be one of {valid_formats}, got {v}")
         return v_lower
 
     class Config:

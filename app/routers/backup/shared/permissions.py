@@ -15,6 +15,7 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 """Permission checking utilities for backup module."""
+
 from typing import Annotated
 
 from fastapi import Depends, HTTPException
@@ -24,22 +25,21 @@ from app.routers.auth import get_current_active_user
 
 
 def require_admin_for_backup(
-    current_user: Annotated[User, Depends(get_current_active_user)]
+    current_user: Annotated[User, Depends(get_current_active_user)],
 ) -> User:
     """Require admin role for backup operations.
-    
+
     Args:
         current_user: The current authenticated user
-        
+
     Returns:
         The user if they are an admin
-        
+
     Raises:
         HTTPException: If user is not an admin
     """
     if current_user.role != UserRole.ADMIN:
         raise HTTPException(
-            status_code=403, 
-            detail="Only administrators can perform backup operations"
+            status_code=403, detail="Only administrators can perform backup operations"
         )
     return current_user

@@ -15,6 +15,7 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 """Schemas for admin-managed assignment types."""
+
 from datetime import datetime
 from typing import Optional
 

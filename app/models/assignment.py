@@ -15,6 +15,7 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 """Assignment models."""
+
 import uuid
 from datetime import datetime, timezone
 
@@ -47,12 +48,12 @@ class AssignmentTemplate(Base):
 
     __tablename__ = "assignment_templates"
 
-    __table_args__ = (
-        Index("idx_assignment_templates_subject_id", "subject_id"),
-    )
+    __table_args__ = (Index("idx_assignment_templates_subject_id", "subject_id"),)
 
     id = Column(Integer, primary_key=True, index=True)
-    external_id = Column(String(36), unique=True, nullable=False, default=lambda: str(uuid.uuid4()))
+    external_id = Column(
+        String(36), unique=True, nullable=False, default=lambda: str(uuid.uuid4())
+    )
     name = Column(String, nullable=False)
     description = Column(Text)
     instructions = Column(Text)
@@ -84,9 +85,17 @@ class AssignmentTemplate(Base):
     export_data = Column(Text)  # JSON string for export/import
 
     # Audit fields
-    created_by = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
-    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
-    updated_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
+    created_by = Column(
+        Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    created_at = Column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )
+    updated_at = Column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+    )
     is_archived = Column(Boolean, default=False, nullable=False)
 
     # Relationships
@@ -111,8 +120,14 @@ class StudentAssignment(Base):
     __tablename__ = "student_assignments"
 
     __table_args__ = (
-        Index("idx_student_assignments_student_assigned_date", "student_id", "assigned_date"),
-        Index("idx_student_assignments_student_graded_date", "student_id", "graded_date"),
+        Index(
+            "idx_student_assignments_student_assigned_date",
+            "student_id",
+            "assigned_date",
+        ),
+        Index(
+            "idx_student_assignments_student_graded_date", "student_id", "graded_date"
+        ),
         Index("idx_student_assignments_template_id", "template_id"),
         Index("idx_student_assignments_student_id", "student_id"),
     )
@@ -121,10 +136,14 @@ class StudentAssignment(Base):
 
     # References
     template_id = Column(Integer, ForeignKey("assignment_templates.id"), nullable=False)
-    student_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    student_id = Column(
+        Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )
 
     # Assignment details
-    assigned_date = Column(Date, nullable=False, default=lambda: datetime.now(timezone.utc).date())
+    assigned_date = Column(
+        Date, nullable=False, default=lambda: datetime.now(timezone.utc).date()
+    )
     due_date = Column(Date)
     extended_due_date = Column(Date)  # If deadline is extended
 
@@ -159,9 +178,17 @@ class StudentAssignment(Base):
     custom_max_points = Column(Integer)  # Custom point value if different from template
 
     # Audit fields
-    assigned_by = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
-    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
-    updated_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
+    assigned_by = Column(
+        Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    created_at = Column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )
+    updated_at = Column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+    )
 
     # Relationships
     # selectin avoids N+1 when serializing assignment lists / report cards
@@ -178,7 +205,11 @@ class StudentAssignment(Base):
     @property
     def max_points(self) -> int:
         """Get the maximum points for this assignment (custom or from template)."""
-        return self.custom_max_points or (self.template.max_points if self.template else 100) or 100
+        return (
+            self.custom_max_points
+            or (self.template.max_points if self.template else 100)
+            or 100
+        )
 
     def calculate_percentage_grade(self):
         """Calculate and update the percentage grade."""

@@ -15,6 +15,7 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 """Authentication APIs."""
+
 import threading
 import time
 from collections import defaultdict, deque
@@ -177,7 +178,7 @@ async def login_for_access_token(
             "login",
             username=form_data.username,
             success=False,
-            reason="invalid_credentials"
+            reason="invalid_credentials",
         )
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -214,10 +215,7 @@ async def login_for_access_token(
     )
 
     log_authentication_event(
-        "login",
-        user_id=str(user.id),
-        username=user.username,
-        success=True
+        "login", user_id=str(user.id), username=user.username, success=True
     )
 
     return {"access_token": access_token, "token_type": "bearer"}

@@ -20,6 +20,7 @@ The version lives in the repo-root ``VERSION`` file (copied into the Docker
 image next to ``app/``). Everything that needs a version string — the FastAPI
 app, startup logs, release tooling — reads it from here.
 """
+
 from pathlib import Path
 
 _VERSION_FILE = Path(__file__).resolve().parent.parent / "VERSION"
