@@ -39,7 +39,7 @@ import { backupApi, isSystemBackupFile } from '../services/backup'
 import { SystemBackupModal } from '../components/backup/SystemBackupModal'
 import { type Subject } from '../types/subject'
 import { type Term } from '../types/term'
-import { type SystemBackupFile, type SystemBackupImportResult, type User } from '../types'
+import { type SystemBackupFile, type SystemBackupImportResult, type User, WIPE_CONFIRMATION_PHRASE } from '../types'
 import { format, parseISO } from 'date-fns'
 import { type TermCreate } from '../types'
 import {
@@ -205,6 +205,8 @@ const Admin: React.FC = () => {
   const [importOptions, setImportOptions] = useState({ skip_existing_users: true, update_existing_data: false, preserve_ids: false, dry_run: true })
   const [importResult, setImportResult] = useState<SystemBackupImportResult | null>(null)
   const [importError, setImportError] = useState<string | null>(null)
+  const [restoreMode, setRestoreMode] = useState<'merge' | 'wipe'>('merge')
+  const [showWipeConfirm, setShowWipeConfirm] = useState(false)
   const backupFileInputRef = useRef<HTMLInputElement>(null)
 
   const handleBackupFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -227,10 +229,16 @@ const Admin: React.FC = () => {
 
   const performImport = async () => {
     if (!importData) return
+    setShowWipeConfirm(false)
     setImportStep('loading')
     setImportError(null)
+    const wipe = restoreMode === 'wipe'
     try {
-      const result = await backupApi.importSystemBackup({ backup_data: importData, import_options: importOptions })
+      const result = await backupApi.importSystemBackup({
+        backup_data: importData,
+        import_options: { ...importOptions, wipe_before_import: wipe },
+        ...(wipe ? { wipe_confirmation: WIPE_CONFIRMATION_PHRASE } : {}),
+      })
       setImportResult(result)
       setImportStep('result')
     } catch (err) {
@@ -239,11 +247,22 @@ const Admin: React.FC = () => {
     }
   }
 
+  // A real (non-dry-run) wipe import must pass the typed-phrase dialog first.
+  const requestImport = () => {
+    if (restoreMode === 'wipe' && !importOptions.dry_run) {
+      setShowWipeConfirm(true)
+    } else {
+      performImport()
+    }
+  }
+
   const resetImport = () => {
     setImportStep('idle')
     setImportData(null)
     setImportResult(null)
     setImportError(null)
+    setRestoreMode('merge')
+    setShowWipeConfirm(false)
     if (backupFileInputRef.current) backupFileInputRef.current.value = ''
   }
 
@@ -1782,7 +1801,7 @@ const Admin: React.FC = () => {
             {/* Import */}
             <div className="bg-panel border border-line rounded-card p-5">
               <p className="text-[13.5px] font-semibold text-ink mb-1">Restore from backup</p>
-              <p className="text-[12px] text-muted mb-4">Import a previously exported file. This merges into existing data — export first to be safe.</p>
+              <p className="text-[12px] text-muted mb-4">Import a previously exported file. Choose merge (keeps existing data) or wipe-and-restore (replaces everything). Export first to be safe.</p>
 
               {importStep === 'idle' && (
                 <>
@@ -1809,6 +1828,29 @@ const Admin: React.FC = () => {
                     <span>Backed up {new Date(importData.backup_timestamp).toLocaleDateString()}</span>
                     <span className="col-span-2 text-faint">Created by: {importData.created_by}</span>
                   </div>
+                  {/* Restore mode */}
+                  <div>
+                    <p className="text-[11px] font-semibold text-faint uppercase tracking-wide mb-1.5">Restore mode</p>
+                    <SegmentedControl
+                      segments={[
+                        { value: 'merge', label: 'Merge into existing data' },
+                        { value: 'wipe', label: 'Wipe and restore' },
+                      ]}
+                      value={restoreMode}
+                      onChange={setRestoreMode}
+                    />
+                    {restoreMode === 'wipe' && (
+                      <div className="mt-2 flex items-start gap-2.5 rounded-card border border-danger-line bg-danger-soft px-3.5 py-3 text-[12.5px] leading-snug text-ink-2">
+                        <AlertTriangle size={14} className="flex-shrink-0 mt-px" />
+                        <span>
+                          Deletes <strong>all</strong> students, subjects, terms, assignments,
+                          grades, attendance, journal entries, points, and settings before
+                          restoring the backup. Your admin account and password are preserved;
+                          all other users will need password resets.
+                        </span>
+                      </div>
+                    )}
+                  </div>
                   {/* Options */}
                   <div className="space-y-2">
                     {([
@@ -1829,8 +1871,17 @@ const Admin: React.FC = () => {
                   </div>
                   <div className="flex gap-2">
                     <button onClick={resetImport} className="h-[34px] px-4 rounded-field text-[13px] font-medium border border-line text-muted hover:bg-panel-2 transition-colors">Cancel</button>
-                    <button onClick={performImport} className="h-[34px] px-4 rounded-field text-[13px] font-medium bg-btn-primary-bg text-btn-primary-fg hover:opacity-90 transition-opacity">
-                      {importOptions.dry_run ? 'Preview import' : 'Import data'}
+                    <button
+                      onClick={requestImport}
+                      className={`h-[34px] px-4 rounded-field text-[13px] font-medium hover:opacity-90 transition-opacity ${
+                        restoreMode === 'wipe' && !importOptions.dry_run
+                          ? 'bg-neg-fg text-white'
+                          : 'bg-btn-primary-bg text-btn-primary-fg'
+                      }`}
+                    >
+                      {importOptions.dry_run
+                        ? 'Preview import'
+                        : restoreMode === 'wipe' ? 'Wipe and restore' : 'Import data'}
                     </button>
                   </div>
                 </div>
@@ -1856,6 +1907,13 @@ const Admin: React.FC = () => {
                         <CheckCircle2 size={15} className="text-pos-fg" />
                         {importResult?.dry_run ? 'Preview complete' : 'Import successful'}
                       </div>
+                      {importResult && Object.keys(importResult.deleted_counts ?? {}).length > 0 && (
+                        <div className="bg-danger-soft border border-danger-line rounded-card p-3 text-[12px] text-ink-2 grid grid-cols-2 gap-1 mb-3">
+                          {Object.entries(importResult.deleted_counts).map(([k, v]) => (
+                            <div key={k}>{importResult.dry_run ? 'Would delete' : 'Deleted'} {k}: {v as number}</div>
+                          ))}
+                        </div>
+                      )}
                       {importResult?.imported_counts && (
                         <div className="bg-panel-2 border border-line rounded-card p-3 text-[12px] text-muted grid grid-cols-2 gap-1 mb-3">
                           {Object.entries(importResult.imported_counts).map(([k, v]) => (
@@ -1896,6 +1954,26 @@ const Admin: React.FC = () => {
               onExport={() => backupApi.exportSystemBackup()}
             />
           )}
+
+          {/* Typed confirmation gate for a real wipe-and-restore */}
+          <ConfirmDialog
+            isOpen={showWipeConfirm}
+            onClose={() => setShowWipeConfirm(false)}
+            onConfirm={performImport}
+            tone="danger"
+            title="Wipe and restore"
+            message={
+              <>
+                This permanently deletes <strong>all current data</strong> and replaces it
+                with the backup from{' '}
+                <strong>{importData ? new Date(importData.backup_timestamp).toLocaleDateString() : ''}</strong>.
+                Anything created since that backup will be lost.
+              </>
+            }
+            note="Your admin account and password are preserved. All other users will need password resets. This cannot be undone."
+            confirmText={WIPE_CONFIRMATION_PHRASE}
+            confirmLabel="Wipe and Restore"
+          />
         </div>
       )
 

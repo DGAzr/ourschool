@@ -38,7 +38,6 @@ const Profile = lazy(() => import('./pages/Profile'))
 const Reports = lazy(() => import('./pages/Reports'))
 const Journal = lazy(() => import('./pages/Journal'))
 const Admin = lazy(() => import('./pages/Admin'))
-const AdminBackup = lazy(() => import('./pages/AdminBackup'))
 const AdminSettings = lazy(() => import('./pages/AdminSettings'))
 const MyPoints = lazy(() => import('./pages/MyPoints'))
 const ChangePasswordRequired = lazy(() => import('./pages/ChangePasswordRequired'))
@@ -102,7 +101,6 @@ function AppContent() {
             <Route path="journal" element={<Journal />} />
             <Route path="profile" element={<Profile />} />
             <Route path="admin" element={<Admin />} />
-            <Route path="admin/backup" element={<AdminBackup />} />
             <Route path="admin/settings" element={<AdminSettings />} />
             <Route path="my-points" element={<MyPoints />} />
           </Route>
