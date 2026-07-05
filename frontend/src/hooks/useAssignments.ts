@@ -38,60 +38,65 @@ export const useAssignments = ({ isAdmin, adminViewMode, selectedSubject, includ
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
 
-  const fetchData = useCallback(async () => {
-    try {
-      setLoading(true)
-      
-      if (isAdmin) {
-        // Admin sees assignment templates and submitted assignments
-        const [templatesData, subjectsData, studentsData] = await Promise.all([
+  // No synchronous spinner toggle here: loading starts true for the initial
+  // load, and user-triggered refreshes go through `refetch` below. State is
+  // only set from promise callbacks, never synchronously.
+  const fetchData = useCallback(() => {
+    const load = isAdmin
+      ? // Admin sees assignment templates and submitted assignments
+        Promise.all([
           assignmentsApi.getAll({
             subject_id: selectedSubject || undefined,
             include_archived: includeArchived || undefined,
           }),
           subjectsApi.getAll(),
-          assignmentsApi.getStudents()
-        ])
-
-        setTemplates(templatesData || [])
-        setSubjects(subjectsData || [])
-        setStudents(studentsData || [])
-
-        // If we're in grading mode, fetch all assignments for admin control
-        if (adminViewMode === 'grading') {
-          try {
-            const allAssignmentsData = await assignmentsApi.getAllAssignmentsForGrading({
-              subject_id: selectedSubject || undefined
-            })
+          assignmentsApi.getStudents(),
+          // In grading mode, also fetch all assignments for admin control;
+          // a failure here falls back to an empty list without failing the load
+          adminViewMode === 'grading'
+            ? assignmentsApi
+                .getAllAssignmentsForGrading({ subject_id: selectedSubject || undefined })
+                .catch(() => [] as StudentAssignment[])
+            : Promise.resolve(null),
+        ]).then(([templatesData, subjectsData, studentsData, allAssignmentsData]) => {
+          setTemplates(templatesData || [])
+          setSubjects(subjectsData || [])
+          setStudents(studentsData || [])
+          if (adminViewMode === 'grading') {
             setAllAssignments(allAssignmentsData || [])
-          } catch (err) {
-            setAllAssignments([])
           }
-        }
-      } else {
-        // Students see their assigned assignments
-        const assignmentsData = await assignmentsApi.getMyAssignments({
-          subject_id: selectedSubject || undefined
+          setError(null)
         })
-        setStudentAssignments(assignmentsData || [])
+      : // Students see their assigned assignments
+        Promise.all([
+          assignmentsApi.getMyAssignments({ subject_id: selectedSubject || undefined }),
+          subjectsApi.getAll(),
+        ]).then(([assignmentsData, subjectsData]) => {
+          setStudentAssignments(assignmentsData || [])
+          setSubjects(subjectsData || [])
+          setError(null)
+        })
 
-        const subjectsData = await subjectsApi.getAll()
-        setSubjects(subjectsData || [])
-      }
-      
-      setError(null)
-    } catch (err) {
-      setError('Failed to load assignments. Please check your connection and ensure you are logged in.')
-      
-      // Set empty arrays as fallbacks
-      setTemplates([])
-      setStudentAssignments([])
-      setAllAssignments([])
-      setSubjects([])
-    } finally {
-      setLoading(false)
-    }
+    return load
+      .catch(() => {
+        setError('Failed to load assignments. Please check your connection and ensure you are logged in.')
+
+        // Set empty arrays as fallbacks
+        setTemplates([])
+        setStudentAssignments([])
+        setAllAssignments([])
+        setSubjects([])
+      })
+      .finally(() => {
+        setLoading(false)
+      })
   }, [isAdmin, selectedSubject, adminViewMode, includeArchived])
+
+  // User-triggered refresh: shows the loading spinner while refetching.
+  const refetch = useCallback(async () => {
+    setLoading(true)
+    await fetchData()
+  }, [fetchData])
 
   useEffect(() => {
     fetchData()
@@ -106,7 +111,7 @@ export const useAssignments = ({ isAdmin, adminViewMode, selectedSubject, includ
     students,
     loading,
     error,
-    refetch: fetchData,
+    refetch,
     setTemplates,
     setError
   }

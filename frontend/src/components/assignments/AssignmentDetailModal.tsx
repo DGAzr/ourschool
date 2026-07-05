@@ -16,7 +16,7 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-import React, { useState, useEffect, useCallback } from 'react'
+import React, { useState, useEffect } from 'react'
 import {
   FileText,
   Calendar,
@@ -68,36 +68,41 @@ const statusBadge = (status: string) => {
   }
 }
 
-const AssignmentDetailModal: React.FC<AssignmentDetailModalProps> = ({
+// Outer shell remounts the content when the target assignment changes so
+// loading/detail state resets through useState initializers.
+const AssignmentDetailModal: React.FC<AssignmentDetailModalProps> = (props) => (
+  <AssignmentDetailModalContent key={props.assignmentId} {...props} />
+)
+
+const AssignmentDetailModalContent: React.FC<AssignmentDetailModalProps> = ({
   assignmentId,
   studentId,
   isOpen,
   onClose
 }) => {
   const [assignment, setAssignment] = useState<DetailedAssignment | null>(null)
-  const [loading, setLoading] = useState(false)
+  const [loading, setLoading] = useState(isOpen && !!assignmentId)
   const [error, setError] = useState<string | null>(null)
 
-  const fetchAssignmentDetails = useCallback(async () => {
-    try {
-      setLoading(true)
-      setError(null)
-      const data = await assignmentsApi.getStudentAssignment(assignmentId)
-      if (data.template) {
-        setAssignment(data as DetailedAssignment)
-      } else {
-        setError('Assignment template not found')
-      }
-    } catch (err) {
-      setError(getErrorMessage(err, 'Failed to load assignment details'))
-    } finally {
-      setLoading(false)
-    }
-  }, [assignmentId])
-
   useEffect(() => {
-    if (isOpen && assignmentId) fetchAssignmentDetails()
-  }, [isOpen, assignmentId, studentId, fetchAssignmentDetails])
+    if (!isOpen || !assignmentId) return
+    const fetchAssignmentDetails = async () => {
+      try {
+        const data = await assignmentsApi.getStudentAssignment(assignmentId)
+        if (data.template) {
+          setAssignment(data as DetailedAssignment)
+          setError(null)
+        } else {
+          setError('Assignment template not found')
+        }
+      } catch (err) {
+        setError(getErrorMessage(err, 'Failed to load assignment details'))
+      } finally {
+        setLoading(false)
+      }
+    }
+    fetchAssignmentDetails()
+  }, [isOpen, assignmentId, studentId])
 
   const pct = assignment?.percentage_grade
   const pctColor = pct == null ? 'text-muted' : pct >= 90 ? 'text-pos-fg' : pct >= 70 ? 'text-accent' : 'text-neg-fg'

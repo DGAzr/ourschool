@@ -35,7 +35,13 @@ const today = () => new Date().toISOString().split('T')[0]
 const FIELD = 'bg-field-bg border border-field-border rounded-field px-3 py-2 text-[13.5px] text-ink focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent placeholder:text-faintest w-full'
 const LABEL = 'block text-[12px] font-semibold text-muted uppercase tracking-wide mb-1.5'
 
-const QuickAssignModal: React.FC<QuickAssignModalProps> = ({ isOpen, onClose, onSuccess }) => {
+// Outer shell remounts the content per open/close so all form state resets
+// through its useState initializers (no reset-in-effect needed).
+const QuickAssignModal: React.FC<QuickAssignModalProps> = (props) => (
+  <QuickAssignModalContent key={props.isOpen ? 'open' : 'closed'} {...props} />
+)
+
+const QuickAssignModalContent: React.FC<QuickAssignModalProps> = ({ isOpen, onClose, onSuccess }) => {
   const [subjects, setSubjects] = useState<Subject[]>([])
   const [students, setStudents] = useState<User[]>([])
   const [loading, setLoading] = useState(false)
@@ -53,29 +59,23 @@ const QuickAssignModal: React.FC<QuickAssignModalProps> = ({ isOpen, onClose, on
   })
 
   useEffect(() => {
-    if (isOpen) {
-      loadData()
-      setForm({ name: '', subject_id: 0, assignment_type: 'homework', max_points: 100, due_date: '', assigned_date: today() })
-      setSelectedStudents([])
-      setError(null)
+    if (!isOpen) return
+    const loadData = async () => {
+      try {
+        const [subjectsData, studentsData] = await Promise.all([
+          subjectsApi.getAll(),
+          assignmentsApi.getStudents(),
+        ])
+        setSubjects(subjectsData)
+        setStudents(studentsData)
+      } catch {
+        setError('Failed to load form data')
+      } finally {
+        setDataLoading(false)
+      }
     }
+    loadData()
   }, [isOpen])
-
-  const loadData = async () => {
-    try {
-      setDataLoading(true)
-      const [subjectsData, studentsData] = await Promise.all([
-        subjectsApi.getAll(),
-        assignmentsApi.getStudents(),
-      ])
-      setSubjects(subjectsData)
-      setStudents(studentsData)
-    } catch {
-      setError('Failed to load form data')
-    } finally {
-      setDataLoading(false)
-    }
-  }
 
   const toggleStudent = (id: number) => {
     setSelectedStudents(prev => prev.includes(id) ? prev.filter(s => s !== id) : [...prev, id])

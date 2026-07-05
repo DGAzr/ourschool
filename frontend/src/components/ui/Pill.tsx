@@ -17,8 +17,7 @@
  */
 
 import React, { ReactNode } from 'react'
-
-type PillVariant = 'pos' | 'neg' | 'info' | 'sub' | 'exc' | 'ns' | 'accent' | 'neutral'
+import { PillVariant } from './pillVariants'
 
 interface PillProps {
   children: ReactNode
@@ -50,20 +49,3 @@ const Pill: React.FC<PillProps> = ({ children, variant = 'neutral', className = 
 )
 
 export default Pill
-
-/* Convenience helper — maps assignment/attendance statuses to pill variants */
-export function statusToPillVariant(
-  status: string
-): PillVariant {
-  switch (status) {
-    case 'graded':
-    case 'present':    return 'pos'
-    case 'overdue':
-    case 'absent':     return 'neg'
-    case 'in_progress':return 'info'
-    case 'submitted':  return 'sub'
-    case 'excused':    return 'exc'
-    case 'not_started':return 'ns'
-    default:           return 'neutral'
-  }
-}

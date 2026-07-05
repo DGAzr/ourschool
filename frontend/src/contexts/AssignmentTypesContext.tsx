@@ -16,22 +16,10 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-import React, { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
-import { assignmentTypesApi } from '../services/assignmentTypes'
+import { createContext, useContext } from 'react'
 import { type AssignmentTypeConfig } from '../types/assignment'
-import { useAuth } from './AuthContext'
 
-/** Default icon name used when a type has no configured icon. */
-const DEFAULT_TYPE_ICON = 'clipboard-check'
-
-const prettifyKey = (key: string) =>
-  key
-    .split(/[_\s-]+/)
-    .filter(Boolean)
-    .map(w => w.charAt(0).toUpperCase() + w.slice(1))
-    .join(' ')
-
-interface AssignmentTypesContextValue {
+export interface AssignmentTypesContextValue {
   types: AssignmentTypeConfig[]
   byKey: Record<string, AssignmentTypeConfig>
   /** Display name for a type key, falling back to a prettified key. */
@@ -44,47 +32,8 @@ interface AssignmentTypesContextValue {
   refresh: () => Promise<void>
 }
 
-const AssignmentTypesContext = createContext<AssignmentTypesContextValue | undefined>(undefined)
-
-export const AssignmentTypesProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
-  const { user } = useAuth()
-  const [types, setTypes] = useState<AssignmentTypeConfig[]>([])
-
-  const refresh = useCallback(async () => {
-    try {
-      const data = await assignmentTypesApi.getAll()
-      setTypes(data)
-    } catch {
-      /* leave the last-known list in place; consumers fall back gracefully */
-    }
-  }, [])
-
-  // Load (and reload) whenever the authenticated user changes.
-  useEffect(() => {
-    if (user) refresh()
-    else setTypes([])
-  }, [user, refresh])
-
-  const byKey = useMemo(
-    () => Object.fromEntries(types.map(t => [t.key, t])) as Record<string, AssignmentTypeConfig>,
-    [types],
-  )
-
-  const value = useMemo<AssignmentTypesContextValue>(() => ({
-    types,
-    byKey,
-    getTypeLabel: (key) => (key ? byKey[key]?.name ?? prettifyKey(key) : ''),
-    getTypeIcon: (key) => (key ? (byKey[key]?.icon ?? DEFAULT_TYPE_ICON) : DEFAULT_TYPE_ICON),
-    getTypeColor: (key) => (key ? byKey[key]?.color : undefined),
-    refresh,
-  }), [types, byKey, refresh])
-
-  return (
-    <AssignmentTypesContext.Provider value={value}>
-      {children}
-    </AssignmentTypesContext.Provider>
-  )
-}
+/** Raw context — consumed by AssignmentTypesProvider; use useAssignmentTypes() elsewhere. */
+export const AssignmentTypesContext = createContext<AssignmentTypesContextValue | undefined>(undefined)
 
 export const useAssignmentTypes = (): AssignmentTypesContextValue => {
   const ctx = useContext(AssignmentTypesContext)

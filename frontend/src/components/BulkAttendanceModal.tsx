@@ -37,13 +37,19 @@ const getLocalDateString = () => {
   return `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
 }
 
-const BulkAttendanceModal: React.FC<BulkAttendanceModalProps> = ({
+// Outer shell remounts the content per open/close so all form state resets
+// through its useState initializers (no reset-in-effect needed).
+const BulkAttendanceModal: React.FC<BulkAttendanceModalProps> = (props) => (
+  <BulkAttendanceModalContent key={props.isOpen ? 'open' : 'closed'} {...props} />
+)
+
+const BulkAttendanceModalContent: React.FC<BulkAttendanceModalProps> = ({
   isOpen,
   onClose,
   onSuccess
 }) => {
   const [students, setStudents] = useState<User[]>([])
-  const [loading, setLoading] = useState(false)
+  const [loading, setLoading] = useState(isOpen)
   const [error, setError] = useState<string | null>(null)
   const [selectedStudents, setSelectedStudents] = useState<number[]>([])
 
@@ -58,26 +64,20 @@ const BulkAttendanceModal: React.FC<BulkAttendanceModalProps> = ({
   })
 
   useEffect(() => {
-    if (isOpen) {
-      fetchStudents()
-      setBulkRecord({ date: getLocalDateString(), status: 'present', notes: '' })
-      setSelectedStudents([])
-      setError(null)
+    if (!isOpen) return
+    const fetchStudents = async () => {
+      try {
+        const data = await attendanceApi.getStudents()
+        setStudents(data)
+        setSelectedStudents(data.map((s: User) => s.id))
+      } catch {
+        setError('Failed to load students')
+      } finally {
+        setLoading(false)
+      }
     }
+    fetchStudents()
   }, [isOpen])
-
-  const fetchStudents = async () => {
-    try {
-      setLoading(true)
-      const data = await attendanceApi.getStudents()
-      setStudents(data)
-      setSelectedStudents(data.map((s: User) => s.id))
-    } catch {
-      setError('Failed to load students')
-    } finally {
-      setLoading(false)
-    }
-  }
 
   const toggleStudent = (id: number) => {
     setSelectedStudents(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id])

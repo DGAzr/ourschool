@@ -18,23 +18,11 @@
 
 import { createContext, useContext } from 'react'
 
-export type ThemeMode = 'light' | 'dark' | 'system'
-
-export interface ThemeContextType {
-  theme: ThemeMode
-  effectiveTheme: 'light' | 'dark'
-  setTheme: (theme: ThemeMode) => void
-  toggleTheme: () => void
-  systemPrefersDark: boolean
+export interface ToastContextValue {
+  toast: (message: string, variant?: 'default' | 'danger') => void
 }
 
-/** Raw context — consumed by ThemeProvider; use useTheme() everywhere else. */
-export const ThemeContext = createContext<ThemeContextType | undefined>(undefined)
+/** Raw context — consumed by ToastProvider; use useToast() everywhere else. */
+export const ToastContext = createContext<ToastContextValue>({ toast: () => {} })
 
-export const useTheme = () => {
-  const context = useContext(ThemeContext)
-  if (context === undefined) {
-    throw new Error('useTheme must be used within a ThemeProvider')
-  }
-  return context
-}
+export const useToast = () => useContext(ToastContext)

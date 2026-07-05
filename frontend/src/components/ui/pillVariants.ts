@@ -16,25 +16,21 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-import { createContext, useContext } from 'react'
+export type PillVariant = 'pos' | 'neg' | 'info' | 'sub' | 'exc' | 'ns' | 'accent' | 'neutral'
 
-export type ThemeMode = 'light' | 'dark' | 'system'
-
-export interface ThemeContextType {
-  theme: ThemeMode
-  effectiveTheme: 'light' | 'dark'
-  setTheme: (theme: ThemeMode) => void
-  toggleTheme: () => void
-  systemPrefersDark: boolean
-}
-
-/** Raw context — consumed by ThemeProvider; use useTheme() everywhere else. */
-export const ThemeContext = createContext<ThemeContextType | undefined>(undefined)
-
-export const useTheme = () => {
-  const context = useContext(ThemeContext)
-  if (context === undefined) {
-    throw new Error('useTheme must be used within a ThemeProvider')
+/* Convenience helper — maps assignment/attendance statuses to pill variants */
+export function statusToPillVariant(
+  status: string
+): PillVariant {
+  switch (status) {
+    case 'graded':
+    case 'present':    return 'pos'
+    case 'overdue':
+    case 'absent':     return 'neg'
+    case 'in_progress':return 'info'
+    case 'submitted':  return 'sub'
+    case 'excused':    return 'exc'
+    case 'not_started':return 'ns'
+    default:           return 'neutral'
   }
-  return context
 }

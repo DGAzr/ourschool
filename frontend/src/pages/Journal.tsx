@@ -679,20 +679,24 @@ const Journal: React.FC = () => {
 
   const isAdmin = user?.role === 'admin'
 
-  const fetchEntries = useCallback(async (studentId?: number | null) => {
-    try {
-      setLoading(true)
-      setError(null)
-      // Admin always fetches all entries so sidebar counts remain accurate
-      const raw = await journalApi.getAll(isAdmin ? undefined : (studentId ?? undefined))
-      const data: JournalEntryWithAuthor[] = Array.isArray(raw) ? raw : []
-      setEntries(data)
-    } catch (err) {
-      setError(`Failed to load journal entries: ${getErrorMessage(err)}`)
-      setEntries([])
-    } finally {
-      setLoading(false)
-    }
+  // No synchronous setState here: this runs from the mount effect, and the
+  // set-state-in-effect lint rule requires state updates to happen inside the
+  // promise callbacks. `loading` starts true.
+  const fetchEntries = useCallback((studentId?: number | null) => {
+    // Admin always fetches all entries so sidebar counts remain accurate
+    journalApi.getAll(isAdmin ? undefined : (studentId ?? undefined))
+      .then(raw => {
+        const data: JournalEntryWithAuthor[] = Array.isArray(raw) ? raw : []
+        setError(null)
+        setEntries(data)
+      })
+      .catch(err => {
+        setError(`Failed to load journal entries: ${getErrorMessage(err)}`)
+        setEntries([])
+      })
+      .finally(() => {
+        setLoading(false)
+      })
   }, [isAdmin])
 
   // Effect event: reads the latest selectedStudentId without making it a

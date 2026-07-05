@@ -21,7 +21,8 @@ import { Outlet, Link, useNavigate, useLocation } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { useTheme } from '../contexts/ThemeContext'
 import PointsDisplay from './PointsDisplay'
-import {
+import { User } from '../types'
+import { type LucideIcon,
   Home,
   Calendar,
   ClipboardList,
@@ -71,6 +72,107 @@ const ThemeCycler: React.FC = () => {
   )
 }
 
+interface NavItem {
+  name: string
+  href: string
+  icon: LucideIcon
+}
+
+interface SidebarContentProps {
+  navigation: NavItem[]
+  pathname: string
+  isAdmin: boolean
+  initials: string
+  user: User | null
+  onNavigate: () => void
+  onLogout: () => void
+}
+
+const SidebarContent: React.FC<SidebarContentProps> = ({
+  navigation,
+  pathname,
+  isAdmin,
+  initials,
+  user,
+  onNavigate,
+  onLogout,
+}) => (
+  <div className="flex flex-col h-full">
+    {/* Brand */}
+    <div className="h-14 px-5 flex items-center border-b border-line flex-shrink-0">
+      <OurSchoolMark />
+    </div>
+
+    {/* Nav */}
+    <nav className="flex-1 py-3 overflow-y-auto">
+      {navigation.map((item) => {
+        const Icon = item.icon
+        const isActive =
+          item.href === '/'
+            ? pathname === '/'
+            : pathname.startsWith(item.href)
+        return (
+          <Link
+            key={item.name}
+            to={item.href}
+            onClick={onNavigate}
+            className={`relative flex items-center gap-3 mx-2 px-3 py-2 rounded-[9px] text-[13.5px] font-medium transition-colors duration-150 ${
+              isActive
+                ? 'bg-nav-active text-ink'
+                : 'text-muted hover:text-ink hover:bg-nav-active'
+            }`}
+          >
+            {isActive && (
+              <span
+                className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-5 rounded-r-full"
+                style={{ background: 'var(--accent)' }}
+              />
+            )}
+            <Icon
+              size={16}
+              className={isActive ? 'text-accent' : 'text-faint'}
+            />
+            {item.name}
+          </Link>
+        )
+      })}
+    </nav>
+
+    {/* User chip */}
+    <div className="px-3 py-3 border-t border-line flex-shrink-0 space-y-1">
+      {!isAdmin && (
+        <div className="px-2 pb-1">
+          <PointsDisplay compact />
+        </div>
+      )}
+      <div className="flex items-center gap-2 px-2 py-1.5">
+        <Link to="/profile" onClick={onNavigate} className="flex items-center gap-2 flex-1 min-w-0 group">
+          <div className="w-7 h-7 rounded-full bg-track flex items-center justify-center flex-shrink-0">
+            <span className="text-[11px] font-semibold text-ink-2 font-mono">{initials}</span>
+          </div>
+          <div className="min-w-0">
+            <p className="text-[13px] font-medium text-ink truncate leading-tight group-hover:text-accent transition-colors">
+              {user?.first_name} {user?.last_name}
+            </p>
+            <p className="text-[11px] text-faint leading-tight">
+              {isAdmin ? 'Teacher' : 'Student'}
+            </p>
+          </div>
+        </Link>
+        <ThemeCycler />
+        <button
+          onClick={onLogout}
+          title="Sign out"
+          aria-label="Sign out"
+          className="w-8 h-8 flex items-center justify-center rounded-field text-muted hover:text-danger hover:bg-neg-bg transition-colors duration-150"
+        >
+          <LogOut size={15} />
+        </button>
+      </div>
+    </div>
+  </div>
+)
+
 const Layout: React.FC = () => {
   const { user, logout } = useAuth()
   const navigate = useNavigate()
@@ -106,82 +208,15 @@ const Layout: React.FC = () => {
 
   const initials = `${user?.first_name?.[0] ?? ''}${user?.last_name?.[0] ?? ''}`
 
-  const SidebarContent = () => (
-    <div className="flex flex-col h-full">
-      {/* Brand */}
-      <div className="h-14 px-5 flex items-center border-b border-line flex-shrink-0">
-        <OurSchoolMark />
-      </div>
-
-      {/* Nav */}
-      <nav className="flex-1 py-3 overflow-y-auto">
-        {navigation.map((item) => {
-          const Icon = item.icon
-          const isActive =
-            item.href === '/'
-              ? location.pathname === '/'
-              : location.pathname.startsWith(item.href)
-          return (
-            <Link
-              key={item.name}
-              to={item.href}
-              onClick={() => setSidebarOpen(false)}
-              className={`relative flex items-center gap-3 mx-2 px-3 py-2 rounded-[9px] text-[13.5px] font-medium transition-colors duration-150 ${
-                isActive
-                  ? 'bg-nav-active text-ink'
-                  : 'text-muted hover:text-ink hover:bg-nav-active'
-              }`}
-            >
-              {isActive && (
-                <span
-                  className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-5 rounded-r-full"
-                  style={{ background: 'var(--accent)' }}
-                />
-              )}
-              <Icon
-                size={16}
-                className={isActive ? 'text-accent' : 'text-faint'}
-              />
-              {item.name}
-            </Link>
-          )
-        })}
-      </nav>
-
-      {/* User chip */}
-      <div className="px-3 py-3 border-t border-line flex-shrink-0 space-y-1">
-        {!isAdmin && (
-          <div className="px-2 pb-1">
-            <PointsDisplay compact />
-          </div>
-        )}
-        <div className="flex items-center gap-2 px-2 py-1.5">
-          <Link to="/profile" onClick={() => setSidebarOpen(false)} className="flex items-center gap-2 flex-1 min-w-0 group">
-            <div className="w-7 h-7 rounded-full bg-track flex items-center justify-center flex-shrink-0">
-              <span className="text-[11px] font-semibold text-ink-2 font-mono">{initials}</span>
-            </div>
-            <div className="min-w-0">
-              <p className="text-[13px] font-medium text-ink truncate leading-tight group-hover:text-accent transition-colors">
-                {user?.first_name} {user?.last_name}
-              </p>
-              <p className="text-[11px] text-faint leading-tight">
-                {isAdmin ? 'Teacher' : 'Student'}
-              </p>
-            </div>
-          </Link>
-          <ThemeCycler />
-          <button
-            onClick={handleLogout}
-            title="Sign out"
-            aria-label="Sign out"
-            className="w-8 h-8 flex items-center justify-center rounded-field text-muted hover:text-danger hover:bg-neg-bg transition-colors duration-150"
-          >
-            <LogOut size={15} />
-          </button>
-        </div>
-      </div>
-    </div>
-  )
+  const sidebarProps: SidebarContentProps = {
+    navigation,
+    pathname: location.pathname,
+    isAdmin,
+    initials,
+    user,
+    onNavigate: () => setSidebarOpen(false),
+    onLogout: handleLogout,
+  }
 
   return (
     <div className="flex h-screen bg-bg">
@@ -209,7 +244,7 @@ const Layout: React.FC = () => {
         >
           <X size={16} />
         </button>
-        <SidebarContent />
+        <SidebarContent {...sidebarProps} />
       </aside>
 
       {/* Main */}

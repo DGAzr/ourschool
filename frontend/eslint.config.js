@@ -22,34 +22,31 @@ export default tseslint.config(
     rules: {
       // Core hooks rules (stable, from v4)
       'react-hooks/rules-of-hooks': 'error',
-      'react-hooks/exhaustive-deps': 'warn',
+      'react-hooks/exhaustive-deps': 'error',
 
-      // react-hooks v7 introduced a full React compiler lint suite.
-      // Downgrading the new strict rules to 'warn' so the toolchain upgrade
-      // doesn't require simultaneous code changes.
-      // TODO: tighten these back to 'error' as the codebase is cleaned up.
-      'react-hooks/immutability': 'warn',
-      'react-hooks/set-state-in-effect': 'warn',
-      'react-hooks/set-state-in-render': 'warn',
-      'react-hooks/static-components': 'warn',
-      'react-hooks/use-memo': 'warn',
-      'react-hooks/preserve-manual-memoization': 'warn',
-      'react-hooks/incompatible-library': 'warn',
-      'react-hooks/globals': 'warn',
-      'react-hooks/refs': 'warn',
-      'react-hooks/error-boundaries': 'warn',
-      'react-hooks/purity': 'warn',
-      'react-hooks/unsupported-syntax': 'warn',
-      'react-hooks/config': 'warn',
-      'react-hooks/gating': 'warn',
+      // react-hooks v7 React compiler lint suite. The pre-existing warning
+      // debt was burned down on 2026-07-05; enforced as errors since.
+      'react-hooks/immutability': 'error',
+      'react-hooks/set-state-in-effect': 'error',
+      'react-hooks/set-state-in-render': 'error',
+      'react-hooks/static-components': 'error',
+      'react-hooks/use-memo': 'error',
+      'react-hooks/preserve-manual-memoization': 'error',
+      'react-hooks/incompatible-library': 'error',
+      'react-hooks/globals': 'error',
+      'react-hooks/refs': 'error',
+      'react-hooks/error-boundaries': 'error',
+      'react-hooks/purity': 'error',
+      'react-hooks/unsupported-syntax': 'error',
+      'react-hooks/config': 'error',
+      'react-hooks/gating': 'error',
 
-      // Warn when a file mixes default-exported components with other exports
+      // Error when a file mixes default-exported components with other exports
       // (breaks React Fast Refresh HMR)
-      'react-refresh/only-export-components': 'warn',
+      'react-refresh/only-export-components': 'error',
 
       // All explicit `any` usage has been eliminated from the codebase, so
-      // this is enforced as an error. Of the pre-existing debt, only the
-      // react-hooks compiler rules above remain downgraded to 'warn'.
+      // this is enforced as an error.
       '@typescript-eslint/no-explicit-any': 'error',
 
       // Caught-error vars intentionally unused (catch (err) { ... }).

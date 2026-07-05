@@ -35,24 +35,27 @@ const AdminSettings: React.FC = () => {
   const [error, setError] = useState<string | null>(null)
   const [successMessage, setSuccessMessage] = useState<string | null>(null)
 
-  const loadSettings = async () => {
-    try {
-      setLoading(true)
-      setError(null)
-
-      // Load attendance settings
-      const groupedSettings = await settingsApi.getGroupedSettings()
-      setRequiredDays(groupedSettings.attendance.required_days_of_instruction)
-
-      // Load points system status
-      const pointsSystemStatus = await pointsApi.getSystemStatus()
-      setPointsStatus(pointsSystemStatus)
-    } catch (err) {
-      setError(`Failed to load settings: ${getErrorMessage(err, 'Unknown error')}`)
-    } finally {
-      setLoading(false)
-    }
-  }
+  // No synchronous setState here: this runs from the mount effect, and the
+  // set-state-in-effect lint rule requires state updates to happen inside the
+  // promise callbacks. `loading` starts true; user-triggered reloads set the
+  // spinner/error state in their own handlers before calling this.
+  const loadSettings = () =>
+    settingsApi
+      .getGroupedSettings()
+      .then(groupedSettings => {
+        // Load attendance settings, then points system status
+        setRequiredDays(groupedSettings.attendance.required_days_of_instruction)
+        return pointsApi.getSystemStatus()
+      })
+      .then(pointsSystemStatus => {
+        setPointsStatus(pointsSystemStatus)
+      })
+      .catch(err => {
+        setError(`Failed to load settings: ${getErrorMessage(err, 'Unknown error')}`)
+      })
+      .finally(() => {
+        setLoading(false)
+      })
 
   const saveRequiredDays = async () => {
     if (requiredDays < 1 || requiredDays > 365) {
@@ -69,6 +72,7 @@ const AdminSettings: React.FC = () => {
       setSuccessMessage('Required days of instruction updated successfully!')
 
       // Reload settings to get the updated values
+      setLoading(true)
       await loadSettings()
     } catch (err) {
       setError(`Failed to update setting: ${getErrorMessage(err, 'Unknown error')}`)
@@ -87,6 +91,7 @@ const AdminSettings: React.FC = () => {
       setSuccessMessage(`Points system ${result.enabled ? 'enabled' : 'disabled'} successfully!`)
 
       // Reload settings to get the updated status
+      setLoading(true)
       await loadSettings()
     } catch (err) {
       setError(`Failed to toggle points system: ${getErrorMessage(err, 'Unknown error')}`)
@@ -130,7 +135,14 @@ const AdminSettings: React.FC = () => {
         title="Couldn't load settings"
         subtext={error}
         action={
-          <Button variant="secondary" onClick={loadSettings}>
+          <Button
+            variant="secondary"
+            onClick={() => {
+              setLoading(true)
+              setError(null)
+              loadSettings()
+            }}
+          >
             Try Again
           </Button>
         }

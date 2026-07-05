@@ -97,7 +97,15 @@ export const useReportsData = (): UseReportsDataReturn => {
   const { user } = useAuth()
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
-  const [selectedView, setSelectedView] = useState<ReportView>('overview')
+  const [selectedView, setSelectedViewState] = useState<ReportView>('overview')
+
+  // Switching views is user-triggered: show the spinner immediately here so
+  // the load effect below doesn't have to set state synchronously.
+  const setSelectedView = useCallback((view: ReportView) => {
+    setLoading(true)
+    setError(null)
+    setSelectedViewState(view)
+  }, [])
   
   // Data states
   const [overviewData, setOverviewData] = useState<StudentReport | AdminReport | null>(null)
@@ -133,49 +141,48 @@ export const useReportsData = (): UseReportsDataReturn => {
 
   const isAdmin = user?.role === 'admin'
 
-  const fetchDataForView = async () => {
-    try {
-      setLoading(true)
-      setError(null)
-      
-      // Load academic years for views that need them
-      if (selectedView === 'attendance' || selectedView === 'overview') {
-        const years = await reportsApi.getAcademicYears()
-        setAcademicYears(years)
-        if (years.length > 0 && !selectedAcademicYear) {
-          setSelectedAcademicYear(years[0].academic_year)
-        }
-      }
+  // No synchronous spinner toggle here: `loading` starts true for the initial
+  // load, and the user-triggered paths (setSelectedView / refreshData) turn it
+  // on before calling this. State is only set from promise callbacks.
+  const fetchDataForView = () => {
+    // Load academic years for views that need them
+    const loadYears =
+      selectedView === 'attendance' || selectedView === 'overview'
+        ? reportsApi.getAcademicYears().then((years) => {
+            setAcademicYears(years)
+            if (years.length > 0 && !selectedAcademicYear) {
+              setSelectedAcademicYear(years[0].academic_year)
+            }
+          })
+        : Promise.resolve()
 
-      if (selectedView === 'overview') {
-        if (isAdmin) {
-          const data = await reportsApi.getAdminReport()
-          setOverviewData(data)
-        } else {
-          const data = await reportsApi.getStudentReport()
-          setOverviewData(data)
+    return loadYears
+      .then(() => {
+        if (selectedView === 'overview') {
+          const request = isAdmin ? reportsApi.getAdminReport() : reportsApi.getStudentReport()
+          return request.then((data) => setOverviewData(data))
+        } else if (selectedView === 'terms' && !isAdmin) {
+          return reportsApi.getStudentTermGrades().then(setTermGrades)
+        } else if (selectedView === 'students' && isAdmin) {
+          // Load terms for the Students report, then the student progress data
+          return reportsApi.getTerms().then((termsData) => {
+            setTerms(termsData)
+            return reportsApi
+              .getAllStudentsProgress(selectedTermId || undefined)
+              .then(setStudentProgress)
+          })
+        } else if (selectedView === 'assignments' && isAdmin) {
+          return fetchAssignmentReport()
+        } else if (selectedView === 'reportcard') {
+          return loadReportCardOptions()
         }
-      } else if (selectedView === 'terms' && !isAdmin) {
-        const data = await reportsApi.getStudentTermGrades()
-        setTermGrades(data)
-      } else if (selectedView === 'students' && isAdmin) {
-        // Load terms for the Students report
-        const termsData = await reportsApi.getTerms()
-        setTerms(termsData)
-        
-        // Load student progress data
-        const data = await reportsApi.getAllStudentsProgress(selectedTermId || undefined)
-        setStudentProgress(data)
-      } else if (selectedView === 'assignments' && isAdmin) {
-        await fetchAssignmentReport()
-      } else if (selectedView === 'reportcard') {
-        await loadReportCardOptions()
-      }
-    } catch (err) {
-      setError(`Failed to load report data: ${getErrorMessage(err, 'Unknown error')}`)
-    } finally {
-      setLoading(false)
-    }
+      })
+      .catch((err) => {
+        setError(`Failed to load report data: ${getErrorMessage(err, 'Unknown error')}`)
+      })
+      .finally(() => {
+        setLoading(false)
+      })
   }
 
   const fetchAssignmentReport = async () => {
@@ -332,21 +339,30 @@ export const useReportsData = (): UseReportsDataReturn => {
     }
   }
 
+  // Fetch-only variant used by the term-change effect below (no synchronous
+  // spinner toggle; the table simply swaps in the new data when it arrives).
+  const loadStudentProgress = (termId?: number | null) => {
+    return reportsApi
+      .getAllStudentsProgress(termId || undefined)
+      .then(setStudentProgress)
+      .catch((err) => {
+        setError(`Failed to load student progress: ${getErrorMessage(err, 'Unknown error')}`)
+      })
+      .finally(() => {
+        setLoading(false)
+      })
+  }
+
   const refreshStudentProgress = async (termId?: number | null) => {
     if (selectedView === 'students' && isAdmin) {
-      try {
-        setLoading(true)
-        const data = await reportsApi.getAllStudentsProgress(termId || undefined)
-        setStudentProgress(data)
-      } catch (err) {
-        setError(`Failed to load student progress: ${getErrorMessage(err, 'Unknown error')}`)
-      } finally {
-        setLoading(false)
-      }
+      setLoading(true)
+      await loadStudentProgress(termId)
     }
   }
 
   const refreshData = async () => {
+    setLoading(true)
+    setError(null)
     await fetchDataForView()
   }
 
@@ -366,7 +382,7 @@ export const useReportsData = (): UseReportsDataReturn => {
   // captured values (view, admin flag, terms) must not retrigger the effect.
   const reloadProgressForTerm = useEffectEvent((termId: number | null) => {
     if (selectedView === 'students' && isAdmin && terms.length > 0) {
-      refreshStudentProgress(termId)
+      loadStudentProgress(termId)
     }
   })
 

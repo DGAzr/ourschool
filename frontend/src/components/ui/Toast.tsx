@@ -16,20 +16,15 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-import React, { createContext, useContext, useState, useCallback, ReactNode, useEffect } from 'react'
+import React, { useState, useCallback, ReactNode, useEffect } from 'react'
 import { createPortal } from 'react-dom'
+import { ToastContext } from './useToast'
 
 interface ToastItem {
   id: number
   message: string
   variant?: 'default' | 'danger'
 }
-
-interface ToastContextValue {
-  toast: (message: string, variant?: 'default' | 'danger') => void
-}
-
-const ToastContext = createContext<ToastContextValue>({ toast: () => {} })
 
 let _nextId = 0
 
@@ -76,7 +71,5 @@ const ToastItem: React.FC<{ item: ToastItem }> = ({ item }) => {
     </div>
   )
 }
-
-export const useToast = () => useContext(ToastContext)
 
 export default ToastProvider

@@ -146,19 +146,19 @@ const CreateAPIKeyModal: React.FC<CreateAPIKeyModalProps> = ({
     }
   }, [isOpen, handleKeyDown])
 
-  const loadPermissions = useCallback(async () => {
-    try {
-      const permissions = await apiKeysApi.getAvailablePermissions()
-      setAvailablePermissions(permissions)
-    } catch (err) {
-      setError?.(getErrorMessage(err, 'Failed to load permissions'))
-    }
-  }, [setError])
-
   useEffect(() => {
     // Guarded by `!availablePermissions`, so re-runs are no-ops once loaded.
-    if (isOpen && !availablePermissions) loadPermissions()
-  }, [isOpen, availablePermissions, loadPermissions])
+    if (!isOpen || availablePermissions) return
+    const loadPermissions = async () => {
+      try {
+        const permissions = await apiKeysApi.getAvailablePermissions()
+        setAvailablePermissions(permissions)
+      } catch (err) {
+        setError?.(getErrorMessage(err, 'Failed to load permissions'))
+      }
+    }
+    loadPermissions()
+  }, [isOpen, availablePermissions, setError])
 
   const togglePermission = (permission: string) => {
     setCreateForm(prev => ({

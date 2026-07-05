@@ -29,11 +29,10 @@ interface DonutChartProps {
 }
 
 const DonutChart: React.FC<DonutChartProps> = ({ segments, total, size = 160 }) => {
-  let acc = 0
-  const stops = segments.map((s) => {
-    const from = total > 0 ? (acc / total) * 100 : 0
-    acc += s.count
-    const to = total > 0 ? (acc / total) * 100 : 0
+  const stops = segments.map((s, i) => {
+    const before = segments.slice(0, i).reduce((sum, x) => sum + x.count, 0)
+    const from = total > 0 ? (before / total) * 100 : 0
+    const to = total > 0 ? ((before + s.count) / total) * 100 : 0
     return `${s.color} ${from.toFixed(1)}% ${to.toFixed(1)}%`
   })
   const gradient = `conic-gradient(${stops.join(', ')})`

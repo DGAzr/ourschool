@@ -51,7 +51,11 @@ const QuickAwardModal: React.FC<QuickAwardModalProps> = ({ onClose, onSuccess })
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
-    loadStudents()
+    // `loadingStudents` starts true; state updates happen in the promise callbacks.
+    pointsApi.getAdminOverview()
+      .then(overview => setStudents(overview.student_points))
+      .catch(() => setError('Failed to load students'))
+      .finally(() => setLoadingStudents(false))
     pointsApi.getPresets().then(setPresets).catch(() => {})
   }, [])
 
@@ -66,18 +70,6 @@ const QuickAwardModal: React.FC<QuickAwardModalProps> = ({ onClose, onSuccess })
     document.addEventListener('keydown', handleEscape)
     return () => document.removeEventListener('keydown', handleEscape)
   }, [onClose])
-
-  const loadStudents = async () => {
-    try {
-      setLoadingStudents(true)
-      const overview = await pointsApi.getAdminOverview()
-      setStudents(overview.student_points)
-    } catch (err) {
-      setError('Failed to load students')
-    } finally {
-      setLoadingStudents(false)
-    }
-  }
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()

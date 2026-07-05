@@ -20,7 +20,7 @@ import { getErrorMessage } from '../services/api'
 import React, { useState, useEffect, useCallback, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
-import { useToast } from '../components/ui/Toast'
+import { useToast } from '../components/ui/useToast'
 import Toggle from '../components/ui/Toggle'
 import ConfirmDialog from '../components/ui/ConfirmDialog'
 import { Button, Input, Select, SegmentedControl, Pill, IconPickerButton, Icon } from '../components/ui'
@@ -247,19 +247,20 @@ const Admin: React.FC = () => {
     if (backupFileInputRef.current) backupFileInputRef.current.value = ''
   }
 
-  const load = useCallback(async () => {
-    setLoading(true)
-    try {
-      const [grouped, pts, presetData, journalPts, subs, trms, usrs, atypes] = await Promise.allSettled([
-        settingsApi.getGroupedSettings(),
-        pointsApi.getSystemStatus(),
-        pointsApi.getPresets(),
-        pointsApi.getJournalPoints(),
-        subjectsApi.getAll(),
-        termsApi.getAll(),
-        usersApi.getAll(),
-        assignmentTypesApi.getAll(),
-      ])
+  // No synchronous setState here: this runs from the mount effect, and the
+  // set-state-in-effect lint rule requires state updates to happen inside the
+  // promise callbacks. `loading` starts true.
+  const load = useCallback(() => {
+    Promise.allSettled([
+      settingsApi.getGroupedSettings(),
+      pointsApi.getSystemStatus(),
+      pointsApi.getPresets(),
+      pointsApi.getJournalPoints(),
+      subjectsApi.getAll(),
+      termsApi.getAll(),
+      usersApi.getAll(),
+      assignmentTypesApi.getAll(),
+    ]).then(([grouped, pts, presetData, journalPts, subs, trms, usrs, atypes]) => {
       if (grouped.status === 'fulfilled') {
         const days = grouped.value.attendance.required_days_of_instruction
         setRequiredDays(days)
@@ -281,23 +282,40 @@ const Admin: React.FC = () => {
         setAssignmentTypes(atypes.value)
         setTypesBaseline(Object.fromEntries(atypes.value.map(t => [t.id, t])))
       }
-    } finally {
+    }).finally(() => {
       setLoading(false)
-    }
+    })
   }, [])
 
-  const loadPointsOverview = useCallback(async () => {
+  // No synchronous setState (this is also called from an effect); user-triggered
+  // refreshes go through refreshPointsOverview below to show the spinner.
+  const loadPointsOverview = useCallback(() => {
     if (!pointsStatus?.enabled) return
-    try {
-      setPointsOverviewLoading(true)
-      const data = await pointsApi.getAdminOverview()
-      setPointsOverview(data)
-    } catch { /* silent */ } finally { setPointsOverviewLoading(false) }
+    pointsApi.getAdminOverview()
+      .then(data => setPointsOverview(data))
+      .catch(() => { /* silent */ })
+      .finally(() => setPointsOverviewLoading(false))
   }, [pointsStatus?.enabled])
+
+  const refreshPointsOverview = () => {
+    setPointsOverviewLoading(true)
+    loadPointsOverview()
+  }
 
   useEffect(() => { load() }, [load])
   // Guarded by `!pointsOverview`, so the pointsOverview dep can't retrigger a fetch loop.
   useEffect(() => { if (section === 'points' && pointsStatus?.enabled && !pointsOverview) loadPointsOverview() }, [section, pointsStatus?.enabled, pointsOverview, loadPointsOverview])
+
+  // Declared above the escape-key effects below, which reference them.
+  const resetTermForm = () => {
+    const yr = `${new Date().getFullYear()}-${new Date().getFullYear() + 1}`
+    setTermFormData({ name: '', description: '', start_date: '', end_date: '', academic_year: yr, term_type: 'semester' })
+    setEditingTerm(null)
+    setShowTermForm(false)
+    setTermError(null)
+    setTermValidationErrors({})
+  }
+  const resetSubjectForm = () => { setSubjectForm({ name: '', description: '', color: '#3B82F6', icon: undefined }); setEditingSubject(null); setShowSubjectForm(false); setSubjectError(null) }
 
   useEffect(() => {
     const handleEscape = (e: KeyboardEvent) => { if (e.key === 'Escape' && showTermForm) resetTermForm() }
@@ -514,15 +532,6 @@ const Admin: React.FC = () => {
     return 'Enter a year (e.g., "2025") or range (e.g., "2025-2026")'
   }
 
-  const resetTermForm = () => {
-    const yr = `${new Date().getFullYear()}-${new Date().getFullYear() + 1}`
-    setTermFormData({ name: '', description: '', start_date: '', end_date: '', academic_year: yr, term_type: 'semester' })
-    setEditingTerm(null)
-    setShowTermForm(false)
-    setTermError(null)
-    setTermValidationErrors({})
-  }
-
   const openTermEdit = (term: Term) => {
     setEditingTerm(term)
     setTermFormData({ name: term.name, description: term.description || '', start_date: term.start_date, end_date: term.end_date, academic_year: term.academic_year, term_type: term.term_type })
@@ -570,7 +579,6 @@ const Admin: React.FC = () => {
   }
 
   // ── Subject handlers ──────────────────────────────────────────────────────
-  const resetSubjectForm = () => { setSubjectForm({ name: '', description: '', color: '#3B82F6', icon: undefined }); setEditingSubject(null); setShowSubjectForm(false); setSubjectError(null) }
   const openSubjectEdit = (s: Subject) => { setEditingSubject(s); setSubjectForm({ name: s.name, description: s.description || '', color: s.color, icon: s.icon ?? undefined }); setShowSubjectForm(true) }
 
   const handleSubjectSubmit = async (e: React.FormEvent) => {
@@ -703,7 +711,7 @@ const Admin: React.FC = () => {
       await pointsApi.adjustPoints({ student_id: selectedStudentPoints.student_id, amount: amt, notes: adjustNotes.trim() })
       setShowAdjustModal(false)
       toast(`Points adjusted for ${selectedStudentPoints.student_name}`)
-      loadPointsOverview()
+      refreshPointsOverview()
     } catch (err) { setAdjustError(getErrorMessage(err, 'Failed to adjust points')) }
     finally { setAdjustLoading(false) }
   }
@@ -1059,7 +1067,7 @@ const Admin: React.FC = () => {
             <div>
               <div className="flex items-center justify-between mb-3">
                 <p className="text-[11px] font-semibold text-faint uppercase tracking-[.06em]">Student balances</p>
-                <button onClick={loadPointsOverview} className="text-[12px] text-accent hover:opacity-80 transition-opacity">Refresh</button>
+                <button onClick={refreshPointsOverview} className="text-[12px] text-accent hover:opacity-80 transition-opacity">Refresh</button>
               </div>
 
               {pointsOverviewLoading ? (
@@ -1067,7 +1075,7 @@ const Admin: React.FC = () => {
               ) : !pointsOverview ? (
                 <div className="bg-panel border border-line rounded-card p-8 text-center">
                   <p className="text-[13px] text-muted mb-3">Load student balances to view and adjust points.</p>
-                  <button onClick={loadPointsOverview} className="h-[34px] px-4 rounded-field bg-btn-primary-bg text-btn-primary-fg text-[13px] font-semibold hover:opacity-90 transition-opacity">Load balances</button>
+                  <button onClick={refreshPointsOverview} className="h-[34px] px-4 rounded-field bg-btn-primary-bg text-btn-primary-fg text-[13px] font-semibold hover:opacity-90 transition-opacity">Load balances</button>
                 </div>
               ) : (
                 <>

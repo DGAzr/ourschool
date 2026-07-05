@@ -67,39 +67,42 @@ const AssignmentReport: React.FC<AssignmentReportProps> = ({ assignmentReport, l
     reportsApi.getTerms().then(setAllTerms).catch(() => {})
   }, [])
 
-  useEffect(() => {
-    if (assignmentReport?.available_students?.length && selectedStudentId === null) {
-      setSelectedStudentId(assignmentReport.available_students[0].id)
-    }
-    if (assignmentReport?.available_terms?.length && allTerms.length && selectedTermId === null) {
-      const now = new Date()
-      const currentMonth = now.getMonth() + 1
-      const availableIds = new Set(assignmentReport.available_terms.map((t) => t.id))
-      const active = allTerms.filter((t) => t.is_active && availableIds.has(t.id))
-      let best = active[0] || assignmentReport.available_terms[0]
-      if (active.length > 0) {
-        const seasonal = active.find((t) => {
-          const n = t.name.toLowerCase()
-          if (currentMonth >= 8 && currentMonth <= 12)
-            return n.includes('fall') || n.includes('semester 1') || n.includes('q1')
-          if (currentMonth >= 1 && currentMonth <= 5)
-            return n.includes('spring') || n.includes('semester 2') || n.includes('q2')
-          return n.includes('summer') || n.includes('q3')
-        })
-        if (seasonal) best = seasonal
-      }
-      setSelectedTermId(best.id)
-    }
-  }, [assignmentReport, selectedStudentId, selectedTermId, allTerms])
+  // Default selections are derived at render time (no state-syncing effect):
+  // the first available student, and the active term best matching the season.
+  const availableStudents = assignmentReport?.available_students
+  const availableTerms = assignmentReport?.available_terms
+  const effectiveStudentId = selectedStudentId ?? availableStudents?.[0]?.id ?? null
 
+  let defaultTermId: number | null = null
+  if (availableTerms?.length && allTerms.length) {
+    const currentMonth = new Date().getMonth() + 1
+    const availableIds = new Set(availableTerms.map((t) => t.id))
+    const active = allTerms.filter((t) => t.is_active && availableIds.has(t.id))
+    let best = active[0] || availableTerms[0]
+    if (active.length > 0) {
+      const seasonal = active.find((t) => {
+        const n = t.name.toLowerCase()
+        if (currentMonth >= 8 && currentMonth <= 12)
+          return n.includes('fall') || n.includes('semester 1') || n.includes('q1')
+        if (currentMonth >= 1 && currentMonth <= 5)
+          return n.includes('spring') || n.includes('semester 2') || n.includes('q2')
+        return n.includes('summer') || n.includes('q3')
+      })
+      if (seasonal) best = seasonal
+    }
+    defaultTermId = best.id
+  }
+  const effectiveTermId = selectedTermId ?? defaultTermId
+
+  const assignments = assignmentReport?.assignments
   const filteredAssignments = useMemo(() => {
-    if (!assignmentReport?.assignments) return []
-    return assignmentReport.assignments.filter((a) => {
-      const matchesStudent = !selectedStudentId || a.student_id === selectedStudentId
-      const matchesTerm = !selectedTermId || a.term_id === selectedTermId
+    if (!assignments) return []
+    return assignments.filter((a) => {
+      const matchesStudent = !effectiveStudentId || a.student_id === effectiveStudentId
+      const matchesTerm = !effectiveTermId || a.term_id === effectiveTermId
       return matchesStudent && matchesTerm
     })
-  }, [assignmentReport?.assignments, selectedStudentId, selectedTermId])
+  }, [assignments, effectiveStudentId, effectiveTermId])
 
   const summary = useMemo(() => {
     const total = filteredAssignments.length
@@ -199,13 +202,13 @@ const AssignmentReport: React.FC<AssignmentReportProps> = ({ assignmentReport, l
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           <Select
             label="Student"
-            value={String(selectedStudentId || '')}
+            value={String(effectiveStudentId || '')}
             onChange={(e) => setSelectedStudentId(Number(e.target.value) || null)}
             options={studentOptions}
           />
           <Select
             label="Term"
-            value={String(selectedTermId || '')}
+            value={String(effectiveTermId || '')}
             onChange={(e) => setSelectedTermId(Number(e.target.value) || null)}
             options={termOptions}
           />

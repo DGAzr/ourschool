@@ -19,7 +19,7 @@
 import React, { useState, useEffect, useCallback } from 'react'
 import { ChevronLeft, ChevronRight, Check } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
-import { useToast } from '../components/ui/Toast'
+import { useToast } from '../components/ui/useToast'
 import SegmentedControl from '../components/ui/SegmentedControl'
 import { attendanceApi } from '../services/attendance'
 import { reportsApi } from '../services/reports'
@@ -182,50 +182,51 @@ const Attendance: React.FC = () => {
     : false
 
   // ── bootstrap: students, settings, academic years, active term ─────────
-  const bootstrap = useCallback(async () => {
-    setLoading(true)
-    setError(null)
-    try {
-      const [stds, grouped, years, activeTerm] = await Promise.allSettled([
-        attendanceApi.getStudents(),
-        settingsApi.getGroupedSettings(),
-        reportsApi.getAcademicYears(),
-        termsApi.getActive(),
-      ])
+  // No synchronous setState here: this runs from the mount effect, and the
+  // set-state-in-effect lint rule requires state updates to happen inside the
+  // promise callbacks. `loading` starts true and `error` starts null.
+  const bootstrap = useCallback(() => {
+    Promise.allSettled([
+      attendanceApi.getStudents(),
+      settingsApi.getGroupedSettings(),
+      reportsApi.getAcademicYears(),
+      termsApi.getActive(),
+    ]).then(([stds, grouped, years, activeTerm]) => {
       if (stds.status === 'fulfilled') setStudents(stds.value)
       if (grouped.status === 'fulfilled')
         setRequiredDays(grouped.value.attendance.required_days_of_instruction)
       if (years.status === 'fulfilled') {
         setAcademicYears(years.value)
         // Default to the active term's year, or the first year if no active term.
+        const activeYear = activeTerm.status === 'fulfilled' && activeTerm.value
+          ? activeTerm.value.academic_year
+          : null
+        const yearsList: AcademicYear[] = years.value
+        const defaultYear = activeYear && yearsList.some(y => y.academic_year === activeYear)
+          ? activeYear
+          : (yearsList[0]?.academic_year ?? '')
         // Only set when selectedYear is still empty (preserve manual user selection on re-bootstrap).
-        setSelectedYear(prev => {
-          if (prev) return prev
-          const activeYear = activeTerm.status === 'fulfilled' && activeTerm.value
-            ? activeTerm.value.academic_year
-            : null
-          const yearsList: AcademicYear[] = years.value
-          if (activeYear && yearsList.some(y => y.academic_year === activeYear))
-            return activeYear
-          return yearsList[0]?.academic_year ?? ''
-        })
+        setSelectedYear(prev => prev || defaultYear)
+        // The records effect fetches for the selected year; show its spinner now.
+        if (defaultYear) setRecordsLoading(true)
       }
-    } catch {
+    }).catch(() => {
       setError('Failed to load attendance data')
-    } finally {
+    }).finally(() => {
       setLoading(false)
-    }
+    })
   }, [])
 
   useEffect(() => { bootstrap() }, [bootstrap])
 
   // ── year-scoped records fetch ──────────────────────────────────────────
+  // `recordsLoading` is turned on by whoever changes the year (bootstrap
+  // above, or the year <select> handler) rather than synchronously here.
   useEffect(() => {
     if (!selectedYear) return
     const yearObj = academicYears.find(y => y.academic_year === selectedYear)
     if (!yearObj) return
 
-    setRecordsLoading(true)
     attendanceApi.getAll({
       start_date: yearObj.start_date,
       end_date:   yearObj.end_date,
@@ -301,7 +302,10 @@ const Attendance: React.FC = () => {
       <select
         id="attendance-academic-year"
         value={selectedYear}
-        onChange={e => setSelectedYear(e.target.value)}
+        onChange={e => {
+          setRecordsLoading(true)
+          setSelectedYear(e.target.value)
+        }}
         className="text-[13px] font-medium text-ink bg-panel border border-line rounded-field px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-accent/30"
       >
         {academicYears.map(y => (

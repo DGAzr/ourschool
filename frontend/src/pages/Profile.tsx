@@ -16,7 +16,7 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-import React, { useState, useEffect } from 'react'
+import React, { useState } from 'react'
 import { Lock, Eye, EyeOff, Save } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 import { usersApi } from '../services/users'
@@ -37,21 +37,13 @@ const Profile: React.FC = () => {
   const [passwordLoading, setPasswordLoading] = useState(false)
   const [profileLoading, setProfileLoading] = useState(false)
 
-  const [profileData, setProfileData] = useState({
-    first_name: '',
-    last_name: '',
-    email: '',
-  })
-
-  useEffect(() => {
-    if (user) {
-      setProfileData({
-        first_name: user.first_name,
-        last_name: user.last_name,
-        email: user.email,
-      })
-    }
-  }, [user])
+  // ProtectedRoute guarantees `user` is loaded before this page renders, so
+  // the form can be seeded once via a lazy initializer (no sync-on-mount effect).
+  const [profileData, setProfileData] = useState(() => ({
+    first_name: user?.first_name ?? '',
+    last_name: user?.last_name ?? '',
+    email: user?.email ?? '',
+  }))
 
   const handleProfileUpdate = async (e: React.FormEvent) => {
     e.preventDefault()

@@ -49,32 +49,34 @@ const MyPoints: React.FC = () => {
   const [systemEnabled, setSystemEnabled] = useState(false)
   const [balanceVisible, setBalanceVisible] = useState(true)
 
-  const loadLedger = useCallback(async (page: number) => {
-    if (!user || user.role !== 'student') {
-      setError('Only students can view their points ledger')
-      setLoading(false)
-      return
-    }
+  // No synchronous setState here: this runs from the page-change effect, and
+  // the set-state-in-effect lint rule requires state updates to happen inside
+  // the promise callbacks. `loading` starts true; user-triggered paths
+  // (pagination, Try Again) show the spinner from their own handlers.
+  const loadLedger = useCallback((page: number) => {
+    // Non-students never get past the access-denied render, so just bail.
+    if (!user || user.role !== 'student') return
 
-    try {
-      setLoading(true)
-      setError(null)
+    pointsApi.getSystemStatus()
+      .then(status => {
+        setSystemEnabled(status.enabled)
 
-      const status = await pointsApi.getSystemStatus()
-      setSystemEnabled(status.enabled)
+        if (!status.enabled) {
+          setError('Points system is currently disabled')
+          return
+        }
 
-      if (!status.enabled) {
-        setError('Points system is currently disabled')
-        return
-      }
-
-      const ledgerData = await pointsApi.getMyLedger(page, 20)
-      setLedger(ledgerData)
-    } catch (err) {
-      setError(getErrorMessage(err, 'Failed to load points ledger'))
-    } finally {
-      setLoading(false)
-    }
+        return pointsApi.getMyLedger(page, 20).then(ledgerData => {
+          setError(null)
+          setLedger(ledgerData)
+        })
+      })
+      .catch(err => {
+        setError(getErrorMessage(err, 'Failed to load points ledger'))
+      })
+      .finally(() => {
+        setLoading(false)
+      })
   }, [user])
 
   useEffect(() => {
@@ -173,7 +175,11 @@ const MyPoints: React.FC = () => {
         </p>
         {error && systemEnabled && (
           <button
-            onClick={() => loadLedger(currentPage)}
+            onClick={() => {
+              setLoading(true)
+              setError(null)
+              loadLedger(currentPage)
+            }}
             className="mt-4 px-4 py-2 rounded-field bg-accent text-white text-[13px] font-medium hover:opacity-90 transition-opacity"
           >
             Try Again
@@ -320,7 +326,10 @@ const MyPoints: React.FC = () => {
             </span>
             <div className="flex items-center gap-1.5">
               <button
-                onClick={() => setCurrentPage(p => p - 1)}
+                onClick={() => {
+                  setLoading(true)
+                  setCurrentPage(p => p - 1)
+                }}
                 disabled={currentPage === 1}
                 aria-label="Previous page"
                 className="w-8 h-8 flex items-center justify-center rounded-field border border-btn-border text-muted hover:text-ink hover:bg-panel disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
@@ -328,7 +337,10 @@ const MyPoints: React.FC = () => {
                 <ChevronLeft size={15} />
               </button>
               <button
-                onClick={() => setCurrentPage(p => p + 1)}
+                onClick={() => {
+                  setLoading(true)
+                  setCurrentPage(p => p + 1)
+                }}
                 disabled={currentPage === ledger.total_pages}
                 aria-label="Next page"
                 className="w-8 h-8 flex items-center justify-center rounded-field border border-btn-border text-muted hover:text-ink hover:bg-panel disabled:opacity-40 disabled:cursor-not-allowed transition-colors"

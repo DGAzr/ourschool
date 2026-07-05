@@ -55,34 +55,44 @@ export const useAPIKeys = () => {
   const [deleting, setDeleting] = useState(false)
 
   /**
+   * Fetch API keys and system statistics from the server. Does not toggle the
+   * loading/refreshing flags on — callers that need a spinner set it first
+   * (loading starts true, so the initial load is already covered).
+   */
+  const fetchData = useCallback(() => {
+    return Promise.all([
+      apiKeysApi.getAPIKeys(),
+      apiKeysApi.getSystemStats()
+    ])
+      .then(([keysData, statsData]) => {
+        setApiKeys(keysData)
+        setStats(statsData)
+        setLastRefresh(new Date())
+      })
+      .catch((err) => {
+        setError(getErrorMessage(err, 'Failed to load API keys'))
+      })
+      .finally(() => {
+        setLoading(false)
+        setRefreshing(false)
+      })
+  }, [])
+
+  /**
    * Load API keys and system statistics from the server.
-   * 
+   *
    * @param showRefreshing - Whether to show refreshing state instead of loading
    */
   const loadData = useCallback(async (showRefreshing = false) => {
-    try {
-      if (showRefreshing) {
-        setRefreshing(true)
-      } else {
-        setLoading(true)
-      }
-      setError(null)
-      
-      const [keysData, statsData] = await Promise.all([
-        apiKeysApi.getAPIKeys(),
-        apiKeysApi.getSystemStats()
-      ])
-      
-      setApiKeys(keysData)
-      setStats(statsData)
-      setLastRefresh(new Date())
-    } catch (err) {
-      setError(getErrorMessage(err, 'Failed to load API keys'))
-    } finally {
-      setLoading(false)
-      setRefreshing(false)
+    if (showRefreshing) {
+      setRefreshing(true)
+    } else {
+      setLoading(true)
     }
-  }, [])
+    setError(null)
+
+    await fetchData()
+  }, [fetchData])
 
   /**
    * Refresh data with visual feedback.
@@ -211,10 +221,10 @@ export const useAPIKeys = () => {
     setError(null)
   }, [])
 
-  // Load initial data
+  // Load initial data (loading starts true, so no synchronous spinner toggle)
   useEffect(() => {
-    loadData()
-  }, [loadData])
+    fetchData()
+  }, [fetchData])
 
   // Auto-refresh functionality
   useEffect(() => {

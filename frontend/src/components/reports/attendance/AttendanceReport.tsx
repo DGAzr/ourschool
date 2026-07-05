@@ -232,30 +232,32 @@ const AttendanceReport: React.FC<AttendanceReportProps> = ({
   calendarStudentLoading,
   fetchStudentCalendar,
 }) => {
-  // Admin: which student's calendar to show
-  const [calendarStudentId, setCalendarStudentId] = useState<number | null>(null)
+  // Admin: which student's calendar to show. The explicit pick is keyed to the
+  // report it was made for, so a newly generated report falls back to its first
+  // student without needing a state-syncing effect.
+  const [calendarSelection, setCalendarSelection] = useState<{
+    report: BulkAttendanceReport
+    studentId: number
+  } | null>(null)
+  const calendarStudentId =
+    calendarSelection && calendarSelection.report === bulkAttendanceReport
+      ? calendarSelection.studentId
+      : (bulkAttendanceReport?.students[0]?.student_id ?? null)
 
-  // When bulk report changes, auto-select first student for calendar
+  // When a bulk report arrives, fetch day-level data for its first student
   useEffect(() => {
     if (bulkAttendanceReport && bulkAttendanceReport.students.length > 0) {
-      const firstId = bulkAttendanceReport.students[0].student_id
-      setCalendarStudentId(firstId)
-      fetchStudentCalendar(firstId)
+      fetchStudentCalendar(bulkAttendanceReport.students[0].student_id)
     }
     // fetchStudentCalendar is memoized on bulkAttendanceReport in useReportsData
   }, [bulkAttendanceReport, fetchStudentCalendar])
 
   const handleCalendarStudentChange = (id: number) => {
-    setCalendarStudentId(id)
+    if (bulkAttendanceReport) {
+      setCalendarSelection({ report: bulkAttendanceReport, studentId: id })
+    }
     fetchStudentCalendar(id)
   }
-
-  // Listen for the global export event wired from ReportsContainer's "Export" button
-  useEffect(() => {
-    const handler = () => handleDownload()
-    document.addEventListener('reports:export', handler)
-    return () => document.removeEventListener('reports:export', handler)
-  })
 
   const downloadCSV = (content: string, filename: string) => {
     const blob = new Blob([content], { type: 'text/csv;charset=utf-8;' })
@@ -302,6 +304,13 @@ const AttendanceReport: React.FC<AttendanceReportProps> = ({
       )
     }
   }
+
+  // Listen for the global export event wired from ReportsContainer's "Export" button
+  useEffect(() => {
+    const handler = () => handleDownload()
+    document.addEventListener('reports:export', handler)
+    return () => document.removeEventListener('reports:export', handler)
+  })
 
   const hasResults = attendanceReport || bulkAttendanceReport
 
