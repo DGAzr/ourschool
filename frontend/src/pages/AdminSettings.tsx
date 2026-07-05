@@ -21,7 +21,7 @@ import { useAuth } from '../contexts/AuthContext'
 import { settingsApi } from '../services/settings'
 import { pointsApi, type PointsSystemStatus } from '../services/points'
 import { Settings, Save, AlertTriangle, CheckCircle, Calendar, Coins, Key, ExternalLink } from 'lucide-react'
-import { Button, Input, Spinner } from '../components/ui'
+import { Button, EmptyState, Input, Spinner } from '../components/ui'
 import { getErrorMessage } from '../services/api'
 
 const AdminSettings: React.FC = () => {
@@ -118,6 +118,23 @@ const AdminSettings: React.FC = () => {
         <Spinner size="sm" />
         Loading settings...
       </div>
+    )
+  }
+
+  // Load failed before any data arrived: show a retryable empty state rather
+  // than a form of defaults that could silently overwrite real settings.
+  if (error && !pointsStatus) {
+    return (
+      <EmptyState
+        icon={AlertTriangle}
+        title="Couldn't load settings"
+        subtext={error}
+        action={
+          <Button variant="secondary" onClick={loadSettings}>
+            Try Again
+          </Button>
+        }
+      />
     )
   }
 

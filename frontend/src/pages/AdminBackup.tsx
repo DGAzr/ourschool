@@ -22,7 +22,7 @@ import { useAuth } from '../contexts/AuthContext'
 import { SystemBackupModal } from '../components/backup/SystemBackupModal'
 import { backupApi, isSystemBackupFile } from '../services/backup'
 import { SystemBackupFile, SystemBackupImportResult } from '../types'
-import { Button, Spinner } from '../components/ui'
+import { Button, EmptyState, Spinner } from '../components/ui'
 import {
   HardDrive,
   Download,
@@ -182,36 +182,30 @@ const AdminBackup: React.FC = () => {
 
             {importStep === 'idle' && (
               <>
-                <div className="space-y-3 mb-6">
-                  <div className="flex items-center text-[13px] text-neg-fg">
-                    <AlertTriangle className="h-4 w-4 mr-2 flex-shrink-0" />
-                    <strong>Warning:</strong>&nbsp;This will merge data into the existing system
-                  </div>
-                  <div className="flex items-center text-[13px] text-muted">
-                    <Info className="h-4 w-4 mr-2 flex-shrink-0 text-faint" />
-                    Only import backup files from this system
-                  </div>
-                  <div className="flex items-center text-[13px] text-muted">
-                    <Info className="h-4 w-4 mr-2 flex-shrink-0 text-faint" />
-                    Use Dry Run to preview changes before applying
-                  </div>
-                </div>
                 {importError && (
                   <div className="mb-4 px-3 py-2.5 bg-neg-bg border border-neg-fg/20 rounded-card text-[13px] text-neg-fg">
                     {importError}
                   </div>
                 )}
-                <label className="w-full bg-btn-primary-bg text-btn-primary-fg text-[13px] font-semibold py-2 px-4 rounded-field hover:opacity-90 transition-opacity cursor-pointer flex items-center justify-center gap-2">
-                  <Upload className="h-4 w-4" />
-                  Select Backup File
-                  <input
-                    ref={fileInputRef}
-                    type="file"
-                    accept=".json"
-                    onChange={handleFileUpload}
-                    className="hidden"
-                  />
-                </label>
+                <EmptyState
+                  size="sm"
+                  icon={Upload}
+                  title="No backup file selected"
+                  subtext="Choose a backup JSON exported from this system. Use Dry Run to preview changes before applying them."
+                  action={
+                    <label className="bg-btn-primary-bg text-btn-primary-fg text-[13px] font-semibold py-2 px-4 rounded-field hover:opacity-90 transition-opacity cursor-pointer flex items-center justify-center gap-2">
+                      <Upload className="h-4 w-4" />
+                      Select Backup File
+                      <input
+                        ref={fileInputRef}
+                        type="file"
+                        accept=".json"
+                        onChange={handleFileUpload}
+                        className="hidden"
+                      />
+                    </label>
+                  }
+                />
               </>
             )}
 

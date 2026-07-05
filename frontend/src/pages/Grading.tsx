@@ -17,13 +17,14 @@
  */
 
 import React, { useState, useEffect } from 'react'
-import { useLocation } from 'react-router-dom'
+import { Link, useLocation } from 'react-router-dom'
+import { ClipboardCheck } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 import { assignmentsApi } from '../services/assignments'
 import { useAssignments } from '../hooks/useAssignments'
 import { useAssignmentFilters } from '../hooks/useAssignmentFilters'
 import { useIsMobile } from '../hooks/useMediaQuery'
-import { SegmentedControl, StatTile, Pill, SubjectDot, statusToPillVariant, useToast } from '../components/ui'
+import { SegmentedControl, StatTile, Pill, SubjectDot, statusToPillVariant, useToast, EmptyState } from '../components/ui'
 import GradeAssignmentModal from '../components/assignments/GradeAssignmentModal'
 import { StudentAssignment, Term } from '../types'
 import { isPastDateOnly, formatDateOnly } from '../utils/formatters'
@@ -538,6 +539,20 @@ const Grading: React.FC = () => {
             <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z" />
           </svg>
         </div>
+      ) : allAssignments.length === 0 && students.length === 0 ? (
+        <EmptyState
+          icon={ClipboardCheck}
+          title="Nothing to grade yet"
+          subtext="Add students, subjects, and assignments in Admin to start using the grading desk."
+          action={
+            <Link
+              to="/admin"
+              className="inline-flex items-center px-4 py-2 rounded-field bg-accent text-white text-[13px] font-medium hover:opacity-90 transition-opacity"
+            >
+              Go to Admin
+            </Link>
+          }
+        />
       ) : (
         <>
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-5 flex-none">

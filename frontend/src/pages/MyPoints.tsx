@@ -22,6 +22,7 @@ import { useAuth } from '../contexts/AuthContext'
 import { pointsApi, type PointsLedger } from '../services/points'
 import { useAssignmentTypes } from '../contexts/AssignmentTypesContext'
 import Icon from '../components/ui/Icon/Icon'
+import { EmptyState } from '../components/ui'
 import {
   Coins,
   Calendar,
@@ -182,7 +183,15 @@ const MyPoints: React.FC = () => {
     )
   }
 
-  if (!ledger) return null
+  if (!ledger) {
+    return (
+      <EmptyState
+        icon={Coins}
+        title="Points unavailable"
+        subtext="Your points ledger couldn't be loaded. Try refreshing the page."
+      />
+    )
+  }
 
   const { student_points: points } = ledger
 
@@ -246,11 +255,11 @@ const MyPoints: React.FC = () => {
         </div>
 
         {ledger.transactions.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-16 text-center">
-            <Award size={32} className="text-faint mb-3" />
-            <p className="text-[14px] font-semibold text-ink">No transactions yet</p>
-            <p className="text-[12px] text-muted mt-1">Complete assignments to start earning points!</p>
-          </div>
+          <EmptyState
+            icon={Award}
+            title="No transactions yet"
+            subtext="Complete assignments to start earning points!"
+          />
         ) : (
           <div className="divide-y divide-line">
             {ledger.transactions.map((transaction) => {
