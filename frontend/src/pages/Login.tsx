@@ -19,7 +19,7 @@
 import React, { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
-import { Eye, EyeOff } from 'lucide-react'
+import { Eye, EyeOff, GraduationCap } from 'lucide-react'
 import { config } from '../config/env'
 
 const Login: React.FC = () => {
@@ -76,10 +76,10 @@ const Login: React.FC = () => {
         {/* Wordmark */}
         <div className="flex flex-col items-center mb-8">
           <div
-            className="w-10 h-10 rounded-xl flex items-center justify-center text-btn-primary-fg text-lg font-bold mb-4"
+            className="w-10 h-10 rounded-xl flex items-center justify-center text-btn-primary-fg mb-4"
             style={{ background: 'var(--btn-primary-bg)' }}
           >
-            O
+            <GraduationCap size={22} />
           </div>
           <h1 className="text-[22px] font-semibold text-ink tracking-[-0.02em]">Sign in to OurSchool</h1>
           <p className="mt-1 text-[13px] text-muted">Homeschool Management System</p>
