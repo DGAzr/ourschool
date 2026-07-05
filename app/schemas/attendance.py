@@ -15,6 +15,7 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 """Attendance schemas."""
+
 from datetime import date, datetime
 from typing import List, Optional
 

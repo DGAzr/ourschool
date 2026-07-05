@@ -116,6 +116,7 @@ const IconPicker: React.FC<IconPickerProps> = ({
               <button
                 key={entry.name}
                 title={entry.name}
+                aria-label={`Select ${entry.name} icon`}
                 onClick={() => handleSelect(entry.name)}
                 className={`
                   flex items-center justify-center w-full aspect-square rounded-field border

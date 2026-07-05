@@ -20,16 +20,18 @@ import { useState } from 'react'
 import { Download, AlertTriangle, CheckCircle, Database } from 'lucide-react'
 import Modal from '../ui/Modal'
 import Button from '../ui/Button'
+import { getErrorMessage } from '../../services/api'
+import { SystemBackupFile } from '../../types'
 
 interface SystemBackupModalProps {
   isOpen: boolean
   onClose: () => void
-  onExport: () => Promise<any>
+  onExport: () => Promise<SystemBackupFile>
 }
 
 export function SystemBackupModal({ isOpen, onClose, onExport }: SystemBackupModalProps) {
   const [isLoading, setIsLoading] = useState(false)
-  const [backupData, setBackupData] = useState<any>(null)
+  const [backupData, setBackupData] = useState<SystemBackupFile | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [done, setDone] = useState(false)
 
@@ -40,8 +42,8 @@ export function SystemBackupModal({ isOpen, onClose, onExport }: SystemBackupMod
       const data = await onExport()
       setBackupData(data)
       setDone(true)
-    } catch (err: any) {
-      setError(err.message || 'Export failed')
+    } catch (err) {
+      setError(getErrorMessage(err, 'Export failed'))
     } finally {
       setIsLoading(false)
     }
@@ -141,7 +143,7 @@ export function SystemBackupModal({ isOpen, onClose, onExport }: SystemBackupMod
             {backupData?.system_info && (
               <div className="bg-panel-2 border border-line rounded-[11px] p-4 text-[12px] text-muted grid grid-cols-2 gap-1">
                 {Object.entries(backupData.system_info).map(([key, value]) => (
-                  <div key={key}>{key.replace('total_', '').replace(/_/g, ' ')}: {value as number}</div>
+                  <div key={key}>{key.replace('total_', '').replace(/_/g, ' ')}: {value}</div>
                 ))}
               </div>
             )}

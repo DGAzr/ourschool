@@ -15,6 +15,7 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 """Validation utilities for backup operations."""
+
 import logging
 from datetime import datetime
 from typing import Any, Dict, List
@@ -24,38 +25,44 @@ logger = logging.getLogger(__name__)
 
 def validate_backup_data(backup_data: Dict[str, Any]) -> List[str]:
     """Validate backup data structure and return any errors.
-    
+
     Args:
         backup_data: The backup data to validate
-        
+
     Returns:
         List of validation error messages
     """
     errors = []
-    
+
     # Check required fields
     required_fields = [
-        'backup_timestamp', 'format_version', 'users', 'subjects', 
-        'terms', 'assignment_templates'
+        "backup_timestamp",
+        "format_version",
+        "users",
+        "subjects",
+        "terms",
+        "assignment_templates",
     ]
-    
+
     for field in required_fields:
         if field not in backup_data:
             errors.append(f"Missing required field: {field}")
-    
+
     # Validate format version
     SUPPORTED_VERSIONS = {"1.0", "2.0"}
-    if 'format_version' in backup_data:
-        version = backup_data['format_version']
+    if "format_version" in backup_data:
+        version = backup_data["format_version"]
         if version not in SUPPORTED_VERSIONS:
-            errors.append(f"Unsupported backup format version: {version}. Supported: {', '.join(sorted(SUPPORTED_VERSIONS))}")
-    
+            errors.append(
+                f"Unsupported backup format version: {version}. Supported: {', '.join(sorted(SUPPORTED_VERSIONS))}"
+            )
+
     # Validate timestamp
-    if 'backup_timestamp' in backup_data:
+    if "backup_timestamp" in backup_data:
         try:
-            ts = backup_data['backup_timestamp']
+            ts = backup_data["backup_timestamp"]
             if not isinstance(ts, datetime):
-                datetime.fromisoformat(str(ts).replace('Z', '+00:00'))
+                datetime.fromisoformat(str(ts).replace("Z", "+00:00"))
         except (ValueError, AttributeError):
             errors.append("Invalid backup_timestamp format")
 
@@ -87,9 +94,7 @@ def _validate_enums(backup_data: Dict[str, Any]) -> List[str]:
             valid = {e.value for e in enum_cls}
             if value not in valid:
                 label = item.get(label_field) if label_field else f"#{idx}"
-                errors.append(
-                    f"{collection}[{label}]: invalid {field} '{value}'"
-                )
+                errors.append(f"{collection}[{label}]: invalid {field} '{value}'")
 
     _check("users", "role", UserRole, "email")
     _check("terms", "type", TermType, "name")
@@ -103,7 +108,7 @@ def _validate_enums(backup_data: Dict[str, Any]) -> List[str]:
 
 def log_backup_operation(operation: str, user_email: str, details: str = ""):
     """Log backup operation for audit trail.
-    
+
     Args:
         operation: The operation being performed (export/import)
         user_email: Email of user performing operation
@@ -114,19 +119,19 @@ def log_backup_operation(operation: str, user_email: str, details: str = ""):
 
 def sanitize_import_data(data: Dict[str, Any]) -> Dict[str, Any]:
     """Sanitize import data by removing sensitive fields.
-    
+
     Args:
         data: The import data to sanitize
-        
+
     Returns:
         Sanitized data dictionary
     """
     # Remove any password fields for security
-    if 'users' in data:
-        for user in data['users']:
-            if 'password_hash' in user:
-                del user['password_hash']
-            if 'password' in user:
-                del user['password']
-    
+    if "users" in data:
+        for user in data["users"]:
+            if "password_hash" in user:
+                del user["password_hash"]
+            if "password" in user:
+                del user["password"]
+
     return data

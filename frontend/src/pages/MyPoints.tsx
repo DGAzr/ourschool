@@ -16,7 +16,8 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-import React, { useState, useEffect } from 'react'
+import { getErrorMessage } from '../services/api'
+import React, { useState, useEffect, useCallback } from 'react'
 import { useAuth } from '../contexts/AuthContext'
 import { pointsApi, type PointsLedger } from '../services/points'
 import { useAssignmentTypes } from '../contexts/AssignmentTypesContext'
@@ -47,11 +48,7 @@ const MyPoints: React.FC = () => {
   const [systemEnabled, setSystemEnabled] = useState(false)
   const [balanceVisible, setBalanceVisible] = useState(true)
 
-  useEffect(() => {
-    loadLedger(currentPage)
-  }, [currentPage])
-
-  const loadLedger = async (page: number) => {
+  const loadLedger = useCallback(async (page: number) => {
     if (!user || user.role !== 'student') {
       setError('Only students can view their points ledger')
       setLoading(false)
@@ -72,12 +69,16 @@ const MyPoints: React.FC = () => {
 
       const ledgerData = await pointsApi.getMyLedger(page, 20)
       setLedger(ledgerData)
-    } catch (err: any) {
-      setError(err.response?.data?.detail || 'Failed to load points ledger')
+    } catch (err) {
+      setError(getErrorMessage(err, 'Failed to load points ledger'))
     } finally {
       setLoading(false)
     }
-  }
+  }, [user])
+
+  useEffect(() => {
+    loadLedger(currentPage)
+  }, [currentPage, loadLedger])
 
   const getTransactionIcon = (transactionType: string, assignmentTypeKey?: string) => {
     if (transactionType === 'assignment') {
@@ -211,6 +212,7 @@ const MyPoints: React.FC = () => {
             onClick={() => setBalanceVisible(v => !v)}
             className="mt-0.5 p-1.5 rounded-field text-muted hover:text-ink hover:bg-panel-2 transition-colors"
             title={balanceVisible ? 'Hide balance' : 'Show balance'}
+            aria-label={balanceVisible ? 'Hide balance' : 'Show balance'}
           >
             {balanceVisible ? <EyeOff size={16} /> : <Eye size={16} />}
           </button>
@@ -311,6 +313,7 @@ const MyPoints: React.FC = () => {
               <button
                 onClick={() => setCurrentPage(p => p - 1)}
                 disabled={currentPage === 1}
+                aria-label="Previous page"
                 className="w-8 h-8 flex items-center justify-center rounded-field border border-btn-border text-muted hover:text-ink hover:bg-panel disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
               >
                 <ChevronLeft size={15} />
@@ -318,6 +321,7 @@ const MyPoints: React.FC = () => {
               <button
                 onClick={() => setCurrentPage(p => p + 1)}
                 disabled={currentPage === ledger.total_pages}
+                aria-label="Next page"
                 className="w-8 h-8 flex items-center justify-center rounded-field border border-btn-border text-muted hover:text-ink hover:bg-panel disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
               >
                 <ChevronRight size={15} />

@@ -15,6 +15,7 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 """Data import utilities for backup operations."""
+
 import logging
 from datetime import date, datetime, timezone
 from typing import Any, Dict, Optional
@@ -37,7 +38,9 @@ SUPPORTED_VERSIONS = {"1.0", "2.0"}
 LEGACY_VERSIONS = {"1.0"}  # Versions that lack external_id — name-only fallback
 
 
-def _resolve(external_id: Optional[str], name: str, by_uuid: Dict, by_name: Dict) -> Optional[int]:
+def _resolve(
+    external_id: Optional[str], name: str, by_uuid: Dict, by_name: Dict
+) -> Optional[int]:
     """Resolve an entity to its local DB id. Prefers external_id, falls back to name."""
     if external_id and external_id in by_uuid:
         return by_uuid[external_id]
@@ -48,7 +51,7 @@ def import_system_data(
     db: Session,
     backup_data: SystemBackup,
     current_user: User,
-    import_options: Dict[str, Any] = None
+    import_options: Dict[str, Any] = None,
 ) -> SystemBackupImportResult:
     if import_options is None:
         import_options = {}
@@ -65,17 +68,25 @@ def import_system_data(
         warnings=[],
         errors=[],
         import_log=[],
-        id_mappings={}
+        id_mappings={},
     )
 
     try:
-        log_backup_operation("import", current_user.email, f"Starting system backup import, dry_run={dry_run}")
-        result.import_log.append(f"Starting backup import at {datetime.now(timezone.utc).isoformat()}")
+        log_backup_operation(
+            "import",
+            current_user.email,
+            f"Starting system backup import, dry_run={dry_run}",
+        )
+        result.import_log.append(
+            f"Starting backup import at {datetime.now(timezone.utc).isoformat()}"
+        )
 
         # Version compatibility check
         version = backup_data.format_version
         if version not in SUPPORTED_VERSIONS:
-            result.errors.append(f"Unsupported backup format version: {version}. Supported: {', '.join(sorted(SUPPORTED_VERSIONS))}")
+            result.errors.append(
+                f"Unsupported backup format version: {version}. Supported: {', '.join(sorted(SUPPORTED_VERSIONS))}"
+            )
             return result
         if version in LEGACY_VERSIONS:
             result.warnings.append(
@@ -92,19 +103,25 @@ def import_system_data(
         backup_dict = sanitize_import_data(backup_data.model_dump())
         backup_data = SystemBackup(**backup_dict)
 
-        # TODO: Implement "clean_import" option — truncate all data tables in reverse
-        # dependency order before importing, preserving only the current admin session user.
-        # This is the more honest restore semantics vs. the current merge behavior which
-        # allows duplicate records on re-import. Wire to a checkbox in the UI with a warning.
+        # Restore semantics are MERGE, not replace: existing records (matched by
+        # external_id, then by natural key) are skipped or updated per
+        # import_options; nothing is deleted. A wipe-and-restore mode is a
+        # possible post-1.0 feature.
 
         # Import in dependency order
         _import_users(db, backup_data.users, result, import_options, dry_run)
         _import_subjects(db, backup_data.subjects, result, dry_run)
         _import_terms(db, backup_data.terms, result, dry_run, current_user.id)
-        _import_assignment_templates(db, backup_data.assignment_templates, result, dry_run, current_user.id)
+        _import_assignment_templates(
+            db, backup_data.assignment_templates, result, dry_run, current_user.id
+        )
         _import_term_subjects(db, backup_data.term_subjects, result, dry_run)
-        _import_student_assignments(db, backup_data.student_assignments, result, dry_run, current_user.id)
-        _import_student_term_grades(db, backup_data.student_term_grades, result, dry_run)
+        _import_student_assignments(
+            db, backup_data.student_assignments, result, dry_run, current_user.id
+        )
+        _import_student_term_grades(
+            db, backup_data.student_term_grades, result, dry_run
+        )
         _import_grade_history(db, backup_data.grade_history, result, dry_run)
         _import_attendance_records(db, backup_data.attendance_records, result, dry_run)
         _import_journal_entries(db, backup_data.journal_entries, result, dry_run)
@@ -115,13 +132,19 @@ def import_system_data(
         if not dry_run:
             db.commit()
             result.success = True
-            result.import_log.append(f"Backup import completed successfully at {datetime.now(timezone.utc).isoformat()}")
+            result.import_log.append(
+                f"Backup import completed successfully at {datetime.now(timezone.utc).isoformat()}"
+            )
         else:
             result.success = True
             result.import_log.append("Dry run completed successfully - no changes made")
 
         total_imported = sum(result.imported_counts.values())
-        log_backup_operation("import", current_user.email, f"Import completed successfully. Imported: {total_imported} objects")
+        log_backup_operation(
+            "import",
+            current_user.email,
+            f"Import completed successfully. Imported: {total_imported} objects",
+        )
         return result
 
     except Exception as e:
@@ -147,7 +170,9 @@ def _import_users(db: Session, users_data, result, import_options, dry_run):
         by_email[existing.email] = existing.id
 
     for user_data in users_data:
-        existing_id = _resolve(user_data.external_id, user_data.email, by_uuid, by_email)
+        existing_id = _resolve(
+            user_data.external_id, user_data.email, by_uuid, by_email
+        )
 
         # Validate the role explicitly so a malformed/tampered backup fails with
         # a clear per-record error rather than an opaque mid-import exception.
@@ -177,7 +202,11 @@ def _import_users(db: Session, users_data, result, import_options, dry_run):
             continue
 
         if not dry_run:
-            existing_user = db.query(User).filter(User.id == existing_id).first() if existing_id else None
+            existing_user = (
+                db.query(User).filter(User.id == existing_id).first()
+                if existing_id
+                else None
+            )
             if existing_user and import_options.get("update_existing_data", False):
                 existing_user.first_name = user_data.first_name
                 existing_user.last_name = user_data.last_name
@@ -194,17 +223,22 @@ def _import_users(db: Session, users_data, result, import_options, dry_run):
                 result.import_log.append(f"Updated existing user: {user_data.email}")
             else:
                 import uuid as _uuid
+
                 new_user = User(
                     external_id=user_data.external_id or str(_uuid.uuid4()),
                     email=user_data.email,
-                    username=user_data.username + "_imported" if existing_user else user_data.username,
+                    username=(
+                        user_data.username + "_imported"
+                        if existing_user
+                        else user_data.username
+                    ),
                     hashed_password="needs_reset",
                     first_name=user_data.first_name,
                     last_name=user_data.last_name,
                     role=role,
                     is_active=user_data.is_active,
                     date_of_birth=user_data.date_of_birth,
-                    grade_level=user_data.grade_level
+                    grade_level=user_data.grade_level,
                 )
                 db.add(new_user)
                 db.flush()
@@ -212,7 +246,9 @@ def _import_users(db: Session, users_data, result, import_options, dry_run):
                 by_uuid[new_user.external_id] = new_user.id
                 imported += 1
                 result.import_log.append(f"Created new user: {user_data.email}")
-                result.warnings.append(f"User {user_data.email} will need to reset their password")
+                result.warnings.append(
+                    f"User {user_data.email} will need to reset their password"
+                )
         else:
             imported += 1
 
@@ -235,7 +271,9 @@ def _import_subjects(db: Session, subjects_data, result, dry_run):
         by_name[existing.name] = existing.id
 
     for subject_data in subjects_data:
-        existing_id = _resolve(subject_data.external_id, subject_data.name, by_uuid, by_name)
+        existing_id = _resolve(
+            subject_data.external_id, subject_data.name, by_uuid, by_name
+        )
 
         if existing_id:
             by_name[subject_data.name] = existing_id
@@ -247,12 +285,13 @@ def _import_subjects(db: Session, subjects_data, result, dry_run):
 
         if not dry_run:
             import uuid as _uuid
+
             new_subject = Subject(
                 external_id=subject_data.external_id or str(_uuid.uuid4()),
                 name=subject_data.name,
                 description=subject_data.description,
                 color=subject_data.color,
-                icon=getattr(subject_data, 'icon', None),
+                icon=getattr(subject_data, "icon", None),
             )
             db.add(new_subject)
             db.flush()
@@ -326,7 +365,9 @@ def _import_terms(db: Session, terms_data, result, dry_run, admin_user_id: int):
     result.id_mappings["terms_by_name"] = by_name
 
 
-def _import_assignment_templates(db: Session, templates_data, result, dry_run, admin_user_id: int):
+def _import_assignment_templates(
+    db: Session, templates_data, result, dry_run, admin_user_id: int
+):
     """Import assignment templates. Resolution: external_id > name."""
     by_uuid: Dict[str, int] = {}
     by_name: Dict[str, int] = {}
@@ -341,7 +382,9 @@ def _import_assignment_templates(db: Session, templates_data, result, dry_run, a
         by_name[existing.name] = existing.id
 
     for template_data in templates_data:
-        existing_id = _resolve(template_data.external_id, template_data.name, by_uuid, by_name)
+        existing_id = _resolve(
+            template_data.external_id, template_data.name, by_uuid, by_name
+        )
 
         if existing_id:
             by_name[template_data.name] = existing_id
@@ -358,14 +401,18 @@ def _import_assignment_templates(db: Session, templates_data, result, dry_run, a
             from app.schemas.assignment_type import AssignmentTypeCreate
 
             subject_id = _resolve(
-                getattr(template_data, 'subject_external_id', None),
+                getattr(template_data, "subject_external_id", None),
                 template_data.subject_name,
                 subjects_by_uuid,
-                subjects_by_name
+                subjects_by_name,
             )
             if not subject_id:
-                result.import_log.append(f"Skipped template '{template_data.name}': subject '{template_data.subject_name}' not found")
-                result.warnings.append(f"Template '{template_data.name}' skipped — subject not found")
+                result.import_log.append(
+                    f"Skipped template '{template_data.name}': subject '{template_data.subject_name}' not found"
+                )
+                result.warnings.append(
+                    f"Template '{template_data.name}' skipped — subject not found"
+                )
                 continue
 
             # Resolve the assignment type, creating it when the backup came from
@@ -388,7 +435,7 @@ def _import_assignment_templates(db: Session, templates_data, result, dry_run, a
                 instructions=template_data.instructions,
                 assignment_type=type_key,
                 subject_id=subject_id,
-                icon=getattr(template_data, 'icon', None),
+                icon=getattr(template_data, "icon", None),
                 max_points=template_data.max_points,
                 estimated_duration_minutes=template_data.estimated_duration_minutes,
                 prerequisites=template_data.prerequisites,
@@ -419,39 +466,63 @@ def _import_term_subjects(db: Session, term_subjects_data, result, dry_run):
     imported = 0
 
     for ts_data in term_subjects_data:
-        term_id = _resolve(getattr(ts_data, 'term_external_id', None), ts_data.term_name, terms_by_uuid, terms_by_name)
-        subject_id = _resolve(getattr(ts_data, 'subject_external_id', None), ts_data.subject_name, subjects_by_uuid, subjects_by_name)
+        term_id = _resolve(
+            getattr(ts_data, "term_external_id", None),
+            ts_data.term_name,
+            terms_by_uuid,
+            terms_by_name,
+        )
+        subject_id = _resolve(
+            getattr(ts_data, "subject_external_id", None),
+            ts_data.subject_name,
+            subjects_by_uuid,
+            subjects_by_name,
+        )
 
         if not term_id or not subject_id:
-            result.import_log.append(f"Skipped term_subject: {ts_data.term_name}/{ts_data.subject_name} (unresolved)")
-            result.warnings.append(f"Term-subject '{ts_data.term_name}/{ts_data.subject_name}' skipped — could not resolve term or subject")
+            result.import_log.append(
+                f"Skipped term_subject: {ts_data.term_name}/{ts_data.subject_name} (unresolved)"
+            )
+            result.warnings.append(
+                f"Term-subject '{ts_data.term_name}/{ts_data.subject_name}' skipped — could not resolve term or subject"
+            )
             continue
 
         if not dry_run:
             from app.models.term import TermSubject
-            existing = db.query(TermSubject).filter(
-                TermSubject.term_id == term_id,
-                TermSubject.subject_id == subject_id
-            ).first()
+
+            existing = (
+                db.query(TermSubject)
+                .filter(
+                    TermSubject.term_id == term_id, TermSubject.subject_id == subject_id
+                )
+                .first()
+            )
             if not existing:
                 new_ts = TermSubject(
                     term_id=term_id,
                     subject_id=subject_id,
                     is_active=True,
                     weight=ts_data.weight or 1.0,
-                    learning_goals="Imported from backup"
+                    learning_goals="Imported from backup",
                 )
                 db.add(new_ts)
                 db.flush()
-                result.import_log.append(f"Created term_subject: {ts_data.term_name}/{ts_data.subject_name}")
+                result.import_log.append(
+                    f"Created term_subject: {ts_data.term_name}/{ts_data.subject_name}"
+                )
             else:
-                result.import_log.append(f"Skipped existing term_subject: {ts_data.term_name}/{ts_data.subject_name}")
+                result.import_log.append(
+                    f"Skipped existing term_subject: {ts_data.term_name}/{ts_data.subject_name}"
+                )
         imported += 1
 
     result.imported_counts["term_subjects"] = imported
 
 
-def _import_student_assignments(db: Session, student_assignments_data, result, dry_run, admin_user_id: int):
+def _import_student_assignments(
+    db: Session, student_assignments_data, result, dry_run, admin_user_id: int
+):
     """Import student assignments."""
     users_by_uuid = result.id_mappings.get("users_by_uuid", {})
     users_by_email = result.id_mappings.get("users_by_email", {})
@@ -460,11 +531,23 @@ def _import_student_assignments(db: Session, student_assignments_data, result, d
     imported = skipped = 0
 
     for sa_data in student_assignments_data:
-        student_id = _resolve(getattr(sa_data, 'student_external_id', None), sa_data.student_email, users_by_uuid, users_by_email)
-        template_id = _resolve(getattr(sa_data, 'template_external_id', None), sa_data.assignment_template_name, templates_by_uuid, templates_by_name)
+        student_id = _resolve(
+            getattr(sa_data, "student_external_id", None),
+            sa_data.student_email,
+            users_by_uuid,
+            users_by_email,
+        )
+        template_id = _resolve(
+            getattr(sa_data, "template_external_id", None),
+            sa_data.assignment_template_name,
+            templates_by_uuid,
+            templates_by_name,
+        )
 
         if not student_id or not template_id:
-            result.import_log.append(f"Skipped student_assignment: {sa_data.student_email}/{sa_data.assignment_template_name} (unresolved)")
+            result.import_log.append(
+                f"Skipped student_assignment: {sa_data.student_email}/{sa_data.assignment_template_name} (unresolved)"
+            )
             continue
 
         if not dry_run:
@@ -473,11 +556,15 @@ def _import_student_assignments(db: Session, student_assignments_data, result, d
 
             # Idempotency: skip if this student already has this template on this
             # due date, so re-importing a backup does not duplicate assignments.
-            existing = db.query(StudentAssignment).filter(
-                StudentAssignment.student_id == student_id,
-                StudentAssignment.template_id == template_id,
-                StudentAssignment.due_date == sa_data.due_date,
-            ).first()
+            existing = (
+                db.query(StudentAssignment)
+                .filter(
+                    StudentAssignment.student_id == student_id,
+                    StudentAssignment.template_id == template_id,
+                    StudentAssignment.due_date == sa_data.due_date,
+                )
+                .first()
+            )
             if existing:
                 skipped += 1
                 result.import_log.append(
@@ -491,7 +578,11 @@ def _import_student_assignments(db: Session, student_assignments_data, result, d
                 assigned_date=sa_data.due_date or date.today(),
                 due_date=sa_data.due_date,
                 extended_due_date=sa_data.extended_due_date,
-                status=AssignmentStatus(sa_data.status) if sa_data.status else AssignmentStatus.NOT_STARTED,
+                status=(
+                    AssignmentStatus(sa_data.status)
+                    if sa_data.status
+                    else AssignmentStatus.NOT_STARTED
+                ),
                 points_earned=sa_data.points_earned,
                 letter_grade=sa_data.letter_grade,
                 teacher_feedback=sa_data.teacher_feedback,
@@ -518,7 +609,9 @@ def _import_student_assignments(db: Session, student_assignments_data, result, d
                 new_sa.calculate_percentage_grade()
                 db.flush()
 
-            result.import_log.append(f"Created student_assignment for {sa_data.student_email}")
+            result.import_log.append(
+                f"Created student_assignment for {sa_data.student_email}"
+            )
         imported += 1
 
     result.imported_counts["student_assignments"] = imported
@@ -536,9 +629,24 @@ def _import_student_term_grades(db: Session, term_grades_data, result, dry_run):
     imported = skipped = 0
 
     for tg_data in term_grades_data:
-        student_id = _resolve(getattr(tg_data, 'student_external_id', None), tg_data.student_email, users_by_uuid, users_by_email)
-        term_id = _resolve(getattr(tg_data, 'term_external_id', None), tg_data.term_name, terms_by_uuid, terms_by_name)
-        subject_id = _resolve(getattr(tg_data, 'subject_external_id', None), tg_data.subject_name, subjects_by_uuid, subjects_by_name)
+        student_id = _resolve(
+            getattr(tg_data, "student_external_id", None),
+            tg_data.student_email,
+            users_by_uuid,
+            users_by_email,
+        )
+        term_id = _resolve(
+            getattr(tg_data, "term_external_id", None),
+            tg_data.term_name,
+            terms_by_uuid,
+            terms_by_name,
+        )
+        subject_id = _resolve(
+            getattr(tg_data, "subject_external_id", None),
+            tg_data.subject_name,
+            subjects_by_uuid,
+            subjects_by_name,
+        )
 
         if not student_id or not term_id or not subject_id:
             result.import_log.append(
@@ -551,10 +659,14 @@ def _import_student_term_grades(db: Session, term_grades_data, result, dry_run):
 
         if not dry_run:
             from app.models.term import StudentTermGrade, TermSubject
-            term_subject = db.query(TermSubject).filter(
-                TermSubject.term_id == term_id,
-                TermSubject.subject_id == subject_id
-            ).first()
+
+            term_subject = (
+                db.query(TermSubject)
+                .filter(
+                    TermSubject.term_id == term_id, TermSubject.subject_id == subject_id
+                )
+                .first()
+            )
             if not term_subject:
                 result.import_log.append(
                     f"Skipped student_term_grade: {tg_data.term_name}/{tg_data.subject_name} (TermSubject not found)"
@@ -564,13 +676,19 @@ def _import_student_term_grades(db: Session, term_grades_data, result, dry_run):
                 )
                 continue
 
-            existing = db.query(StudentTermGrade).filter(
-                StudentTermGrade.student_id == student_id,
-                StudentTermGrade.term_subject_id == term_subject.id
-            ).first()
+            existing = (
+                db.query(StudentTermGrade)
+                .filter(
+                    StudentTermGrade.student_id == student_id,
+                    StudentTermGrade.term_subject_id == term_subject.id,
+                )
+                .first()
+            )
             if existing:
                 skipped += 1
-                result.import_log.append(f"Skipped existing student_term_grade for {tg_data.student_email}")
+                result.import_log.append(
+                    f"Skipped existing student_term_grade for {tg_data.student_email}"
+                )
                 continue
 
             new_tg = StudentTermGrade(
@@ -591,7 +709,9 @@ def _import_student_term_grades(db: Session, term_grades_data, result, dry_run):
             )
             db.add(new_tg)
             db.flush()
-            result.import_log.append(f"Created student_term_grade for {tg_data.student_email}/{tg_data.term_name}/{tg_data.subject_name}")
+            result.import_log.append(
+                f"Created student_term_grade for {tg_data.student_email}/{tg_data.term_name}/{tg_data.subject_name}"
+            )
         imported += 1
 
     result.imported_counts["student_term_grades"] = imported
@@ -616,9 +736,16 @@ def _import_attendance_records(db: Session, attendance_data, result, dry_run):
     imported = skipped = 0
 
     for att_data in attendance_data:
-        student_id = _resolve(getattr(att_data, 'student_external_id', None), att_data.student_email, users_by_uuid, users_by_email)
+        student_id = _resolve(
+            getattr(att_data, "student_external_id", None),
+            att_data.student_email,
+            users_by_uuid,
+            users_by_email,
+        )
         if not student_id:
-            result.import_log.append(f"Skipped attendance: {att_data.student_email} (unresolved)")
+            result.import_log.append(
+                f"Skipped attendance: {att_data.student_email} (unresolved)"
+            )
             continue
 
         if not dry_run:
@@ -626,10 +753,14 @@ def _import_attendance_records(db: Session, attendance_data, result, dry_run):
             from app.enums import AttendanceStatus
 
             # Idempotency: one record per student per day.
-            existing = db.query(AttendanceRecord).filter(
-                AttendanceRecord.student_id == student_id,
-                AttendanceRecord.date == att_data.date,
-            ).first()
+            existing = (
+                db.query(AttendanceRecord)
+                .filter(
+                    AttendanceRecord.student_id == student_id,
+                    AttendanceRecord.date == att_data.date,
+                )
+                .first()
+            )
             if existing:
                 skipped += 1
                 result.import_log.append(
@@ -640,8 +771,12 @@ def _import_attendance_records(db: Session, attendance_data, result, dry_run):
             new_att = AttendanceRecord(
                 student_id=student_id,
                 date=att_data.date,
-                status=AttendanceStatus(att_data.status) if att_data.status else AttendanceStatus.PRESENT,
-                notes=att_data.notes
+                status=(
+                    AttendanceStatus(att_data.status)
+                    if att_data.status
+                    else AttendanceStatus.PRESENT
+                ),
+                notes=att_data.notes,
             )
             db.add(new_att)
             db.flush()
@@ -659,9 +794,16 @@ def _import_journal_entries(db: Session, journal_data, result, dry_run):
     imported = skipped = 0
 
     for je_data in journal_data:
-        author_id = _resolve(getattr(je_data, 'user_external_id', None), je_data.user_email, users_by_uuid, users_by_email)
+        author_id = _resolve(
+            getattr(je_data, "user_external_id", None),
+            je_data.user_email,
+            users_by_uuid,
+            users_by_email,
+        )
         if not author_id:
-            result.import_log.append(f"Skipped journal: {je_data.user_email} (unresolved)")
+            result.import_log.append(
+                f"Skipped journal: {je_data.user_email} (unresolved)"
+            )
             continue
 
         entry_date = (
@@ -674,11 +816,15 @@ def _import_journal_entries(db: Session, journal_data, result, dry_run):
             from app.models.journal import JournalEntry
 
             # Idempotency: dedup on (author, title, entry_date).
-            existing = db.query(JournalEntry).filter(
-                JournalEntry.author_id == author_id,
-                JournalEntry.title == je_data.title,
-                JournalEntry.entry_date == entry_date,
-            ).first()
+            existing = (
+                db.query(JournalEntry)
+                .filter(
+                    JournalEntry.author_id == author_id,
+                    JournalEntry.title == je_data.title,
+                    JournalEntry.entry_date == entry_date,
+                )
+                .first()
+            )
             if existing:
                 skipped += 1
                 result.import_log.append(
@@ -708,10 +854,17 @@ def _import_system_settings(db: Session, system_settings_data, result, dry_run):
     for ss_data in system_settings_data:
         if not dry_run:
             from app.models.points import SystemSettings
-            existing = db.query(SystemSettings).filter(SystemSettings.setting_key == ss_data.setting_key).first()
+
+            existing = (
+                db.query(SystemSettings)
+                .filter(SystemSettings.setting_key == ss_data.setting_key)
+                .first()
+            )
             if existing:
                 skipped += 1
-                result.import_log.append(f"Skipped existing system_setting: {ss_data.setting_key}")
+                result.import_log.append(
+                    f"Skipped existing system_setting: {ss_data.setting_key}"
+                )
                 continue
             new_ss = SystemSettings(
                 setting_key=ss_data.setting_key,
@@ -735,17 +888,31 @@ def _import_student_points(db: Session, student_points_data, result, dry_run):
     imported = skipped = 0
 
     for sp_data in student_points_data:
-        student_id = _resolve(getattr(sp_data, 'student_external_id', None), sp_data.student_email, users_by_uuid, users_by_email)
+        student_id = _resolve(
+            getattr(sp_data, "student_external_id", None),
+            sp_data.student_email,
+            users_by_uuid,
+            users_by_email,
+        )
         if not student_id:
-            result.import_log.append(f"Skipped student_points: {sp_data.student_email} (unresolved)")
+            result.import_log.append(
+                f"Skipped student_points: {sp_data.student_email} (unresolved)"
+            )
             continue
 
         if not dry_run:
             from app.models.points import StudentPoints
-            existing = db.query(StudentPoints).filter(StudentPoints.student_id == student_id).first()
+
+            existing = (
+                db.query(StudentPoints)
+                .filter(StudentPoints.student_id == student_id)
+                .first()
+            )
             if existing:
                 skipped += 1
-                result.import_log.append(f"Skipped existing student_points for {sp_data.student_email}")
+                result.import_log.append(
+                    f"Skipped existing student_points for {sp_data.student_email}"
+                )
                 continue
             new_sp = StudentPoints(
                 student_id=student_id,
@@ -755,7 +922,9 @@ def _import_student_points(db: Session, student_points_data, result, dry_run):
             )
             db.add(new_sp)
             db.flush()
-            result.import_log.append(f"Created student_points for {sp_data.student_email}")
+            result.import_log.append(
+                f"Created student_points for {sp_data.student_email}"
+            )
         imported += 1
 
     result.imported_counts["student_points"] = imported
@@ -769,19 +938,31 @@ def _import_point_transactions(db: Session, point_transactions_data, result, dry
     imported = skipped = 0
 
     for tx_data in point_transactions_data:
-        student_id = _resolve(getattr(tx_data, 'student_external_id', None), tx_data.student_email, users_by_uuid, users_by_email)
+        student_id = _resolve(
+            getattr(tx_data, "student_external_id", None),
+            tx_data.student_email,
+            users_by_uuid,
+            users_by_email,
+        )
         if not student_id:
-            result.import_log.append(f"Skipped point_transaction: {tx_data.student_email} (unresolved)")
+            result.import_log.append(
+                f"Skipped point_transaction: {tx_data.student_email} (unresolved)"
+            )
             continue
 
         if not dry_run:
             from app.models.points import PointTransaction
-            existing = db.query(PointTransaction).filter(
-                PointTransaction.student_id == student_id,
-                PointTransaction.amount == tx_data.amount,
-                PointTransaction.transaction_type == tx_data.transaction_type,
-                PointTransaction.created_at == tx_data.created_at,
-            ).first()
+
+            existing = (
+                db.query(PointTransaction)
+                .filter(
+                    PointTransaction.student_id == student_id,
+                    PointTransaction.amount == tx_data.amount,
+                    PointTransaction.transaction_type == tx_data.transaction_type,
+                    PointTransaction.created_at == tx_data.created_at,
+                )
+                .first()
+            )
             if existing:
                 skipped += 1
                 continue
@@ -794,7 +975,9 @@ def _import_point_transactions(db: Session, point_transactions_data, result, dry
             )
             db.add(new_tx)
             db.flush()
-            result.import_log.append(f"Created point_transaction for {tx_data.student_email}: {tx_data.amount} pts ({tx_data.transaction_type})")
+            result.import_log.append(
+                f"Created point_transaction for {tx_data.student_email}: {tx_data.amount} pts ({tx_data.transaction_type})"
+            )
         imported += 1
 
     result.imported_counts["point_transactions"] = imported

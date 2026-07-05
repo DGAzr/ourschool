@@ -31,6 +31,21 @@ import {
 } from '../types'
 import { Term } from '../types/term'
 
+/** Query options for GET /reports/attendance/student/{id}. */
+export interface StudentAttendanceReportOptions {
+  student_id?: number
+  start_date?: string
+  end_date?: string
+  academic_year?: string
+}
+
+/** Query options for GET /reports/attendance/bulk. */
+export interface BulkAttendanceReportOptions {
+  start_date?: string
+  end_date?: string
+  academic_year?: string
+}
+
 export const reportsApi = {
   getStudentReport: async (): Promise<StudentReport> => {
     const response = await api.get('/reports/student/overview')
@@ -67,12 +82,7 @@ export const reportsApi = {
   },
 
   getStudentAttendanceReport: async (
-    options: {
-      student_id?: number
-      start_date?: string
-      end_date?: string
-      academic_year?: string
-    }
+    options: StudentAttendanceReportOptions
   ): Promise<StudentAttendanceReport> => {
     // For students, we need to get their own user ID
     // For now, let's assume the backend expects the actual student_id
@@ -93,11 +103,7 @@ export const reportsApi = {
   },
 
   getBulkAttendanceReport: async (
-    options: {
-      start_date?: string
-      end_date?: string
-      academic_year?: string
-    }
+    options: BulkAttendanceReportOptions
   ): Promise<BulkAttendanceReport> => {
     const params = new URLSearchParams()
     if (options.start_date) params.append('start_date', options.start_date)
@@ -133,7 +139,8 @@ export const reportsApi = {
     return response
   },
 
-  getReportCardOptions: async (): Promise<any[]> => {
+  // No backend schema exists for this endpoint yet; callers must narrow.
+  getReportCardOptions: async (): Promise<unknown[]> => {
     const response = await api.get('/reports/report-card-options')
     return response
   },

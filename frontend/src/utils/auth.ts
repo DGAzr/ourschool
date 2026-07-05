@@ -22,19 +22,19 @@ import { config } from '../config/env'
  * Token validation and management utilities
  */
 
-export interface TokenPayload {
+interface TokenPayload {
   exp?: number
   iat?: number
   user_id?: number
   email?: string
-  [key: string]: any
+  [key: string]: unknown
 }
 
 /**
  * Decode JWT token payload without verification (for client-side use only)
  * Note: This is for reading token data, not for security validation
  */
-export const decodeToken = (token: string): TokenPayload | null => {
+const decodeToken = (token: string): TokenPayload | null => {
   try {
     // Split the token and get the payload part
     const parts = token.split('.')

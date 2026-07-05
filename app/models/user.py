@@ -15,6 +15,7 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 """User models."""
+
 import uuid
 from datetime import datetime, timezone
 
@@ -40,7 +41,9 @@ class User(Base):
     __tablename__ = "users"
 
     id = Column(Integer, primary_key=True, index=True)
-    external_id = Column(String(36), unique=True, nullable=False, default=lambda: str(uuid.uuid4()))
+    external_id = Column(
+        String(36), unique=True, nullable=False, default=lambda: str(uuid.uuid4())
+    )
     email = Column(String, unique=True, index=True, nullable=False)
     username = Column(String, unique=True, index=True, nullable=False)
     hashed_password = Column(String, nullable=False)
@@ -57,8 +60,18 @@ class User(Base):
     date_of_birth = Column(Date, nullable=True)
     grade_level = Column(Integer, nullable=True)
 
-    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
-    updated_at = Column(DateTime, default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
+    # Forces a password change on next login (seeded default credentials,
+    # admin-issued temporary passwords).
+    must_change_password = Column(Boolean, default=False, nullable=False)
+
+    created_at = Column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )
+    updated_at = Column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+    )
 
     # Relationships for parent role (when this user is an admin managing students)
     # This user manages students (one-to-many: one parent manages many students)
@@ -102,11 +115,11 @@ class User(Base):
         "StudentPoints",
         back_populates="student",
         uselist=False,
-        cascade="all, delete-orphan"
+        cascade="all, delete-orphan",
     )
     point_transactions = relationship(
         "PointTransaction",
         foreign_keys="PointTransaction.student_id",
         back_populates="student",
-        cascade="all, delete-orphan"
+        cascade="all, delete-orphan",
     )

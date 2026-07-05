@@ -15,6 +15,7 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 """APIs for database backup and restore operations."""
+
 import logging
 from datetime import datetime, timezone
 from typing import Annotated
@@ -24,7 +25,11 @@ from sqlalchemy.orm import Session
 
 from app.core.database import get_db
 from app.models.user import User
-from app.schemas.backup import SystemBackup, SystemBackupImportRequest, SystemBackupImportResult
+from app.schemas.backup import (
+    SystemBackup,
+    SystemBackupImportRequest,
+    SystemBackupImportResult,
+)
 
 from .exporters import (
     export_assignment_templates,
@@ -54,10 +59,12 @@ def export_system_backup(
     current_user: Annotated[User, Depends(require_admin_for_backup)],
 ):
     """Export complete system backup for data protection and migration."""
-    
+
     try:
-        log_backup_operation("export", current_user.email, "Starting complete system backup")
-        
+        log_backup_operation(
+            "export", current_user.email, "Starting complete system backup"
+        )
+
         # Export all data types
         users_data = export_users(db)
         subjects_data = export_subjects(db)
@@ -77,7 +84,8 @@ def export_system_backup(
         backup = SystemBackup(
             format_version="2.0",
             backup_timestamp=datetime.now(timezone.utc),
-            created_by=f"{current_user.first_name} {current_user.last_name}".strip() or current_user.email,
+            created_by=f"{current_user.first_name} {current_user.last_name}".strip()
+            or current_user.email,
             system_info={
                 "total_users": len(users_data),
                 "total_subjects": len(subjects_data),
@@ -104,16 +112,19 @@ def export_system_backup(
             point_transactions=point_transactions_data,
             system_settings=system_settings_data,
         )
-        
+
         total_objects = sum(backup.system_info.values())
-        log_backup_operation("export", current_user.email, f"Backup completed successfully. Total objects: {total_objects}")
+        log_backup_operation(
+            "export",
+            current_user.email,
+            f"Backup completed successfully. Total objects: {total_objects}",
+        )
         return backup
-        
+
     except Exception as e:
         logger.error(f"System backup export failed: {str(e)}", exc_info=True)
         raise HTTPException(
-            status_code=500,
-            detail="Backup export failed. See server logs for details."
+            status_code=500, detail="Backup export failed. See server logs for details."
         )
 
 
@@ -124,24 +135,37 @@ def import_system_backup(
     current_user: Annotated[User, Depends(require_admin_for_backup)],
 ):
     """Import complete system backup with intelligent conflict resolution."""
-    
+
     try:
-        log_backup_operation("import", current_user.email, "Starting system backup import")
-        
+        log_backup_operation(
+            "import", current_user.email, "Starting system backup import"
+        )
+
         # Delegate to import handler
-        result = import_system_data(db, import_request.backup_data, current_user, import_request.import_options)
-        
+        result = import_system_data(
+            db, import_request.backup_data, current_user, import_request.import_options
+        )
+
         if result.success:
-            total = sum(result.imported_counts.values()) if result.imported_counts else 0
-            log_backup_operation("import", current_user.email, f"Import completed successfully. {total} objects imported")
+            total = (
+                sum(result.imported_counts.values()) if result.imported_counts else 0
+            )
+            log_backup_operation(
+                "import",
+                current_user.email,
+                f"Import completed successfully. {total} objects imported",
+            )
         else:
-            log_backup_operation("import", current_user.email, f"Import failed with {len(result.errors)} errors")
-            
+            log_backup_operation(
+                "import",
+                current_user.email,
+                f"Import failed with {len(result.errors)} errors",
+            )
+
         return result
-        
+
     except Exception as e:
         logger.error(f"System backup import failed: {str(e)}", exc_info=True)
         raise HTTPException(
-            status_code=500,
-            detail="Backup import failed. See server logs for details."
+            status_code=500, detail="Backup import failed. See server logs for details."
         )

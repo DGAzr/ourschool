@@ -95,6 +95,15 @@ const request = async (endpoint: string, init: RequestInit = {}) => {
   return text ? JSON.parse(text) : null
 }
 
+/**
+ * Extract a human-readable message from an unknown thrown value.
+ * Every error raised by this API client is a plain `Error` whose message
+ * already contains the parsed backend detail, so narrowing on `Error`
+ * covers the real cases; anything else falls back to the provided text.
+ */
+export const getErrorMessage = (err: unknown, fallback = 'An unexpected error occurred'): string =>
+  err instanceof Error && err.message ? err.message : fallback
+
 export const api = {
   get: (endpoint: string) => request(endpoint, { method: 'GET' }),
 

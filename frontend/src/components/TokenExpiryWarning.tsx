@@ -25,7 +25,7 @@ interface TokenExpiryWarningProps {
   onExtendSession?: () => void
 }
 
-export const TokenExpiryWarning: React.FC<TokenExpiryWarningProps> = ({
+const TokenExpiryWarning: React.FC<TokenExpiryWarningProps> = ({
   onDismiss,
   onExtendSession
 }) => {
@@ -37,27 +37,27 @@ export const TokenExpiryWarning: React.FC<TokenExpiryWarningProps> = ({
 
   return (
     <div className="fixed top-4 right-4 z-50 max-w-sm">
-      <div className="bg-yellow-50 border border-yellow-200 rounded-lg shadow-lg p-4">
+      <div className="bg-warn-soft border border-warn-line rounded-card shadow-float p-4">
         <div className="flex items-start">
           <div className="flex-shrink-0">
-            <AlertTriangle className="h-5 w-5 text-yellow-400" />
+            <AlertTriangle className="h-5 w-5 text-warn" />
           </div>
           <div className="ml-3 flex-1">
-            <h3 className="text-sm font-medium text-yellow-800">
+            <h3 className="text-[13px] font-semibold text-warn">
               Session Expiring Soon
             </h3>
-            <div className="mt-1 text-sm text-yellow-700">
+            <div className="mt-1 text-[13px] text-warn">
               <p>Your session will expire in:</p>
               <div className="flex items-center mt-1">
                 <Clock className="h-4 w-4 mr-1" />
                 <span className="font-mono font-semibold">{timeRemaining}</span>
               </div>
             </div>
-            <div className="mt-3 flex space-x-2">
+            <div className="mt-3 flex gap-2">
               {onExtendSession && (
                 <button
                   onClick={onExtendSession}
-                  className="text-xs bg-yellow-100 text-yellow-800 px-2 py-1 rounded hover:bg-yellow-200 transition-colors"
+                  className="text-[12px] font-semibold px-2 py-1 rounded-field border border-warn-line text-warn hover:bg-warn-line/40 transition-colors"
                 >
                   Extend Session
                 </button>
@@ -65,7 +65,7 @@ export const TokenExpiryWarning: React.FC<TokenExpiryWarningProps> = ({
               {onDismiss && (
                 <button
                   onClick={onDismiss}
-                  className="text-xs text-yellow-600 hover:text-yellow-800 transition-colors"
+                  className="text-[12px] text-warn hover:opacity-70 transition-opacity"
                 >
                   Dismiss
                 </button>
@@ -76,7 +76,8 @@ export const TokenExpiryWarning: React.FC<TokenExpiryWarningProps> = ({
             <div className="flex-shrink-0 ml-2">
               <button
                 onClick={onDismiss}
-                className="text-yellow-400 hover:text-yellow-600 transition-colors"
+                aria-label="Dismiss session expiry warning"
+                className="text-warn hover:opacity-70 transition-opacity"
               >
                 <X className="h-4 w-4" />
               </button>

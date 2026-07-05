@@ -128,6 +128,7 @@ const Login: React.FC = () => {
               <button
                 type="button"
                 onClick={() => setShowPassword(!showPassword)}
+                aria-label={showPassword ? 'Hide password' : 'Show password'}
                 className="absolute inset-y-0 right-0 pr-3 flex items-center text-faint hover:text-muted"
               >
                 {showPassword ? <EyeOff size={15} /> : <Eye size={15} />}

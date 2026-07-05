@@ -15,6 +15,7 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 """APIs for users."""
+
 import secrets
 import string
 from typing import Annotated, List, Optional
@@ -46,7 +47,7 @@ async def get_current_user_optional(
     """Get current user if authenticated, None if not."""
     if not token:
         return None
-    
+
     try:
         return await get_current_user(token.credentials, db)
     except HTTPException:
@@ -62,7 +63,7 @@ async def create_user(
     """Create a new user."""
     # Check if there are any existing users for initial signup
     existing_users_count = db.query(User).count()
-    
+
     if existing_users_count == 0:
         # Allow first user creation without authentication
         pass
@@ -212,11 +213,7 @@ def list_students(
         )
 
     # Return all students for admins in homeschool context
-    return (
-        db.query(User)
-        .filter(User.role == UserRole.STUDENT)
-        .all()
-    )
+    return db.query(User).filter(User.role == UserRole.STUDENT).all()
 
 
 @router.get("/{user_id}", response_model=UserSchema)
@@ -319,8 +316,10 @@ def reset_user_password(
     # Generate a temporary password
     temp_password = generate_temporary_password()
 
-    # Hash and update the password
+    # Hash and update the password; the temporary password must be rotated
+    # by the user on their next login.
     target_user.hashed_password = get_password_hash(temp_password)
+    target_user.must_change_password = True
 
     db.commit()
     db.refresh(target_user)
@@ -376,6 +375,7 @@ def change_my_password(
 
     # Update password
     current_user.hashed_password = get_password_hash(new_password)
+    current_user.must_change_password = False
     db.commit()
     db.refresh(current_user)
 
@@ -391,7 +391,7 @@ async def lookup_students(
     username: Optional[str] = Query(None, description="Search by username"),
     email: Optional[str] = Query(None, description="Search by email"),
     auth_user: AuthUser = Depends(require_admin_or_permission("students:read")),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
 ):
     """
     Lookup students by username or email for API integrations.
@@ -400,19 +400,19 @@ async def lookup_students(
     if not username and not email:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Either username or email must be provided"
+            detail="Either username or email must be provided",
         )
-    
-    query = db.query(User).filter(User.role == UserRole.STUDENT, User.is_active == True)
-    
+
+    query = db.query(User).filter(User.role == UserRole.STUDENT, User.is_active)
+
     if username:
         query = query.filter(User.username.ilike(f"%{username}%"))
-    
+
     if email:
         query = query.filter(User.email.ilike(f"%{email}%"))
-    
+
     students = query.limit(10).all()  # Limit results to prevent abuse
-    
+
     return students
 
 
@@ -420,22 +420,21 @@ async def lookup_students(
 async def get_student_info(
     student_id: int,
     auth_user: AuthUser = Depends(require_admin_or_permission("students:read")),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
 ):
     """
     Get basic student information by ID for API integrations.
     Useful for verifying student exists before point operations.
     """
-    student = db.query(User).filter(
-        User.id == student_id,
-        User.role == UserRole.STUDENT,
-        User.is_active == True
-    ).first()
-    
+    student = (
+        db.query(User)
+        .filter(User.id == student_id, User.role == UserRole.STUDENT, User.is_active)
+        .first()
+    )
+
     if not student:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Student not found"
+            status_code=status.HTTP_404_NOT_FOUND, detail="Student not found"
         )
-    
+
     return student

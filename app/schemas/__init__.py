@@ -30,3 +30,17 @@ from .points import (
     SystemSettingCreate,
     PointsSystemStatus,
 )
+
+__all__ = [
+    "AdminPointAdjustment",
+    "AdminPointsOverview",
+    "PointTransaction",
+    "PointTransactionCreate",
+    "PointsLedger",
+    "PointsSystemStatus",
+    "StudentPoints",
+    "StudentPointsCreate",
+    "StudentPointsWithTransactions",
+    "SystemSetting",
+    "SystemSettingCreate",
+]

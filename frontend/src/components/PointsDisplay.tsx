@@ -75,6 +75,7 @@ const PointsDisplay: React.FC<PointsDisplayProps> = ({ compact = false, classNam
           onClick={toggleVisibility}
           className="p-1 rounded text-muted hover:text-ink transition-colors"
           title={isVisible ? 'Hide points' : 'Show points'}
+          aria-label={isVisible ? 'Hide points' : 'Show points'}
         >
           {isVisible ? <EyeOff size={13} /> : <Eye size={13} />}
         </button>
@@ -100,6 +101,7 @@ const PointsDisplay: React.FC<PointsDisplayProps> = ({ compact = false, classNam
           onClick={toggleVisibility}
           className="p-1.5 rounded-field text-muted hover:text-ink hover:bg-panel-2 transition-colors"
           title={isVisible ? 'Hide points' : 'Show points'}
+          aria-label={isVisible ? 'Hide points' : 'Show points'}
         >
           {isVisible ? <EyeOff size={15} /> : <Eye size={15} />}
         </button>

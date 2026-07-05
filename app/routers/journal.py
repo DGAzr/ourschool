@@ -15,6 +15,7 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 """Journal entry router."""
+
 from datetime import date, datetime, timedelta, timezone
 from typing import List
 
@@ -29,7 +30,6 @@ from app.models.journal import JournalEntry, JournalReply
 from app.models.user import User
 from app.schemas.journal import (
     JournalEntryCreate,
-    JournalEntryResponse,
     JournalEntryUpdate,
     JournalEntryWithAuthor,
     JournalReplyResponse,
@@ -72,20 +72,28 @@ def _compute_streak(db: Session, student_id: int) -> int:
     return streak
 
 
-def _entry_to_response(entry: JournalEntry, current_user: User, db: Session, streak: int = 0) -> JournalEntryWithAuthor:
+def _entry_to_response(
+    entry: JournalEntry, current_user: User, db: Session, streak: int = 0
+) -> JournalEntryWithAuthor:
     author = db.query(User).filter(User.id == entry.author_id).first()
     student = db.query(User).filter(User.id == entry.student_id).first()
 
     replies = []
     for r in entry.replies:
         reply_author = db.query(User).filter(User.id == r.author_id).first()
-        replies.append(JournalReplyResponse(
-            id=r.id,
-            author_name=f"{reply_author.first_name} {reply_author.last_name}" if reply_author else "Unknown",
-            author_role=reply_author.role.value if reply_author else "admin",
-            text=r.text,
-            created_at=r.created_at,
-        ))
+        replies.append(
+            JournalReplyResponse(
+                id=r.id,
+                author_name=(
+                    f"{reply_author.first_name} {reply_author.last_name}"
+                    if reply_author
+                    else "Unknown"
+                ),
+                author_role=reply_author.role.value if reply_author else "admin",
+                text=r.text,
+                created_at=r.created_at,
+            )
+        )
 
     return JournalEntryWithAuthor(
         id=entry.id,
@@ -105,7 +113,9 @@ def _entry_to_response(entry: JournalEntry, current_user: User, db: Session, str
         needs_response=entry.needs_response,
         points_awarded=entry.points_awarded,
         author_name=f"{author.first_name} {author.last_name}" if author else "Unknown",
-        student_name=f"{student.first_name} {student.last_name}" if student else "Unknown",
+        student_name=(
+            f"{student.first_name} {student.last_name}" if student else "Unknown"
+        ),
         is_own_entry=entry.author_id == current_user.id,
         replies=replies,
         streak=streak,
@@ -132,7 +142,9 @@ async def get_journal_entries(
     for entry in entries:
         if entry.student_id not in streak_cache:
             streak_cache[entry.student_id] = _compute_streak(db, entry.student_id)
-        result.append(_entry_to_response(entry, current_user, db, streak_cache[entry.student_id]))
+        result.append(
+            _entry_to_response(entry, current_user, db, streak_cache[entry.student_id])
+        )
 
     return result
 
@@ -143,12 +155,22 @@ async def get_journal_entry(
     current_user: User = Depends(get_user_with_permission),
     db: Session = Depends(get_db),
 ):
-    entry = db.query(JournalEntry).options(joinedload(JournalEntry.replies)).filter(JournalEntry.id == entry_id).first()
+    entry = (
+        db.query(JournalEntry)
+        .options(joinedload(JournalEntry.replies))
+        .filter(JournalEntry.id == entry_id)
+        .first()
+    )
     if not entry:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Journal entry not found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Journal entry not found"
+        )
 
     if current_user.role == UserRole.STUDENT and entry.student_id != current_user.id:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You can only view your own journal entries")
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You can only view your own journal entries",
+        )
 
     streak = _compute_streak(db, entry.student_id)
     return _entry_to_response(entry, current_user, db, streak)
@@ -164,11 +186,20 @@ async def create_journal_entry(
         student_id = current_user.id
     elif current_user.role == UserRole.ADMIN:
         if not entry_data.student_id:
-            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="student_id is required for admin users")
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="student_id is required for admin users",
+            )
         student_id = entry_data.student_id
-        student = db.query(User).filter(User.id == student_id, User.role == UserRole.STUDENT).first()
+        student = (
+            db.query(User)
+            .filter(User.id == student_id, User.role == UserRole.STUDENT)
+            .first()
+        )
         if not student:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Student not found")
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND, detail="Student not found"
+            )
 
     entry = JournalEntry(
         student_id=student_id,
@@ -190,23 +221,31 @@ async def create_journal_entry(
     db.refresh(entry)
 
     # Award points to students on their first journal entry of the day
-    if current_user.role == UserRole.STUDENT and points_crud.is_points_system_enabled(db):
-        today_start = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
-        already_awarded = db.query(JournalEntry).filter(
-            JournalEntry.student_id == student_id,
-            JournalEntry.points_awarded.isnot(None),
-            JournalEntry.created_at >= today_start,
-            JournalEntry.id != entry.id,
-        ).first()
+    if current_user.role == UserRole.STUDENT and points_crud.is_points_system_enabled(
+        db
+    ):
+        today_start = datetime.now(timezone.utc).replace(
+            hour=0, minute=0, second=0, microsecond=0
+        )
+        already_awarded = (
+            db.query(JournalEntry)
+            .filter(
+                JournalEntry.student_id == student_id,
+                JournalEntry.points_awarded.isnot(None),
+                JournalEntry.created_at >= today_start,
+                JournalEntry.id != entry.id,
+            )
+            .first()
+        )
         if not already_awarded:
-            setting = points_crud.get_system_setting(db, 'journal_points_per_entry')
+            setting = points_crud.get_system_setting(db, "journal_points_per_entry")
             amount = int(setting.setting_value) if setting else 5
             txn = PointTransactionCreate(
                 student_id=student_id,
                 amount=amount,
-                transaction_type='journal_submission',
+                transaction_type="journal_submission",
                 source_id=entry.id,
-                source_description='Journal entry submitted',
+                source_description="Journal entry submitted",
             )
             points_crud.create_point_transaction(db, txn)
             entry.points_awarded = amount
@@ -224,14 +263,33 @@ async def update_journal_entry(
     current_user: User = Depends(get_user_with_permission),
     db: Session = Depends(get_db),
 ):
-    entry = db.query(JournalEntry).options(joinedload(JournalEntry.replies)).filter(JournalEntry.id == entry_id).first()
+    entry = (
+        db.query(JournalEntry)
+        .options(joinedload(JournalEntry.replies))
+        .filter(JournalEntry.id == entry_id)
+        .first()
+    )
     if not entry:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Journal entry not found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Journal entry not found"
+        )
 
     if current_user.role == UserRole.STUDENT and entry.author_id != current_user.id:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You can only edit your own journal entries")
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You can only edit your own journal entries",
+        )
 
-    for field in ['title', 'content', 'entry_date', 'mood', 'icon', 'tags', 'win', 'goals']:
+    for field in [
+        "title",
+        "content",
+        "entry_date",
+        "mood",
+        "icon",
+        "tags",
+        "win",
+        "goals",
+    ]:
         val = getattr(entry_data, field)
         if val is not None:
             setattr(entry, field, val)
@@ -250,10 +308,15 @@ async def delete_journal_entry(
 ):
     entry = db.query(JournalEntry).filter(JournalEntry.id == entry_id).first()
     if not entry:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Journal entry not found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Journal entry not found"
+        )
 
     if current_user.role == UserRole.STUDENT and entry.author_id != current_user.id:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="You can only delete your own journal entries")
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You can only delete your own journal entries",
+        )
 
     db.delete(entry)
     db.commit()
@@ -268,11 +331,21 @@ async def set_reactions(
     db: Session = Depends(get_db),
 ):
     if current_user.role != UserRole.ADMIN:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only admins can set reactions")
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only admins can set reactions",
+        )
 
-    entry = db.query(JournalEntry).options(joinedload(JournalEntry.replies)).filter(JournalEntry.id == entry_id).first()
+    entry = (
+        db.query(JournalEntry)
+        .options(joinedload(JournalEntry.replies))
+        .filter(JournalEntry.id == entry_id)
+        .first()
+    )
     if not entry:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Journal entry not found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Journal entry not found"
+        )
 
     entry.reactions = body.reactions
     entry.needs_response = False
@@ -291,11 +364,16 @@ async def add_reply(
     db: Session = Depends(get_db),
 ):
     if current_user.role != UserRole.ADMIN:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only admins can reply to journal entries")
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only admins can reply to journal entries",
+        )
 
     entry = db.query(JournalEntry).filter(JournalEntry.id == entry_id).first()
     if not entry:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Journal entry not found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Journal entry not found"
+        )
 
     reply = JournalReply(
         entry_id=entry_id,
@@ -323,11 +401,21 @@ async def mark_entry_read(
     db: Session = Depends(get_db),
 ):
     if current_user.role != UserRole.ADMIN:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only admins can mark entries as read")
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only admins can mark entries as read",
+        )
 
-    entry = db.query(JournalEntry).options(joinedload(JournalEntry.replies)).filter(JournalEntry.id == entry_id).first()
+    entry = (
+        db.query(JournalEntry)
+        .options(joinedload(JournalEntry.replies))
+        .filter(JournalEntry.id == entry_id)
+        .first()
+    )
     if not entry:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Journal entry not found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Journal entry not found"
+        )
 
     if entry.needs_response:
         entry.needs_response = False
@@ -345,11 +433,16 @@ async def delete_reply(
     db: Session = Depends(get_db),
 ):
     if current_user.role != UserRole.ADMIN:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only admins can delete replies")
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only admins can delete replies",
+        )
 
     reply = db.query(JournalReply).filter(JournalReply.id == reply_id).first()
     if not reply:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Reply not found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Reply not found"
+        )
 
     db.delete(reply)
     db.commit()
@@ -367,22 +460,32 @@ async def get_composer_data(
     subjects = db.query(Subject).all()
     subject_list = [{"id": s.id, "name": s.name, "color": s.color} for s in subjects]
 
-    streak = _compute_streak(db, current_user.id) if current_user.role == UserRole.STUDENT else 0
+    streak = (
+        _compute_streak(db, current_user.id)
+        if current_user.role == UserRole.STUDENT
+        else 0
+    )
 
     points_today = None
     if current_user.role == UserRole.STUDENT:
-        today_start = datetime.now(timezone.utc).replace(hour=0, minute=0, second=0, microsecond=0)
-        awarded_entry = db.query(JournalEntry).filter(
-            JournalEntry.student_id == current_user.id,
-            JournalEntry.points_awarded.isnot(None),
-            JournalEntry.created_at >= today_start,
-        ).first()
+        today_start = datetime.now(timezone.utc).replace(
+            hour=0, minute=0, second=0, microsecond=0
+        )
+        awarded_entry = (
+            db.query(JournalEntry)
+            .filter(
+                JournalEntry.student_id == current_user.id,
+                JournalEntry.points_awarded.isnot(None),
+                JournalEntry.created_at >= today_start,
+            )
+            .first()
+        )
         if awarded_entry:
             points_today = awarded_entry.points_awarded
 
     points_per_entry = None
     if points_crud.is_points_system_enabled(db):
-        setting = points_crud.get_system_setting(db, 'journal_points_per_entry')
+        setting = points_crud.get_system_setting(db, "journal_points_per_entry")
         points_per_entry = int(setting.setting_value) if setting else 5
 
     return {
@@ -399,7 +502,13 @@ async def get_students_for_journal(
     db: Session = Depends(get_db),
 ):
     if current_user.role != UserRole.ADMIN:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Only admins can access student list")
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only admins can access student list",
+        )
 
     students = db.query(User).filter(User.role == UserRole.STUDENT).all()
-    return [{"id": s.id, "name": f"{s.first_name} {s.last_name}", "email": s.email} for s in students]
+    return [
+        {"id": s.id, "name": f"{s.first_name} {s.last_name}", "email": s.email}
+        for s in students
+    ]

@@ -18,9 +18,10 @@
 
 import React, { useState, useEffect } from 'react'
 import { attendanceApi } from '../services/attendance'
-import { User } from '../types'
+import { AttendanceStatus, User } from '../types'
 import Modal from './ui/Modal'
 import Button from './ui/Button'
+import { getErrorMessage } from '../services/api'
 
 interface BulkAttendanceModalProps {
   isOpen: boolean
@@ -46,16 +47,20 @@ const BulkAttendanceModal: React.FC<BulkAttendanceModalProps> = ({
   const [error, setError] = useState<string | null>(null)
   const [selectedStudents, setSelectedStudents] = useState<number[]>([])
 
-  const [bulkRecord, setBulkRecord] = useState({
+  const [bulkRecord, setBulkRecord] = useState<{
+    date: string
+    status: AttendanceStatus
+    notes: string
+  }>({
     date: getLocalDateString(),
-    status: 'present' as const,
+    status: 'present',
     notes: ''
   })
 
   useEffect(() => {
     if (isOpen) {
       fetchStudents()
-      setBulkRecord({ date: getLocalDateString(), status: 'present' as const, notes: '' })
+      setBulkRecord({ date: getLocalDateString(), status: 'present', notes: '' })
       setSelectedStudents([])
       setError(null)
     }
@@ -93,8 +98,8 @@ const BulkAttendanceModal: React.FC<BulkAttendanceModalProps> = ({
       })
       onSuccess?.()
       onClose()
-    } catch (err: any) {
-      setError(err.message || 'Failed to record attendance')
+    } catch (err) {
+      setError(getErrorMessage(err, 'Failed to record attendance'))
     } finally {
       setLoading(false)
     }
@@ -132,8 +137,9 @@ const BulkAttendanceModal: React.FC<BulkAttendanceModalProps> = ({
         {/* Date + Status */}
         <div className="grid grid-cols-2 gap-3">
           <div>
-            <label className={LABEL}>Date</label>
+            <label htmlFor="bulk-attendance-date" className={LABEL}>Date</label>
             <input
+              id="bulk-attendance-date"
               type="date"
               value={bulkRecord.date}
               onChange={e => setBulkRecord(r => ({ ...r, date: e.target.value }))}
@@ -142,10 +148,11 @@ const BulkAttendanceModal: React.FC<BulkAttendanceModalProps> = ({
             />
           </div>
           <div>
-            <label className={LABEL}>Status</label>
+            <label htmlFor="bulk-attendance-status" className={LABEL}>Status</label>
             <select
+              id="bulk-attendance-status"
               value={bulkRecord.status}
-              onChange={e => setBulkRecord(r => ({ ...r, status: e.target.value as any }))}
+              onChange={e => setBulkRecord(r => ({ ...r, status: e.target.value as AttendanceStatus }))}
               className={FIELD}
               disabled={loading}
             >
@@ -159,8 +166,9 @@ const BulkAttendanceModal: React.FC<BulkAttendanceModalProps> = ({
 
         {/* Notes */}
         <div>
-          <label className={LABEL}>Notes <span className="normal-case font-normal text-faint">(optional)</span></label>
+          <label htmlFor="bulk-attendance-notes" className={LABEL}>Notes <span className="normal-case font-normal text-faint">(optional)</span></label>
           <textarea
+            id="bulk-attendance-notes"
             value={bulkRecord.notes}
             onChange={e => setBulkRecord(r => ({ ...r, notes: e.target.value }))}
             rows={2}

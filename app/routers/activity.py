@@ -15,17 +15,18 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 """APIs for activity tracking."""
+
 from datetime import datetime, timezone, timedelta
-from typing import Annotated, List, Optional
+from typing import Annotated, List
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session, joinedload
-from sqlalchemy import desc, and_, or_
+from sqlalchemy import desc, and_
 
 from app.core.database import get_db
 from app.core.logging import get_logger, log_business_event
 from app.models.user import User, UserRole
-from app.models.assignment import StudentAssignment, AssignmentTemplate
+from app.models.assignment import StudentAssignment
 from app.models.attendance import AttendanceRecord
 from app.enums import AssignmentStatus
 from app.routers.auth import get_current_active_user
@@ -37,7 +38,7 @@ router = APIRouter()
 
 class ActivityItem:
     """Represents a single activity item."""
-    
+
     def __init__(
         self,
         activity_type: str,
@@ -45,7 +46,7 @@ class ActivityItem:
         timestamp: datetime,
         user_name: str = "",
         student_name: str = "",
-        details: dict = None
+        details: dict = None,
     ):
         self.activity_type = activity_type
         self.description = description
@@ -53,7 +54,7 @@ class ActivityItem:
         self.user_name = user_name
         self.student_name = student_name
         self.details = details or {}
-    
+
     def to_dict(self):
         """Convert to dictionary for JSON response."""
         return {
@@ -63,39 +64,40 @@ class ActivityItem:
             "user_name": self.user_name,
             "student_name": self.student_name,
             "details": self.details,
-            "time_ago": self._get_time_ago()
+            "time_ago": self._get_time_ago(),
         }
-    
+
     def _get_time_ago(self):
         """Generate human-readable time difference."""
         # For activities that only have date information (like attendance),
         # compare dates directly to avoid timezone confusion
-        if (hasattr(self.timestamp, 'time') and 
-            self.timestamp.time() == datetime.min.time()):
+        if (
+            hasattr(self.timestamp, "time")
+            and self.timestamp.time() == datetime.min.time()
+        ):
             # This is a date-only event created with datetime.combine(date, datetime.min.time())
-            from datetime import date as Date
-            
+
             # Date-only events are stored using the server's local date, so
             # compare against the server's local "today" rather than a
             # hardcoded UTC offset (which was wrong outside EDT and during DST).
             today = datetime.now().date()
             event_date = self.timestamp.date()
-            
+
             day_diff = (today - event_date).days
             if day_diff == 0:
                 return "Today"
             elif day_diff == 1:
-                return "Yesterday" 
+                return "Yesterday"
             elif day_diff > 1:
                 return f"{day_diff} days ago"
             else:
                 # Future date (shouldn't happen for most activities)
                 return "Today"
-        
+
         # For regular datetime comparisons, use UTC
         now_utc = datetime.now(timezone.utc)
         diff = now_utc - self.timestamp
-        
+
         if diff.days > 0:
             return f"{diff.days} day{'s' if diff.days != 1 else ''} ago"
         elif diff.seconds >= 3600:
@@ -113,115 +115,147 @@ def get_recent_activity(
     db: Annotated[Session, Depends(get_db)],
     current_user: Annotated[User, Depends(get_current_active_user)],
     limit: int = Query(default=10, le=50),
-    days: int = Query(default=7, le=30)
+    days: int = Query(default=7, le=30),
 ):
     """Get recent activity for the current user."""
     log_business_event(
-        "activity_fetch_recent",
-        user_id=str(current_user.id),
-        limit=limit,
-        days=days
+        "activity_fetch_recent", user_id=str(current_user.id), limit=limit, days=days
     )
-    
+
     try:
         # Calculate date range
         end_date = datetime.now(timezone.utc)
         start_date = end_date - timedelta(days=days)
-        
+
         activities = []
-        
+
         if current_user.role == UserRole.ADMIN:
             # Admin sees all activity
             activities.extend(_get_assignment_activities(db, start_date, end_date))
             activities.extend(_get_attendance_activities(db, start_date, end_date))
         else:
             # Students see only their own activity
-            activities.extend(_get_student_assignment_activities(db, current_user.id, start_date, end_date))
-            activities.extend(_get_student_attendance_activities(db, current_user.id, start_date, end_date))
-        
+            activities.extend(
+                _get_student_assignment_activities(
+                    db, current_user.id, start_date, end_date
+                )
+            )
+            activities.extend(
+                _get_student_attendance_activities(
+                    db, current_user.id, start_date, end_date
+                )
+            )
+
         # Sort by timestamp (newest first) and limit
         activities.sort(key=lambda x: x.timestamp, reverse=True)
         activities = activities[:limit]
-        
+
         # Convert to dictionaries
         activity_dicts = [activity.to_dict() for activity in activities]
-        
-        logger.info(f"Retrieved {len(activity_dicts)} activities for user {current_user.id}")
-        
+
+        logger.info(
+            f"Retrieved {len(activity_dicts)} activities for user {current_user.id}"
+        )
+
         return {
             "activities": activity_dicts,
             "total": len(activity_dicts),
             "date_range": {
                 "start": start_date.isoformat(),
-                "end": end_date.isoformat()
-            }
+                "end": end_date.isoformat(),
+            },
         }
-        
+
     except Exception as e:
         logger.error(f"Failed to get recent activity: {e}")
         raise HTTPException(status_code=500, detail="Failed to retrieve activity")
 
 
-def _get_assignment_activities(db: Session, start_date: datetime, end_date: datetime) -> List[ActivityItem]:
+def _get_assignment_activities(
+    db: Session, start_date: datetime, end_date: datetime
+) -> List[ActivityItem]:
     """Get assignment-related activities for admin."""
     activities = []
-    
+
     # Recent assignment submissions and grades
     assignments = (
         db.query(StudentAssignment)
         .options(
             joinedload(StudentAssignment.template),
-            joinedload(StudentAssignment.student)
+            joinedload(StudentAssignment.student),
         )
         .filter(
             and_(
                 StudentAssignment.updated_at >= start_date,
-                StudentAssignment.updated_at <= end_date
+                StudentAssignment.updated_at <= end_date,
             )
         )
         .order_by(desc(StudentAssignment.updated_at))
         .limit(20)
         .all()
     )
-    
+
     for assignment in assignments:
         student_name = f"{assignment.student.first_name} {assignment.student.last_name}"
-        template_name = assignment.template.name if assignment.template else "Unknown Assignment"
-        
-        if assignment.status == AssignmentStatus.SUBMITTED and assignment.submitted_date:
-            activities.append(ActivityItem(
-                activity_type="assignment_submitted",
-                description=f"Assignment '{template_name}' submitted",
-                timestamp=datetime.combine(assignment.submitted_date, datetime.min.time()),
-                student_name=student_name,
-                details={
-                    "assignment_id": assignment.id,
-                    "template_name": template_name,
-                    "subject": assignment.template.subject.name if assignment.template and assignment.template.subject else None
-                }
-            ))
-        
+        template_name = (
+            assignment.template.name if assignment.template else "Unknown Assignment"
+        )
+
+        if (
+            assignment.status == AssignmentStatus.SUBMITTED
+            and assignment.submitted_date
+        ):
+            activities.append(
+                ActivityItem(
+                    activity_type="assignment_submitted",
+                    description=f"Assignment '{template_name}' submitted",
+                    timestamp=datetime.combine(
+                        assignment.submitted_date, datetime.min.time()
+                    ),
+                    student_name=student_name,
+                    details={
+                        "assignment_id": assignment.id,
+                        "template_name": template_name,
+                        "subject": (
+                            assignment.template.subject.name
+                            if assignment.template and assignment.template.subject
+                            else None
+                        ),
+                    },
+                )
+            )
+
         if assignment.percentage_grade is not None and assignment.graded_date:
-            activities.append(ActivityItem(
-                activity_type="assignment_graded",
-                description=f"Assignment '{template_name}' graded ({assignment.percentage_grade:.1f}%)",
-                timestamp=datetime.combine(assignment.graded_date, datetime.min.time()),
-                student_name=student_name,
-                details={
-                    "assignment_id": assignment.id,
-                    "template_name": template_name,
-                    "grade": assignment.percentage_grade,
-                    "subject": assignment.template.subject.name if assignment.template and assignment.template.subject else None
-                }
-            ))
-    
+            activities.append(
+                ActivityItem(
+                    activity_type="assignment_graded",
+                    description=f"Assignment '{template_name}' graded ({assignment.percentage_grade:.1f}%)",
+                    timestamp=datetime.combine(
+                        assignment.graded_date, datetime.min.time()
+                    ),
+                    student_name=student_name,
+                    details={
+                        "assignment_id": assignment.id,
+                        "template_name": template_name,
+                        "grade": assignment.percentage_grade,
+                        "subject": (
+                            assignment.template.subject.name
+                            if assignment.template and assignment.template.subject
+                            else None
+                        ),
+                    },
+                )
+            )
+
     return activities
 
 
-def _get_attendance_activities(db: Session, start_date: datetime, end_date: datetime) -> List[ActivityItem]:
+def _get_attendance_activities(
+    db: Session, start_date: datetime, end_date: datetime
+) -> List[ActivityItem]:
     """Get attendance-related activities for admin."""
     activities = []
-    
+
     # Recent attendance records
     attendance_records = (
         db.query(AttendanceRecord)
@@ -229,37 +263,45 @@ def _get_attendance_activities(db: Session, start_date: datetime, end_date: date
         .filter(
             and_(
                 AttendanceRecord.date >= start_date.date(),
-                AttendanceRecord.date <= end_date.date()
+                AttendanceRecord.date <= end_date.date(),
             )
         )
         .order_by(desc(AttendanceRecord.date))
         .limit(20)
         .all()
     )
-    
+
     for record in attendance_records:
         student_name = f"{record.student.first_name} {record.student.last_name}"
-        
-        activities.append(ActivityItem(
-            activity_type="attendance_recorded",
-            description=f"Attendance marked as {record.status.value if hasattr(record.status, 'value') else record.status}",
-            timestamp=datetime.combine(record.date, datetime.min.time()),
-            student_name=student_name,
-            details={
-                "attendance_id": record.id,
-                "status": record.status.value if hasattr(record.status, 'value') else record.status,
-                "date": record.date.isoformat(),
-                "notes": record.notes
-            }
-        ))
-    
+
+        activities.append(
+            ActivityItem(
+                activity_type="attendance_recorded",
+                description=f"Attendance marked as {record.status.value if hasattr(record.status, 'value') else record.status}",
+                timestamp=datetime.combine(record.date, datetime.min.time()),
+                student_name=student_name,
+                details={
+                    "attendance_id": record.id,
+                    "status": (
+                        record.status.value
+                        if hasattr(record.status, "value")
+                        else record.status
+                    ),
+                    "date": record.date.isoformat(),
+                    "notes": record.notes,
+                },
+            )
+        )
+
     return activities
 
 
-def _get_student_assignment_activities(db: Session, student_id: int, start_date: datetime, end_date: datetime) -> List[ActivityItem]:
+def _get_student_assignment_activities(
+    db: Session, student_id: int, start_date: datetime, end_date: datetime
+) -> List[ActivityItem]:
     """Get assignment activities for a specific student."""
     activities = []
-    
+
     # Student's recent assignments
     assignments = (
         db.query(StudentAssignment)
@@ -268,61 +310,95 @@ def _get_student_assignment_activities(db: Session, student_id: int, start_date:
             and_(
                 StudentAssignment.student_id == student_id,
                 StudentAssignment.updated_at >= start_date,
-                StudentAssignment.updated_at <= end_date
+                StudentAssignment.updated_at <= end_date,
             )
         )
         .order_by(desc(StudentAssignment.updated_at))
         .limit(15)
         .all()
     )
-    
+
     for assignment in assignments:
-        template_name = assignment.template.name if assignment.template else "Unknown Assignment"
-        
-        if assignment.status == AssignmentStatus.SUBMITTED and assignment.submitted_date:
-            activities.append(ActivityItem(
-                activity_type="my_assignment_submitted",
-                description=f"You submitted '{template_name}'",
-                timestamp=datetime.combine(assignment.submitted_date, datetime.min.time()),
-                details={
-                    "assignment_id": assignment.id,
-                    "template_name": template_name,
-                    "subject": assignment.template.subject.name if assignment.template and assignment.template.subject else None
-                }
-            ))
-        
+        template_name = (
+            assignment.template.name if assignment.template else "Unknown Assignment"
+        )
+
+        if (
+            assignment.status == AssignmentStatus.SUBMITTED
+            and assignment.submitted_date
+        ):
+            activities.append(
+                ActivityItem(
+                    activity_type="my_assignment_submitted",
+                    description=f"You submitted '{template_name}'",
+                    timestamp=datetime.combine(
+                        assignment.submitted_date, datetime.min.time()
+                    ),
+                    details={
+                        "assignment_id": assignment.id,
+                        "template_name": template_name,
+                        "subject": (
+                            assignment.template.subject.name
+                            if assignment.template and assignment.template.subject
+                            else None
+                        ),
+                    },
+                )
+            )
+
         if assignment.percentage_grade is not None and assignment.graded_date:
-            activities.append(ActivityItem(
-                activity_type="my_assignment_graded",
-                description=f"'{template_name}' was graded ({assignment.percentage_grade:.1f}%)",
-                timestamp=datetime.combine(assignment.graded_date, datetime.min.time()),
-                details={
-                    "assignment_id": assignment.id,
-                    "template_name": template_name,
-                    "grade": assignment.percentage_grade,
-                    "subject": assignment.template.subject.name if assignment.template and assignment.template.subject else None
-                }
-            ))
-        
-        if assignment.status == AssignmentStatus.NOT_STARTED and assignment.assigned_date:
-            activities.append(ActivityItem(
-                activity_type="my_assignment_received",
-                description=f"New assignment received: '{template_name}'",
-                timestamp=datetime.combine(assignment.assigned_date, datetime.min.time()),
-                details={
-                    "assignment_id": assignment.id,
-                    "template_name": template_name,
-                    "subject": assignment.template.subject.name if assignment.template and assignment.template.subject else None
-                }
-            ))
-    
+            activities.append(
+                ActivityItem(
+                    activity_type="my_assignment_graded",
+                    description=f"'{template_name}' was graded ({assignment.percentage_grade:.1f}%)",
+                    timestamp=datetime.combine(
+                        assignment.graded_date, datetime.min.time()
+                    ),
+                    details={
+                        "assignment_id": assignment.id,
+                        "template_name": template_name,
+                        "grade": assignment.percentage_grade,
+                        "subject": (
+                            assignment.template.subject.name
+                            if assignment.template and assignment.template.subject
+                            else None
+                        ),
+                    },
+                )
+            )
+
+        if (
+            assignment.status == AssignmentStatus.NOT_STARTED
+            and assignment.assigned_date
+        ):
+            activities.append(
+                ActivityItem(
+                    activity_type="my_assignment_received",
+                    description=f"New assignment received: '{template_name}'",
+                    timestamp=datetime.combine(
+                        assignment.assigned_date, datetime.min.time()
+                    ),
+                    details={
+                        "assignment_id": assignment.id,
+                        "template_name": template_name,
+                        "subject": (
+                            assignment.template.subject.name
+                            if assignment.template and assignment.template.subject
+                            else None
+                        ),
+                    },
+                )
+            )
+
     return activities
 
 
-def _get_student_attendance_activities(db: Session, student_id: int, start_date: datetime, end_date: datetime) -> List[ActivityItem]:
+def _get_student_attendance_activities(
+    db: Session, student_id: int, start_date: datetime, end_date: datetime
+) -> List[ActivityItem]:
     """Get attendance activities for a specific student."""
     activities = []
-    
+
     # Student's recent attendance
     attendance_records = (
         db.query(AttendanceRecord)
@@ -330,25 +406,31 @@ def _get_student_attendance_activities(db: Session, student_id: int, start_date:
             and_(
                 AttendanceRecord.student_id == student_id,
                 AttendanceRecord.date >= start_date.date(),
-                AttendanceRecord.date <= end_date.date()
+                AttendanceRecord.date <= end_date.date(),
             )
         )
         .order_by(desc(AttendanceRecord.date))
         .limit(10)
         .all()
     )
-    
+
     for record in attendance_records:
-        activities.append(ActivityItem(
-            activity_type="my_attendance_recorded",
-            description=f"Your attendance was marked as {record.status.value if hasattr(record.status, 'value') else record.status}",
-            timestamp=datetime.combine(record.date, datetime.min.time()),
-            details={
-                "attendance_id": record.id,
-                "status": record.status.value if hasattr(record.status, 'value') else record.status,
-                "date": record.date.isoformat(),
-                "notes": record.notes
-            }
-        ))
-    
+        activities.append(
+            ActivityItem(
+                activity_type="my_attendance_recorded",
+                description=f"Your attendance was marked as {record.status.value if hasattr(record.status, 'value') else record.status}",
+                timestamp=datetime.combine(record.date, datetime.min.time()),
+                details={
+                    "attendance_id": record.id,
+                    "status": (
+                        record.status.value
+                        if hasattr(record.status, "value")
+                        else record.status
+                    ),
+                    "date": record.date.isoformat(),
+                    "notes": record.notes,
+                },
+            )
+        )
+
     return activities

@@ -20,11 +20,13 @@
  * Attendance tracking and reporting types
  */
 
+export type AttendanceStatus = 'present' | 'absent' | 'late' | 'excused'
+
 export interface AttendanceRecord {
   id: number
   student_id: number
   date: string
-  status: 'present' | 'absent' | 'late' | 'excused'
+  status: AttendanceStatus
   notes?: string
   created_at: string
   updated_at: string
@@ -51,7 +53,7 @@ export interface AttendanceReportSummary {
   recent_activity_summary?: string
 }
 
-export interface AttendanceReportDetail {
+interface AttendanceReportDetail {
   date: string
   status: string
   notes?: string

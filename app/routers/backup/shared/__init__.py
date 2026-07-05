@@ -15,12 +15,13 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 """Shared utilities for backup module."""
+
 from .permissions import require_admin_for_backup
 from .validation import log_backup_operation, sanitize_import_data, validate_backup_data
 
 __all__ = [
     "require_admin_for_backup",
-    "log_backup_operation", 
+    "log_backup_operation",
     "sanitize_import_data",
     "validate_backup_data",
 ]

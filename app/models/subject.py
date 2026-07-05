@@ -15,6 +15,7 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 """Subject model."""
+
 import uuid
 from datetime import datetime, timezone
 
@@ -30,12 +31,16 @@ class Subject(Base):
     __tablename__ = "subjects"
 
     id = Column(Integer, primary_key=True, index=True)
-    external_id = Column(String(36), unique=True, nullable=False, default=lambda: str(uuid.uuid4()))
+    external_id = Column(
+        String(36), unique=True, nullable=False, default=lambda: str(uuid.uuid4())
+    )
     name = Column(String, nullable=False)
     description = Column(Text)
     color = Column(String, default="#3B82F6")
     icon = Column(String, nullable=True)
-    created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
+    created_at = Column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )
 
     assignment_templates = relationship("AssignmentTemplate", back_populates="subject")
     term_subjects = relationship("TermSubject", back_populates="subject")

@@ -59,7 +59,10 @@ def create_users(db: Session):
             first_name="Admin",
             last_name="Parent",
             role=UserRole.ADMIN,
-            is_active=True
+            is_active=True,
+            # Seeded credentials are public knowledge; force a rotation on
+            # first login.
+            must_change_password=True,
         )
         db.add(admin_user)
         db.commit()
@@ -411,7 +414,10 @@ def create_admin_only():
             first_name="Admin",
             last_name="Parent",
             role=UserRole.ADMIN,
-            is_active=True
+            is_active=True,
+            # Seeded credentials are public knowledge; force a rotation on
+            # first login.
+            must_change_password=True,
         )
         db.add(admin_user)
         db.commit()
@@ -422,6 +428,7 @@ def create_admin_only():
         print("  Email: admin@ourschool.work")
         print("  Username: admin")
         print("  Password: admin123")
+        print("  (A new password must be chosen on first login)")
         
         return admin_user
         
@@ -461,6 +468,7 @@ def create_test_data():
         print("  Email: admin@ourschool.work")
         print("  Username: admin")
         print("  Password: admin123")
+        print("  (A new password must be chosen on first login)")
         print("\nStudent accounts:")
         for student in student_users:
             print(f"  Email: {student.email}")

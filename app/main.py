@@ -15,6 +15,7 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 """Main application file."""
+
 import time
 import uuid
 from contextlib import asynccontextmanager
@@ -24,13 +25,36 @@ from fastapi import FastAPI, Request, HTTPException, Depends, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
-from app.core.logging import setup_logging, log_request_start, log_request_end, get_logger
+from app.core.logging import (
+    setup_logging,
+    log_request_start,
+    log_request_end,
+    get_logger,
+)
 from app.core.error_tracking import ErrorHandler
 from app.core.config import settings
 from app.models.user import User
 from app.routers.auth import get_current_admin_user
-from app.routers import activity, api_keys, assignment_types, assignments, attendance, auth, backup, integrations, journal, meta, performance, points, reports, subjects, terms, users
+from app.routers import (
+    activity,
+    api_keys,
+    assignment_types,
+    assignments,
+    attendance,
+    auth,
+    backup,
+    integrations,
+    journal,
+    meta,
+    performance,
+    points,
+    reports,
+    subjects,
+    terms,
+    users,
+)
 from app.routers import settings as settings_router
+from app.version import __version__
 
 
 @asynccontextmanager
@@ -39,25 +63,22 @@ async def lifespan(app: FastAPI):
     # Startup
     setup_logging()
     logger = get_logger("startup")
-    logger.info("OurSchool API starting up", extra={
-        "application": "ourschool",
-        "version": "1.0.0-beta.1",
-        "event": "startup"
-    })
-    
+    logger.info(
+        "OurSchool API starting up",
+        extra={"application": "ourschool", "version": __version__, "event": "startup"},
+    )
+
     yield
-    
+
     # Shutdown
     logger = get_logger("shutdown")
-    logger.info("OurSchool API shutting down", extra={
-        "event": "shutdown"
-    })
+    logger.info("OurSchool API shutting down", extra={"event": "shutdown"})
 
 
 app = FastAPI(
     title="OurSchool - Homeschool Tracking System",
     description="A comprehensive homeschool management platform",
-    version="1.0.0-beta.1",
+    version=__version__,
     lifespan=lifespan,
     docs_url="/docs" if settings.enable_api_docs else None,
     redoc_url="/redoc" if settings.enable_api_docs else None,
@@ -106,9 +127,7 @@ async def security_headers(request: Request, call_next):
     response.headers.setdefault(
         "Strict-Transport-Security", "max-age=31536000; includeSubDomains"
     )
-    response.headers.setdefault(
-        "Content-Security-Policy", "frame-ancestors 'none'"
-    )
+    response.headers.setdefault("Content-Security-Policy", "frame-ancestors 'none'")
     return response
 
 
@@ -118,34 +137,35 @@ async def request_logging_middleware(request: Request, call_next):
     # Generate unique request ID
     request_id = str(uuid.uuid4())
     request.state.request_id = request_id
-    
+
     # Try to extract user info from authorization header
-    user_id = 'anonymous'
+    user_id = "anonymous"
     try:
-        auth_header = request.headers.get('authorization')
-        if auth_header and auth_header.startswith('Bearer '):
+        auth_header = request.headers.get("authorization")
+        if auth_header and auth_header.startswith("Bearer "):
             # We'll set this properly after auth, but initialize for error tracking
             request.state.user_id = user_id
     except Exception:
         pass
-    
+
     # Log request start
     start_time = time.time()
     log_request_start(request_id, request.method, str(request.url.path), user_id)
-    
+
     # Process request
     response = await call_next(request)
-    
+
     # Calculate duration
     duration_ms = (time.time() - start_time) * 1000
-    
+
     # Log request completion
     log_request_end(request_id, response.status_code, duration_ms)
-    
+
     # Add request ID to response headers for debugging
     response.headers["X-Request-ID"] = request_id
-    
+
     return response
+
 
 app.include_router(auth.router, prefix="/api/auth", tags=["authentication"])
 app.include_router(users.router, prefix="/api/users", tags=["users"])
@@ -154,7 +174,9 @@ app.include_router(attendance.router, prefix="/api/attendance", tags=["attendanc
 app.include_router(subjects.router, prefix="/api/subjects", tags=["subjects"])
 app.include_router(meta.router, prefix="/api", tags=["meta"])
 app.include_router(assignments.router, prefix="/api/assignments", tags=["assignments"])
-app.include_router(assignment_types.router, prefix="/api/assignment-types", tags=["assignment-types"])
+app.include_router(
+    assignment_types.router, prefix="/api/assignment-types", tags=["assignment-types"]
+)
 app.include_router(terms.router, prefix="/api/terms", tags=["terms"])
 app.include_router(reports.router, prefix="/api/reports", tags=["reports"])
 app.include_router(journal.router, prefix="/api/journal", tags=["journal"])
@@ -183,43 +205,49 @@ async def database_health_check():
     """Database health check endpoint."""
     from app.core.database import get_db
     from sqlalchemy import text
-    
+
     try:
         # Get database session
         db = next(get_db())
-        
+
         # Test basic connectivity with a simple query
         result = db.execute(text("SELECT 1 as health_check"))
         row = result.fetchone()
-        
+
         # Verify we got expected result
         if row and row[0] == 1:
             # Test migration status
             try:
-                migration_result = db.execute(text("SELECT version_num FROM alembic_version"))
+                migration_result = db.execute(
+                    text("SELECT version_num FROM alembic_version")
+                )
                 current_version = migration_result.fetchone()
-                
+
                 db.close()
                 return {
                     "status": "healthy",
                     "database": "connected",
-                    "migration_version": current_version[0] if current_version else "unknown"
+                    "migration_version": (
+                        current_version[0] if current_version else "unknown"
+                    ),
                 }
             except Exception:
                 # Migration table might not exist, but DB is still healthy
                 db.close()
                 return {
-                    "status": "healthy", 
+                    "status": "healthy",
                     "database": "connected",
-                    "migration_version": "not_initialized"
+                    "migration_version": "not_initialized",
                 }
         else:
             db.close()
             return {"status": "unhealthy", "database": "query_failed"}
-            
+
     except Exception as e:
         # Log full detail server-side; never leak DB internals to callers.
-        get_logger("health").error("Database health check failed", extra={"error": str(e)})
+        get_logger("health").error(
+            "Database health check failed", extra={"error": str(e)}
+        )
         return {
             "status": "unhealthy",
             "database": "connection_failed",
@@ -235,7 +263,7 @@ async def get_recent_errors(
     from app.core.error_tracking import error_tracker
 
     recent_errors = error_tracker.get_recent_errors(limit)
-    
+
     # Sanitize sensitive information
     sanitized_errors = []
     for error in recent_errors:
@@ -248,10 +276,10 @@ async def get_recent_errors(
             "user_id": error.get("user_id", "anonymous"),
             "request_method": error.get("request_context", {}).get("method"),
             "request_path": error.get("request_context", {}).get("url"),
-            "status_code": error.get("additional_context", {}).get("status_code")
+            "status_code": error.get("additional_context", {}).get("status_code"),
         }
         sanitized_errors.append(sanitized)
-    
+
     return {"errors": sanitized_errors, "total": len(sanitized_errors)}
 
 

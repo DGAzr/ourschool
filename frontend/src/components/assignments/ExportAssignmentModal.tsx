@@ -20,14 +20,20 @@ import { useState } from 'react'
 import { Download, Copy, Check } from 'lucide-react'
 import Modal from '../ui/Modal'
 import Button from '../ui/Button'
+import { AssignmentTemplateExport, AssignmentTemplateBulkExport } from '../../types'
+
+type ExportData = AssignmentTemplateExport | AssignmentTemplateBulkExport
+
+const isBulkExport = (data: ExportData): data is AssignmentTemplateBulkExport =>
+  'templates' in data
 
 interface ExportAssignmentModalProps {
   isOpen: boolean
   onClose: () => void
   templateId: number
   templateName: string
-  onExport: (templateId: number) => Promise<any>
-  onBulkExport?: (templateIds: number[]) => Promise<any>
+  onExport: (templateId: number) => Promise<AssignmentTemplateExport>
+  onBulkExport?: (templateIds: number[]) => Promise<AssignmentTemplateBulkExport>
   selectedTemplateIds?: number[]
   isBulkMode?: boolean
 }
@@ -43,7 +49,7 @@ export function ExportAssignmentModal({
   isBulkMode = false
 }: ExportAssignmentModalProps) {
   const [isLoading, setIsLoading] = useState(false)
-  const [exportData, setExportData] = useState<any>(null)
+  const [exportData, setExportData] = useState<ExportData | null>(null)
   const [copied, setCopied] = useState(false)
 
   const handleExport = async () => {
@@ -159,7 +165,7 @@ export function ExportAssignmentModal({
           <div className="bg-pos-bg border border-pos-fg/20 rounded-[11px] p-4">
             <p className="text-[11px] font-semibold text-pos-fg uppercase tracking-wide mb-2">Export Summary</p>
             <div className="text-[13px] text-pos-fg space-y-1">
-              {isBulkMode ? (
+              {isBulkExport(exportData) ? (
                 <>
                   <div>Format: JSON v{exportData.format_version}</div>
                   <div>Templates: {exportData.templates?.length || 0}</div>

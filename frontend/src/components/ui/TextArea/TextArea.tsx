@@ -16,7 +16,7 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-import { TextareaHTMLAttributes, forwardRef } from 'react'
+import { TextareaHTMLAttributes, forwardRef, useId } from 'react'
 import { INPUT_STYLES } from '../../../constants'
 
 interface TextAreaProps extends TextareaHTMLAttributes<HTMLTextAreaElement> {
@@ -38,6 +38,8 @@ const TextArea = forwardRef<HTMLTextAreaElement, TextAreaProps>(({
   rows = 4,
   ...props
 }, ref) => {
+  const autoId = useId()
+  const textAreaId = props.id ?? autoId
   const getTextAreaClasses = () => {
     const baseClasses = INPUT_STYLES.base
     const errorClasses = error ? INPUT_STYLES.error : ''
@@ -53,7 +55,7 @@ const TextArea = forwardRef<HTMLTextAreaElement, TextAreaProps>(({
   return (
     <div className={fullWidth ? 'w-full' : ''}>
       {label && (
-        <label className="block text-[12px] font-semibold text-faint uppercase tracking-wide mb-1.5">
+        <label htmlFor={textAreaId} className="block text-[12px] font-semibold text-faint uppercase tracking-wide mb-1.5">
           {label}
           {props.required && <span className="text-danger ml-0.5">*</span>}
         </label>
@@ -64,6 +66,7 @@ const TextArea = forwardRef<HTMLTextAreaElement, TextAreaProps>(({
         className={getTextAreaClasses()}
         disabled={disabled}
         {...props}
+        id={textAreaId}
       />
       {error && <p className="mt-1 text-[12px] text-danger">{error}</p>}
       {helperText && !error && <p className="mt-1 text-[12px] text-muted">{helperText}</p>}

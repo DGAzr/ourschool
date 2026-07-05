@@ -6,8 +6,8 @@ OurSchool is pre-stable (beta) software. Only the latest release receives securi
 
 | Version | Supported |
 |---------|-----------|
-| 1.0.0-beta.1 (latest) | ✅ |
-| 0.0.1-alpha | ❌ |
+| Latest 1.0.0-beta.x release | ✅ |
+| Older betas / 0.0.1-alpha | ❌ |
 
 ## Reporting a vulnerability
 

@@ -15,6 +15,7 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 """Term schemas."""
+
 from datetime import date, datetime
 from typing import List, Optional
 import re
@@ -31,44 +32,55 @@ class TermBase(BaseModel):
     description: Optional[str] = None
     start_date: date = Field(..., description="Term start date")
     end_date: date = Field(..., description="Term end date")
-    academic_year: str = Field(..., description="Academic year (e.g., '2025' or '2025-2026')")
+    academic_year: str = Field(
+        ..., description="Academic year (e.g., '2025' or '2025-2026')"
+    )
     term_type: TermType = Field(default=TermType.CUSTOM, description="Type of term")
 
-    @validator('academic_year')
+    @validator("academic_year")
     def validate_academic_year(cls, v):
         """Validate academic year format."""
         if not v:
-            raise ValueError('Academic year is required')
-        
+            raise ValueError("Academic year is required")
+
         # Pattern for single year (YYYY) or year range (YYYY-YYYY)
-        single_year_pattern = r'^\d{4}$'
-        year_range_pattern = r'^\d{4}-\d{4}$'
-        
+        single_year_pattern = r"^\d{4}$"
+        year_range_pattern = r"^\d{4}-\d{4}$"
+
         if re.match(single_year_pattern, v):
             # Validate single year is reasonable (between 1900 and 2100)
             year = int(v)
             if year < 1900 or year > 2100:
-                raise ValueError('Academic year must be between 1900 and 2100')
+                raise ValueError("Academic year must be between 1900 and 2100")
             return v
         elif re.match(year_range_pattern, v):
             # Validate year range
-            start_year, end_year = map(int, v.split('-'))
-            
+            start_year, end_year = map(int, v.split("-"))
+
             # Check years are reasonable
-            if start_year < 1900 or start_year > 2100 or end_year < 1900 or end_year > 2100:
-                raise ValueError('Academic years must be between 1900 and 2100')
-            
+            if (
+                start_year < 1900
+                or start_year > 2100
+                or end_year < 1900
+                or end_year > 2100
+            ):
+                raise ValueError("Academic years must be between 1900 and 2100")
+
             # Check end year is after start year
             if end_year <= start_year:
-                raise ValueError('End year must be after start year in academic year range')
-            
+                raise ValueError(
+                    "End year must be after start year in academic year range"
+                )
+
             # Check it's a reasonable range (typically 1-2 years)
             if end_year - start_year > 5:
-                raise ValueError('Academic year range cannot exceed 5 years')
-            
+                raise ValueError("Academic year range cannot exceed 5 years")
+
             return v
         else:
-            raise ValueError('Academic year must be a single 4-digit year (e.g., "2025") or a year range (e.g., "2025-2026")')
+            raise ValueError(
+                'Academic year must be a single 4-digit year (e.g., "2025") or a year range (e.g., "2025-2026")'
+            )
 
 
 class TermCreate(TermBase):

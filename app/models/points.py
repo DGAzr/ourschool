@@ -33,19 +33,30 @@ from app.core.database import Base
 class StudentPoints(Base):
     """
     Current point balance for each student.
-    
+
     This table maintains the running total of points for quick balance lookups.
     The actual transaction history is stored in PointTransaction.
     """
+
     __tablename__ = "student_points"
 
     id = Column(Integer, primary_key=True, index=True)
-    student_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), unique=True, nullable=False, index=True)
+    student_id = Column(
+        Integer,
+        ForeignKey("users.id", ondelete="CASCADE"),
+        unique=True,
+        nullable=False,
+        index=True,
+    )
     current_balance = Column(Integer, default=0, nullable=False)
     total_earned = Column(Integer, default=0, nullable=False)  # Lifetime points earned
-    total_spent = Column(Integer, default=0, nullable=False)   # Lifetime points spent/deducted
+    total_spent = Column(
+        Integer, default=0, nullable=False
+    )  # Lifetime points spent/deducted
     created_at = Column(DateTime(timezone=True), server_default=func.now())
-    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+    updated_at = Column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )
 
     # Relationships
     student = relationship("User", back_populates="student_points")
@@ -54,41 +65,63 @@ class StudentPoints(Base):
 class PointTransaction(Base):
     """
     Individual point transactions (awards, deductions, spending).
-    
+
     This provides a complete audit trail of all point changes with context
     about what caused each transaction.
     """
+
     __tablename__ = "point_transactions"
 
     id = Column(Integer, primary_key=True, index=True)
-    student_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
-    amount = Column(Integer, nullable=False)  # Positive for awards, negative for deductions/spending
-    transaction_type = Column(String(50), nullable=False, index=True)  # 'assignment', 'admin_award', 'admin_deduction', 'spending'
-    source_id = Column(Integer, nullable=True)  # ID of assignment if transaction_type is 'assignment'
-    source_description = Column(String(255), nullable=True)  # Brief description of the source
-    notes = Column(Text, nullable=True)  # Detailed notes, especially for manual adjustments
-    admin_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)  # Admin who made manual adjustment
+    student_id = Column(
+        Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    amount = Column(
+        Integer, nullable=False
+    )  # Positive for awards, negative for deductions/spending
+    transaction_type = Column(
+        String(50), nullable=False, index=True
+    )  # 'assignment', 'admin_award', 'admin_deduction', 'spending'
+    source_id = Column(
+        Integer, nullable=True
+    )  # ID of assignment if transaction_type is 'assignment'
+    source_description = Column(
+        String(255), nullable=True
+    )  # Brief description of the source
+    notes = Column(
+        Text, nullable=True
+    )  # Detailed notes, especially for manual adjustments
+    admin_id = Column(
+        Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )  # Admin who made manual adjustment
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     # Relationships
-    student = relationship("User", foreign_keys=[student_id], back_populates="point_transactions")
+    student = relationship(
+        "User", foreign_keys=[student_id], back_populates="point_transactions"
+    )
     admin = relationship("User", foreign_keys=[admin_id])
 
 
 class SystemSettings(Base):
     """
     System-wide configuration settings.
-    
+
     Initially used for enabling/disabling the points system, but can be expanded
     for other global settings in the future.
     """
+
     __tablename__ = "system_settings"
 
     id = Column(Integer, primary_key=True, index=True)
     setting_key = Column(String(100), unique=True, nullable=False, index=True)
     setting_value = Column(String(500), nullable=False)
-    setting_type = Column(String(50), nullable=False)  # 'boolean', 'string', 'integer', 'json'
+    setting_type = Column(
+        String(50), nullable=False
+    )  # 'boolean', 'string', 'integer', 'json'
     description = Column(Text, nullable=True)
     is_active = Column(Boolean, default=True, nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
-    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+    updated_at = Column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
+    )

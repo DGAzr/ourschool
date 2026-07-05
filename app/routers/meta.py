@@ -15,6 +15,7 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 """Meta endpoint — exposes enum values and permissions for MCP discovery."""
+
 from typing import Annotated
 
 from fastapi import APIRouter, Depends

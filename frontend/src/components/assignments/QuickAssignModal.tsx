@@ -22,6 +22,7 @@ import { subjectsApi } from '../../services/subjects'
 import { Subject, User } from '../../types'
 import Modal from '../ui/Modal'
 import Button from '../ui/Button'
+import { getErrorMessage } from '../../services/api'
 
 interface QuickAssignModalProps {
   isOpen: boolean
@@ -97,7 +98,7 @@ const QuickAssignModal: React.FC<QuickAssignModalProps> = ({ isOpen, onClose, on
       const template = await assignmentsApi.create({
         name: form.name,
         subject_id: form.subject_id,
-        assignment_type: form.assignment_type as any,
+        assignment_type: form.assignment_type,
         max_points: form.max_points,
         is_exportable: false,
       })
@@ -110,11 +111,11 @@ const QuickAssignModal: React.FC<QuickAssignModalProps> = ({ isOpen, onClose, on
       })
       onSuccess()
       onClose()
-    } catch (err: any) {
+    } catch (err) {
       if (templateId !== null) {
         assignmentsApi.delete(templateId).catch(() => {})
       }
-      const msg: string = err.message || 'Failed to create and assign'
+      const msg: string = getErrorMessage(err, 'Failed to create and assign')
       setError(msg.toLowerCase().includes('active term') ? 'NO_ACTIVE_TERM' : msg)
     } finally {
       setLoading(false)

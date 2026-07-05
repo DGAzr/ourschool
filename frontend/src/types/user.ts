@@ -28,6 +28,8 @@ export interface User {
   last_name: string
   role: 'admin' | 'student'
   is_active: boolean
+  // Server requires a password rotation (seeded/temporary credentials)
+  must_change_password?: boolean
   // Student-specific fields (only populated for student users)
   parent_id?: number
   date_of_birth?: string

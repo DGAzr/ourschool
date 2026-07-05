@@ -18,17 +18,35 @@
 
 import { api } from './api'
 
+/**
+ * Structured context attached to an activity item. Mirrors the ad-hoc
+ * `details` dicts built in app/routers/activity.py; which fields are present
+ * depends on the activity type, so all are optional.
+ */
+interface ActivityDetails {
+  assignment_id?: number
+  student_assignment_id?: number
+  template_name?: string
+  subject?: string | null
+  grade?: number
+  attendance_id?: number
+  status?: string
+  date?: string
+  notes?: string | null
+  [key: string]: unknown
+}
+
 export interface ActivityItem {
   activity_type: string
   description: string
   timestamp: string
   user_name?: string
   student_name?: string
-  details: Record<string, any>
+  details: ActivityDetails
   time_ago: string
 }
 
-export interface ActivityResponse {
+interface ActivityResponse {
   activities: ActivityItem[]
   total: number
   date_range: {
@@ -37,7 +55,7 @@ export interface ActivityResponse {
   }
 }
 
-export interface ActivityFilters {
+interface ActivityFilters {
   limit?: number
   days?: number
 }

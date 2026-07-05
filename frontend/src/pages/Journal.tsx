@@ -16,7 +16,7 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-import React, { useState, useEffect, useRef, useCallback } from 'react'
+import React, { useState, useEffect, useRef, useCallback, useEffectEvent } from 'react'
 import { journalApi } from '../services/journal'
 import {
   JournalEntryWithAuthor,
@@ -28,6 +28,8 @@ import { useAuth } from '../contexts/AuthContext'
 import { format, parseISO } from 'date-fns'
 import MarkdownRenderer from '../components/common/MarkdownRenderer'
 import { IconPickerButton, Icon } from '../components/ui'
+import ConfirmDialog from '../components/ui/ConfirmDialog'
+import { getErrorMessage } from '../services/api'
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
@@ -146,8 +148,8 @@ const StudentComposer: React.FC<ComposerProps> = ({ composerData, onSaved }) => 
       if (editorRef.current) editorRef.current.innerHTML = ''
       setOpen(false)
       onSaved(entry)
-    } catch (err: any) {
-      setSaveError(err.response?.data?.detail || 'Failed to save entry. Please try again.')
+    } catch (err) {
+      setSaveError(getErrorMessage(err, 'Failed to save entry. Please try again.'))
     } finally {
       setSaving(false)
     }
@@ -187,6 +189,7 @@ const StudentComposer: React.FC<ComposerProps> = ({ composerData, onSaved }) => 
             type="text"
             value={title}
             onChange={e => { setTitle(e.target.value); setTitleError(false) }}
+            aria-label="Entry title"
             placeholder="Give this entry a title…"
             className={`flex-1 min-w-0 bg-transparent text-[17px] font-semibold placeholder:text-faintest focus:outline-none border-none ${titleError ? 'text-neg-fg placeholder:text-neg-fg/50' : 'text-ink'}`}
           />
@@ -201,19 +204,19 @@ const StudentComposer: React.FC<ComposerProps> = ({ composerData, onSaved }) => 
         {/* Formatting toolbar */}
         <div className="flex items-center gap-0.5 mb-2 -ml-1">
           {[
-            { label: 'B', cmd: 'bold', style: 'font-bold' },
-            { label: 'I', cmd: 'italic', style: 'italic' },
+            { label: 'B', cmd: 'bold', style: 'font-bold', aria: 'Bold' },
+            { label: 'I', cmd: 'italic', style: 'italic', aria: 'Italic' },
           ].map(b => (
-            <button key={b.cmd} type="button" onMouseDown={e => { e.preventDefault(); execCmd(b.cmd) }}
+            <button key={b.cmd} type="button" aria-label={b.aria} onMouseDown={e => { e.preventDefault(); execCmd(b.cmd) }}
               className={`w-7 h-7 rounded-[5px] text-[13px] text-faint hover:text-ink hover:bg-track transition-colors ${b.style}`}>
               {b.label}
             </button>
           ))}
-          <button type="button" onMouseDown={e => { e.preventDefault(); execCmd('formatBlock', 'h3') }}
+          <button type="button" aria-label="Heading" onMouseDown={e => { e.preventDefault(); execCmd('formatBlock', 'h3') }}
             className="w-7 h-7 rounded-[5px] text-[13px] font-bold text-faint hover:text-ink hover:bg-track transition-colors">
             H
           </button>
-          <button type="button" onMouseDown={e => { e.preventDefault(); execCmd('insertUnorderedList') }}
+          <button type="button" aria-label="Bullet list" onMouseDown={e => { e.preventDefault(); execCmd('insertUnorderedList') }}
             className="w-7 h-7 rounded-[5px] text-[13px] text-faint hover:text-ink hover:bg-track transition-colors">
             •
           </button>
@@ -228,6 +231,9 @@ const StudentComposer: React.FC<ComposerProps> = ({ composerData, onSaved }) => 
         <div
           ref={editorRef}
           contentEditable
+          role="textbox"
+          aria-multiline="true"
+          aria-label="Journal entry"
           suppressContentEditableWarning
           onInput={e => setEditorEmpty((e.currentTarget.innerText?.trim().length ?? 0) === 0)}
           className="min-h-[120px] font-serif text-[15.5px] leading-relaxed text-ink focus:outline-none empty:before:content-[attr(data-placeholder)] empty:before:text-faintest"
@@ -288,6 +294,7 @@ const StudentComposer: React.FC<ComposerProps> = ({ composerData, onSaved }) => 
           type="text"
           value={win}
           onChange={e => setWin(e.target.value)}
+          aria-label="Win of the day"
           placeholder="Something you're proud of today…"
           className="w-full bg-field-bg border border-field-border rounded-field px-3 py-2 text-[13.5px] text-ink focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent placeholder:text-faintest"
         />
@@ -299,13 +306,14 @@ const StudentComposer: React.FC<ComposerProps> = ({ composerData, onSaved }) => 
         {goals.map(g => (
           <div key={g.id} className="flex items-center gap-2 mb-1.5">
             <button type="button" onClick={() => toggleGoal(g.id)}
+              aria-label={g.done ? `Mark goal "${g.text}" as not done` : `Mark goal "${g.text}" as done`}
               className={`w-4 h-4 rounded-[4px] border flex-none flex items-center justify-center transition-colors ${
                 g.done ? 'bg-accent border-accent' : 'border-field-border'
               }`}>
               {g.done && <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M2 5l2.5 2.5L8 3" stroke="white" strokeWidth="1.5" strokeLinecap="round"/></svg>}
             </button>
             <span className={`text-[13px] flex-1 ${g.done ? 'line-through text-faint' : 'text-ink'}`}>{g.text}</span>
-            <button type="button" onClick={() => removeGoal(g.id)} className="text-faint hover:text-danger text-[14px] leading-none">×</button>
+            <button type="button" aria-label={`Remove goal "${g.text}"`} onClick={() => removeGoal(g.id)} className="text-faint hover:text-danger text-[14px] leading-none">×</button>
           </div>
         ))}
         <div className="flex gap-2 mt-1">
@@ -314,6 +322,7 @@ const StudentComposer: React.FC<ComposerProps> = ({ composerData, onSaved }) => 
             value={goalDraft}
             onChange={e => setGoalDraft(e.target.value)}
             onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addGoal() } }}
+            aria-label="Add a goal"
             placeholder="Add a goal… (Enter to add)"
             className="flex-1 bg-field-bg border border-field-border rounded-field px-3 py-1.5 text-[13px] text-ink focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent placeholder:text-faintest"
           />
@@ -622,7 +631,7 @@ const AdminEntryPanel: React.FC<AdminEntryPanelProps> = ({ entry, onReacted, onR
                 <span className="text-[12.5px] text-ink-2">{r.text}</span>
                 <p className="text-[11px] text-faint mt-1 font-mono">{formatDate(r.created_at)}</p>
               </div>
-              <button onClick={() => deleteReply(r.id)} className="text-faint hover:text-danger text-[16px] leading-none flex-none">×</button>
+              <button aria-label="Delete reply" onClick={() => deleteReply(r.id)} className="text-faint hover:text-danger text-[16px] leading-none flex-none">×</button>
             </div>
           ))}
         </div>
@@ -636,6 +645,7 @@ const AdminEntryPanel: React.FC<AdminEntryPanelProps> = ({ entry, onReacted, onR
             value={replyDraft}
             onChange={e => setReplyDraft(e.target.value)}
             onKeyDown={e => { if (e.key === 'Enter') sendReply() }}
+            aria-label="Reply"
             placeholder="Leave a reply…"
             className="flex-1 bg-field-bg border border-field-border rounded-field px-3 py-2 text-[13.5px] text-ink focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent placeholder:text-faintest"
           />
@@ -664,6 +674,8 @@ const Journal: React.FC = () => {
   const [selectedStudentId, setSelectedStudentId] = useState<number | null>(null)
   const [searchTerm, setSearchTerm] = useState('')
   const [error, setError] = useState<string | null>(null)
+  const [deletingEntryId, setDeletingEntryId] = useState<number | null>(null)
+  const [deleteLoading, setDeleteLoading] = useState(false)
 
   const isAdmin = user?.role === 'admin'
 
@@ -675,13 +687,19 @@ const Journal: React.FC = () => {
       const raw = await journalApi.getAll(isAdmin ? undefined : (studentId ?? undefined))
       const data: JournalEntryWithAuthor[] = Array.isArray(raw) ? raw : []
       setEntries(data)
-    } catch (err: any) {
-      setError(`Failed to load journal entries: ${err.response?.data?.detail || err.message}`)
+    } catch (err) {
+      setError(`Failed to load journal entries: ${getErrorMessage(err)}`)
       setEntries([])
     } finally {
       setLoading(false)
     }
   }, [isAdmin])
+
+  // Effect event: reads the latest selectedStudentId without making it a
+  // refetch trigger (student switching is filtered client-side, not refetched).
+  const fetchEntriesForSelectedStudent = useEffectEvent(() => {
+    fetchEntries(selectedStudentId)
+  })
 
   useEffect(() => {
     if (!user) return
@@ -690,18 +708,24 @@ const Journal: React.FC = () => {
       fetchEntries(null)
       journalApi.getStudents().then(s => setStudents(Array.isArray(s) ? s : [])).catch(() => {})
     } else {
-      fetchEntries(selectedStudentId)
+      fetchEntriesForSelectedStudent()
       journalApi.getComposerData().then(setComposerData).catch(() => {})
     }
   }, [user, isAdmin, fetchEntries])
 
-  const handleDelete = async (id: number) => {
-    if (!confirm('Are you sure you want to delete this journal entry?')) return
+  const handleDelete = (id: number) => setDeletingEntryId(id)
+
+  const confirmDelete = async () => {
+    if (deletingEntryId === null) return
+    setDeleteLoading(true)
     try {
-      await journalApi.delete(id)
-      setEntries(prev => prev.filter(e => e.id !== id))
-    } catch (err: any) {
-      setError(`Failed to delete entry: ${err.response?.data?.detail || err.message}`)
+      await journalApi.delete(deletingEntryId)
+      setEntries(prev => prev.filter(e => e.id !== deletingEntryId))
+    } catch (err) {
+      setError(`Failed to delete entry: ${getErrorMessage(err)}`)
+    } finally {
+      setDeleteLoading(false)
+      setDeletingEntryId(null)
     }
   }
 
@@ -749,7 +773,7 @@ const Journal: React.FC = () => {
       {error && (
         <div className="mb-4 px-4 py-3 rounded-card text-[13px] text-neg-fg bg-neg-bg border border-neg-fg/20">
           {error}
-          <button onClick={() => setError(null)} className="ml-3 text-neg-fg/60 hover:text-neg-fg">✕</button>
+          <button aria-label="Dismiss error" onClick={() => setError(null)} className="ml-3 text-neg-fg/60 hover:text-neg-fg">✕</button>
         </div>
       )}
 
@@ -982,6 +1006,18 @@ const Journal: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* Delete confirmation */}
+      <ConfirmDialog
+        isOpen={deletingEntryId !== null}
+        onClose={() => setDeletingEntryId(null)}
+        onConfirm={confirmDelete}
+        tone="danger"
+        title="Delete journal entry"
+        message="Are you sure you want to delete this journal entry? This action cannot be undone."
+        confirmLabel="Delete entry"
+        loading={deleteLoading}
+      />
     </div>
   )
 }

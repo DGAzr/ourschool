@@ -15,6 +15,7 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 """Assignment schemas."""
+
 from datetime import date, datetime
 from typing import TYPE_CHECKING, List, Optional
 import json
@@ -124,30 +125,35 @@ class StudentAssignmentUpdate(BaseModel):
     custom_max_points: Optional[int] = Field(None, ge=1, le=1000)
     student_notes: Optional[str] = None
     submission_notes: Optional[str] = None
-    submission_artifacts: Optional[List[str]] = Field(None, description="List of external artifact links")
+    submission_artifacts: Optional[List[str]] = Field(
+        None, description="List of external artifact links"
+    )
 
-    @validator('submission_artifacts')
+    @validator("submission_artifacts")
     def validate_artifact_urls(cls, v):
         """Validate that artifact links are valid URLs."""
         if v is None:
             return v
-        
+
         import re
+
         url_pattern = re.compile(
-            r'^https?://'  # http:// or https://
-            r'(?:(?:[A-Z0-9](?:[A-Z0-9-]{0,61}[A-Z0-9])?\.)+[A-Z]{2,6}\.?|'  # domain...
-            r'localhost|'  # localhost...
-            r'\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})'  # ...or ip
-            r'(?::\d+)?'  # optional port
-            r'(?:/?|[/?]\S+)$', re.IGNORECASE)
-        
+            r"^https?://"  # http:// or https://
+            r"(?:(?:[A-Z0-9](?:[A-Z0-9-]{0,61}[A-Z0-9])?\.)+[A-Z]{2,6}\.?|"  # domain...
+            r"localhost|"  # localhost...
+            r"\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})"  # ...or ip
+            r"(?::\d+)?"  # optional port
+            r"(?:/?|[/?]\S+)$",
+            re.IGNORECASE,
+        )
+
         validated_urls = []
         for url in v:
             if url.strip():  # Only validate non-empty URLs
                 if not url_pattern.match(url.strip()):
-                    raise ValueError(f'Invalid URL format: {url}')
+                    raise ValueError(f"Invalid URL format: {url}")
                 validated_urls.append(url.strip())
-        
+
         return validated_urls
 
 
@@ -206,7 +212,7 @@ class StudentAssignmentResponse(StudentAssignmentBase):
 
     # student: Optional['User'] = None  # Causes serialization issues
 
-    @validator('submission_artifacts', pre=True)
+    @validator("submission_artifacts", pre=True)
     def parse_submission_artifacts(cls, v):
         """Parse submission_artifacts from JSON string to list."""
         if isinstance(v, str) and v:

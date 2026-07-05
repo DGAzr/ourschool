@@ -18,10 +18,8 @@
 
 import React, { createContext, useContext, useState, useEffect, ReactNode, useCallback } from 'react'
 import { useAuth } from './AuthContext'
-import { config } from '../config/env'
-import { STORAGE_KEYS } from '../constants/auth'
 
-export type ThemeMode = 'light' | 'dark' | 'system'
+type ThemeMode = 'light' | 'dark' | 'system'
 
 interface ThemeContextType {
   theme: ThemeMode
@@ -107,33 +105,13 @@ export const ThemeProvider: React.FC<ThemeProviderProps> = ({ children }) => {
     }
   }, [effectiveTheme])
 
-  // Update theme preference
-  const setTheme = useCallback(async (newTheme: ThemeMode) => {
+  // Update theme preference.
+  // Persisted in localStorage only — there is no backend endpoint for user
+  // preferences yet. Server-side persistence needs a backend endpoint first.
+  const setTheme = useCallback((newTheme: ThemeMode) => {
     setThemeState(newTheme)
     localStorage.setItem('theme', newTheme)
-    
-    // If user is logged in, try to save to profile
-    if (user) {
-      try {
-        // This would be an API call to update user preferences
-        // For now we'll just save to localStorage
-        const response = await fetch(`${config.api.baseUrl}/user/preferences`, {
-          method: 'PATCH',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${localStorage.getItem(STORAGE_KEYS.TOKEN)}`
-          },
-          body: JSON.stringify({ theme_preference: newTheme })
-        })
-        
-        if (!response.ok) {
-          console.warn('Failed to save theme preference to server')
-        }
-      } catch (error) {
-        console.warn('Error saving theme preference:', error)
-      }
-    }
-  }, [user])
+  }, [])
 
   // Toggle between light and dark (smart toggle)
   const toggleTheme = useCallback(() => {

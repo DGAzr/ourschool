@@ -17,7 +17,13 @@
  */
 
 import { api } from './api'
-import { Term, TermCreate, TermUpdate } from '../types'
+import {
+  Term,
+  TermAutoLinkResult,
+  TermCreate,
+  TermGradeCalculationResult,
+  TermUpdate
+} from '../types'
 
 export const termsApi = {
   // Get all terms
@@ -62,23 +68,25 @@ export const termsApi = {
   },
 
   // Auto-link subjects to term based on assignment dates
-  autoLinkSubjects: async (termId: number): Promise<any> => {
+  autoLinkSubjects: async (termId: number): Promise<TermAutoLinkResult> => {
     return await api.post(`/terms/${termId}/auto-link-subjects`, {})
   },
 
   // Calculate grades for term
-  calculateGrades: async (termId: number, studentId?: number): Promise<any> => {
+  calculateGrades: async (termId: number, studentId?: number): Promise<TermGradeCalculationResult> => {
     const endpoint = `/terms/${termId}/calculate-grades${studentId ? `?student_id=${studentId}` : ''}`
     return await api.post(endpoint, {})
   },
 
-  // Get term grade report
-  getGradeReport: async (termId: number): Promise<any> => {
+  // Get term grade report. The backend returns an untyped dict
+  // (TermGradingService.get_term_grade_report), so callers must narrow.
+  getGradeReport: async (termId: number): Promise<Record<string, unknown>> => {
     return await api.get(`/terms/${termId}/grade-report`)
   },
 
-  // Get student term report
-  getStudentReport: async (termId: number, studentId: number): Promise<any> => {
+  // Get student term report. The backend returns an untyped dict
+  // (TermGradingService.get_student_term_report), so callers must narrow.
+  getStudentReport: async (termId: number, studentId: number): Promise<Record<string, unknown>> => {
     return await api.get(`/terms/${termId}/students/${studentId}/report`)
   }
 }

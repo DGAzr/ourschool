@@ -36,7 +36,7 @@ interface AssignmentFormFieldsProps {
     is_exportable?: boolean
   }
   subjects: Subject[]
-  onUpdate: (field: string, value: any) => void
+  onUpdate: (field: string, value: string | number | boolean | null | undefined) => void
   showAllFields?: boolean
   disabled?: boolean
 }

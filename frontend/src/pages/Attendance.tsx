@@ -131,11 +131,11 @@ const Attendance: React.FC = () => {
   }, [records])
 
   // Display status: collapses 'late' → 'present' for the P/A/E UI
-  const statusForStudent = (studentId: number, iso: string): Status | undefined => {
+  const statusForStudent = useCallback((studentId: number, iso: string): Status | undefined => {
     const raw = attendanceMap[`${studentId}-${iso}`]
     if (!raw) return undefined
     return (raw === 'late' ? 'present' : raw) as Status
-  }
+  }, [attendanceMap])
 
   // ── per-student compliance ────────────────────────────────────────────
   // Counts days a student received instruction (present | late | excused),
@@ -171,7 +171,7 @@ const Attendance: React.FC = () => {
     const a = students.filter(s => statusForStudent(s.id, activeDate) === 'absent').length
     const e = students.filter(s => statusForStudent(s.id, activeDate) === 'excused').length
     return { present: p, absent: a, excused: e }
-  }, [students, activeDate, attendanceMap])
+  }, [students, activeDate, statusForStudent])
 
   const allMarked = students.length > 0 && students.every(s => !!statusForStudent(s.id, activeDate))
   const dayComplete = allMarked && !isFuture(activeDate)
@@ -236,7 +236,8 @@ const Attendance: React.FC = () => {
     }).finally(() => {
       setRecordsLoading(false)
     })
-  }, [selectedYear, academicYears])
+    // toast is a stable useCallback from ToastProvider
+  }, [selectedYear, academicYears, toast])
 
   // ── mark student ──────────────────────────────────────────────────────
   const markStudent = async (studentId: number, iso: string, status: Status) => {
@@ -294,10 +295,11 @@ const Attendance: React.FC = () => {
   // ── academic year selector (shared across tabs) ───────────────────────
   const yearSelector = academicYears.length > 0 && (
     <div className="flex items-center gap-2 mb-6">
-      <label className="text-[12px] font-semibold text-faint uppercase tracking-[.06em] whitespace-nowrap">
+      <label htmlFor="attendance-academic-year" className="text-[12px] font-semibold text-faint uppercase tracking-[.06em] whitespace-nowrap">
         Academic year
       </label>
       <select
+        id="attendance-academic-year"
         value={selectedYear}
         onChange={e => setSelectedYear(e.target.value)}
         className="text-[13px] font-medium text-ink bg-panel border border-line rounded-field px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-accent/30"
@@ -355,6 +357,7 @@ const Attendance: React.FC = () => {
             <div className="flex items-center gap-1.5">
               <button
                 onClick={() => setActiveDate(d => shiftDate(d, -1))}
+                aria-label="Previous day"
                 className="w-8 h-8 flex items-center justify-center rounded-field border border-btn-border text-muted hover:text-ink hover:bg-panel-2 transition-colors"
               ><ChevronLeft size={15} /></button>
               <button
@@ -364,6 +367,7 @@ const Attendance: React.FC = () => {
               >Today</button>
               <button
                 onClick={() => setActiveDate(d => shiftDate(d, 1))}
+                aria-label="Next day"
                 className="w-8 h-8 flex items-center justify-center rounded-field border border-btn-border text-muted hover:text-ink hover:bg-panel-2 transition-colors"
               ><ChevronRight size={15} /></button>
             </div>

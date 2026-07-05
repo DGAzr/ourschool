@@ -47,7 +47,7 @@ const APIKeyDetailsPanel: React.FC<APIKeyDetailsPanelProps> = ({ apiKeyId }) => 
         setError(null)
         const stats = await apiKeysApi.getAPIKeyStats(apiKeyId)
         setKeyStats(stats)
-      } catch (err: any) {
+      } catch (err) {
         setError('Failed to load usage statistics')
       } finally {
         setLoading(false)

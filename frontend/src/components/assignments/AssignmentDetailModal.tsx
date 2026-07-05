@@ -16,7 +16,7 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useCallback } from 'react'
 import {
   FileText,
   Calendar,
@@ -37,6 +37,7 @@ import MarkdownRenderer from '../common/MarkdownRenderer'
 import { formatDateOnly } from '../../utils/formatters'
 import Modal from '../ui/Modal'
 import Button from '../ui/Button'
+import { getErrorMessage } from '../../services/api'
 
 interface AssignmentDetailModalProps {
   assignmentId: number
@@ -77,11 +78,7 @@ const AssignmentDetailModal: React.FC<AssignmentDetailModalProps> = ({
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  useEffect(() => {
-    if (isOpen && assignmentId) fetchAssignmentDetails()
-  }, [isOpen, assignmentId, studentId])
-
-  const fetchAssignmentDetails = async () => {
+  const fetchAssignmentDetails = useCallback(async () => {
     try {
       setLoading(true)
       setError(null)
@@ -91,12 +88,16 @@ const AssignmentDetailModal: React.FC<AssignmentDetailModalProps> = ({
       } else {
         setError('Assignment template not found')
       }
-    } catch (err: any) {
-      setError(err.message || 'Failed to load assignment details')
+    } catch (err) {
+      setError(getErrorMessage(err, 'Failed to load assignment details'))
     } finally {
       setLoading(false)
     }
-  }
+  }, [assignmentId])
+
+  useEffect(() => {
+    if (isOpen && assignmentId) fetchAssignmentDetails()
+  }, [isOpen, assignmentId, studentId, fetchAssignmentDetails])
 
   const pct = assignment?.percentage_grade
   const pctColor = pct == null ? 'text-muted' : pct >= 90 ? 'text-pos-fg' : pct >= 70 ? 'text-accent' : 'text-neg-fg'

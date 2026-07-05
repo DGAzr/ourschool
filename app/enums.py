@@ -21,7 +21,7 @@ This module contains all enum definitions used throughout the application,
 providing a single source of truth and preventing inconsistencies.
 
 All enums follow the pattern:
-- Uppercase enum names (e.g., PRESENT, BEGINNER)  
+- Uppercase enum names (e.g., PRESENT, BEGINNER)
 - Lowercase string values (e.g., "present", "beginner")
 - Values match database enum values
 - Values match frontend type definitions
@@ -37,7 +37,6 @@ class AttendanceStatus(enum.Enum):
     ABSENT = "absent"
     LATE = "late"
     EXCUSED = "excused"
-
 
 
 class AssignmentType(enum.Enum):

@@ -18,14 +18,12 @@
 Points system API endpoints.
 """
 
-from typing import List
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
 from app.core.dual_auth import (
     AuthUser,
-    get_current_user_or_api_key,
     require_admin_or_permission,
     can_access_student_data,
     get_actor_name_from_auth,
@@ -52,50 +50,54 @@ router = APIRouter(prefix="/points", tags=["points"])
 
 @router.get("/status", response_model=PointsSystemStatus)
 async def get_points_system_status(
-    current_user: User = Depends(get_current_active_user),
-    db: Session = Depends(get_db)
+    current_user: User = Depends(get_current_active_user), db: Session = Depends(get_db)
 ):
     """Get the current status of the points system."""
     enabled = points_crud.is_points_system_enabled(db)
     can_toggle = current_user.role == UserRole.ADMIN
-    
+
     return PointsSystemStatus(enabled=enabled, can_toggle=can_toggle)
 
 
 @router.post("/toggle")
 async def toggle_points_system(
-    current_user: User = Depends(get_current_active_user),
-    db: Session = Depends(get_db)
+    current_user: User = Depends(get_current_active_user), db: Session = Depends(get_db)
 ):
     """Toggle the points system on/off (admin only)."""
     if current_user.role != UserRole.ADMIN:
-        raise HTTPException(status_code=403, detail="Only administrators can toggle the points system")
-    
+        raise HTTPException(
+            status_code=403, detail="Only administrators can toggle the points system"
+        )
+
     current_status = points_crud.is_points_system_enabled(db)
     new_status = "false" if current_status else "true"
-    
+
     points_crud.update_system_setting(db, "points_system_enabled", new_status)
-    
-    return {"message": f"Points system {'disabled' if current_status else 'enabled'}", "enabled": not current_status}
+
+    return {
+        "message": f"Points system {'disabled' if current_status else 'enabled'}",
+        "enabled": not current_status,
+    }
 
 
 @router.get("/my-balance", response_model=StudentPoints)
 async def get_my_points_balance(
-    current_user: User = Depends(get_current_active_user),
-    db: Session = Depends(get_db)
+    current_user: User = Depends(get_current_active_user), db: Session = Depends(get_db)
 ):
     """Get current user's points balance (students only)."""
     if current_user.role != UserRole.STUDENT:
-        raise HTTPException(status_code=403, detail="Only students can view their points balance")
-    
+        raise HTTPException(
+            status_code=403, detail="Only students can view their points balance"
+        )
+
     if not points_crud.is_points_system_enabled(db):
         raise HTTPException(status_code=403, detail="Points system is disabled")
-    
+
     student_points = points_crud.get_or_create_student_points(db, current_user.id)
-    
+
     # Add student name for response
     student_points.student_name = f"{current_user.first_name} {current_user.last_name}"
-    
+
     return student_points
 
 
@@ -104,32 +106,36 @@ async def get_my_points_ledger(
     page: int = Query(1, ge=1, description="Page number"),
     per_page: int = Query(20, ge=1, le=100, description="Items per page"),
     current_user: User = Depends(get_current_active_user),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
 ):
     """Get current user's points ledger with transaction history (students only)."""
     if current_user.role != UserRole.STUDENT:
-        raise HTTPException(status_code=403, detail="Only students can view their points ledger")
-    
+        raise HTTPException(
+            status_code=403, detail="Only students can view their points ledger"
+        )
+
     if not points_crud.is_points_system_enabled(db):
         raise HTTPException(status_code=403, detail="Points system is disabled")
-    
+
     student_points, transactions, total_pages = points_crud.get_student_points_ledger(
         db, current_user.id, page, per_page
     )
-    
+
     # Add student name
     student_points.student_name = f"{current_user.first_name} {current_user.last_name}"
-    
+
     # Add admin names to transactions
     for transaction in transactions:
         if transaction.admin_id and transaction.admin:
-            transaction.admin_name = f"{transaction.admin.first_name} {transaction.admin.last_name}"
-    
+            transaction.admin_name = (
+                f"{transaction.admin.first_name} {transaction.admin.last_name}"
+            )
+
     return PointsLedger(
         student_points=student_points,
         transactions=transactions,
         total_pages=total_pages,
-        current_page=page
+        current_page=page,
     )
 
 
@@ -137,23 +143,27 @@ async def get_my_points_ledger(
 async def get_student_points_balance(
     student_id: int,
     auth_user: AuthUser = Depends(require_admin_or_permission("points:read")),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
 ):
     """Get a specific student's points balance (admin users or API keys with points:read permission)."""
     if not points_crud.is_points_system_enabled(db):
         raise HTTPException(status_code=403, detail="Points system is disabled")
-    
+
     # For user sessions, check if they can access this student's data
-    if isinstance(auth_user, User) and not can_access_student_data(auth_user, student_id):
-        raise HTTPException(status_code=403, detail="Access denied to this student's data")
-    
+    if isinstance(auth_user, User) and not can_access_student_data(
+        auth_user, student_id
+    ):
+        raise HTTPException(
+            status_code=403, detail="Access denied to this student's data"
+        )
+
     student_points = points_crud.get_student_points(db, student_id)
     if not student_points:
         # Create a new record if it doesn't exist
         student_points = points_crud.get_or_create_student_points(db, student_id)
         if student_points.student:
             student_points.student_name = f"{student_points.student.first_name} {student_points.student.last_name}"
-    
+
     return student_points
 
 
@@ -163,36 +173,44 @@ async def get_student_points_ledger(
     page: int = Query(1, ge=1, description="Page number"),
     per_page: int = Query(20, ge=1, le=100, description="Items per page"),
     auth_user: AuthUser = Depends(require_admin_or_permission("points:read")),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
 ):
     """Get a specific student's points ledger (admin users or API keys with points:read permission)."""
     if not points_crud.is_points_system_enabled(db):
         raise HTTPException(status_code=403, detail="Points system is disabled")
-    
+
     # For user sessions, check if they can access this student's data
-    if isinstance(auth_user, User) and not can_access_student_data(auth_user, student_id):
-        raise HTTPException(status_code=403, detail="Access denied to this student's data")
-    
+    if isinstance(auth_user, User) and not can_access_student_data(
+        auth_user, student_id
+    ):
+        raise HTTPException(
+            status_code=403, detail="Access denied to this student's data"
+        )
+
     student_points, transactions, total_pages = points_crud.get_student_points_ledger(
         db, student_id, page, per_page
     )
-    
+
     # Add names to response data
     if student_points.student:
-        student_points.student_name = f"{student_points.student.first_name} {student_points.student.last_name}"
-    
+        student_points.student_name = (
+            f"{student_points.student.first_name} {student_points.student.last_name}"
+        )
+
     for transaction in transactions:
         if transaction.admin_id and transaction.admin:
-            transaction.admin_name = f"{transaction.admin.first_name} {transaction.admin.last_name}"
+            transaction.admin_name = (
+                f"{transaction.admin.first_name} {transaction.admin.last_name}"
+            )
         elif not transaction.admin_id:
             # This was likely created by an API key (no admin_id)
             transaction.admin_name = "API Integration"
-    
+
     return PointsLedger(
         student_points=student_points,
         transactions=transactions,
         total_pages=total_pages,
-        current_page=page
+        current_page=page,
     )
 
 
@@ -200,33 +218,34 @@ async def get_student_points_ledger(
 async def adjust_student_points(
     adjustment: AdminPointAdjustment,
     auth_user: AuthUser = Depends(require_admin_or_permission("points:write")),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
 ):
     """Manually adjust a student's points (admin users or API keys with points:write permission)."""
     if not points_crud.is_points_system_enabled(db):
         raise HTTPException(status_code=403, detail="Points system is disabled")
-    
+
     # Verify student exists and is a student
-    student = db.query(User).filter(
-        User.id == adjustment.student_id,
-        User.role == UserRole.STUDENT
-    ).first()
-    
+    student = (
+        db.query(User)
+        .filter(User.id == adjustment.student_id, User.role == UserRole.STUDENT)
+        .first()
+    )
+
     if not student:
         raise HTTPException(status_code=404, detail="Student not found")
-    
+
     # Get admin ID for transaction (None for API keys)
     admin_id = get_user_id_from_auth(auth_user)
-    
+
     transaction = points_crud.admin_adjust_points(db, adjustment, admin_id)
-    
+
     # Add names to response
     transaction.student_name = f"{student.first_name} {student.last_name}"
-    
+
     # Attribute to the acting admin (user session, or API key acting
     # on-behalf-of a user); otherwise fall back to the API key name.
     transaction.admin_name = get_actor_name_from_auth(auth_user)
-    
+
     # Log the adjustment with context
     auth_context = get_auth_context_for_logging(auth_user)
     logger.info(
@@ -237,40 +256,41 @@ async def adjust_student_points(
             "points_amount": adjustment.amount,
             "notes": adjustment.notes,
             "transaction_id": transaction.id,
-            **auth_context
-        }
+            **auth_context,
+        },
     )
-    
+
     return transaction
 
 
 @router.get("/admin/overview", response_model=AdminPointsOverview)
 async def get_admin_points_overview(
     auth_user: AuthUser = Depends(require_admin_or_permission("points:read")),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
 ):
     """Get points system overview for administrators or API keys with points:read permission."""
     if not points_crud.is_points_system_enabled(db):
         raise HTTPException(status_code=403, detail="Points system is disabled")
-    
+
     overview_data = points_crud.get_admin_points_overview(db)
-    
+
     # Add student names to the points records
     for student_points in overview_data["student_points"]:
         if student_points.student:
             student_points.student_name = f"{student_points.student.first_name} {student_points.student.last_name}"
-    
+
     return AdminPointsOverview(**overview_data)
+
 
 @router.get("/presets")
 async def get_award_presets(
-    current_user: User = Depends(get_current_active_user),
-    db: Session = Depends(get_db)
+    current_user: User = Depends(get_current_active_user), db: Session = Depends(get_db)
 ):
     """Get quick-award presets (admin only)."""
     if current_user.role != UserRole.ADMIN:
         raise HTTPException(status_code=403, detail="Not authorized")
     import json
+
     setting = points_crud.get_system_setting(db, "points_award_presets")
     if not setting:
         return []
@@ -284,21 +304,30 @@ async def get_award_presets(
 async def set_award_presets(
     presets: list[dict],
     current_user: User = Depends(get_current_active_user),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
 ):
     """Save quick-award presets (admin only)."""
     if current_user.role != UserRole.ADMIN:
         raise HTTPException(status_code=403, detail="Not authorized")
     import json
     from app.models.points import SystemSettings as _SS
+
     for p in presets:
         if not isinstance(p.get("label"), str) or not isinstance(p.get("amount"), int):
-            raise HTTPException(status_code=422, detail="Each preset must have a string label and integer amount")
+            raise HTTPException(
+                status_code=422,
+                detail="Each preset must have a string label and integer amount",
+            )
     setting = points_crud.get_system_setting(db, "points_award_presets")
     if setting:
         setting.setting_value = json.dumps(presets)
     else:
-        setting = _SS(setting_key="points_award_presets", setting_value=json.dumps(presets), setting_type="json", description="Quick-award point presets")
+        setting = _SS(
+            setting_key="points_award_presets",
+            setting_value=json.dumps(presets),
+            setting_type="json",
+            description="Quick-award point presets",
+        )
         db.add(setting)
     db.commit()
     return presets
@@ -306,8 +335,7 @@ async def set_award_presets(
 
 @router.get("/journal-points")
 async def get_journal_points(
-    current_user: User = Depends(get_current_active_user),
-    db: Session = Depends(get_db)
+    current_user: User = Depends(get_current_active_user), db: Session = Depends(get_db)
 ):
     """Get points awarded per journaling day (admin only)."""
     if current_user.role != UserRole.ADMIN:
@@ -321,13 +349,15 @@ async def get_journal_points(
 async def set_journal_points(
     payload: dict,
     current_user: User = Depends(get_current_active_user),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
 ):
     """Set points awarded per journaling day (admin only)."""
     if current_user.role != UserRole.ADMIN:
         raise HTTPException(status_code=403, detail="Not authorized")
     value = payload.get("value")
     if not isinstance(value, int) or value < 0:
-        raise HTTPException(status_code=422, detail="value must be a non-negative integer")
+        raise HTTPException(
+            status_code=422, detail="value must be a non-negative integer"
+        )
     points_crud.update_system_setting(db, "journal_points_per_entry", str(value))
     return {"value": value}

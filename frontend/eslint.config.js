@@ -47,10 +47,10 @@ export default tseslint.config(
       // (breaks React Fast Refresh HMR)
       'react-refresh/only-export-components': 'warn',
 
-      // ---- Pre-existing debt: downgrade to warn rather than error ----
-      // The codebase has widespread `any` usage from incremental typing.
-      // TODO: resolve these progressively and tighten to 'error' before v2.
-      '@typescript-eslint/no-explicit-any': 'warn',
+      // All explicit `any` usage has been eliminated from the codebase, so
+      // this is enforced as an error. Of the pre-existing debt, only the
+      // react-hooks compiler rules above remain downgraded to 'warn'.
+      '@typescript-eslint/no-explicit-any': 'error',
 
       // Caught-error vars intentionally unused (catch (err) { ... }).
       // Downgraded from error; suppress per-occurrence by renaming to _err

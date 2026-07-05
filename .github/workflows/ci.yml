@@ -2,9 +2,11 @@ name: CI
 
 on:
   push:
-    branches: [main, beta-release]
+    branches: [main, dev]
+  # All PRs, regardless of target branch (release branches vary per cycle).
   pull_request:
-    branches: [main, beta-release]
+  # Allows publish.yml to run CI as a gating prerequisite.
+  workflow_call:
 
 jobs:
   backend:
@@ -37,19 +39,14 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements-dev.txt
 
-      # Report-only for now: the codebase has pre-existing lint/format debt.
-      # Tighten to blocking once it's cleaned up.
       - name: Lint (ruff)
         run: ruff check app
-        continue-on-error: true
 
       - name: Format check (black)
         run: black --check app
-        continue-on-error: true
 
       - name: Dead code (vulture)
         run: vulture app --min-confidence 80 --ignore-names cls
-        continue-on-error: true
 
       - name: Verify migrations apply cleanly
         run: alembic upgrade head
@@ -75,15 +72,16 @@ jobs:
         run: npm ci
 
       - name: Type-check
-        run: npx tsc --noEmit
+        run: npm run typecheck
+
+      - name: Test
+        run: npm test
 
       - name: Lint
         run: npm run lint
-        continue-on-error: true
 
       - name: Unused code (knip)
         run: npm run knip
-        continue-on-error: true
 
       - name: Build
         run: npm run build

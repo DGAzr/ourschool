@@ -16,7 +16,7 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-import { InputHTMLAttributes, forwardRef } from 'react'
+import { InputHTMLAttributes, forwardRef, useId } from 'react'
 
 interface InputProps extends InputHTMLAttributes<HTMLInputElement> {
   label?: string
@@ -27,6 +27,8 @@ interface InputProps extends InputHTMLAttributes<HTMLInputElement> {
 
 const Input = forwardRef<HTMLInputElement, InputProps>(
   ({ label, error, helperText, fullWidth = true, className = '', disabled = false, ...props }, ref) => {
+    const autoId = useId()
+    const inputId = props.id ?? autoId
     const inputClasses = [
       'bg-field-bg border text-ink text-[13.5px] rounded-field px-3 py-2 transition-colors duration-150',
       'placeholder:text-faintest',
@@ -42,12 +44,12 @@ const Input = forwardRef<HTMLInputElement, InputProps>(
     return (
       <div className={fullWidth ? 'w-full' : ''}>
         {label && (
-          <label className="block text-[12px] font-semibold text-faint uppercase tracking-wide mb-1.5">
+          <label htmlFor={inputId} className="block text-[12px] font-semibold text-faint uppercase tracking-wide mb-1.5">
             {label}
             {props.required && <span className="text-danger ml-0.5">*</span>}
           </label>
         )}
-        <input ref={ref} className={inputClasses} disabled={disabled} {...props} />
+        <input ref={ref} className={inputClasses} disabled={disabled} {...props} id={inputId} />
         {error && <p className="mt-1 text-[12px] text-danger">{error}</p>}
         {helperText && !error && <p className="mt-1 text-[12px] text-muted">{helperText}</p>}
       </div>

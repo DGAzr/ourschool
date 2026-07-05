@@ -22,9 +22,7 @@
  * This module exports reusable components for managing API keys:
  * - APIKeyTable: Main table component for listing and managing keys
  * - CreateAPIKeyModal: Modal for creating new API keys
- * - APIKeyDetailsPanel: Expandable panel showing detailed statistics
  */
 
 export { default as APIKeyTable } from './APIKeyTable'
 export { default as CreateAPIKeyModal } from './CreateAPIKeyModal'
-export { default as APIKeyDetailsPanel } from './APIKeyDetailsPanel'

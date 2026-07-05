@@ -15,6 +15,7 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 """User schemas."""
+
 from datetime import date, datetime
 from typing import Optional
 
@@ -83,6 +84,7 @@ class User(UserBase):
 
     id: int
     is_active: bool
+    must_change_password: bool = False
     created_at: datetime
     updated_at: datetime
 

@@ -125,7 +125,7 @@ const QueuePanel: React.FC<QueuePanelProps> = ({
           >
             <div className="flex items-center justify-between gap-2">
               <span className="flex items-center gap-1.5 min-w-0">
-                <SubjectDot color={(sub as any)?.color ?? '#74716A'} size={8} />
+                <SubjectDot color={sub?.color ?? '#74716A'} size={8} />
                 <span className="font-semibold text-[13.5px] text-ink truncate">
                   {stu ? `${stu.first_name} ${stu.last_name}` : 'Student'}
                 </span>
@@ -224,7 +224,7 @@ const DetailPanel: React.FC<DetailPanelProps> = ({
           <div className="flex items-start justify-between gap-4">
             <div className="min-w-0">
               <div className="flex items-center gap-2 text-[12.5px] text-muted mb-1.5">
-                {sub && <SubjectDot color={(sub as any)?.color ?? '#74716A'} size={9} />}
+                {sub && <SubjectDot color={sub?.color ?? '#74716A'} size={9} />}
                 <span>{sub?.name ?? 'Assignment'}</span>
                 <span className="text-check-border">·</span>
                 <span>{selectedAssignment.template?.assignment_type ?? 'Assignment'}</span>
@@ -324,9 +324,10 @@ const DetailPanel: React.FC<DetailPanelProps> = ({
             <>
               <div className="flex gap-5 flex-wrap items-end">
                 <div>
-                  <label className="block text-[11px] font-semibold text-faint uppercase tracking-[.06em] mb-1.5">Points earned</label>
+                  <label htmlFor="grading-points-earned" className="block text-[11px] font-semibold text-faint uppercase tracking-[.06em] mb-1.5">Points earned</label>
                   <div className="flex items-center gap-2">
                     <input
+                      id="grading-points-earned"
                       type="number"
                       inputMode="decimal"
                       min={0}
@@ -364,8 +365,9 @@ const DetailPanel: React.FC<DetailPanelProps> = ({
               </div>
 
               <div>
-                <label className="block text-[11px] font-semibold text-faint uppercase tracking-[.06em] mb-1.5">Feedback to student</label>
+                <label htmlFor="grading-feedback" className="block text-[11px] font-semibold text-faint uppercase tracking-[.06em] mb-1.5">Feedback to student</label>
                 <textarea
+                  id="grading-feedback"
                   value={feedbackInput}
                   onChange={e => setFeedbackInput(e.target.value)}
                   rows={3}
@@ -411,7 +413,7 @@ const Grading: React.FC = () => {
   const isMobile = useIsMobile()
 
   const location = useLocation()
-  const incomingId: number | undefined = (location.state as any)?.assignmentId
+  const incomingId: number | undefined = (location.state as { assignmentId?: number } | null)?.assignmentId
 
   const [queueFilter, setQueueFilter] = useState<'needs' | 'overdue' | 'all'>(
     incomingId ? 'all' : 'needs'

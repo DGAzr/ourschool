@@ -15,6 +15,7 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 """APIs for reports."""
+
 from datetime import date
 from typing import Annotated, List, Optional
 
@@ -151,9 +152,7 @@ def get_student_attendance_report(
             .first()
         )
         if not student:
-            raise HTTPException(
-                status_code=404, detail="Student not found"
-            )
+            raise HTTPException(status_code=404, detail="Student not found")
     else:
         raise HTTPException(status_code=403, detail="Not authorized")
 

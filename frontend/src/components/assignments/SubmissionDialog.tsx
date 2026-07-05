@@ -182,7 +182,7 @@ const SubmissionDialog: React.FC<SubmissionDialogProps> = ({
                 )}
                 <button onClick={() => handleRemoveArtifactLink(index)}
                   disabled={loading || artifactLinks.length === 1}
-                  className="p-1.5 text-faint hover:text-neg-fg hover:bg-neg-bg rounded-field transition-colors disabled:opacity-50 disabled:cursor-not-allowed" title="Remove link">
+                  className="p-1.5 text-faint hover:text-neg-fg hover:bg-neg-bg rounded-field transition-colors disabled:opacity-50 disabled:cursor-not-allowed" title="Remove link" aria-label="Remove link">
                   <Trash2 className="h-4 w-4" />
                 </button>
               </div>

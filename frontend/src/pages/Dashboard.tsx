@@ -32,6 +32,7 @@ import Modal from '../components/ui/Modal'
 import Button from '../components/ui/Button'
 import BulkAttendanceModal from '../components/BulkAttendanceModal'
 import AssignmentDetailModal from '../components/assignments/AssignmentDetailModal'
+import { getErrorMessage } from '../services/api'
 
 // Quick Award Points Modal Component
 interface QuickAwardModalProps {
@@ -71,7 +72,7 @@ const QuickAwardModal: React.FC<QuickAwardModalProps> = ({ onClose, onSuccess })
       setLoadingStudents(true)
       const overview = await pointsApi.getAdminOverview()
       setStudents(overview.student_points)
-    } catch (err: any) {
+    } catch (err) {
       setError('Failed to load students')
     } finally {
       setLoadingStudents(false)
@@ -104,8 +105,8 @@ const QuickAwardModal: React.FC<QuickAwardModalProps> = ({ onClose, onSuccess })
       
       onSuccess()
       onClose()
-    } catch (err: any) {
-      setError(err.message || 'Failed to award points')
+    } catch (err) {
+      setError(getErrorMessage(err, 'Failed to award points'))
     } finally {
       setLoading(false)
     }
@@ -307,7 +308,8 @@ const Dashboard: React.FC = () => {
     }
     
     loadDashboardData()
-  }, [isAdmin])
+    // setLoading is a stable useState setter returned by usePageLayout
+  }, [isAdmin, setLoading])
 
   // Load activity data separately
   useEffect(() => {

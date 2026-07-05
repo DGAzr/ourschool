@@ -15,6 +15,7 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 """APIs for system settings management."""
+
 from typing import Annotated, List
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
@@ -32,7 +33,7 @@ from app.schemas.settings import (
     GradingSettings,
     GradeBand,
     GradeScaleUpdate,
-    SystemSettingsGroup
+    SystemSettingsGroup,
 )
 
 router = APIRouter()
@@ -46,7 +47,7 @@ def get_all_settings(
     """Get all system settings (admin only)."""
     if current_user.role != UserRole.ADMIN:
         raise HTTPException(status_code=403, detail="Not authorized")
-    
+
     return crud_settings.get_all_settings(db)
 
 
@@ -58,28 +59,21 @@ def get_grouped_settings(
     """Get settings organized by category (admin only)."""
     if current_user.role != UserRole.ADMIN:
         raise HTTPException(status_code=403, detail="Not authorized")
-    
+
     required_days = crud_settings.get_setting_value(
-        db,
-        "attendance.required_days_of_instruction",
-        default_value=180,
-        value_type=int
+        db, "attendance.required_days_of_instruction", default_value=180, value_type=int
     )
     skip_weekends = crud_settings.get_setting_value(
-        db,
-        "attendance.skip_weekends",
-        default_value=True,
-        value_type=bool
+        db, "attendance.skip_weekends", default_value=True, value_type=bool
     )
     count_excused = crud_settings.get_setting_value(
-        db,
-        "attendance.count_excused",
-        default_value=True,
-        value_type=bool
+        db, "attendance.count_excused", default_value=True, value_type=bool
     )
 
     raw_scale = crud_settings.get_grade_scale(db)
-    grade_bands = [GradeBand(letter=l, min_percent=m) for l, m in raw_scale]
+    grade_bands = [
+        GradeBand(letter=letter, min_percent=min_pct) for letter, min_pct in raw_scale
+    ]
 
     return SystemSettingsGroup(
         attendance=AttendanceSettings(
@@ -87,7 +81,7 @@ def get_grouped_settings(
             skip_weekends=skip_weekends,
             count_excused=count_excused,
         ),
-        grading=GradingSettings(scale=grade_bands)
+        grading=GradingSettings(scale=grade_bands),
     )
 
 
@@ -100,11 +94,11 @@ def get_setting(
     """Get a specific system setting (admin only)."""
     if current_user.role != UserRole.ADMIN:
         raise HTTPException(status_code=403, detail="Not authorized")
-    
+
     setting = crud_settings.get_setting(db, setting_key)
     if not setting:
         raise HTTPException(status_code=404, detail="Setting not found")
-    
+
     return setting
 
 
@@ -117,15 +111,14 @@ def create_setting(
     """Create a new system setting (admin only)."""
     if current_user.role != UserRole.ADMIN:
         raise HTTPException(status_code=403, detail="Not authorized")
-    
+
     # Check if setting already exists
     existing = crud_settings.get_setting(db, setting.setting_key)
     if existing:
         raise HTTPException(
-            status_code=400, 
-            detail=f"Setting '{setting.setting_key}' already exists"
+            status_code=400, detail=f"Setting '{setting.setting_key}' already exists"
         )
-    
+
     return crud_settings.create_setting(db, setting)
 
 
@@ -139,11 +132,11 @@ def update_setting(
     """Update an existing system setting (admin only)."""
     if current_user.role != UserRole.ADMIN:
         raise HTTPException(status_code=403, detail="Not authorized")
-    
+
     updated_setting = crud_settings.update_setting(db, setting_key, setting_update)
     if not updated_setting:
         raise HTTPException(status_code=404, detail="Setting not found")
-    
+
     return updated_setting
 
 
@@ -164,8 +157,11 @@ def update_grade_scale(
         [{"letter": b.letter, "min_percent": b.min_percent} for b in scale_update.scale]
     )
     crud_settings.upsert_setting(
-        db, "grading.scale", payload, "json",
-        "Letter-grade threshold bands (JSON array of {letter, min_percent})"
+        db,
+        "grading.scale",
+        payload,
+        "json",
+        "Letter-grade threshold bands (JSON array of {letter, min_percent})",
     )
     return GradingSettings(scale=scale_update.scale)
 
@@ -179,19 +175,18 @@ def update_required_days_of_instruction(
     """Update the required days of instruction setting (admin only)."""
     if current_user.role != UserRole.ADMIN:
         raise HTTPException(status_code=403, detail="Not authorized")
-    
+
     if required_days < 1 or required_days > 365:
         raise HTTPException(
-            status_code=400, 
-            detail="Required days must be between 1 and 365"
+            status_code=400, detail="Required days must be between 1 and 365"
         )
-    
+
     return crud_settings.upsert_setting(
         db,
         "attendance.required_days_of_instruction",
         str(required_days),
         "integer",
-        "Required number of instructional days per academic year for attendance calculations"
+        "Required number of instructional days per academic year for attendance calculations",
     )
 
 
@@ -210,7 +205,7 @@ def update_skip_weekends(
         "attendance.skip_weekends",
         str(skip_weekends).lower(),
         "boolean",
-        "Exclude Saturdays and Sundays from instructional day counts"
+        "Exclude Saturdays and Sundays from instructional day counts",
     )
 
 
@@ -229,5 +224,5 @@ def update_count_excused(
         "attendance.count_excused",
         str(count_excused).lower(),
         "boolean",
-        "Count excused absences as instructional days toward the required-days total"
+        "Count excused absences as instructional days toward the required-days total",
     )

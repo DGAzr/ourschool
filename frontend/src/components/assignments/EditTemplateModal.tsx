@@ -23,6 +23,7 @@ import { Subject, AssignmentTemplate, AssignmentTemplateUpdate } from '../../typ
 import Modal from '../ui/Modal'
 import Button from '../ui/Button'
 import { IconSelect, IconPickerButton } from '../ui'
+import { getErrorMessage } from '../../services/api'
 
 interface EditTemplateModalProps {
   template: AssignmentTemplate
@@ -100,14 +101,14 @@ const EditTemplateModal: React.FC<EditTemplateModalProps> = ({
 
       await assignmentsApi.update(template.id, templateData)
       onSuccess()
-    } catch (err: any) {
-      setError(err.message || 'Failed to update assignment template')
+    } catch (err) {
+      setError(getErrorMessage(err, 'Failed to update assignment template'))
     } finally {
       setLoading(false)
     }
   }
 
-  const updateFormData = (field: keyof AssignmentTemplateUpdate, value: any) => {
+  const updateFormData = <K extends keyof AssignmentTemplateUpdate>(field: K, value: AssignmentTemplateUpdate[K]) => {
     setFormData(prev => ({ ...prev, [field]: value }))
   }
 

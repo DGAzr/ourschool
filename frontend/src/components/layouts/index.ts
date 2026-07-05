@@ -16,7 +16,4 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-export { default as PageLayout } from './PageLayout'
-export { default as TablePageLayout } from './TablePageLayout'
-export { default as DashboardLayout } from './DashboardLayout'
 export { usePageLayout } from './hooks/usePageLayout'

@@ -62,25 +62,47 @@ DATABASE_URL=postgresql+psycopg://user:password@host:port/database
 ```env
 SECRET_KEY=your-secret-key-here         # JWT signing key (REQUIRED)
 ALGORITHM=HS256                         # JWT algorithm (default: HS256)
-ACCESS_TOKEN_EXPIRE_MINUTES=30         # Token expiration (default: 30)
+ACCESS_TOKEN_EXPIRE_MINUTES=30          # Token expiration (default: 30)
+MAX_SESSION_AGE_MINUTES=720             # Absolute session-lifetime cap; activity
+                                        # can extend a session, but never past
+                                        # this (default: 720 = 12 hours)
+MAX_REQUEST_BODY_BYTES=10485760         # Max accepted request body (default:
+                                        # 10 MiB). Raise if a large backup
+                                        # restore is rejected with HTTP 413.
+ENABLE_API_DOCS=false                   # Expose /docs, /redoc, /openapi.json
+                                        # (default: false — off in production)
 ```
 
-**Important:** The `SECRET_KEY` must be set and should be a long, random string for production.
+**Important:** The `SECRET_KEY` must be set and should be a long, random string for production. The app refuses to start with a missing, short, or placeholder key.
 
 ### Server Configuration
 
 #### Backend Server
 ```env
-BACKEND_HOST=0.0.0.0               # Backend bind address (default: 0.0.0.0)
+BACKEND_HOST=127.0.0.1             # Backend bind address inside the container
+                                   # (default: 127.0.0.1; compose sets 0.0.0.0)
 BACKEND_PORT=8000                  # Backend port (default: 8000)
 ```
 
 #### Frontend Server
 ```env
-FRONTEND_PORT=4173                 # Frontend port (default: 4173, Vite preview default)
+FRONTEND_PORT=4173                 # Published frontend port (default: 4173)
 ```
 
-Note: `FRONTEND_HOST` is no longer used by the backend configuration. The frontend port is fixed at 4173 (Vite preview server default).
+#### Published-port binding (Docker Compose)
+These control which host interface each published port binds to. The frontend
+is the only service meant to be reachable from other machines; the backend and
+database stay on loopback and are reached through the frontend's nginx proxy.
+
+```env
+BACKEND_BIND=127.0.0.1             # Host interface for the backend port
+POSTGRES_BIND=127.0.0.1            # Host interface for the database port
+```
+
+Set these to `0.0.0.0` only if you need direct external access (e.g. the
+backend behind your own TLS reverse proxy).
+
+Note: `FRONTEND_HOST` was removed; it was never read by the application.
 
 ### Logging Configuration
 

@@ -40,12 +40,26 @@ const Admin = lazy(() => import('./pages/Admin'))
 const AdminBackup = lazy(() => import('./pages/AdminBackup'))
 const AdminSettings = lazy(() => import('./pages/AdminSettings'))
 const MyPoints = lazy(() => import('./pages/MyPoints'))
+const ChangePasswordRequired = lazy(() => import('./pages/ChangePasswordRequired'))
 
 const PageLoadingSpinner = () => (
   <div className="flex items-center justify-center min-h-screen bg-bg">
     <div className="w-8 h-8 border-2 border-line border-t-accent rounded-full animate-spin" />
   </div>
 )
+
+/**
+ * Server-enforced password rotation gate: while must_change_password is set,
+ * the backend rejects every endpoint except the password change, so show the
+ * dedicated screen instead of the app.
+ */
+const RequirePasswordChange = ({ children }: { children: React.ReactNode }) => {
+  const { user } = useAuth()
+  if (user?.must_change_password) {
+    return <ChangePasswordRequired />
+  }
+  return <>{children}</>
+}
 
 function AppContent() {
   const { extendSession, trackActivity } = useAuth()
@@ -77,7 +91,7 @@ function AppContent() {
       <Suspense fallback={<PageLoadingSpinner />}>
         <Routes>
           <Route path="/login" element={<Login />} />
-          <Route path="/" element={<ProtectedRoute><Layout /></ProtectedRoute>}>
+          <Route path="/" element={<ProtectedRoute><RequirePasswordChange><Layout /></RequirePasswordChange></ProtectedRoute>}>
             <Route index element={<Dashboard />} />
             <Route path="attendance" element={<Attendance />} />
             <Route path="assignments" element={<Assignments />} />

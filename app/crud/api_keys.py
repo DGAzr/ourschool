@@ -15,6 +15,7 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 """CRUD operations for API keys."""
+
 from datetime import datetime, timedelta, timezone
 from typing import List, Optional, Dict, Any
 
@@ -23,7 +24,6 @@ from sqlalchemy import func, desc
 
 from app.core.security import generate_api_key, hash_api_key
 from app.models.api_key import APIKey
-from app.models.user import User
 
 
 def create_api_key(
@@ -31,13 +31,13 @@ def create_api_key(
     name: str,
     permissions: List[str],
     creator_id: int,
-    expires_at: Optional[datetime] = None
+    expires_at: Optional[datetime] = None,
 ) -> tuple[APIKey, str]:
     """Create a new API key and return the model and the plain text key."""
     # Generate API key
     full_key, prefix = generate_api_key()
     key_hash = hash_api_key(full_key)
-    
+
     # Create database record
     api_key = APIKey(
         name=name,
@@ -45,23 +45,23 @@ def create_api_key(
         key_prefix=prefix,
         permissions=permissions,
         created_by=creator_id,
-        expires_at=expires_at
+        expires_at=expires_at,
     )
-    
+
     db.add(api_key)
     db.commit()
     db.refresh(api_key)
-    
+
     return api_key, full_key
 
 
 def get_api_keys(db: Session, created_by: Optional[int] = None) -> List[APIKey]:
     """Get all API keys, optionally filtered by creator."""
     query = db.query(APIKey)
-    
+
     if created_by is not None:
         query = query.filter(APIKey.created_by == created_by)
-    
+
     return query.order_by(desc(APIKey.created_at)).all()
 
 
@@ -72,10 +72,9 @@ def get_api_key_by_id(db: Session, api_key_id: int) -> Optional[APIKey]:
 
 def get_api_key_by_prefix(db: Session, prefix: str) -> Optional[APIKey]:
     """Get an API key by its prefix."""
-    return db.query(APIKey).filter(
-        APIKey.key_prefix == prefix,
-        APIKey.is_active == True
-    ).first()
+    return (
+        db.query(APIKey).filter(APIKey.key_prefix == prefix, APIKey.is_active).first()
+    )
 
 
 def update_api_key(
@@ -84,13 +83,13 @@ def update_api_key(
     name: Optional[str] = None,
     permissions: Optional[List[str]] = None,
     is_active: Optional[bool] = None,
-    expires_at: Optional[datetime] = None
+    expires_at: Optional[datetime] = None,
 ) -> Optional[APIKey]:
     """Update an API key."""
     api_key = get_api_key_by_id(db, api_key_id)
     if not api_key:
         return None
-    
+
     if name is not None:
         api_key.name = name
     if permissions is not None:
@@ -99,11 +98,11 @@ def update_api_key(
         api_key.is_active = is_active
     if expires_at is not None:
         api_key.expires_at = expires_at
-    
+
     api_key.updated_at = datetime.now(timezone.utc)
     db.commit()
     db.refresh(api_key)
-    
+
     return api_key
 
 
@@ -112,7 +111,7 @@ def delete_api_key(db: Session, api_key_id: int) -> bool:
     api_key = get_api_key_by_id(db, api_key_id)
     if not api_key:
         return False
-    
+
     db.delete(api_key)
     db.commit()
     return True
@@ -123,20 +122,20 @@ def regenerate_api_key(db: Session, api_key_id: int) -> Optional[tuple[APIKey, s
     api_key = get_api_key_by_id(db, api_key_id)
     if not api_key:
         return None
-    
+
     # Generate new key
     full_key, prefix = generate_api_key()
     key_hash = hash_api_key(full_key)
-    
+
     # Update the record
     api_key.key_hash = key_hash
     api_key.key_prefix = prefix
     api_key.updated_at = datetime.now(timezone.utc)
     api_key.last_used_at = None  # Reset usage tracking
-    
+
     db.commit()
     db.refresh(api_key)
-    
+
     return api_key, full_key
 
 
@@ -153,7 +152,7 @@ def get_api_key_stats(db: Session, api_key_id: int) -> Optional[Dict[str, Any]]:
     api_key = get_api_key_by_id(db, api_key_id)
     if not api_key:
         return None
-    
+
     # Basic stats - can be expanded with actual usage logging later
     stats = {
         "id": api_key.id,
@@ -163,34 +162,39 @@ def get_api_key_stats(db: Session, api_key_id: int) -> Optional[Dict[str, Any]]:
         "is_active": api_key.is_active,
         "is_expired": api_key.is_expired,
         "permissions_count": len(api_key.permissions),
-        "permissions": api_key.permissions
+        "permissions": api_key.permissions,
     }
-    
+
     return stats
 
 
 def get_system_api_key_stats(db: Session) -> Dict[str, Any]:
     """Get system-wide API key statistics."""
     total_keys = db.query(func.count(APIKey.id)).scalar()
-    active_keys = db.query(func.count(APIKey.id)).filter(APIKey.is_active == True).scalar()
-    expired_keys = db.query(func.count(APIKey.id)).filter(
-        APIKey.expires_at.isnot(None),
-        APIKey.expires_at < datetime.now(timezone.utc)
-    ).scalar()
-    
+    active_keys = db.query(func.count(APIKey.id)).filter(APIKey.is_active).scalar()
+    expired_keys = (
+        db.query(func.count(APIKey.id))
+        .filter(
+            APIKey.expires_at.isnot(None),
+            APIKey.expires_at < datetime.now(timezone.utc),
+        )
+        .scalar()
+    )
+
     # Keys used in the last 30 days
     thirty_days_ago = datetime.now(timezone.utc) - timedelta(days=30)
-    recently_used = db.query(func.count(APIKey.id)).filter(
-        APIKey.last_used_at.isnot(None),
-        APIKey.last_used_at > thirty_days_ago
-    ).scalar()
-    
+    recently_used = (
+        db.query(func.count(APIKey.id))
+        .filter(APIKey.last_used_at.isnot(None), APIKey.last_used_at > thirty_days_ago)
+        .scalar()
+    )
+
     return {
         "total_keys": total_keys,
         "active_keys": active_keys,
         "expired_keys": expired_keys,
         "recently_used_keys": recently_used,
-        "inactive_keys": total_keys - active_keys
+        "inactive_keys": total_keys - active_keys,
     }
 
 
@@ -198,16 +202,16 @@ def get_system_api_key_stats(db: Session) -> Dict[str, Any]:
 # Only permissions backed by a real integration endpoint are listed, so the
 # /api/meta discovery contract never advertises capabilities that don't exist.
 AVAILABLE_PERMISSIONS = [
-    "students:read",      # GET /api/users/students/lookup, /students/{id}/info
-    "assignments:read",   # GET /api/integrations/assignments/{id};
-                          #     GET /api/assignments/templates, /all-assignments,
-                          #     /students/{id}/progress
+    "students:read",  # GET /api/users/students/lookup, /students/{id}/info
+    "assignments:read",  # GET /api/integrations/assignments/{id};
+    #     GET /api/assignments/templates, /all-assignments,
+    #     /students/{id}/progress
     "assignments:write",  # POST/PUT /api/assignments/templates; POST /api/assignments/assign
     "assignments:grade",  # POST /api/integrations/assignments/{id}/grade
-    "attendance:read",    # GET /api/attendance, /api/attendance/students
-    "attendance:write",   # POST/PUT/DELETE /api/attendance, POST /api/attendance/bulk
-    "points:read",        # GET /api/students/{id}/points (+ ledger, overview)
-    "points:write",       # POST /api/students/{id}/points/adjust
+    "attendance:read",  # GET /api/attendance, /api/attendance/students
+    "attendance:write",  # POST/PUT/DELETE /api/attendance, POST /api/attendance/bulk
+    "points:read",  # GET /api/students/{id}/points (+ ledger, overview)
+    "points:write",  # POST /api/students/{id}/points/adjust
 ]
 
 

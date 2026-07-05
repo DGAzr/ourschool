@@ -15,6 +15,7 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 """API key models for external integrations."""
+
 from datetime import datetime, timezone
 from typing import List
 
@@ -43,11 +44,19 @@ class APIKey(Base):
     key_prefix = Column(String(8), nullable=False, index=True)
     permissions = Column(JSON, nullable=False)  # List of permission strings
     is_active = Column(Boolean, default=True, index=True)
-    created_by = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    created_by = Column(
+        Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
     last_used_at = Column(DateTime(timezone=True), nullable=True)
     expires_at = Column(DateTime(timezone=True), nullable=True)
-    created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
-    updated_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), onupdate=lambda: datetime.now(timezone.utc))
+    created_at = Column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )
+    updated_at = Column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+    )
 
     # Relationships
     creator = relationship("User", foreign_keys=[created_by])
@@ -64,7 +73,9 @@ class APIKey(Base):
         if not self.is_active:
             return False
 
-        if self.expires_at and self._as_aware(self.expires_at) < datetime.now(timezone.utc):
+        if self.expires_at and self._as_aware(self.expires_at) < datetime.now(
+            timezone.utc
+        ):
             return False
 
         return permission in self.permissions
@@ -80,7 +91,9 @@ class APIKey(Base):
     @property
     def is_expired(self) -> bool:
         """Check if this API key is expired."""
-        return self.expires_at is not None and self._as_aware(self.expires_at) < datetime.now(timezone.utc)
+        return self.expires_at is not None and self._as_aware(
+            self.expires_at
+        ) < datetime.now(timezone.utc)
 
     @property
     def is_valid(self) -> bool:

@@ -39,7 +39,8 @@ export const config = {
   // Application Settings
   app: {
     name: import.meta.env.VITE_APP_NAME || 'OurSchool - Homeschool Management',
-    version: import.meta.env.VITE_APP_VERSION || '1.0.0',
+    // Baked in at build time (see Dockerfile.frontend APP_VERSION build arg).
+    version: import.meta.env.VITE_APP_VERSION || 'dev',
   },
   
   // Development Settings

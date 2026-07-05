@@ -1,12 +1,18 @@
 # Stage 1: build the React app
 FROM node:20-alpine AS builder
 
+# Version string baked into the build (shown in the UI). The publish
+# workflow passes the release tag; defaults to the VERSION file content
+# via docker-compose build args for source builds.
+ARG APP_VERSION=dev
+
 WORKDIR /app
 
 COPY frontend/package*.json ./
 RUN npm ci
 
 COPY frontend/ .
+ENV VITE_APP_VERSION=${APP_VERSION}
 RUN npm run build
 
 # Stage 2: serve with nginx

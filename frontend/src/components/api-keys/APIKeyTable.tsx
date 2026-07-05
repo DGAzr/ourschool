@@ -87,6 +87,7 @@ const APIKeyTable: React.FC<APIKeyTableProps> = ({
               disabled={refreshing}
               className="p-1.5 rounded-field text-muted hover:text-ink hover:bg-panel-2 disabled:opacity-40 transition-colors"
               title="Refresh"
+              aria-label="Refresh API keys"
             >
               <RotateCcw className={`h-3.5 w-3.5 ${refreshing ? 'animate-spin' : ''}`} />
             </button>
@@ -164,6 +165,7 @@ const APIKeyTable: React.FC<APIKeyTableProps> = ({
                           onClick={() => onToggleStatsExpanded(apiKey.id)}
                           className="p-1.5 rounded-field text-muted hover:text-ink hover:bg-panel-2 transition-colors"
                           title={expandedStats.has(apiKey.id) ? 'Hide details' : 'Show details'}
+                          aria-label={expandedStats.has(apiKey.id) ? 'Hide API key details' : 'Show API key details'}
                         >
                           <Eye className="h-3.5 w-3.5" />
                         </button>
@@ -176,6 +178,7 @@ const APIKeyTable: React.FC<APIKeyTableProps> = ({
                               : 'text-pos-fg hover:bg-pos-bg'
                           }`}
                           title={apiKey.is_active ? 'Disable API key' : 'Enable API key'}
+                          aria-label={apiKey.is_active ? 'Disable API key' : 'Enable API key'}
                         >
                           {apiKey.is_active
                             ? <AlertTriangle className="h-3.5 w-3.5" />
@@ -186,6 +189,7 @@ const APIKeyTable: React.FC<APIKeyTableProps> = ({
                           onClick={() => onDelete(apiKey.id)}
                           className="p-1.5 rounded-field text-neg-fg hover:bg-neg-bg transition-colors"
                           title="Delete API key"
+                          aria-label="Delete API key"
                         >
                           <Trash2 className="h-3.5 w-3.5" />
                         </button>

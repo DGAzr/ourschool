@@ -185,6 +185,7 @@ const StudentAssignmentCard: React.FC<StudentAssignmentCardProps> = ({
               onClick={() => onArchive(assignment)}
               className="w-[34px] h-[34px] flex items-center justify-center rounded-field text-faint hover:text-ink hover:bg-track transition-colors"
               title="Archive"
+              aria-label="Archive assignment"
             >
               <Archive className="w-4 h-4" />
             </button>
@@ -194,6 +195,7 @@ const StudentAssignmentCard: React.FC<StudentAssignmentCardProps> = ({
               onClick={() => onDelete(assignment)}
               className="w-[34px] h-[34px] flex items-center justify-center rounded-field text-faint hover:text-neg-fg hover:bg-neg-bg transition-colors"
               title="Delete"
+              aria-label="Delete assignment"
             >
               <Trash2 className="w-4 h-4" />
             </button>

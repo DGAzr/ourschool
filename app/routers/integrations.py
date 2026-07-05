@@ -27,7 +27,6 @@ from app.core.api_auth import require_permission
 from app.core.database import get_db
 from app.core.dual_auth import get_user_id_from_auth
 from app.models.assignment import StudentAssignment
-from app.models.user import User, UserRole
 from app.schemas.assignment import StudentAssignmentGrade
 
 logger = logging.getLogger(__name__)
@@ -43,19 +42,19 @@ def grade_assignment_via_api(
 ):
     """
     Grade a student assignment via external API.
-    
+
     This endpoint allows external systems to submit grades for student assignments
     using API key authentication. The API key must have the 'assignments:grade' permission.
-    
+
     Args:
         assignment_id: ID of the student assignment to grade
         grade_data: Grade information including points earned and feedback
         db: Database session
         api_key_user: Authenticated API key user with grading permissions
-        
+
     Returns:
         Graded assignment data
-        
+
     Raises:
         HTTPException: 404 if assignment not found
         HTTPException: 400 if points exceed maximum or other validation fails
@@ -86,7 +85,7 @@ def grade_assignment_via_api(
     assignment.letter_grade = grade_data.letter_grade
     assignment.is_graded = True
     assignment.graded_date = date.today()
-    
+
     # Attribute the grade to the acting admin if an X-On-Behalf-Of header was
     # supplied; otherwise it stays None (the API key is logged separately).
     assignment.graded_by = get_user_id_from_auth(api_key_user)
@@ -99,7 +98,10 @@ def grade_assignment_via_api(
     if not grade_data.letter_grade and percentage is not None:
         from app.crud.reports import calculate_letter_grade
         from app.crud.settings import get_grade_scale
-        assignment.letter_grade = calculate_letter_grade(percentage, get_grade_scale(db))
+
+        assignment.letter_grade = calculate_letter_grade(
+            percentage, get_grade_scale(db)
+        )
     else:
         assignment.letter_grade = grade_data.letter_grade
 
@@ -114,21 +116,26 @@ def grade_assignment_via_api(
     # Sync points if points system is enabled (idempotent; safe on re-grade)
     try:
         from app.crud import points as points_crud
+
         if points_crud.is_points_system_enabled(db):
-            assignment_title = f"{assignment.template.name}" if assignment.template else f"Assignment {assignment.id}"
+            assignment_title = (
+                f"{assignment.template.name}"
+                if assignment.template
+                else f"Assignment {assignment.id}"
+            )
             points_crud.set_assignment_points(
                 db=db,
                 student_id=assignment.student_id,
                 assignment_id=assignment.id,
                 points_earned=grade_data.points_earned,
-                assignment_title=assignment_title
+                assignment_title=assignment_title,
             )
             db.commit()
             logger.info(
                 "Synced points for student %s assignment %s via API",
                 assignment.student_id,
                 assignment.id,
-                extra={"api_key": api_key_user.name}
+                extra={"api_key": api_key_user.name},
             )
     except Exception as e:
         # Don't fail the grading process if points syncing fails
@@ -137,7 +144,7 @@ def grade_assignment_via_api(
             "Failed to sync points for assignment %s via API: %s",
             assignment.id,
             str(e),
-            extra={"api_key": api_key_user.name}
+            extra={"api_key": api_key_user.name},
         )
 
     logger.info(
@@ -145,7 +152,7 @@ def grade_assignment_via_api(
         assignment.id,
         grade_data.points_earned,
         max_points,
-        extra={"api_key": api_key_user.name}
+        extra={"api_key": api_key_user.name},
     )
 
     # Return the assignment data - we need to manually construct the response
@@ -176,18 +183,18 @@ def get_assignment_via_api(
 ):
     """
     Get assignment details via external API.
-    
+
     This endpoint allows external systems to retrieve assignment information
     using API key authentication. The API key must have the 'assignments:read' permission.
-    
+
     Args:
         assignment_id: ID of the student assignment
         db: Database session
         api_key_user: Authenticated API key user with read permissions
-        
+
     Returns:
         Assignment data
-        
+
     Raises:
         HTTPException: 404 if assignment not found
     """
@@ -203,7 +210,7 @@ def get_assignment_via_api(
     logger.info(
         "Retrieved assignment %s via API",
         assignment.id,
-        extra={"api_key": api_key_user.name}
+        extra={"api_key": api_key_user.name},
     )
 
     return {

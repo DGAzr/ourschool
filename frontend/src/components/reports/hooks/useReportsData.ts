@@ -16,7 +16,7 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback, useEffectEvent } from 'react'
 import { useAuth } from '../../../contexts/AuthContext'
 import { reportsApi } from '../../../services/reports'
 import {
@@ -27,9 +27,11 @@ import {
   AcademicYear,
   StudentAttendanceReport,
   BulkAttendanceReport,
-  AssignmentReport
+  AssignmentReport,
+  ReportCard
 } from '../../../types'
 import { Term } from '../../../types/term'
+import { getErrorMessage } from '../../../services/api'
 
 export type ReportView = 'overview' | 'terms' | 'subjects' | 'students' | 'attendance' | 'assignments' | 'reportcard'
 
@@ -76,7 +78,7 @@ interface UseReportsDataReturn {
   assignmentLoading: boolean
   
   // Report card data
-  reportCard: any | null
+  reportCard: ReportCard | null
   reportCardStudentId: string
   setReportCardStudentId: (id: string) => void
   reportCardTermId: string
@@ -122,7 +124,7 @@ export const useReportsData = (): UseReportsDataReturn => {
   const [assignmentLoading, setAssignmentLoading] = useState(false)
   
   // Report card states
-  const [reportCard, setReportCard] = useState<any | null>(null)
+  const [reportCard, setReportCard] = useState<ReportCard | null>(null)
   const [reportCardStudentId, setReportCardStudentId] = useState<string>('')
   const [reportCardTermId, setReportCardTermId] = useState<string>('')
   const [reportCardLoading, setReportCardLoading] = useState(false)
@@ -169,8 +171,8 @@ export const useReportsData = (): UseReportsDataReturn => {
       } else if (selectedView === 'reportcard') {
         await loadReportCardOptions()
       }
-    } catch (err: any) {
-      setError(`Failed to load report data: ${err.message || 'Unknown error'}`)
+    } catch (err) {
+      setError(`Failed to load report data: ${getErrorMessage(err, 'Unknown error')}`)
     } finally {
       setLoading(false)
     }
@@ -181,7 +183,7 @@ export const useReportsData = (): UseReportsDataReturn => {
       setAssignmentLoading(true)
       const data = await reportsApi.getAssignmentReport()
       setAssignmentReport(data)
-    } catch (err: any) {
+    } catch (err) {
       setError('Failed to load assignment report')
     } finally {
       setAssignmentLoading(false)
@@ -211,8 +213,8 @@ export const useReportsData = (): UseReportsDataReturn => {
         }])
         setReportCardStudentId(user!.id.toString())
       }
-    } catch (err: any) {
-      setError('Failed to load report card options: ' + (err.message || 'Unknown error'))
+    } catch (err) {
+      setError('Failed to load report card options: ' + (getErrorMessage(err, 'Unknown error')))
     }
   }
 
@@ -231,8 +233,8 @@ export const useReportsData = (): UseReportsDataReturn => {
 
       const data = await reportsApi.getReportCard(studentId, termId)
       setReportCard(data)
-    } catch (err: any) {
-      setError('Failed to generate report card: ' + (err.message || 'Unknown error'))
+    } catch (err) {
+      setError('Failed to generate report card: ' + (getErrorMessage(err, 'Unknown error')))
     } finally {
       setReportCardLoading(false)
     }
@@ -240,7 +242,7 @@ export const useReportsData = (): UseReportsDataReturn => {
 
   // Fetch per-day records for a single student, using the same date range as the
   // current bulk report.  Used by the admin calendar picker.
-  const fetchStudentCalendar = async (studentId: number) => {
+  const fetchStudentCalendar = useCallback(async (studentId: number) => {
     if (!bulkAttendanceReport) return
     try {
       setCalendarStudentLoading(true)
@@ -256,7 +258,7 @@ export const useReportsData = (): UseReportsDataReturn => {
     } finally {
       setCalendarStudentLoading(false)
     }
-  }
+  }, [bulkAttendanceReport])
 
   const generateAttendanceReport = async () => {
     try {
@@ -323,7 +325,7 @@ export const useReportsData = (): UseReportsDataReturn => {
           setAttendanceReport(data)
         }
       }
-    } catch (err: any) {
+    } catch (err) {
       setError('Failed to generate attendance report')
     } finally {
       setAttendanceLoading(false)
@@ -336,8 +338,8 @@ export const useReportsData = (): UseReportsDataReturn => {
         setLoading(true)
         const data = await reportsApi.getAllStudentsProgress(termId || undefined)
         setStudentProgress(data)
-      } catch (err: any) {
-        setError(`Failed to load student progress: ${err.message || 'Unknown error'}`)
+      } catch (err) {
+        setError(`Failed to load student progress: ${getErrorMessage(err, 'Unknown error')}`)
       } finally {
         setLoading(false)
       }
@@ -348,17 +350,29 @@ export const useReportsData = (): UseReportsDataReturn => {
     await fetchDataForView()
   }
 
+  // Effect event: reads the latest fetchDataForView without making every piece
+  // of state it captures (selected dates, term, ...) a refetch trigger.
+  const loadViewData = useEffectEvent(() => {
+    fetchDataForView()
+  })
+
   useEffect(() => {
     if (user) {
-      fetchDataForView()
+      loadViewData()
     }
   }, [selectedView, user, isAdmin])
 
+  // Effect event: term changes should only reload student progress; the other
+  // captured values (view, admin flag, terms) must not retrigger the effect.
+  const reloadProgressForTerm = useEffectEvent((termId: number | null) => {
+    if (selectedView === 'students' && isAdmin && terms.length > 0) {
+      refreshStudentProgress(termId)
+    }
+  })
+
   // Reload student progress when term selection changes
   useEffect(() => {
-    if (selectedView === 'students' && isAdmin && terms.length > 0) {
-      refreshStudentProgress(selectedTermId)
-    }
+    reloadProgressForTerm(selectedTermId)
   }, [selectedTermId])
 
   return {

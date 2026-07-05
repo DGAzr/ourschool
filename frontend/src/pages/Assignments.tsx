@@ -21,12 +21,14 @@ import { useNavigate, Link } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { assignmentsApi } from '../services/assignments'
 import { termsApi } from '../services/terms'
-import { subjectsApi } from '../services/subjects'
+import { useAssignments } from '../hooks/useAssignments'
+import { useAssignmentFilters } from '../hooks/useAssignmentFilters'
 import { Pill, statusToPillVariant, SubjectDot, useToast } from '../components/ui'
+import ConfirmDialog from '../components/ui/ConfirmDialog'
 import StudentAssignmentCard from '../components/assignments/StudentAssignmentCard'
 import SubmissionDialog from '../components/assignments/SubmissionDialog'
 import QuickAssignModal from '../components/assignments/QuickAssignModal'
-import { StudentAssignment, Subject, Term } from '../types'
+import { StudentAssignment, Term } from '../types'
 import { formatDateOnly, isPastDateOnly } from '../utils/formatters'
 import { letterGrade } from '../utils/grading'
 
@@ -38,24 +40,34 @@ const Assignments: React.FC = () => {
   const { toast } = useToast()
   const navigate = useNavigate()
 
-  // ── Data ──
-  const [allAssignments, setAllAssignments] = useState<StudentAssignment[]>([])
-  const [subjects, setSubjects] = useState<Subject[]>([])
-  const [students, setStudents] = useState<{ id: number; first_name: string; last_name: string }[]>([])
-  const [terms, setTerms] = useState<Term[]>([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
-
-  // Student view data
-  const [myAssignments, setMyAssignments] = useState<StudentAssignment[]>([])
-
   // ── Filters ──
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all')
-  const [selectedStudent, setSelectedStudent] = useState<number | null>(null)
-  const [selectedSubject, setSelectedSubject] = useState<number | null>(null)
   // undefined = not yet initialized (will default to active term); null = user explicitly chose "All terms"
   const [selectedTerm, setSelectedTerm] = useState<number | null | undefined>(undefined)
-  const [searchTerm, setSearchTerm] = useState('')
+  const {
+    searchTerm,
+    setSearchTerm,
+    selectedSubject,
+    setSelectedSubject,
+    selectedStudent,
+    setSelectedStudent,
+    filterStudentAssignments,
+  } = useAssignmentFilters()
+
+  // ── Data ──
+  const {
+    allAssignments,
+    studentAssignments,
+    subjects,
+    students,
+    loading,
+    error,
+    refetch,
+    setError,
+  } = useAssignments({ isAdmin, adminViewMode: 'grading', selectedSubject })
+
+  // Terms are admin-only and have no hook equivalent — loaded locally
+  const [terms, setTerms] = useState<Term[]>([])
 
   // ── Selection ──
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set())
@@ -69,43 +81,23 @@ const Assignments: React.FC = () => {
   const [showQuickAssign, setShowQuickAssign] = useState(false)
   const [submittingAssignment, setSubmittingAssignment] = useState<StudentAssignment | null>(null)
   const [showSubmissionDialog, setShowSubmissionDialog] = useState(false)
+  const [unassigningAssignment, setUnassigningAssignment] = useState<StudentAssignment | null>(null)
+  const [unassignLoading, setUnassignLoading] = useState(false)
+  const [showBulkUnassignConfirm, setShowBulkUnassignConfirm] = useState(false)
 
   const menuRef = useRef<HTMLDivElement>(null)
 
-  const fetchData = async () => {
-    try {
-      setLoading(true)
-      if (isAdmin) {
-        const [assignmentsData, subjectsData, studentsData, termsData] = await Promise.all([
-          assignmentsApi.getAllAssignmentsForGrading(),
-          subjectsApi.getAll(),
-          assignmentsApi.getStudents(),
-          termsApi.getAll(),
-        ])
-        setAllAssignments(assignmentsData || [])
-        setSubjects(subjectsData || [])
-        setStudents(studentsData || [])
+  useEffect(() => {
+    if (!isAdmin) return
+    termsApi.getAll()
+      .then(termsData => {
         setTerms(termsData || [])
         // Default to active term on first load (undefined = not yet set)
         const activeTerm = termsData?.find(t => t.is_active)
-        if (activeTerm) setSelectedTerm(prev => prev === undefined ? activeTerm.id : prev)
-      } else {
-        const [assignmentsData, subjectsData] = await Promise.all([
-          assignmentsApi.getMyAssignments(),
-          subjectsApi.getAll(),
-        ])
-        setMyAssignments(assignmentsData || [])
-        setSubjects(subjectsData || [])
-      }
-      setError(null)
-    } catch {
-      setError('Failed to load assignments.')
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  useEffect(() => { fetchData() }, [isAdmin]) // eslint-disable-line react-hooks/exhaustive-deps
+        if (activeTerm) setSelectedTerm(prev => (prev === undefined ? activeTerm.id : prev))
+      })
+      .catch(() => {})
+  }, [isAdmin])
 
   // Close menu on outside click
   useEffect(() => {
@@ -183,17 +175,18 @@ const Assignments: React.FC = () => {
   }
 
   // ── Student view filters ──
-  const filteredStudentAssignments = myAssignments.filter(a => {
-    if (selectedSubject && a.template?.subject_id !== selectedSubject) return false
-    if (searchTerm && !a.template?.name?.toLowerCase().includes(searchTerm.toLowerCase())) return false
-    return true
-  })
+  const filteredStudentAssignments = filterStudentAssignments(studentAssignments)
 
   // ── Handlers ──
+  const studentNameFor = (assignment: StudentAssignment | null) => {
+    const stu = assignment ? students.find(s => s.id === assignment.student_id) : undefined
+    return stu ? `${stu.first_name} ${stu.last_name}` : 'this student'
+  }
+
   const handleExcuseAssignment = async (assignment: StudentAssignment) => {
     try {
       await assignmentsApi.updateStudentAssignment(assignment.id, { status: 'excused' })
-      fetchData()
+      refetch()
       setMenuOpenId(null)
       toast('Assignment excused')
     } catch {
@@ -201,24 +194,30 @@ const Assignments: React.FC = () => {
     }
   }
 
-  const handleUnassignAssignment = async (assignment: StudentAssignment) => {
-    const stu = students.find(s => s.id === assignment.student_id)
-    const name = stu ? `${stu.first_name} ${stu.last_name}` : 'this student'
-    if (!confirm(`Remove "${assignment.template?.name ?? 'this assignment'}" from ${name}?`)) return
+  const handleUnassignAssignment = (assignment: StudentAssignment) => {
+    setMenuOpenId(null)
+    setUnassigningAssignment(assignment)
+  }
+
+  const confirmUnassign = async () => {
+    if (!unassigningAssignment) return
     try {
-      await assignmentsApi.deleteStudentAssignment(assignment.id)
-      fetchData()
-      setMenuOpenId(null)
+      setUnassignLoading(true)
+      await assignmentsApi.deleteStudentAssignment(unassigningAssignment.id)
+      refetch()
       toast('Assignment removed')
     } catch {
       toast('Failed to unassign assignment', 'danger')
+    } finally {
+      setUnassignLoading(false)
+      setUnassigningAssignment(null)
     }
   }
 
   const handleStartAssignment = async (assignmentId: number) => {
     try {
       await assignmentsApi.startAssignment(assignmentId)
-      fetchData()
+      refetch()
     } catch {
       setError('Failed to start assignment')
     }
@@ -237,21 +236,9 @@ const Assignments: React.FC = () => {
       await assignmentsApi.updateStudentAssignment(submittingAssignment.id, { status: 'submitted', ...submissionData })
       setShowSubmissionDialog(false)
       setSubmittingAssignment(null)
-      fetchData()
+      refetch()
     } catch {
       setError('Failed to submit assignment')
-    }
-  }
-
-  const handleDeleteStudentAssignment = async (assignment: StudentAssignment) => {
-    const stu = students.find(s => s.id === assignment.student_id)
-    const name = stu ? `${stu.first_name} ${stu.last_name}` : 'this student'
-    if (!confirm(`Remove "${assignment.template?.name ?? 'this assignment'}" from ${name}?`)) return
-    try {
-      await assignmentsApi.deleteStudentAssignment(assignment.id)
-      fetchData()
-    } catch {
-      setError('Failed to remove assignment')
     }
   }
 
@@ -263,7 +250,7 @@ const Assignments: React.FC = () => {
       await Promise.all(ids.map(id => assignmentsApi.updateStudentAssignment(id, { status: 'excused' })))
       toast(`${ids.length} assignment${ids.length !== 1 ? 's' : ''} excused`)
       setSelectedIds(new Set())
-      fetchData()
+      refetch()
     } catch {
       toast('Some assignments could not be excused', 'danger')
     } finally {
@@ -271,26 +258,30 @@ const Assignments: React.FC = () => {
     }
   }
 
-  const handleBulkUnassign = async () => {
+  const confirmBulkUnassign = async () => {
     const ids = Array.from(selectedIds)
-    if (!confirm(`Remove ${ids.length} assignment${ids.length !== 1 ? 's' : ''}? This cannot be undone.`)) return
     setBulkLoading(true)
     try {
       await Promise.all(ids.map(id => assignmentsApi.deleteStudentAssignment(id)))
       toast(`${ids.length} assignment${ids.length !== 1 ? 's' : ''} removed`)
       setSelectedIds(new Set())
-      fetchData()
+      refetch()
     } catch {
       toast('Some assignments could not be removed', 'danger')
     } finally {
       setBulkLoading(false)
+      setShowBulkUnassignConfirm(false)
     }
   }
 
   const toggleSelect = (id: number) => {
     setSelectedIds(prev => {
       const next = new Set(prev)
-      next.has(id) ? next.delete(id) : next.add(id)
+      if (next.has(id)) {
+        next.delete(id)
+      } else {
+        next.add(id)
+      }
       return next
     })
   }
@@ -451,6 +442,7 @@ const Assignments: React.FC = () => {
                     <th className="w-10 pl-4 py-3">
                       <button
                         onClick={toggleSelectAll}
+                        aria-label={allSelected ? 'Deselect all assignments' : 'Select all assignments'}
                         className={`w-[18px] h-[18px] rounded-[5px] border-[1.5px] flex items-center justify-center transition-colors ${
                           allSelected ? 'bg-accent border-accent text-white' : 'border-check-border bg-field-bg'
                         }`}
@@ -502,6 +494,7 @@ const Assignments: React.FC = () => {
                         <td className="pl-4 py-3.5 w-10">
                           <button
                             onClick={() => toggleSelect(assignment.id)}
+                            aria-label={`${isSelected ? 'Deselect' : 'Select'} ${assignment.template?.name ?? 'assignment'}`}
                             className={`w-[18px] h-[18px] rounded-[5px] border-[1.5px] flex items-center justify-center transition-colors ${
                               isSelected ? 'bg-accent border-accent text-white' : 'border-check-border bg-field-bg'
                             }`}
@@ -529,7 +522,7 @@ const Assignments: React.FC = () => {
                         {/* Assignment */}
                         <td className="px-3 py-3.5 min-w-0">
                           <div className="flex items-center gap-2 min-w-0">
-                            <SubjectDot color={(sub as any)?.color ?? '#74716A'} size={9} className="flex-none" />
+                            <SubjectDot color={sub?.color ?? '#74716A'} size={9} className="flex-none" />
                             <div className="min-w-0">
                               <div className="text-[14px] font-semibold text-ink tracking-[-0.01em] truncate">
                                 {assignment.template?.name ?? '—'}
@@ -584,6 +577,7 @@ const Assignments: React.FC = () => {
                           <div className="relative flex justify-end" ref={menuOpenId === assignment.id ? menuRef : undefined}>
                             <button
                               onClick={() => setMenuOpenId(menuOpenId === assignment.id ? null : assignment.id)}
+                              aria-label={`Actions for ${assignment.template?.name ?? 'assignment'}`}
                               className="w-[30px] h-[30px] rounded-[7px] border border-line text-muted flex items-center justify-center text-[16px] opacity-0 group-hover:opacity-100 transition-opacity hover:bg-track"
                             >
                               ⋯
@@ -626,7 +620,7 @@ const Assignments: React.FC = () => {
                             <div className="pt-4 space-y-4">
                               {/* Meta row */}
                               <div className="flex items-center gap-3 flex-wrap text-[12.5px] text-muted">
-                                {sub && <SubjectDot color={(sub as any)?.color ?? '#74716A'} size={9} />}
+                                {sub && <SubjectDot color={sub?.color ?? '#74716A'} size={9} />}
                                 <span>{sub?.name ?? '—'}</span>
                                 {assignment.template?.assignment_type && (
                                   <>
@@ -755,7 +749,7 @@ const Assignments: React.FC = () => {
                 Excuse
               </button>
               <button
-                onClick={handleBulkUnassign}
+                onClick={() => setShowBulkUnassignConfirm(true)}
                 disabled={bulkLoading}
                 className="h-[30px] px-3 text-[12.5px] font-semibold text-btn-primary-fg/80 hover:text-btn-primary-fg rounded-[7px] hover:bg-btn-primary-fg/10 transition-colors disabled:opacity-50"
               >
@@ -764,6 +758,7 @@ const Assignments: React.FC = () => {
               <span className="w-px h-[22px] mx-1 bg-btn-primary-fg/20" />
               <button
                 onClick={() => setSelectedIds(new Set())}
+                aria-label="Clear selection"
                 className="w-[30px] h-[30px] flex items-center justify-center rounded-[7px] text-[16px] text-btn-primary-fg/60 hover:text-btn-primary-fg transition-colors"
               >
                 ✕
@@ -819,7 +814,7 @@ const Assignments: React.FC = () => {
                 isAdmin={false}
                 onStart={handleStartAssignment}
                 onComplete={handleCompleteAssignment}
-                onDelete={handleDeleteStudentAssignment}
+                onDelete={handleUnassignAssignment}
               />
             ))}
           </div>
@@ -831,7 +826,7 @@ const Assignments: React.FC = () => {
         <QuickAssignModal
           isOpen={showQuickAssign}
           onClose={() => setShowQuickAssign(false)}
-          onSuccess={() => { setShowQuickAssign(false); fetchData() }}
+          onSuccess={() => { setShowQuickAssign(false); refetch() }}
         />
       )}
 
@@ -844,6 +839,30 @@ const Assignments: React.FC = () => {
           loading={false}
         />
       )}
+
+      {/* Unassign Confirmation */}
+      <ConfirmDialog
+        isOpen={!!unassigningAssignment}
+        onClose={() => setUnassigningAssignment(null)}
+        onConfirm={confirmUnassign}
+        tone="danger"
+        title="Remove assignment"
+        message={<>Remove <strong className="text-ink">"{unassigningAssignment?.template?.name ?? 'this assignment'}"</strong> from {studentNameFor(unassigningAssignment)}?</>}
+        confirmLabel="Remove"
+        loading={unassignLoading}
+      />
+
+      {/* Bulk Unassign Confirmation */}
+      <ConfirmDialog
+        isOpen={showBulkUnassignConfirm}
+        onClose={() => setShowBulkUnassignConfirm(false)}
+        onConfirm={confirmBulkUnassign}
+        tone="danger"
+        title="Remove assignments"
+        message={<>Remove <strong className="text-ink">{selectedIds.size} assignment{selectedIds.size !== 1 ? 's' : ''}</strong>? This cannot be undone.</>}
+        confirmLabel={`Remove ${selectedIds.size}`}
+        loading={bulkLoading}
+      />
     </div>
   )
 }

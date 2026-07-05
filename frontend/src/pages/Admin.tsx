@@ -16,11 +16,13 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
+import { getErrorMessage } from '../services/api'
 import React, { useState, useEffect, useCallback, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { useToast } from '../components/ui/Toast'
 import Toggle from '../components/ui/Toggle'
+import ConfirmDialog from '../components/ui/ConfirmDialog'
 import { Button, Input, Select, SegmentedControl, Pill, IconPickerButton, Icon } from '../components/ui'
 import { useAPIKeys } from '../hooks/useAPIKeys'
 import { APIKeyTable, CreateAPIKeyModal } from '../components/api-keys'
@@ -33,11 +35,11 @@ import { useAssignmentTypes } from '../contexts/AssignmentTypesContext'
 import { type AssignmentTypeConfig } from '../types/assignment'
 import { termsApi } from '../services/terms'
 import { usersApi } from '../services/users'
-import { backupApi } from '../services/backup'
+import { backupApi, isSystemBackupFile } from '../services/backup'
 import { SystemBackupModal } from '../components/backup/SystemBackupModal'
 import { type Subject } from '../types/subject'
 import { type Term } from '../types/term'
-import { type User } from '../types'
+import { type SystemBackupFile, type SystemBackupImportResult, type User } from '../types'
 import { format, parseISO } from 'date-fns'
 import { type TermCreate } from '../types'
 import {
@@ -60,6 +62,14 @@ const CATS = [
 ] as const
 
 type SectionKey = typeof CATS[number]['key']
+
+// Pending destructive action awaiting confirmation via ConfirmDialog
+type PendingAction =
+  | { kind: 'delete-type'; type: AssignmentTypeConfig }
+  | { kind: 'delete-term'; id: number }
+  | { kind: 'delete-subject'; id: number }
+  | { kind: 'delete-user'; id: number }
+  | { kind: 'reset-password'; id: number; username: string }
 
 // ── Shared section chrome ──────────────────────────────────────────────────
 const SectionHeader: React.FC<{ title: string; desc: string }> = ({ title, desc }) => (
@@ -102,6 +112,7 @@ const Admin: React.FC = () => {
   const navigate = useNavigate()
   const { refresh: refreshAssignmentTypes } = useAssignmentTypes()
   const [section, setSection] = useState<SectionKey>('overview')
+  const [pendingAction, setPendingAction] = useState<PendingAction | null>(null)
 
   // ── Attendance settings ──
   const [requiredDays, setRequiredDays] = useState(180)
@@ -190,9 +201,9 @@ const Admin: React.FC = () => {
   // ── Backup management ──
   const [showBackupModal, setShowBackupModal] = useState(false)
   const [importStep, setImportStep] = useState<'idle' | 'configure' | 'loading' | 'result'>('idle')
-  const [importData, setImportData] = useState<any>(null)
+  const [importData, setImportData] = useState<SystemBackupFile | null>(null)
   const [importOptions, setImportOptions] = useState({ skip_existing_users: true, update_existing_data: false, preserve_ids: false, dry_run: true })
-  const [importResult, setImportResult] = useState<any>(null)
+  const [importResult, setImportResult] = useState<SystemBackupImportResult | null>(null)
   const [importError, setImportError] = useState<string | null>(null)
   const backupFileInputRef = useRef<HTMLInputElement>(null)
 
@@ -202,8 +213,8 @@ const Admin: React.FC = () => {
     const reader = new FileReader()
     reader.onload = (e) => {
       try {
-        const data = JSON.parse(e.target?.result as string)
-        if (!data.format_version || !data.backup_timestamp) throw new Error('Invalid backup format')
+        const data: unknown = JSON.parse(e.target?.result as string)
+        if (!isSystemBackupFile(data)) throw new Error('Invalid backup format')
         setImportData(data)
         setImportError(null)
         setImportStep('configure')
@@ -222,8 +233,8 @@ const Admin: React.FC = () => {
       const result = await backupApi.importSystemBackup({ backup_data: importData, import_options: importOptions })
       setImportResult(result)
       setImportStep('result')
-    } catch (err: any) {
-      setImportError(err.message || 'Import failed')
+    } catch (err) {
+      setImportError(getErrorMessage(err, 'Import failed'))
       setImportStep('result')
     }
   }
@@ -275,8 +286,18 @@ const Admin: React.FC = () => {
     }
   }, [])
 
+  const loadPointsOverview = useCallback(async () => {
+    if (!pointsStatus?.enabled) return
+    try {
+      setPointsOverviewLoading(true)
+      const data = await pointsApi.getAdminOverview()
+      setPointsOverview(data)
+    } catch { /* silent */ } finally { setPointsOverviewLoading(false) }
+  }, [pointsStatus?.enabled])
+
   useEffect(() => { load() }, [load])
-  useEffect(() => { if (section === 'points' && pointsStatus?.enabled && !pointsOverview) loadPointsOverview() }, [section, pointsStatus?.enabled])
+  // Guarded by `!pointsOverview`, so the pointsOverview dep can't retrigger a fetch loop.
+  useEffect(() => { if (section === 'points' && pointsStatus?.enabled && !pointsOverview) loadPointsOverview() }, [section, pointsStatus?.enabled, pointsOverview, loadPointsOverview])
 
   useEffect(() => {
     const handleEscape = (e: KeyboardEvent) => { if (e.key === 'Escape' && showTermForm) resetTermForm() }
@@ -410,8 +431,8 @@ const Admin: React.FC = () => {
       })
       refreshAssignmentTypes()
       toast('Assignment types saved')
-    } catch (err: any) {
-      toast(err.message || 'Failed to save assignment types', 'danger')
+    } catch (err) {
+      toast(getErrorMessage(err, 'Failed to save assignment types'), 'danger')
     } finally {
       setSavingTypes(false)
     }
@@ -437,27 +458,30 @@ const Admin: React.FC = () => {
       setNewTypeIcon(undefined)
       refreshAssignmentTypes()
       toast('Assignment type added')
-    } catch (err: any) {
-      toast(err.message || 'Failed to add type', 'danger')
+    } catch (err) {
+      toast(getErrorMessage(err, 'Failed to add type'), 'danger')
     } finally {
       setAddingType(false)
     }
   }
 
-  const deleteType = async (t: AssignmentTypeConfig) => {
+  const deleteType = (t: AssignmentTypeConfig) => {
     if (t.usage_count > 0) {
       toast(`"${t.name}" is used by ${t.usage_count} template(s). Deactivate it instead.`, 'danger')
       return
     }
-    if (!confirm(`Delete assignment type "${t.name}"?`)) return
+    setPendingAction({ kind: 'delete-type', type: t })
+  }
+
+  const performDeleteType = async (t: AssignmentTypeConfig) => {
     try {
       await assignmentTypesApi.delete(t.id)
       setAssignmentTypes(prev => prev.filter(x => x.id !== t.id))
       setTypesBaseline(prev => { const n = { ...prev }; delete n[t.id]; return n })
       refreshAssignmentTypes()
       toast('Assignment type deleted')
-    } catch (err: any) {
-      toast(err.message || 'Failed to delete type', 'danger')
+    } catch (err) {
+      toast(getErrorMessage(err, 'Failed to delete type'), 'danger')
     }
   }
 
@@ -520,20 +544,21 @@ const Admin: React.FC = () => {
       }
       resetTermForm()
       toast(editingTerm ? 'Term updated' : 'Term created')
-    } catch (err: any) {
-      const detail = err.message || ''
+    } catch (err) {
+      const detail = getErrorMessage(err, '')
       if (detail.toLowerCase().includes('academic year')) setTermValidationErrors({ academic_year: detail })
       else setTermError(detail || 'Failed to save term')
     }
   }
 
-  const handleTermDelete = async (id: number) => {
-    if (!confirm('Delete this term?')) return
+  const handleTermDelete = (id: number) => setPendingAction({ kind: 'delete-term', id })
+
+  const performTermDelete = async (id: number) => {
     try {
       await termsApi.delete(id)
       setTerms(prev => prev.filter(t => t.id !== id))
       toast('Term deleted')
-    } catch (err: any) { setTermError(err.message || 'Failed to delete term') }
+    } catch (err) { setTermError(getErrorMessage(err, 'Failed to delete term')) }
   }
 
   const handleTermActivate = async (id: number) => {
@@ -541,7 +566,7 @@ const Admin: React.FC = () => {
       await termsApi.activate(id)
       setTerms(prev => prev.map(t => ({ ...t, is_active: t.id === id })))
       toast('Term activated')
-    } catch (err: any) { setTermError(err.message || 'Failed to activate term') }
+    } catch (err) { setTermError(getErrorMessage(err, 'Failed to activate term')) }
   }
 
   // ── Subject handlers ──────────────────────────────────────────────────────
@@ -561,16 +586,17 @@ const Admin: React.FC = () => {
         toast('Subject created')
       }
       resetSubjectForm()
-    } catch (err: any) { setSubjectError(err.message || 'Failed to save subject') }
+    } catch (err) { setSubjectError(getErrorMessage(err, 'Failed to save subject')) }
   }
 
-  const handleSubjectDelete = async (id: number) => {
-    if (!confirm('Delete this subject? This cannot be undone.')) return
+  const handleSubjectDelete = (id: number) => setPendingAction({ kind: 'delete-subject', id })
+
+  const performSubjectDelete = async (id: number) => {
     try {
       await subjectsApi.delete(id)
       setSubjects(prev => prev.filter(s => s.id !== id))
       toast('Subject deleted')
-    } catch (err: any) { setSubjectError(err.message || 'Failed to delete subject') }
+    } catch (err) { setSubjectError(getErrorMessage(err, 'Failed to delete subject')) }
   }
 
   // ── User handlers ─────────────────────────────────────────────────────────
@@ -612,7 +638,7 @@ const Admin: React.FC = () => {
       setNewUserErrors({})
       setShowAddUser(false)
       toast('User created')
-    } catch (err: any) { setUserError(err.message || 'Failed to create user') }
+    } catch (err) { setUserError(getErrorMessage(err, 'Failed to create user')) }
   }
 
   const handleEditUser = async () => {
@@ -627,24 +653,26 @@ const Admin: React.FC = () => {
       setEditingUser(null)
       setEditUserErrors({})
       toast('User updated')
-    } catch (err: any) { setUserError(err.message || 'Failed to update user') }
+    } catch (err) { setUserError(getErrorMessage(err, 'Failed to update user')) }
   }
 
-  const handleDeleteUser = async (id: number) => {
-    if (!confirm('Delete this user?')) return
+  const handleDeleteUser = (id: number) => setPendingAction({ kind: 'delete-user', id })
+
+  const performDeleteUser = async (id: number) => {
     try {
       await usersApi.delete(id)
       setUsers(prev => prev.filter(u => u.id !== id))
       toast('User deleted')
-    } catch (err: any) { setUserError(err.message || 'Failed to delete user') }
+    } catch (err) { setUserError(getErrorMessage(err, 'Failed to delete user')) }
   }
 
-  const handleResetPassword = async (id: number, username: string) => {
-    if (!confirm(`Reset password for ${username}? This will generate a temporary password.`)) return
+  const handleResetPassword = (id: number, username: string) => setPendingAction({ kind: 'reset-password', id, username })
+
+  const performResetPassword = async (id: number, username: string) => {
     try {
       const r = await usersApi.resetPassword(id)
       alert(`Temporary password for ${username}: ${r.temporary_password}\n\nShare this securely and ask them to change it on next login.`)
-    } catch (err: any) { setUserError(`Failed to reset password: ${err.message}`) }
+    } catch (err) { setUserError(`Failed to reset password: ${getErrorMessage(err)}`) }
   }
 
   const openEditUser = (u: User) => {
@@ -655,15 +683,6 @@ const Admin: React.FC = () => {
   }
 
   // ── Points management handlers ────────────────────────────────────────────
-  const loadPointsOverview = async () => {
-    if (!pointsStatus?.enabled) return
-    try {
-      setPointsOverviewLoading(true)
-      const data = await pointsApi.getAdminOverview()
-      setPointsOverview(data)
-    } catch { /* silent */ } finally { setPointsOverviewLoading(false) }
-  }
-
   const openAdjustModal = (s: StudentPoints) => {
     setSelectedStudentPoints(s)
     setAdjustAmount('')
@@ -685,7 +704,7 @@ const Admin: React.FC = () => {
       setShowAdjustModal(false)
       toast(`Points adjusted for ${selectedStudentPoints.student_name}`)
       loadPointsOverview()
-    } catch (err: any) { setAdjustError(err.message || 'Failed to adjust points') }
+    } catch (err) { setAdjustError(getErrorMessage(err, 'Failed to adjust points')) }
     finally { setAdjustLoading(false) }
   }
 
@@ -699,7 +718,7 @@ const Admin: React.FC = () => {
       setLedgerLoading(true)
       const data = await pointsApi.getStudentLedger(s.student_id, 1, 10)
       setLedger(data)
-    } catch (err: any) { setLedgerError(err.message || 'Failed to load ledger') }
+    } catch (err) { setLedgerError(getErrorMessage(err, 'Failed to load ledger')) }
     finally { setLedgerLoading(false) }
   }
 
@@ -711,9 +730,59 @@ const Admin: React.FC = () => {
       const data = await pointsApi.getStudentLedger(selectedStudentPoints.student_id, page, 10)
       setLedger(data)
       setLedgerPage(page)
-    } catch (err: any) { setLedgerError(err.message || 'Failed to load ledger') }
+    } catch (err) { setLedgerError(getErrorMessage(err, 'Failed to load ledger')) }
     finally { setLedgerLoading(false) }
   }
+
+  // ── Confirm-dialog dispatch ───────────────────────────────────────────────
+  const runPendingAction = () => {
+    if (!pendingAction) return
+    const action = pendingAction
+    setPendingAction(null)
+    switch (action.kind) {
+      case 'delete-type': performDeleteType(action.type); break
+      case 'delete-term': performTermDelete(action.id); break
+      case 'delete-subject': performSubjectDelete(action.id); break
+      case 'delete-user': performDeleteUser(action.id); break
+      case 'reset-password': performResetPassword(action.id, action.username); break
+    }
+  }
+
+  const confirmDialogProps = ((): { title: string; message: React.ReactNode; confirmLabel: string; tone: 'danger' | 'warn' } | null => {
+    if (!pendingAction) return null
+    switch (pendingAction.kind) {
+      case 'delete-type': return {
+        title: 'Delete assignment type',
+        message: <>Delete assignment type <strong className="text-ink">"{pendingAction.type.name}"</strong>?</>,
+        confirmLabel: 'Delete type',
+        tone: 'danger',
+      }
+      case 'delete-term': return {
+        title: 'Delete term',
+        message: 'Are you sure you want to delete this term?',
+        confirmLabel: 'Delete term',
+        tone: 'danger',
+      }
+      case 'delete-subject': return {
+        title: 'Delete subject',
+        message: 'Are you sure you want to delete this subject? This cannot be undone.',
+        confirmLabel: 'Delete subject',
+        tone: 'danger',
+      }
+      case 'delete-user': return {
+        title: 'Delete user',
+        message: 'Are you sure you want to delete this user?',
+        confirmLabel: 'Delete user',
+        tone: 'danger',
+      }
+      case 'reset-password': return {
+        title: 'Reset password',
+        message: <>Reset password for <strong className="text-ink">{pendingAction.username}</strong>? This will generate a temporary password.</>,
+        confirmLabel: 'Reset password',
+        tone: 'warn',
+      }
+    }
+  })()
 
   // ── Section content ───────────────────────────────────────────────────────
   const renderSection = () => {
@@ -763,14 +832,14 @@ const Admin: React.FC = () => {
               </div>
             </div>
             <SettingRow label="Skip weekends" desc="Don't count Saturdays and Sundays toward instructional days.">
-              <Toggle checked={skipWeekends} onChange={async (v) => {
+              <Toggle aria-label="Skip weekends" checked={skipWeekends} onChange={async (v) => {
                 setSkipWeekends(v)
                 try { await settingsApi.updateSkipWeekends(v); toast('Setting saved') }
                 catch { toast('Failed to save', 'danger'); setSkipWeekends(!v) }
               }} />
             </SettingRow>
             <SettingRow label="Count excused days as instruction" desc="Excused absences still count toward the required-days total.">
-              <Toggle checked={countExcused} onChange={async (v) => {
+              <Toggle aria-label="Count excused days as instruction" checked={countExcused} onChange={async (v) => {
                 setCountExcused(v)
                 try { await settingsApi.updateCountExcused(v); toast('Setting saved') }
                 catch { toast('Failed to save', 'danger'); setCountExcused(!v) }
@@ -879,11 +948,12 @@ const Admin: React.FC = () => {
                             <span className="w-20 text-[11px] text-faint text-right hidden sm:block">
                               {t.usage_count > 0 ? `${t.usage_count} in use` : 'unused'}
                             </span>
-                            <Toggle checked={t.is_active} onChange={v => updateTypeField(t.id, { is_active: v })} />
+                            <Toggle aria-label={`${t.name} active`} checked={t.is_active} onChange={v => updateTypeField(t.id, { is_active: v })} />
                             <button
                               onClick={() => deleteType(t)}
                               className="w-7 h-7 flex items-center justify-center rounded-field text-faint hover:text-danger hover:bg-track transition-colors flex-shrink-0"
                               title={t.usage_count > 0 ? 'In use — deactivate instead' : 'Delete type'}
+                              aria-label={`Delete ${t.name} assignment type`}
                             >
                               <Trash2 className="w-3.5 h-3.5" />
                             </button>
@@ -948,15 +1018,15 @@ const Admin: React.FC = () => {
                   {pointsStatus?.enabled ? 'On' : 'Off'}
                 </span>
                 {pointsStatus?.can_toggle && (
-                  <Toggle checked={!!pointsStatus?.enabled} onChange={togglePoints} disabled={togglingPoints} />
+                  <Toggle aria-label="Points and rewards system" checked={!!pointsStatus?.enabled} onChange={togglePoints} disabled={togglingPoints} />
                 )}
               </div>
             </SettingRow>
             <SettingRow label="Points per journaling day" desc="Awarded once per day a student journals.">
               <div className="flex items-center gap-2">
-                <button onClick={() => { const v = Math.max(0, ptsJournal - 1); setPtsJournal(v); pointsApi.setJournalPoints(v) }} className="w-7 h-7 rounded-field border border-btn-border flex items-center justify-center text-ink-2 hover:bg-track">–</button>
+                <button aria-label="Decrease points per journaling day" onClick={() => { const v = Math.max(0, ptsJournal - 1); setPtsJournal(v); pointsApi.setJournalPoints(v) }} className="w-7 h-7 rounded-field border border-btn-border flex items-center justify-center text-ink-2 hover:bg-track">–</button>
                 <span className="w-8 text-center font-mono text-[14px] font-semibold text-ink">{ptsJournal}</span>
-                <button onClick={() => { const v = ptsJournal + 1; setPtsJournal(v); pointsApi.setJournalPoints(v) }} className="w-7 h-7 rounded-field border border-btn-border flex items-center justify-center text-ink-2 hover:bg-track">+</button>
+                <button aria-label="Increase points per journaling day" onClick={() => { const v = ptsJournal + 1; setPtsJournal(v); pointsApi.setJournalPoints(v) }} className="w-7 h-7 rounded-field border border-btn-border flex items-center justify-center text-ink-2 hover:bg-track">+</button>
               </div>
             </SettingRow>
           </div>
@@ -970,7 +1040,7 @@ const Admin: React.FC = () => {
                   <span className="text-[13.5px] text-ink">{p.label}</span>
                   <div className="flex items-center gap-2">
                     <span className="font-mono text-[13px] text-pos-fg font-semibold">+{p.amount}</span>
-                    <button onClick={() => removePreset(i)} className="text-faintest hover:text-danger text-[14px] leading-none">✕</button>
+                    <button aria-label={`Remove ${p.label} preset`} onClick={() => removePreset(i)} className="text-faintest hover:text-danger text-[14px] leading-none">✕</button>
                   </div>
                 </div>
               ))}
@@ -1064,7 +1134,7 @@ const Admin: React.FC = () => {
                     <h3 className="text-[15px] font-semibold text-ink">Adjust Points</h3>
                     <p className="text-[12px] text-muted mt-0.5">{selectedStudentPoints.student_name} · {selectedStudentPoints.current_balance.toLocaleString()} current balance</p>
                   </div>
-                  <button onClick={() => setShowAdjustModal(false)} className="w-7 h-7 flex items-center justify-center rounded-full text-faint hover:text-ink hover:bg-track transition-colors"><X className="w-4 h-4" /></button>
+                  <button aria-label="Close dialog" onClick={() => setShowAdjustModal(false)} className="w-7 h-7 flex items-center justify-center rounded-full text-faint hover:text-ink hover:bg-track transition-colors"><X className="w-4 h-4" /></button>
                 </div>
                 <form onSubmit={handleAdjustSubmit} className="flex flex-col">
                   <div className="px-6 py-5 space-y-4">
@@ -1101,7 +1171,7 @@ const Admin: React.FC = () => {
                     <h3 className="text-[15px] font-semibold text-ink">Points Ledger</h3>
                     <p className="text-[12px] text-muted mt-0.5">{selectedStudentPoints.student_name} · {selectedStudentPoints.current_balance.toLocaleString()} balance</p>
                   </div>
-                  <button onClick={() => setShowLedgerModal(false)} className="w-7 h-7 flex items-center justify-center rounded-full text-faint hover:text-ink hover:bg-track transition-colors"><X className="w-4 h-4" /></button>
+                  <button aria-label="Close dialog" onClick={() => setShowLedgerModal(false)} className="w-7 h-7 flex items-center justify-center rounded-full text-faint hover:text-ink hover:bg-track transition-colors"><X className="w-4 h-4" /></button>
                 </div>
 
                 <div className="flex-1 overflow-y-auto px-6 py-5">
@@ -1298,6 +1368,7 @@ const Admin: React.FC = () => {
                               onClick={() => openTermEdit(term)}
                               className="w-7 h-7 flex items-center justify-center rounded-field text-faint hover:text-ink hover:bg-track transition-colors"
                               title="Edit"
+                              aria-label="Edit term"
                             >
                               <Edit2 className="w-3.5 h-3.5" />
                             </button>
@@ -1305,6 +1376,7 @@ const Admin: React.FC = () => {
                               onClick={() => handleTermDelete(term.id)}
                               className="w-7 h-7 flex items-center justify-center rounded-field text-faint hover:text-neg-fg hover:bg-neg-bg transition-colors"
                               title="Delete"
+                              aria-label="Delete term"
                             >
                               <Trash2 className="w-3.5 h-3.5" />
                             </button>
@@ -1327,7 +1399,7 @@ const Admin: React.FC = () => {
                       <h3 className="text-[15px] font-semibold text-ink">{editingTerm ? 'Edit Term' : 'New Term'}</h3>
                       <p className="text-[12px] text-muted mt-0.5">{editingTerm ? 'Update term details' : 'Add a new academic term'}</p>
                     </div>
-                    <button onClick={resetTermForm} className="w-7 h-7 flex items-center justify-center rounded-full text-faint hover:text-ink hover:bg-track transition-colors">
+                    <button aria-label="Close dialog" onClick={resetTermForm} className="w-7 h-7 flex items-center justify-center rounded-full text-faint hover:text-ink hover:bg-track transition-colors">
                       <X className="w-4 h-4" />
                     </button>
                   </div>
@@ -1370,7 +1442,7 @@ const Admin: React.FC = () => {
                       </div>
                       <div>
                         <label className={TLABEL}>Term Type</label>
-                        <select value={termFormData.term_type} onChange={e => setTermFormData(p => ({ ...p, term_type: e.target.value as any }))} className={TFIELD}>
+                        <select value={termFormData.term_type} onChange={e => setTermFormData(p => ({ ...p, term_type: e.target.value as TermCreate['term_type'] }))} className={TFIELD}>
                           <option value="semester">Semester</option>
                           <option value="quarter">Quarter</option>
                           <option value="trimester">Trimester</option>
@@ -1440,8 +1512,8 @@ const Admin: React.FC = () => {
                         </div>
                       </div>
                       <div className="flex items-center gap-0.5 flex-shrink-0 ml-2">
-                        <button onClick={() => openSubjectEdit(s)} className="w-7 h-7 flex items-center justify-center rounded-field text-faint hover:text-ink hover:bg-track transition-colors" title="Edit"><Edit2 className="w-3.5 h-3.5" /></button>
-                        <button onClick={() => handleSubjectDelete(s.id)} className="w-7 h-7 flex items-center justify-center rounded-field text-faint hover:text-neg-fg hover:bg-neg-bg transition-colors" title="Delete"><Trash2 className="w-3.5 h-3.5" /></button>
+                        <button aria-label="Edit subject" onClick={() => openSubjectEdit(s)} className="w-7 h-7 flex items-center justify-center rounded-field text-faint hover:text-ink hover:bg-track transition-colors" title="Edit"><Edit2 className="w-3.5 h-3.5" /></button>
+                        <button aria-label="Delete subject" onClick={() => handleSubjectDelete(s.id)} className="w-7 h-7 flex items-center justify-center rounded-field text-faint hover:text-neg-fg hover:bg-neg-bg transition-colors" title="Delete"><Trash2 className="w-3.5 h-3.5" /></button>
                       </div>
                     </div>
                   </div>
@@ -1457,7 +1529,7 @@ const Admin: React.FC = () => {
                       <h3 className="text-[15px] font-semibold text-ink">{editingSubject ? 'Edit Subject' : 'New Subject'}</h3>
                       <p className="text-[12px] text-muted mt-0.5">{editingSubject ? 'Update subject details' : 'Add a new subject'}</p>
                     </div>
-                    <button onClick={resetSubjectForm} className="w-7 h-7 flex items-center justify-center rounded-full text-faint hover:text-ink hover:bg-track transition-colors"><X className="w-4 h-4" /></button>
+                    <button aria-label="Close dialog" onClick={resetSubjectForm} className="w-7 h-7 flex items-center justify-center rounded-full text-faint hover:text-ink hover:bg-track transition-colors"><X className="w-4 h-4" /></button>
                   </div>
                   <form onSubmit={handleSubjectSubmit} className="flex flex-col">
                     <div className="px-6 py-5 space-y-4">
@@ -1504,7 +1576,7 @@ const Admin: React.FC = () => {
 
       case 'users': {
         const filteredUsers = users.filter(u => userFilter === 'students' ? u.role === 'student' : userFilter === 'admins' ? u.role === 'admin' : true)
-        const filterOptions = [
+        const filterOptions: { label: string; value: 'all' | 'students' | 'admins' }[] = [
           { label: `All (${users.length})`, value: 'all' },
           { label: `Students (${users.filter(u => u.role === 'student').length})`, value: 'students' },
           { label: `Admins (${users.filter(u => u.role === 'admin').length})`, value: 'admins' },
@@ -1522,7 +1594,7 @@ const Admin: React.FC = () => {
             {userError && <div className="bg-neg-bg text-neg-fg px-4 py-3 rounded-field text-[13px] mb-4">{userError}</div>}
 
             <div className="mb-4">
-              <SegmentedControl segments={filterOptions} value={userFilter} onChange={v => setUserFilter(v as any)} />
+              <SegmentedControl segments={filterOptions} value={userFilter} onChange={v => setUserFilter(v)} />
             </div>
 
             {loading ? (
@@ -1550,9 +1622,9 @@ const Admin: React.FC = () => {
                         <td className="px-5 py-3.5 whitespace-nowrap"><Pill variant={u.is_active ? 'pos' : 'neg'}>{u.is_active ? 'Active' : 'Inactive'}</Pill></td>
                         <td className="px-5 py-3.5 whitespace-nowrap">
                           <div className="flex items-center gap-2">
-                            <button onClick={() => openEditUser(u)} className="text-muted hover:text-ink transition-colors" title="Edit"><Edit2 className="h-4 w-4" /></button>
-                            <button onClick={() => handleResetPassword(u.id, u.username)} className="text-muted hover:text-sub-fg transition-colors" title="Reset password"><Key className="h-4 w-4" /></button>
-                            <button onClick={() => handleDeleteUser(u.id)} className="text-muted hover:text-neg-fg transition-colors" title="Delete"><Trash2 className="h-4 w-4" /></button>
+                            <button aria-label={`Edit user ${u.username}`} onClick={() => openEditUser(u)} className="text-muted hover:text-ink transition-colors" title="Edit"><Edit2 className="h-4 w-4" /></button>
+                            <button aria-label={`Reset password for ${u.username}`} onClick={() => handleResetPassword(u.id, u.username)} className="text-muted hover:text-sub-fg transition-colors" title="Reset password"><Key className="h-4 w-4" /></button>
+                            <button aria-label={`Delete user ${u.username}`} onClick={() => handleDeleteUser(u.id)} className="text-muted hover:text-neg-fg transition-colors" title="Delete"><Trash2 className="h-4 w-4" /></button>
                           </div>
                         </td>
                       </tr>
@@ -1570,7 +1642,7 @@ const Admin: React.FC = () => {
                       <h3 className="text-[15px] font-semibold text-ink">Add New User</h3>
                       <p className="text-[12px] text-muted mt-0.5">Create an administrator or student account</p>
                     </div>
-                    <button onClick={() => { setShowAddUser(false); setNewUserErrors({}) }} className="w-7 h-7 flex items-center justify-center rounded-full text-faint hover:text-ink hover:bg-track transition-colors"><X className="w-4 h-4" /></button>
+                    <button aria-label="Close dialog" onClick={() => { setShowAddUser(false); setNewUserErrors({}) }} className="w-7 h-7 flex items-center justify-center rounded-full text-faint hover:text-ink hover:bg-track transition-colors"><X className="w-4 h-4" /></button>
                   </div>
                   <div className="px-6 py-5 space-y-4 max-h-[70vh] overflow-y-auto">
                     <div className="grid grid-cols-2 gap-3">
@@ -1580,7 +1652,7 @@ const Admin: React.FC = () => {
                     <Input label="Email" type="email" required value={newUser.email} error={newUserErrors.email} onChange={e => { setNewUser(p => ({ ...p, email: e.target.value })); setNewUserErrors(p => ({ ...p, email: '' })) }} />
                     <Input label="Username" required value={newUser.username} error={newUserErrors.username} onChange={e => { setNewUser(p => ({ ...p, username: e.target.value })); setNewUserErrors(p => ({ ...p, username: '' })) }} />
                     <Input label="Password" type="password" required value={newUser.password} error={newUserErrors.password} onChange={e => { setNewUser(p => ({ ...p, password: e.target.value })); setNewUserErrors(p => ({ ...p, password: '' })) }} />
-                    <Select label="Role" value={newUser.role} onChange={e => setNewUser(p => ({ ...p, role: e.target.value as any }))} options={[{ value: 'student', label: 'Student' }, { value: 'admin', label: 'Administrator' }]} />
+                    <Select label="Role" value={newUser.role} onChange={e => setNewUser(p => ({ ...p, role: e.target.value as 'admin' | 'student' }))} options={[{ value: 'student', label: 'Student' }, { value: 'admin', label: 'Administrator' }]} />
                     {newUser.role === 'student' && (
                       <>
                         <Input label="Date of Birth" type="date" value={newUser.date_of_birth} onChange={e => setNewUser(p => ({ ...p, date_of_birth: e.target.value }))} />
@@ -1604,7 +1676,7 @@ const Admin: React.FC = () => {
                       <h3 className="text-[15px] font-semibold text-ink">Edit User</h3>
                       <p className="text-[12px] text-muted mt-0.5">{editingUser.first_name} {editingUser.last_name}</p>
                     </div>
-                    <button onClick={() => { setShowEditUser(false); setEditingUser(null); setEditUserErrors({}) }} className="w-7 h-7 flex items-center justify-center rounded-full text-faint hover:text-ink hover:bg-track transition-colors"><X className="w-4 h-4" /></button>
+                    <button aria-label="Close dialog" onClick={() => { setShowEditUser(false); setEditingUser(null); setEditUserErrors({}) }} className="w-7 h-7 flex items-center justify-center rounded-full text-faint hover:text-ink hover:bg-track transition-colors"><X className="w-4 h-4" /></button>
                   </div>
                   <div className="px-6 py-5 space-y-4 max-h-[70vh] overflow-y-auto">
                     <div className="grid grid-cols-2 gap-3">
@@ -1670,6 +1742,16 @@ const Admin: React.FC = () => {
               setError={apiKeysHook.setError}
             />
           </ErrorBoundary>
+          <ConfirmDialog
+            isOpen={!!apiKeysHook.pendingDelete}
+            onClose={apiKeysHook.cancelDeleteAPIKey}
+            onConfirm={apiKeysHook.confirmDeleteAPIKey}
+            tone="danger"
+            title="Delete API key"
+            message={<>Are you sure you want to delete the API key <strong className="text-ink">"{apiKeysHook.pendingDelete?.name}"</strong>? This action cannot be undone.</>}
+            confirmLabel="Delete key"
+            loading={apiKeysHook.deleting}
+          />
         </div>
       )
 
@@ -1773,7 +1855,7 @@ const Admin: React.FC = () => {
                           ))}
                         </div>
                       )}
-                      {importResult?.warnings?.length > 0 && (
+                      {importResult && importResult.warnings.length > 0 && (
                         <div className="bg-panel-2 border border-line rounded-card p-3 text-[11px] text-muted mb-3">
                           {importResult.warnings.slice(0, 3).map((w: string, i: number) => <div key={i}>• {w}</div>)}
                           {importResult.warnings.length > 3 && <div>…and {importResult.warnings.length - 3} more</div>}
@@ -1847,6 +1929,16 @@ const Admin: React.FC = () => {
           ) : renderSection()}
         </div>
       </main>
+
+      {/* Shared destructive-action confirmation */}
+      {confirmDialogProps && (
+        <ConfirmDialog
+          isOpen
+          onClose={() => setPendingAction(null)}
+          onConfirm={runPendingAction}
+          {...confirmDialogProps}
+        />
+      )}
     </div>
   )
 }

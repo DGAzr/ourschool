@@ -17,71 +17,29 @@
  */
 
 import { api } from './api'
+import {
+  BackupImportOptions,
+  SystemBackupFile,
+  SystemBackupImportResult
+} from '../types'
+
+/**
+ * Type guard for data parsed from an uploaded backup file. Checks the
+ * metadata the frontend relies on; the backend fully validates the rest.
+ */
+export const isSystemBackupFile = (value: unknown): value is SystemBackupFile => {
+  if (typeof value !== 'object' || value === null) return false
+  const record = value as Record<string, unknown>
+  return typeof record.format_version === 'string' && typeof record.backup_timestamp === 'string'
+}
 
 export const backupApi = {
   // System backup export
-  exportSystemBackup: () => api.get('/backup/export'),
-  
+  exportSystemBackup: (): Promise<SystemBackupFile> => api.get('/backup/export'),
+
   // System backup import
   importSystemBackup: (data: {
-    backup_data: any
-    import_options?: {
-      skip_existing_users?: boolean
-      update_existing_data?: boolean
-      preserve_ids?: boolean
-      dry_run?: boolean
-    }
-  }) => api.post('/backup/import', data),
-}
-
-// Utility functions for backup handling
-export const backupUtils = {
-  downloadBackup: (backupData: any, filename?: string) => {
-    const blob = new Blob([JSON.stringify(backupData, null, 2)], {
-      type: 'application/json'
-    })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = filename || `ourschool-backup-${new Date().toISOString().split('T')[0]}.json`
-    document.body.appendChild(a)
-    a.click()
-    document.body.removeChild(a)
-    URL.revokeObjectURL(url)
-  },
-
-  formatFileSize: (bytes: number): string => {
-    if (bytes === 0) return '0 Bytes'
-    const k = 1024
-    const sizes = ['Bytes', 'KB', 'MB', 'GB']
-    const i = Math.floor(Math.log(bytes) / Math.log(k))
-    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i]
-  },
-
-  validateBackupData: (data: any): { valid: boolean; errors: string[] } => {
-    const errors: string[] = []
-    
-    if (!data) {
-      errors.push('Backup data is empty')
-      return { valid: false, errors }
-    }
-
-    if (!data.format_version) {
-      errors.push('Missing format version')
-    }
-
-    if (!data.backup_timestamp) {
-      errors.push('Missing backup timestamp')
-    }
-
-    if (!data.users || !Array.isArray(data.users)) {
-      errors.push('Invalid or missing users data')
-    }
-
-    if (!data.subjects || !Array.isArray(data.subjects)) {
-      errors.push('Invalid or missing subjects data')
-    }
-
-    return { valid: errors.length === 0, errors }
-  }
+    backup_data: SystemBackupFile
+    import_options?: BackupImportOptions
+  }): Promise<SystemBackupImportResult> => api.post('/backup/import', data),
 }

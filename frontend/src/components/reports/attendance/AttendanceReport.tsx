@@ -242,7 +242,8 @@ const AttendanceReport: React.FC<AttendanceReportProps> = ({
       setCalendarStudentId(firstId)
       fetchStudentCalendar(firstId)
     }
-  }, [bulkAttendanceReport])
+    // fetchStudentCalendar is memoized on bulkAttendanceReport in useReportsData
+  }, [bulkAttendanceReport, fetchStudentCalendar])
 
   const handleCalendarStudentChange = (id: number) => {
     setCalendarStudentId(id)

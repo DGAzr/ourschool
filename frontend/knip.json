@@ -1,7 +1,9 @@
 {
   "$schema": "https://unpkg.com/knip@latest/schema.json",
   "project": ["src/**/*.{ts,tsx}"],
+  // Reserved for upcoming component tests; not yet imported anywhere.
   "ignoreDependencies": [
-    "tailwindcss"
+    "@testing-library/react",
+    "@testing-library/user-event"
   ]
 }

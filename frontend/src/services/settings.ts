@@ -27,7 +27,7 @@ export interface SystemSetting {
   is_active: boolean
 }
 
-export interface AttendanceSettings {
+interface AttendanceSettings {
   required_days_of_instruction: number
   skip_weekends: boolean
   count_excused: boolean

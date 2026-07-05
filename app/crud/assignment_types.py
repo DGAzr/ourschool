@@ -15,6 +15,7 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 """CRUD operations for admin-managed assignment types."""
+
 import re
 from typing import List, Optional
 
@@ -24,7 +25,6 @@ from sqlalchemy.orm import Session
 from app.models.assignment import AssignmentTemplate
 from app.models.assignment_type import AssignmentTypeConfig
 from app.schemas.assignment_type import AssignmentTypeCreate, AssignmentTypeUpdate
-
 
 # Default categories seeded on a fresh database (key, name, color, icon). Weights
 # start at 0 so grading behaves as plain points-weighting until configured.
@@ -53,8 +53,13 @@ def ensure_default_assignment_types(db: Session) -> None:
     for idx, (key, name, color, icon) in enumerate(DEFAULT_ASSIGNMENT_TYPES):
         db.add(
             AssignmentTypeConfig(
-                key=key, name=name, color=color, icon=icon, weight=0.0,
-                is_active=True, display_order=idx,
+                key=key,
+                name=name,
+                color=color,
+                icon=icon,
+                weight=0.0,
+                is_active=True,
+                display_order=idx,
             )
         )
     db.commit()
@@ -90,9 +95,7 @@ def get_assignment_type(db: Session, type_id: int) -> Optional[AssignmentTypeCon
 def get_by_key(db: Session, key: str) -> Optional[AssignmentTypeConfig]:
     """Get a single assignment type by its stable key."""
     return (
-        db.query(AssignmentTypeConfig)
-        .filter(AssignmentTypeConfig.key == key)
-        .first()
+        db.query(AssignmentTypeConfig).filter(AssignmentTypeConfig.key == key).first()
     )
 
 

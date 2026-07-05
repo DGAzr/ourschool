@@ -15,6 +15,7 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 """Models package."""
+
 # Import all models to ensure they are registered with SQLAlchemy
 from .api_key import APIKey
 from .assignment import (
@@ -30,3 +31,27 @@ from .subject import Subject
 from .term import GradeHistory, StudentTermGrade, Term, TermSubject, TermType
 from .user import User, UserRole
 from .points import StudentPoints, PointTransaction, SystemSettings
+
+__all__ = [
+    "APIKey",
+    "AssignmentStatus",
+    "AssignmentTemplate",
+    "AssignmentType",
+    "AssignmentTypeConfig",
+    "AttendanceRecord",
+    "AttendanceStatus",
+    "GradeHistory",
+    "JournalEntry",
+    "JournalReply",
+    "PointTransaction",
+    "StudentAssignment",
+    "StudentPoints",
+    "StudentTermGrade",
+    "Subject",
+    "SystemSettings",
+    "Term",
+    "TermSubject",
+    "TermType",
+    "User",
+    "UserRole",
+]

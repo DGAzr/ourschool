@@ -51,6 +51,7 @@ const IconPickerButton: React.FC<IconPickerButtonProps> = ({
       <button
         type="button"
         title={value ? `Icon: ${value} (click to change)` : 'Click to choose an icon'}
+        aria-label={value ? `Change icon (current: ${value})` : 'Choose an icon'}
         onClick={() => setPickerOpen(true)}
         className={`
           h-9 w-16 flex items-center justify-center rounded-field border border-field-border

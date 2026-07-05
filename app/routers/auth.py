@@ -15,6 +15,7 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 """Authentication APIs."""
+
 import threading
 import time
 from collections import defaultdict, deque
@@ -122,12 +123,30 @@ async def get_current_user(
     return user
 
 
+# Endpoints a user may still reach while a password change is required:
+# reading their own profile (to learn about the requirement) and changing
+# the password itself.
+_PASSWORD_CHANGE_ALLOWED_PATHS = {
+    "/api/users/me",
+    "/api/users/me/change-password",
+}
+
+
 async def get_current_active_user(
+    request: Request,
     current_user: Annotated[User, Depends(get_current_user)],
 ):
     """Get the current active user."""
     if not current_user.is_active:
         raise HTTPException(status_code=400, detail="Inactive user")
+    if (
+        current_user.must_change_password
+        and request.url.path not in _PASSWORD_CHANGE_ALLOWED_PATHS
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Password change required",
+        )
     return current_user
 
 
@@ -159,7 +178,7 @@ async def login_for_access_token(
             "login",
             username=form_data.username,
             success=False,
-            reason="invalid_credentials"
+            reason="invalid_credentials",
         )
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -180,16 +199,23 @@ async def login_for_access_token(
 
     _clear_login_failures(ip, form_data.username)
 
+    # Installs upgraded from before must_change_password existed: if the
+    # well-known seeded credentials still work, force a rotation now.
+    if (
+        not user.must_change_password
+        and user.username == "admin"
+        and form_data.password == "admin123"
+    ):
+        user.must_change_password = True
+        db.commit()
+
     access_token_expires = timedelta(minutes=settings.access_token_expire_minutes)
     access_token = create_access_token(
         data={"sub": user.username}, expires_delta=access_token_expires
     )
 
     log_authentication_event(
-        "login",
-        user_id=str(user.id),
-        username=user.username,
-        success=True
+        "login", user_id=str(user.id), username=user.username, success=True
     )
 
     return {"access_token": access_token, "token_type": "bearer"}

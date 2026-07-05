@@ -44,12 +44,11 @@ open http://localhost:4173
 
 That's it. The backend runs migrations and seeds an admin account automatically on first start.
 
-> ⚠️ **Change the default credentials immediately after first login.**  
-> Admin login: `admin` / `admin123` — these are public knowledge and exist only to get you in the door.
+> ⚠️ **Default credentials:** Admin login is `admin` / `admin123` — these are public knowledge and exist only to get you in the door. The app requires you to choose a new password on first login.
 
 > 📌 **External database?** Skip `--profile local-db` and set `DATABASE_URL` in `.env` instead.
 
-> 🏷️ **Image tag:** The compose file defaults to `v1.0.0-beta.1`. Change `IMAGE_TAG` in `.env` to pin a different release. All published tags: [ghcr.io/dgazr/ourschool-backend](https://github.com/DGAzr/ourschool/pkgs/container/ourschool-backend).
+> 🏷️ **Image tag:** The compose file defaults to the release it shipped with. Change `IMAGE_TAG` in `.env` to pin a different release. All published tags: [ghcr.io/dgazr/ourschool-backend](https://github.com/DGAzr/ourschool/pkgs/container/ourschool-backend).
 
 
 ## 📸 Screenshots
@@ -292,4 +291,4 @@ This program is free software: you can redistribute it and/or modify it under th
 
 This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU Affero General Public License for more details.
 
-You should have received a copy of the GNU General Public License along with this program. If not, see <https://www.gnu.org/licenses/>.
+You should have received a copy of the GNU Affero General Public License along with this program. If not, see <https://www.gnu.org/licenses/>.

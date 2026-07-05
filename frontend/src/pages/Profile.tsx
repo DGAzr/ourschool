@@ -20,6 +20,7 @@ import React, { useState, useEffect } from 'react'
 import { Lock, Eye, EyeOff, Save } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 import { usersApi } from '../services/users'
+import { getErrorMessage } from '../services/api'
 
 const FIELD = 'w-full bg-field-bg border border-field-border rounded-field px-3 py-2 text-[13.5px] text-ink focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent placeholder:text-faintest'
 const FIELD_DISABLED = 'w-full bg-panel-2 border border-field-border rounded-field px-3 py-2 text-[13.5px] text-ink cursor-not-allowed'
@@ -61,8 +62,8 @@ const Profile: React.FC = () => {
       const response = await usersApi.updateMe(profileData)
       updateUser(response.data)
       setSuccess('Profile updated successfully')
-    } catch (err: any) {
-      setError(err.response?.data?.detail || 'Failed to update profile')
+    } catch (err) {
+      setError(getErrorMessage(err, 'Failed to update profile'))
     } finally {
       setProfileLoading(false)
     }
@@ -98,8 +99,8 @@ const Profile: React.FC = () => {
       setSuccess('Password changed successfully')
       setPasswordData({ current_password: '', new_password: '', confirm_password: '' })
       setShowPasswordForm(false)
-    } catch (err: any) {
-      setError(err.response?.data?.detail || 'Failed to change password')
+    } catch (err) {
+      setError(getErrorMessage(err, 'Failed to change password'))
     } finally {
       setPasswordLoading(false)
     }
@@ -130,8 +131,9 @@ const Profile: React.FC = () => {
         <h2 className="text-[15px] font-semibold text-ink">Profile Information</h2>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
-            <label className={LABEL}>First Name</label>
+            <label htmlFor="profile-first-name" className={LABEL}>First Name</label>
             <input
+              id="profile-first-name"
               type="text"
               value={profileData.first_name}
               onChange={e => setProfileData({ ...profileData, first_name: e.target.value })}
@@ -140,8 +142,9 @@ const Profile: React.FC = () => {
             />
           </div>
           <div>
-            <label className={LABEL}>Last Name</label>
+            <label htmlFor="profile-last-name" className={LABEL}>Last Name</label>
             <input
+              id="profile-last-name"
               type="text"
               value={profileData.last_name}
               onChange={e => setProfileData({ ...profileData, last_name: e.target.value })}
@@ -150,8 +153,9 @@ const Profile: React.FC = () => {
             />
           </div>
           <div>
-            <label className={LABEL}>Email</label>
+            <label htmlFor="profile-email" className={LABEL}>Email</label>
             <input
+              id="profile-email"
               type="email"
               value={profileData.email}
               onChange={e => setProfileData({ ...profileData, email: e.target.value })}
@@ -216,9 +220,10 @@ const Profile: React.FC = () => {
             )}
 
             <div>
-              <label className={LABEL}>Current Password</label>
+              <label htmlFor="profile-current-password" className={LABEL}>Current Password</label>
               <div className="relative">
                 <input
+                  id="profile-current-password"
                   type={showCurrentPassword ? 'text' : 'password'}
                   value={passwordData.current_password}
                   onChange={e => setPasswordData({ ...passwordData, current_password: e.target.value })}
@@ -228,6 +233,7 @@ const Profile: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => setShowCurrentPassword(!showCurrentPassword)}
+                  aria-label={showCurrentPassword ? 'Hide current password' : 'Show current password'}
                   className="absolute inset-y-0 right-0 pr-3 flex items-center text-faint hover:text-muted"
                 >
                   {showCurrentPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
@@ -236,9 +242,10 @@ const Profile: React.FC = () => {
             </div>
 
             <div>
-              <label className={LABEL}>New Password</label>
+              <label htmlFor="profile-new-password" className={LABEL}>New Password</label>
               <div className="relative">
                 <input
+                  id="profile-new-password"
                   type={showNewPassword ? 'text' : 'password'}
                   value={passwordData.new_password}
                   onChange={e => setPasswordData({ ...passwordData, new_password: e.target.value })}
@@ -249,6 +256,7 @@ const Profile: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => setShowNewPassword(!showNewPassword)}
+                  aria-label={showNewPassword ? 'Hide new password' : 'Show new password'}
                   className="absolute inset-y-0 right-0 pr-3 flex items-center text-faint hover:text-muted"
                 >
                   {showNewPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
@@ -258,9 +266,10 @@ const Profile: React.FC = () => {
             </div>
 
             <div>
-              <label className={LABEL}>Confirm New Password</label>
+              <label htmlFor="profile-confirm-password" className={LABEL}>Confirm New Password</label>
               <div className="relative">
                 <input
+                  id="profile-confirm-password"
                   type={showConfirmPassword ? 'text' : 'password'}
                   value={passwordData.confirm_password}
                   onChange={e => setPasswordData({ ...passwordData, confirm_password: e.target.value })}
@@ -270,6 +279,7 @@ const Profile: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => setShowConfirmPassword(!showConfirmPassword)}
+                  aria-label={showConfirmPassword ? 'Hide confirmed password' : 'Show confirmed password'}
                   className="absolute inset-y-0 right-0 pr-3 flex items-center text-faint hover:text-muted"
                 >
                   {showConfirmPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}

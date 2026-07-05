@@ -15,18 +15,21 @@
 # along with this program.  If not, see <https://www.gnu.org/licenses/>.
 
 """Utility functions for attendance calculations and operations."""
+
 from datetime import date, timedelta
 from typing import Optional, Tuple
 
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from app.models.attendance import AttendanceRecord, AttendanceStatus
+from app.models.attendance import AttendanceStatus
 from app.models.term import Term
 from app.crud import settings as crud_settings
 
 
-def calculate_school_days(start_date: date, end_date: date, skip_weekends: bool = True) -> int:
+def calculate_school_days(
+    start_date: date, end_date: date, skip_weekends: bool = True
+) -> int:
     """Calculate number of school days between two dates."""
     current_date = start_date
     school_days = 0
@@ -50,16 +53,16 @@ def resolve_date_range_from_academic_year(
 ) -> Tuple[date, date]:
     """
     Resolve date range from academic year or explicit dates.
-    
+
     Args:
         db: Database session
         academic_year: Academic year string (e.g., "2024-2025")
         start_date: Explicit start date
         end_date: Explicit end date
-        
+
     Returns:
         Tuple of (start_date, end_date)
-        
+
     Raises:
         ValueError: If neither academic_year nor both dates are provided, or if academic year not found
     """
@@ -73,15 +76,21 @@ def resolve_date_range_from_academic_year(
             .filter(Term.academic_year == academic_year)
             .first()
         )
-        
-        if academic_year_data and academic_year_data.start_date and academic_year_data.end_date:
+
+        if (
+            academic_year_data
+            and academic_year_data.start_date
+            and academic_year_data.end_date
+        ):
             return academic_year_data.start_date, academic_year_data.end_date
         else:
             raise ValueError(f"No terms found for academic year {academic_year}")
-    
+
     if not start_date or not end_date:
-        raise ValueError("start_date and end_date are required when academic_year is not provided")
-        
+        raise ValueError(
+            "start_date and end_date are required when academic_year is not provided"
+        )
+
     return start_date, end_date
 
 
@@ -117,9 +126,7 @@ def calculate_attendance_rate(
     present_days = sum(
         1 for r in attendance_records if r.status == AttendanceStatus.PRESENT
     )
-    late_days = sum(
-        1 for r in attendance_records if r.status == AttendanceStatus.LATE
-    )
+    late_days = sum(1 for r in attendance_records if r.status == AttendanceStatus.LATE)
     excused_days = sum(
         1 for r in attendance_records if r.status == AttendanceStatus.EXCUSED
     )
@@ -142,10 +149,10 @@ def calculate_attendance_rate(
 def get_attendance_statistics(attendance_records: list) -> dict:
     """
     Get attendance statistics from a list of attendance records.
-    
+
     Args:
         attendance_records: List of AttendanceRecord objects
-        
+
     Returns:
         Dictionary with attendance statistics
     """
@@ -155,13 +162,11 @@ def get_attendance_statistics(attendance_records: list) -> dict:
     absent_days = sum(
         1 for r in attendance_records if r.status == AttendanceStatus.ABSENT
     )
-    late_days = sum(
-        1 for r in attendance_records if r.status == AttendanceStatus.LATE
-    )
+    late_days = sum(1 for r in attendance_records if r.status == AttendanceStatus.LATE)
     excused_days = sum(
         1 for r in attendance_records if r.status == AttendanceStatus.EXCUSED
     )
-    
+
     return {
         "present_days": present_days,
         "absent_days": absent_days,
@@ -173,10 +178,10 @@ def get_attendance_statistics(attendance_records: list) -> dict:
 def find_first_absence_date(attendance_records: list) -> Optional[str]:
     """
     Find the first absence date from attendance records.
-    
+
     Args:
         attendance_records: List of AttendanceRecord objects
-        
+
     Returns:
         ISO date string of first absence, or None if no absences
     """
@@ -186,21 +191,25 @@ def find_first_absence_date(attendance_records: list) -> Optional[str]:
     return None
 
 
-def generate_recent_activity_summary(attendance_records: list, limit: int = 3) -> Optional[str]:
+def generate_recent_activity_summary(
+    attendance_records: list, limit: int = 3
+) -> Optional[str]:
     """
     Generate a summary of recent attendance activity.
-    
+
     Args:
         attendance_records: List of AttendanceRecord objects
         limit: Number of recent records to include
-        
+
     Returns:
         Summary string or None if no records
     """
     if not attendance_records:
         return None
-        
-    recent_records = sorted(attendance_records, key=lambda x: x.date, reverse=True)[:limit]
+
+    recent_records = sorted(attendance_records, key=lambda x: x.date, reverse=True)[
+        :limit
+    ]
     activities = []
     for record in recent_records:
         activities.append(f"{record.date.strftime('%m/%d')}: {record.status.value}")
