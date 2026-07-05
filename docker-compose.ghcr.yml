@@ -51,7 +51,7 @@ services:
         max-file: "3"
 
   backend:
-    image: ghcr.io/dgazr/ourschool-backend:${IMAGE_TAG:-v1.0.0-beta.7}
+    image: ghcr.io/dgazr/ourschool-backend:${IMAGE_TAG:-v1.0.0-beta.8}
     restart: unless-stopped
     environment:
       # Database configuration
@@ -103,7 +103,7 @@ services:
         max-file: "3"
 
   frontend:
-    image: ghcr.io/dgazr/ourschool-frontend:${IMAGE_TAG:-v1.0.0-beta.7}
+    image: ghcr.io/dgazr/ourschool-frontend:${IMAGE_TAG:-v1.0.0-beta.8}
     restart: unless-stopped
     ports:
       # Host port 4173 → container port 80 (nginx). Change FRONTEND_PORT to
