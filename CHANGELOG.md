@@ -6,6 +6,31 @@ All notable changes to OurSchool are documented here.
 
 ## [Unreleased]
 
+### Post-1.0-hardening backlog burn-down (2026-07-05)
+
+- **Wipe-and-restore backup mode** — `POST /api/backup/import` accepts
+  `wipe_before_import`, deleting all backup-scoped data (child tables first,
+  in one transaction — a failed import rolls back to the pre-wipe state)
+  before restoring. Guarded twice: the API requires
+  `wipe_confirmation: "WIPE ALL DATA"` in the request body, and the UI makes
+  you retype the phrase in a danger dialog. The importing admin's account and
+  password, assignment types, and API keys are preserved; results report
+  per-table deleted counts (would-delete counts on dry runs).
+- **Server-side theme persistence** — light/dark/system preference is stored
+  on the user (`PUT /users/me`) and follows you across devices; localStorage
+  remains the logged-out fallback.
+- **Empty states everywhere** — new shared `EmptyState` component; Grading,
+  My Points, Admin Settings, and Admin Backup now show helpful empty/error
+  states instead of blank panels (Admin Settings' failed load is retryable
+  rather than silently rendering defaults).
+- **React-hooks compiler suite enforced** — all 39 remaining warnings from
+  the react-hooks v7 upgrade fixed (no state updates from effect bodies,
+  keyed modal resets, `useSyncExternalStore` for media queries, synchronous
+  auth hydration) and every rule flipped from `warn` to `error` in CI.
+- **README** — complete endpoint reference for the whole API surface,
+  corrected API-key permission table (8 permissions), and accurate
+  docs-disabled-by-default note.
+
 ### 1.0 hardening
 
 Release-readiness work targeting a stable 1.0: security fixes, test coverage

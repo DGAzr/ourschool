@@ -15,7 +15,7 @@
 # Use docker-compose.yml (which builds from local Dockerfiles) instead.
 #
 # Image tag:
-#   IMAGE_TAG controls which release to pull (default: v1.0.0-beta.7).
+#   IMAGE_TAG controls which release to pull (default: v1.0.0-beta.9).
 #   Set it in .env or override inline:
 #     IMAGE_TAG=v1.1.0 docker compose -f docker-compose.ghcr.yml up -d
 #   All published tags: https://github.com/DGAzr/ourschool/pkgs/container/ourschool-backend
@@ -51,7 +51,7 @@ services:
         max-file: "3"
 
   backend:
-    image: ghcr.io/dgazr/ourschool-backend:${IMAGE_TAG:-v1.0.0-beta.8}
+    image: ghcr.io/dgazr/ourschool-backend:${IMAGE_TAG:-v1.0.0-beta.9}
     restart: unless-stopped
     environment:
       # Database configuration
@@ -103,7 +103,7 @@ services:
         max-file: "3"
 
   frontend:
-    image: ghcr.io/dgazr/ourschool-frontend:${IMAGE_TAG:-v1.0.0-beta.8}
+    image: ghcr.io/dgazr/ourschool-frontend:${IMAGE_TAG:-v1.0.0-beta.9}
     restart: unless-stopped
     ports:
       # Host port 4173 → container port 80 (nginx). Change FRONTEND_PORT to
