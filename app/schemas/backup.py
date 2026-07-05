@@ -276,6 +276,10 @@ class SystemBackupImportRequest(BaseModel):
             "dry_run": False,
         }
     )
+    # Required (must equal WIPE_CONFIRMATION_PHRASE) when import_options
+    # includes wipe_before_import=true. Kept top-level, not in import_options:
+    # it is a safety credential, not a tuning knob.
+    wipe_confirmation: Optional[str] = None
 
 
 class SystemBackupImportResult(BaseModel):
@@ -289,6 +293,8 @@ class SystemBackupImportResult(BaseModel):
     skipped_counts: Dict[str, int] = {}
     updated_counts: Dict[str, int] = {}
     error_counts: Dict[str, int] = {}
+    # Rows removed by wipe_before_import (would-be-removed counts on dry_run)
+    deleted_counts: Dict[str, int] = {}
 
     # Details
     warnings: List[str] = []

@@ -16,10 +16,11 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-import React, { ReactNode } from 'react'
+import React, { ReactNode, useState } from 'react'
 import { AlertTriangle } from 'lucide-react'
 import Modal, { ModalIconVariant } from '../Modal/Modal'
 import Button from '../Button'
+import Input from '../Input'
 
 type ConfirmTone = 'danger' | 'warn' | 'default'
 
@@ -68,13 +69,25 @@ interface ConfirmDialogProps {
   loading?: boolean
   /** Override the leading icon (defaults to AlertTriangle) */
   icon?: ReactNode
+  /**
+   * Retype-to-confirm: when set, an input is rendered and the confirm button
+   * stays disabled until the user types this exact phrase.
+   */
+  confirmText?: string
 }
 
 /**
  * The single confirmation dialog. Replaces the inline delete/archive confirms that were
  * hand-written in Assignments.tsx with raw red-600 / yellow-600 / gray-800 + a ⚠️ emoji.
+ *
+ * The outer component remounts the core on every open/close so the
+ * retype-to-confirm input starts blank each time (no state-sync effect).
  */
-const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
+const ConfirmDialog: React.FC<ConfirmDialogProps> = (props) => (
+  <ConfirmDialogCore key={props.isOpen ? 'open' : 'closed'} {...props} />
+)
+
+const ConfirmDialogCore: React.FC<ConfirmDialogProps> = ({
   isOpen,
   onClose,
   onConfirm,
@@ -86,8 +99,11 @@ const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
   cancelLabel = 'Cancel',
   loading = false,
   icon,
+  confirmText,
 }) => {
   const t = TONE[tone]
+  const [typed, setTyped] = useState('')
+  const confirmBlocked = confirmText !== undefined && typed !== confirmText
 
   return (
     <Modal
@@ -102,7 +118,12 @@ const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
           <Button variant="secondary" onClick={onClose} disabled={loading}>
             {cancelLabel}
           </Button>
-          <Button variant={t.primary} onClick={onConfirm} loading={loading}>
+          <Button
+            variant={t.primary}
+            onClick={onConfirm}
+            loading={loading}
+            disabled={confirmBlocked}
+          >
             {confirmLabel}
           </Button>
         </>
@@ -117,6 +138,16 @@ const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
             <AlertTriangle size={14} className="flex-shrink-0 mt-px" />
             <span>{note}</span>
           </div>
+        )}
+        {confirmText !== undefined && (
+          <Input
+            label={`Type "${confirmText}" to confirm`}
+            value={typed}
+            onChange={(e) => setTyped(e.target.value)}
+            placeholder={confirmText}
+            autoComplete="off"
+            disabled={loading}
+          />
         )}
       </div>
     </Modal>

@@ -23,9 +23,13 @@ from typing import Any, Dict, Optional
 from sqlalchemy.orm import Session
 
 from app.enums import UserRole as UserRoleEnum
-from app.models.assignment import AssignmentTemplate
+from app.models.api_key import APIKey
+from app.models.assignment import AssignmentTemplate, StudentAssignment
+from app.models.attendance import AttendanceRecord
+from app.models.journal import JournalEntry, JournalReply
+from app.models.points import PointTransaction, StudentPoints, SystemSettings
 from app.models.subject import Subject
-from app.models.term import Term
+from app.models.term import GradeHistory, StudentTermGrade, Term, TermSubject
 from app.models.user import User
 from app.schemas.backup import SystemBackup, SystemBackupImportResult
 
@@ -36,6 +40,107 @@ logger = logging.getLogger(__name__)
 # Backup format versions supported by this importer
 SUPPORTED_VERSIONS = {"1.0", "2.0"}
 LEGACY_VERSIONS = {"1.0"}  # Versions that lack external_id — name-only fallback
+
+# Typed phrase required in the request body to arm wipe_before_import.
+WIPE_CONFIRMATION_PHRASE = "WIPE ALL DATA"
+
+# Deletion order for wipe-and-restore: children before parents so plain
+# DELETEs never trip FK constraints. Covers the backup-scoped tables plus
+# journal_replies and grade_history, which are FK children of them but are
+# not restorable from a backup. Deliberately absent: assignment_types (the
+# importer only auto-creates missing type keys, so wiping would destroy
+# display names and icons irrecoverably) and api_keys (standalone system
+# credentials, not user-bound — wiping them would break external
+# integrations; their created_by FK is ON DELETE SET NULL). Users need
+# admin-preservation logic and are handled separately.
+_WIPE_ORDER = [
+    ("point_transactions", PointTransaction),
+    ("student_points", StudentPoints),
+    ("journal_replies", JournalReply),
+    ("journal_entries", JournalEntry),
+    ("attendance_records", AttendanceRecord),
+    ("grade_history", GradeHistory),
+    ("student_term_grades", StudentTermGrade),
+    ("term_subjects", TermSubject),
+    ("student_assignments", StudentAssignment),
+    ("assignment_templates", AssignmentTemplate),
+    ("terms", Term),
+    ("subjects", Subject),
+    ("system_settings", SystemSettings),
+]
+
+
+def _wipe_for_restore(
+    db: Session, current_user: User, result: SystemBackupImportResult, dry_run: bool
+) -> None:
+    """Delete all backup-scoped data ahead of a restore.
+
+    Runs inside the import transaction, so any later failure rolls the wipe
+    back with everything else. The importing admin's row and API keys are
+    preserved: backups carry no password hashes, so wiping the current admin
+    would leave the system with no working login.
+    """
+    deleted: Dict[str, int] = {}
+
+    for table_name, model in _WIPE_ORDER:
+        query = db.query(model)
+        deleted[table_name] = (
+            query.count() if dry_run else query.delete(synchronize_session=False)
+        )
+
+    # API keys survive the wipe (see _WIPE_ORDER comment). Keys created by
+    # wiped users lose their provenance to SET NULL — tell the admin.
+    orphaning_keys = (
+        db.query(APIKey)
+        .filter(APIKey.created_by.isnot(None), APIKey.created_by != current_user.id)
+        .count()
+    )
+    if orphaning_keys:
+        result.warnings.append(
+            f"{orphaning_keys} API key(s) created by wiped users remain active; "
+            "review them under Admin > Integrations and revoke any you no "
+            "longer need."
+        )
+
+    # Users: two passes for the self-referential parent_id FK (students
+    # first, then parents), never deleting the current admin.
+    users_query = db.query(User).filter(User.id != current_user.id)
+    if dry_run:
+        deleted["users"] = users_query.count()
+    else:
+        if current_user.parent_id is not None:
+            current_user.parent_id = None
+            db.flush()
+        children = users_query.filter(User.parent_id.isnot(None))
+        deleted["users"] = children.delete(synchronize_session=False)
+        deleted["users"] += users_query.delete(synchronize_session=False)
+
+    result.deleted_counts = deleted
+
+    verb = "Would delete" if dry_run else "Deleted"
+    if deleted.get("journal_replies"):
+        result.warnings.append(
+            f"{verb} {deleted['journal_replies']} journal replies; replies are "
+            "not part of backups and cannot be restored."
+        )
+    if deleted.get("grade_history"):
+        result.warnings.append(
+            f"{verb} {deleted['grade_history']} grade history records; grade "
+            "history is audit data and is not re-imported from backups."
+        )
+
+    total = sum(deleted.values())
+    tables = sum(1 for count in deleted.values() if count)
+    log_backup_operation(
+        "import",
+        current_user.email,
+        f"WIPE-AND-RESTORE ({'dry run' if dry_run else 'executing'}): "
+        f"{verb.lower()} {total} rows across {tables} tables before import",
+    )
+    result.import_log.append(
+        f"Wipe-and-restore: {verb.lower()} {total} rows across {tables} tables; "
+        f"preserved current admin account ({current_user.email})."
+    )
 
 
 def _resolve(
@@ -103,13 +208,25 @@ def import_system_data(
         backup_dict = sanitize_import_data(backup_data.model_dump())
         backup_data = SystemBackup(**backup_dict)
 
-        # Restore semantics are MERGE, not replace: existing records (matched by
+        # Default restore semantics are MERGE: existing records (matched by
         # external_id, then by natural key) are skipped or updated per
-        # import_options; nothing is deleted. A wipe-and-restore mode is a
-        # possible post-1.0 feature.
+        # import_options; nothing is deleted. With wipe_before_import (gated
+        # by a typed confirmation at the endpoint), all backup-scoped data is
+        # deleted first — except the importing admin — for true
+        # point-in-time restore semantics.
+        if import_options.get("wipe_before_import", False):
+            _wipe_for_restore(db, current_user, result, dry_run)
+            if dry_run:
+                result.warnings.append(
+                    "Dry-run preview simulates a merge against current data; "
+                    "after a real wipe, records reported as skipped-existing "
+                    "will be imported instead."
+                )
 
         # Import in dependency order
-        _import_users(db, backup_data.users, result, import_options, dry_run)
+        _import_users(
+            db, backup_data.users, result, import_options, dry_run, current_user
+        )
         _import_subjects(db, backup_data.subjects, result, dry_run)
         _import_terms(db, backup_data.terms, result, dry_run, current_user.id)
         _import_assignment_templates(
@@ -156,12 +273,15 @@ def import_system_data(
         return result
 
 
-def _import_users(db: Session, users_data, result, import_options, dry_run):
+def _import_users(
+    db: Session, users_data, result, import_options, dry_run, current_user
+):
     """Import users. Builds two resolution maps: by external_id and by email."""
     by_uuid: Dict[str, int] = {}
     by_email: Dict[str, int] = {}
     imported = skipped = updated = 0
     allow_admin_import = import_options.get("allow_admin_import", False)
+    wipe_mode = import_options.get("wipe_before_import", False)
 
     # Pre-load existing users into both maps
     for existing in db.query(User).all():
@@ -181,6 +301,27 @@ def _import_users(db: Session, users_data, result, import_options, dry_run):
         except ValueError:
             result.errors.append(
                 f"User {user_data.email}: invalid role '{user_data.role}'"
+            )
+            continue
+
+        # In wipe mode the current admin survived the wipe: refresh their
+        # profile from the backup but never touch credentials, role, or the
+        # username/email the active session is bound to.
+        if wipe_mode and existing_id == current_user.id:
+            if not dry_run:
+                current_user.first_name = user_data.first_name
+                current_user.last_name = user_data.last_name
+                current_user.date_of_birth = user_data.date_of_birth
+                current_user.grade_level = user_data.grade_level
+                current_user.theme_preference = user_data.theme_preference
+                db.flush()
+            if user_data.external_id:
+                by_uuid[user_data.external_id] = existing_id
+            by_email[user_data.email] = existing_id
+            updated += 1
+            result.import_log.append(
+                f"Preserved current admin account and credentials: "
+                f"{current_user.email}"
             )
             continue
 

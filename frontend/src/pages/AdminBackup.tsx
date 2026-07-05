@@ -21,8 +21,9 @@ import React, { useState, useRef } from 'react'
 import { useAuth } from '../contexts/AuthContext'
 import { SystemBackupModal } from '../components/backup/SystemBackupModal'
 import { backupApi, isSystemBackupFile } from '../services/backup'
-import { SystemBackupFile, SystemBackupImportResult } from '../types'
-import { Button, EmptyState, Spinner } from '../components/ui'
+import { SystemBackupFile, SystemBackupImportResult, WIPE_CONFIRMATION_PHRASE } from '../types'
+import { Button, EmptyState, SegmentedControl, Spinner } from '../components/ui'
+import ConfirmDialog from '../components/ui/ConfirmDialog'
 import {
   HardDrive,
   Download,
@@ -52,6 +53,8 @@ const AdminBackup: React.FC = () => {
   })
   const [importResult, setImportResult] = useState<SystemBackupImportResult | null>(null)
   const [importError, setImportError] = useState<string | null>(null)
+  const [restoreMode, setRestoreMode] = useState<'merge' | 'wipe'>('merge')
+  const [showWipeConfirm, setShowWipeConfirm] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   const handleExport = async () => {
@@ -78,10 +81,16 @@ const AdminBackup: React.FC = () => {
 
   const performImport = async () => {
     if (!importData) return
+    setShowWipeConfirm(false)
     setImportStep('loading')
     setImportError(null)
+    const wipe = restoreMode === 'wipe'
     try {
-      const result = await backupApi.importSystemBackup({ backup_data: importData, import_options: importOptions })
+      const result = await backupApi.importSystemBackup({
+        backup_data: importData,
+        import_options: { ...importOptions, wipe_before_import: wipe },
+        ...(wipe ? { wipe_confirmation: WIPE_CONFIRMATION_PHRASE } : {}),
+      })
       setImportResult(result)
       setImportStep('result')
     } catch (err) {
@@ -90,11 +99,22 @@ const AdminBackup: React.FC = () => {
     }
   }
 
+  // A real (non-dry-run) wipe import must pass the typed-phrase dialog first.
+  const requestImport = () => {
+    if (restoreMode === 'wipe' && !importOptions.dry_run) {
+      setShowWipeConfirm(true)
+    } else {
+      performImport()
+    }
+  }
+
   const resetImport = () => {
     setImportStep('idle')
     setImportData(null)
     setImportResult(null)
     setImportError(null)
+    setRestoreMode('merge')
+    setShowWipeConfirm(false)
     if (fileInputRef.current) fileInputRef.current.value = ''
   }
 
@@ -230,6 +250,30 @@ const AdminBackup: React.FC = () => {
                   <div className="text-[12px] text-faint">Created by: {importData.created_by}</div>
                 </div>
 
+                {/* Restore mode */}
+                <div className="mb-4">
+                  <p className="text-[12px] font-semibold text-faint uppercase tracking-wide mb-1.5">Restore mode</p>
+                  <SegmentedControl
+                    segments={[
+                      { value: 'merge', label: 'Merge into existing data' },
+                      { value: 'wipe', label: 'Wipe and restore' },
+                    ]}
+                    value={restoreMode}
+                    onChange={setRestoreMode}
+                  />
+                  {restoreMode === 'wipe' && (
+                    <div className="mt-2 flex items-start gap-2.5 rounded-card border border-danger-line bg-danger-soft px-3.5 py-3 text-[12.5px] leading-snug text-ink-2">
+                      <AlertTriangle size={14} className="flex-shrink-0 mt-px" />
+                      <span>
+                        Deletes <strong>all</strong> students, subjects, terms, assignments,
+                        grades, attendance, journal entries (including replies), points, and
+                        settings before restoring the backup. Your admin account and password
+                        are preserved; all other users will need password resets.
+                      </span>
+                    </div>
+                  )}
+                </div>
+
                 {/* Options */}
                 <div className="space-y-2 mb-4 text-[13px]">
                   {[
@@ -254,8 +298,14 @@ const AdminBackup: React.FC = () => {
                   <Button variant="secondary" className="flex-1" onClick={resetImport}>
                     Cancel
                   </Button>
-                  <Button className="flex-1" onClick={performImport}>
-                    {importOptions.dry_run ? 'Preview Import' : 'Import Data'}
+                  <Button
+                    variant={restoreMode === 'wipe' && !importOptions.dry_run ? 'danger' : 'primary'}
+                    className="flex-1"
+                    onClick={requestImport}
+                  >
+                    {importOptions.dry_run
+                      ? 'Preview Import'
+                      : restoreMode === 'wipe' ? 'Wipe and Restore' : 'Import Data'}
                   </Button>
                 </div>
               </>
@@ -286,6 +336,13 @@ const AdminBackup: React.FC = () => {
                         {importResult?.dry_run ? 'Preview Complete' : 'Import Successful'}
                       </span>
                     </div>
+                    {importResult && Object.keys(importResult.deleted_counts ?? {}).length > 0 && (
+                      <div className="bg-danger-soft border border-danger-line rounded-card p-3 text-[13px] text-ink-2 mb-3 grid grid-cols-2 gap-1">
+                        {Object.entries(importResult.deleted_counts).map(([k, v]) => (
+                          <div key={k}>{importResult.dry_run ? 'Would delete' : 'Deleted'} {k}: {v}</div>
+                        ))}
+                      </div>
+                    )}
                     <div className="bg-pos-bg rounded-card p-3 text-[13px] text-pos-fg mb-3 grid grid-cols-2 gap-1">
                       {importResult?.imported_counts && Object.entries(importResult.imported_counts).map(([k, v]) => (
                         <div key={k}>{importResult.dry_run ? 'Would import' : 'Imported'} {k}: {v}</div>
@@ -347,6 +404,26 @@ const AdminBackup: React.FC = () => {
           onExport={handleExport}
         />
       )}
+
+      {/* Typed confirmation gate for a real wipe-and-restore */}
+      <ConfirmDialog
+        isOpen={showWipeConfirm}
+        onClose={() => setShowWipeConfirm(false)}
+        onConfirm={performImport}
+        tone="danger"
+        title="Wipe and restore"
+        message={
+          <>
+            This permanently deletes <strong>all current data</strong> and replaces it
+            with the backup from{' '}
+            <strong>{importData ? new Date(importData.backup_timestamp).toLocaleDateString() : ''}</strong>.
+            Anything created since that backup will be lost.
+          </>
+        }
+        note="Your admin account and password are preserved. All other users will need password resets. This cannot be undone."
+        confirmText={WIPE_CONFIRMATION_PHRASE}
+        confirmLabel="Wipe and Restore"
+      />
     </div>
   )
 }

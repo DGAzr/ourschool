@@ -46,7 +46,7 @@ from .exporters import (
     export_terms,
     export_users,
 )
-from .importers import import_system_data
+from .importers import WIPE_CONFIRMATION_PHRASE, import_system_data
 from .shared import log_backup_operation, require_admin_for_backup
 
 logger = logging.getLogger(__name__)
@@ -135,6 +135,18 @@ def import_system_backup(
     current_user: Annotated[User, Depends(require_admin_for_backup)],
 ):
     """Import complete system backup with intelligent conflict resolution."""
+
+    # Wipe-and-restore is destructive; require an explicit typed confirmation
+    # in the request body so the API alone can never wipe by accident.
+    if import_request.import_options.get("wipe_before_import"):
+        if import_request.wipe_confirmation != WIPE_CONFIRMATION_PHRASE:
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    "wipe_before_import requires wipe_confirmation="
+                    f"'{WIPE_CONFIRMATION_PHRASE}'"
+                ),
+            )
 
     try:
         log_backup_operation(

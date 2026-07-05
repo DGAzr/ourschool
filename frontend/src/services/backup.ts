@@ -41,5 +41,6 @@ export const backupApi = {
   importSystemBackup: (data: {
     backup_data: SystemBackupFile
     import_options?: BackupImportOptions
+    wipe_confirmation?: string
   }): Promise<SystemBackupImportResult> => api.post('/backup/import', data),
 }

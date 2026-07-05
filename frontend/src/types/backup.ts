@@ -59,7 +59,12 @@ export interface BackupImportOptions {
   update_existing_data?: boolean
   preserve_ids?: boolean
   dry_run?: boolean
+  /** Delete all backup-scoped data first (requires wipe_confirmation). */
+  wipe_before_import?: boolean
 }
+
+/** Phrase the user must retype to arm wipe_before_import (matches backend). */
+export const WIPE_CONFIRMATION_PHRASE = 'WIPE ALL DATA'
 
 /** Result of POST /backup/import (SystemBackupImportResult). */
 export interface SystemBackupImportResult {
@@ -69,6 +74,7 @@ export interface SystemBackupImportResult {
   skipped_counts: Record<string, number>
   updated_counts: Record<string, number>
   error_counts: Record<string, number>
+  deleted_counts: Record<string, number>
   warnings: string[]
   errors: string[]
   import_log: string[]
