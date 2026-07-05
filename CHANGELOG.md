@@ -4,7 +4,7 @@ All notable changes to OurSchool are documented here.
 
 ---
 
-## [v1.0.0-beta.9]
+## [v1.0.0-beta.10]
 
 ### Post-1.0-hardening backlog burn-down (2026-07-05)
 
