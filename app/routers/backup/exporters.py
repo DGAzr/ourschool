@@ -61,6 +61,7 @@ def export_users(db: Session) -> List[UserBackup]:
                 parent_id=user.parent_id,
                 date_of_birth=user.date_of_birth,
                 grade_level=user.grade_level,
+                theme_preference=user.theme_preference,
                 created_at=user.created_at,
                 updated_at=user.updated_at,
             )

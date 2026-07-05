@@ -17,7 +17,7 @@
 """User schemas."""
 
 from datetime import date, datetime
-from typing import Optional
+from typing import Literal, Optional
 
 from pydantic import BaseModel, Field, field_validator
 
@@ -73,6 +73,7 @@ class UserUpdate(BaseModel):
     first_name: Optional[str] = None
     last_name: Optional[str] = None
     is_active: Optional[bool] = None
+    theme_preference: Optional[Literal["light", "dark", "system"]] = None
     # Student-specific fields
     parent_id: Optional[int] = None
     date_of_birth: Optional[date] = None
@@ -85,6 +86,7 @@ class User(UserBase):
     id: int
     is_active: bool
     must_change_password: bool = False
+    theme_preference: Optional[str] = None
     created_at: datetime
     updated_at: datetime
 

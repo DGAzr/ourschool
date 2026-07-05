@@ -38,6 +38,7 @@ class UserBackup(BaseModel):
     parent_id: Optional[int] = None
     date_of_birth: Optional[date] = None
     grade_level: Optional[int] = None
+    theme_preference: Optional[str] = None
     created_at: datetime
     updated_at: datetime
 

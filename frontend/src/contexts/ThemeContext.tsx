@@ -16,8 +16,17 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-import React, { createContext, useContext, useState, useEffect, ReactNode, useCallback } from 'react'
+import React, {
+  createContext,
+  useContext,
+  useState,
+  useEffect,
+  useSyncExternalStore,
+  ReactNode,
+  useCallback,
+} from 'react'
 import { useAuth } from './AuthContext'
+import { usersApi } from '../services/users'
 
 type ThemeMode = 'light' | 'dark' | 'system'
 
@@ -39,65 +48,50 @@ export const useTheme = () => {
   return context
 }
 
+const readValidTheme = (value: string | null): ThemeMode | null =>
+  value === 'light' || value === 'dark' || value === 'system' ? value : null
+
+const darkQuery = () => window.matchMedia('(prefers-color-scheme: dark)')
+
+const subscribeToSystemTheme = (onChange: () => void) => {
+  const mediaQuery = darkQuery()
+  mediaQuery.addEventListener('change', onChange)
+  return () => mediaQuery.removeEventListener('change', onChange)
+}
+
+const getSystemPrefersDark = () => darkQuery().matches
+
 interface ThemeProviderProps {
   children: ReactNode
 }
 
 export const ThemeProvider: React.FC<ThemeProviderProps> = ({ children }) => {
-  const { user } = useAuth()
-  const [theme, setThemeState] = useState<ThemeMode>('system')
-  const [systemPrefersDark, setSystemPrefersDark] = useState(false)
+  const { user, updateUser } = useAuth()
 
-  // Detect system preference
-  const detectSystemPreference = useCallback(() => {
-    if (typeof window !== 'undefined') {
-      const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)')
-      setSystemPrefersDark(mediaQuery.matches)
-      return mediaQuery.matches
-    }
-    return false
-  }, [])
+  // Local (device) preference; hydrated once from localStorage.
+  const [localTheme, setLocalTheme] = useState<ThemeMode | null>(() =>
+    readValidTheme(localStorage.getItem('theme'))
+  )
+
+  const systemPrefersDark = useSyncExternalStore(
+    subscribeToSystemTheme,
+    getSystemPrefersDark,
+    () => false
+  )
+
+  // Server-stored preference wins when logged in; localStorage covers the
+  // login screen and logged-out state.
+  const theme: ThemeMode = user?.theme_preference ?? localTheme ?? 'system'
 
   // Calculate effective theme (what actually gets applied)
-  const effectiveTheme: 'light' | 'dark' = theme === 'system' 
+  const effectiveTheme: 'light' | 'dark' = theme === 'system'
     ? (systemPrefersDark ? 'dark' : 'light')
     : theme
-
-  // Load theme preference from localStorage or user profile
-  useEffect(() => {
-    // First try to get from user profile if available
-    if (user?.theme_preference) {
-      setThemeState(user.theme_preference as ThemeMode)
-    } else {
-      // Fall back to localStorage
-      const savedTheme = localStorage.getItem('theme') as ThemeMode
-      if (savedTheme && ['light', 'dark', 'system'].includes(savedTheme)) {
-        setThemeState(savedTheme)
-      } else {
-        setThemeState('system')
-      }
-    }
-  }, [user])
-
-  // Set up system preference listener
-  useEffect(() => {
-    detectSystemPreference()
-    
-    if (typeof window !== 'undefined') {
-      const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)')
-      const handleChange = (e: MediaQueryListEvent) => {
-        setSystemPrefersDark(e.matches)
-      }
-      
-      mediaQuery.addEventListener('change', handleChange)
-      return () => mediaQuery.removeEventListener('change', handleChange)
-    }
-  }, [detectSystemPreference])
 
   // Apply theme to document
   useEffect(() => {
     const root = document.documentElement
-    
+
     if (effectiveTheme === 'dark') {
       root.classList.add('dark')
     } else {
@@ -105,13 +99,20 @@ export const ThemeProvider: React.FC<ThemeProviderProps> = ({ children }) => {
     }
   }, [effectiveTheme])
 
-  // Update theme preference.
-  // Persisted in localStorage only — there is no backend endpoint for user
-  // preferences yet. Server-side persistence needs a backend endpoint first.
+  // Update theme preference: always persisted locally; when logged in, also
+  // persisted server-side so it follows the user across devices.
   const setTheme = useCallback((newTheme: ThemeMode) => {
-    setThemeState(newTheme)
+    setLocalTheme(newTheme)
     localStorage.setItem('theme', newTheme)
-  }, [])
+    if (user) {
+      // Optimistic: the cached user drives the derived theme immediately;
+      // losing the server write is benign (local persistence still holds).
+      updateUser({ ...user, theme_preference: newTheme })
+      usersApi.updateMe({ theme_preference: newTheme }).catch((err) => {
+        console.warn('Failed to save theme preference to server:', err)
+      })
+    }
+  }, [user, updateUser])
 
   // Toggle between light and dark (smart toggle)
   const toggleTheme = useCallback(() => {

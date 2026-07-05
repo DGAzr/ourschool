@@ -87,6 +87,35 @@ def test_student_cannot_edit_other_user(client, admin_token):
     assert client.put(f"/api/users/{student_id}", json={"first_name": "New"}, headers=stu).status_code == 200
 
 
+def test_theme_preference_self_service(client, student_factory):
+    _student, headers = student_factory()
+
+    # Defaults to null until the user picks one
+    me = client.get("/api/users/me", headers=headers)
+    assert me.status_code == 200
+    assert me.json()["theme_preference"] is None
+
+    r = client.put(
+        "/api/users/me", json={"theme_preference": "dark"}, headers=headers
+    )
+    assert r.status_code == 200, r.text
+    assert r.json()["theme_preference"] == "dark"
+
+    # Persisted across reads
+    me = client.get("/api/users/me", headers=headers)
+    assert me.json()["theme_preference"] == "dark"
+
+    # Invalid values are rejected by schema validation
+    r = client.put(
+        "/api/users/me", json={"theme_preference": "purple"}, headers=headers
+    )
+    assert r.status_code == 422
+
+    # Privileged fields are still off-limits via /users/me
+    r = client.put("/api/users/me", json={"is_active": False}, headers=headers)
+    assert r.status_code == 403
+
+
 def test_meta_permissions_are_canonical(client):
     from app.crud.api_keys import AVAILABLE_PERMISSIONS
 

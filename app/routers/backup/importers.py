@@ -215,6 +215,7 @@ def _import_users(db: Session, users_data, result, import_options, dry_run):
                 existing_user.is_active = user_data.is_active
                 existing_user.date_of_birth = user_data.date_of_birth
                 existing_user.grade_level = user_data.grade_level
+                existing_user.theme_preference = user_data.theme_preference
                 db.flush()
                 by_email[user_data.email] = existing_user.id
                 if user_data.external_id:
@@ -239,6 +240,7 @@ def _import_users(db: Session, users_data, result, import_options, dry_run):
                     is_active=user_data.is_active,
                     date_of_birth=user_data.date_of_birth,
                     grade_level=user_data.grade_level,
+                    theme_preference=user_data.theme_preference,
                 )
                 db.add(new_user)
                 db.flush()

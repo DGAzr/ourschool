@@ -64,6 +64,10 @@ class User(Base):
     # admin-issued temporary passwords).
     must_change_password = Column(Boolean, default=False, nullable=False)
 
+    # UI theme preference ("light" | "dark" | "system"); NULL means the
+    # client falls back to its locally stored preference.
+    theme_preference = Column(String(10), nullable=True)
+
     created_at = Column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )

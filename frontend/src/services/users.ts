@@ -51,6 +51,7 @@ export const usersApi = {
     first_name?: string
     last_name?: string
     email?: string
+    theme_preference?: 'light' | 'dark' | 'system'
   }) => api.put('/users/me', data),
 
   changeMyPassword: (passwordData: {

@@ -237,7 +237,13 @@ def read_user(
 
 
 # Fields a non-admin user is permitted to change on their own account.
-SELF_EDITABLE_FIELDS = {"email", "username", "first_name", "last_name"}
+SELF_EDITABLE_FIELDS = {
+    "email",
+    "username",
+    "first_name",
+    "last_name",
+    "theme_preference",
+}
 
 
 @router.put("/{user_id}", response_model=UserSchema)
