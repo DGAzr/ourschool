@@ -155,7 +155,7 @@ class AvailablePermissions(BaseModel):
 
 
 # Permission descriptions for API documentation. Keep keys in sync with
-# crud.api_keys.AVAILABLE_PERMISSIONS (only endpoint-backed permissions).
+# crud.api_keys.AVAILABLE_PERMISSIONS.
 PERMISSION_DESCRIPTIONS = {
     "students:read": PermissionInfo(
         permission="students:read",
@@ -167,10 +167,25 @@ PERMISSION_DESCRIPTIONS = {
         description="Read assignment data and submissions",
         category="Assignments",
     ),
+    "assignments:write": PermissionInfo(
+        permission="assignments:write",
+        description="Create and update assignment templates and assignments",
+        category="Assignments",
+    ),
     "assignments:grade": PermissionInfo(
         permission="assignments:grade",
         description="Grade student assignments and provide feedback",
         category="Assignments",
+    ),
+    "attendance:read": PermissionInfo(
+        permission="attendance:read",
+        description="Read attendance records",
+        category="Attendance",
+    ),
+    "attendance:write": PermissionInfo(
+        permission="attendance:write",
+        description="Create, update, and delete attendance records",
+        category="Attendance",
     ),
     "points:read": PermissionInfo(
         permission="points:read",
