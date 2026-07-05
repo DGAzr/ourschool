@@ -198,7 +198,24 @@ def test_meta_advertises_new_permissions(client):
     r = client.get("/api/meta")
     assert r.status_code == 200, r.text
     perms = set(r.json()["permissions"])
-    assert {"assignments:write", "attendance:read", "attendance:write"} <= perms
+    assert {
+        # existing
+        "students:read",
+        "assignments:read", "assignments:write", "assignments:grade",
+        "assignment_types:read", "assignment_types:write",
+        "attendance:read", "attendance:write",
+        "points:read", "points:write",
+        # new
+        "terms:read", "terms:write",
+        "subjects:read", "subjects:write",
+        "reports:read",
+        "journal:read", "journal:write", "journal:moderate",
+        "activity:read",
+        "settings:read", "settings:write",
+        "performance:read", "performance:write",
+        "backup:export", "backup:import",
+        "api_keys:read",
+    } <= perms
     assert r.json()["on_behalf_of_header"] == "X-On-Behalf-Of"
 
 

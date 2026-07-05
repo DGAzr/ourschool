@@ -202,16 +202,49 @@ def get_system_api_key_stats(db: Session) -> Dict[str, Any]:
 # Only permissions backed by a real integration endpoint are listed, so the
 # /api/meta discovery contract never advertises capabilities that don't exist.
 AVAILABLE_PERMISSIONS = [
+    # Students
     "students:read",  # GET /api/users/students/lookup, /students/{id}/info
+    # Assignments
     "assignments:read",  # GET /api/integrations/assignments/{id};
     #     GET /api/assignments/templates, /all-assignments,
-    #     /students/{id}/progress
-    "assignments:write",  # POST/PUT /api/assignments/templates; POST /api/assignments/assign
-    "assignments:grade",  # POST /api/integrations/assignments/{id}/grade
+    #     /students/{id}/progress, /submitted
+    "assignments:write",  # POST/PUT /api/assignments/templates; POST /api/assignments/assign;
+    #     DELETE/archive templates and student-assignments
+    "assignments:grade",  # POST /api/integrations/assignments/{id}/grade, /bulk-grade
+    # Assignment types
+    "assignment_types:read",  # GET /api/assignment-types
+    "assignment_types:write",  # POST/PUT/DELETE /api/assignment-types
+    # Attendance
     "attendance:read",  # GET /api/attendance, /api/attendance/students
     "attendance:write",  # POST/PUT/DELETE /api/attendance, POST /api/attendance/bulk
+    # Points
     "points:read",  # GET /api/students/{id}/points (+ ledger, overview)
     "points:write",  # POST /api/students/{id}/points/adjust
+    # Terms
+    "terms:read",  # GET /api/terms (list, active, single, grade-report, student-report)
+    "terms:write",  # POST/PUT/DELETE /api/terms; activate, auto-link-subjects, calculate-grades
+    # Subjects
+    "subjects:read",  # GET /api/subjects
+    "subjects:write",  # POST/PUT/DELETE /api/subjects
+    # Reports
+    "reports:read",  # GET /api/reports/* (all report endpoints)
+    # Journal
+    "journal:read",  # GET /api/journal/entries, /entries/{id}, /composer-data, /students
+    "journal:write",  # POST/PUT/DELETE /api/journal/entries
+    "journal:moderate",  # POST reactions/replies/mark-read; DELETE replies (admin moderation)
+    # Activity
+    "activity:read",  # GET /api/activity/recent
+    # Settings
+    "settings:read",  # GET /api/settings/* (all read endpoints)
+    "settings:write",  # POST/PUT /api/settings/* (all write endpoints)
+    # System / Infrastructure
+    "performance:read",  # GET /api/performance/stats, /summary, /slow-operations, etc.
+    "performance:write",  # POST /api/performance/reset
+    "backup:export",  # GET /api/backup/export
+    "backup:import",  # POST /api/backup/import (overwrites the entire database — high risk)
+    "api_keys:read",  # GET /api/admin/api-keys (list, get, stats, permissions)
+    # Note: api_keys:write is intentionally omitted — key create/regenerate/delete stay
+    # JWT-admin-only to prevent a key from escalating its own privileges.
 ]
 
 

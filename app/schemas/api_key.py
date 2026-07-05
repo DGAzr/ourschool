@@ -197,4 +197,94 @@ PERMISSION_DESCRIPTIONS = {
         description="Add or deduct student points with notes",
         category="Points",
     ),
+    "assignment_types:read": PermissionInfo(
+        permission="assignment_types:read",
+        description="Read assignment types",
+        category="Assignments",
+    ),
+    "assignment_types:write": PermissionInfo(
+        permission="assignment_types:write",
+        description="Create, update, and delete assignment types",
+        category="Assignments",
+    ),
+    "terms:read": PermissionInfo(
+        permission="terms:read",
+        description="Read terms, active term, grade reports, and student term reports",
+        category="Terms",
+    ),
+    "terms:write": PermissionInfo(
+        permission="terms:write",
+        description="Create, update, activate, and delete terms; auto-link subjects and calculate grades",
+        category="Terms",
+    ),
+    "subjects:read": PermissionInfo(
+        permission="subjects:read",
+        description="Read the list of subjects",
+        category="Subjects",
+    ),
+    "subjects:write": PermissionInfo(
+        permission="subjects:write",
+        description="Create, update, and delete subjects",
+        category="Subjects",
+    ),
+    "reports:read": PermissionInfo(
+        permission="reports:read",
+        description="Read student, admin, attendance, assignment, and report-card reports",
+        category="Reports",
+    ),
+    "journal:read": PermissionInfo(
+        permission="journal:read",
+        description="Read journal entries and composer data",
+        category="Journal",
+    ),
+    "journal:write": PermissionInfo(
+        permission="journal:write",
+        description="Create, update, and delete journal entries",
+        category="Journal",
+    ),
+    "journal:moderate": PermissionInfo(
+        permission="journal:moderate",
+        description="Reply to, react to, mark read, and delete journal entries and replies",
+        category="Journal",
+    ),
+    "activity:read": PermissionInfo(
+        permission="activity:read",
+        description="Read the recent activity feed",
+        category="Activity",
+    ),
+    "settings:read": PermissionInfo(
+        permission="settings:read",
+        description="Read application settings",
+        category="Settings",
+    ),
+    "settings:write": PermissionInfo(
+        permission="settings:write",
+        description="Create and update application settings",
+        category="Settings",
+    ),
+    "performance:read": PermissionInfo(
+        permission="performance:read",
+        description="Read performance statistics and slow-operation reports",
+        category="System",
+    ),
+    "performance:write": PermissionInfo(
+        permission="performance:write",
+        description="Reset performance statistics",
+        category="System",
+    ),
+    "backup:export": PermissionInfo(
+        permission="backup:export",
+        description="Export a full system backup",
+        category="System",
+    ),
+    "backup:import": PermissionInfo(
+        permission="backup:import",
+        description="Import a system backup (overwrites all data — use with extreme caution)",
+        category="System",
+    ),
+    "api_keys:read": PermissionInfo(
+        permission="api_keys:read",
+        description="Read API key list, details, and usage statistics",
+        category="System",
+    ),
 }
