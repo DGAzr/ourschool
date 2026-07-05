@@ -30,6 +30,9 @@ All notable changes to OurSchool are documented here.
 - **README** — complete endpoint reference for the whole API surface,
   corrected API-key permission table (8 permissions), and accurate
   docs-disabled-by-default note.
+- **Docs cleanup** — removed the unreferenced and stale `API_GUIDE.md`,
+  `COMPONENT_GUIDE.md`, and `CONFIGURATION.md`; `env.EXAMPLE` is the
+  authoritative configuration reference.
 
 ### 1.0 hardening
 
