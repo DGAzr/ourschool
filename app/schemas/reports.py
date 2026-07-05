@@ -40,7 +40,7 @@ class TermGrade(BaseModel):
     class Config:
         """Pydantic configuration."""
 
-        orm_mode = True
+        from_attributes = True
 
 
 class TrendDataPoint(BaseModel):
@@ -53,7 +53,7 @@ class TrendDataPoint(BaseModel):
     class Config:
         """Pydantic configuration."""
 
-        orm_mode = True
+        from_attributes = True
 
 
 class SubjectPerformance(BaseModel):
@@ -73,7 +73,7 @@ class SubjectPerformance(BaseModel):
     class Config:
         """Pydantic configuration."""
 
-        orm_mode = True
+        from_attributes = True
 
 
 class StudentProgress(BaseModel):
@@ -106,7 +106,7 @@ class StudentProgress(BaseModel):
     class Config:
         """Pydantic configuration."""
 
-        orm_mode = True
+        from_attributes = True
 
 
 class MetricTrend(BaseModel):
@@ -160,7 +160,7 @@ class StudentReport(BaseModel):
     class Config:
         """Pydantic configuration."""
 
-        orm_mode = True
+        from_attributes = True
 
 
 class AdminReport(BaseModel):
@@ -180,7 +180,7 @@ class AdminReport(BaseModel):
     class Config:
         """Pydantic configuration."""
 
-        orm_mode = True
+        from_attributes = True
 
 
 # Attendance Report Schemas
