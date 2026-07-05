@@ -22,6 +22,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
+from app.core.dual_auth import AuthUser, require_admin_or_permission
 from app.core.logging import get_logger
 from app.crud import api_keys as crud_api_keys
 from app.models.user import User, UserRole
@@ -52,7 +53,9 @@ def require_admin_user(current_user: User = Depends(get_current_active_user)) ->
 
 
 @router.get("/permissions", response_model=AvailablePermissions)
-async def get_available_permissions(current_user: User = Depends(require_admin_user)):
+async def get_available_permissions(
+    auth_user: AuthUser = Depends(require_admin_or_permission("api_keys:read")),
+):
     """Get all available permissions for API keys."""
     permissions = list(PERMISSION_DESCRIPTIONS.values())
     categories = list(set(p.category for p in permissions))
@@ -103,7 +106,8 @@ async def create_api_key(
 
 @router.get("/", response_model=List[APIKeyResponse])
 async def list_api_keys(
-    db: Session = Depends(get_db), current_user: User = Depends(require_admin_user)
+    db: Session = Depends(get_db),
+    auth_user: AuthUser = Depends(require_admin_or_permission("api_keys:read")),
 ):
     """List all API keys."""
     api_keys = crud_api_keys.get_api_keys(db)
@@ -119,7 +123,8 @@ async def list_api_keys(
 
 @router.get("/stats", response_model=SystemAPIKeyStats)
 async def get_system_api_key_stats(
-    db: Session = Depends(get_db), current_user: User = Depends(require_admin_user)
+    db: Session = Depends(get_db),
+    auth_user: AuthUser = Depends(require_admin_or_permission("api_keys:read")),
 ):
     """Get system-wide API key statistics."""
     return crud_api_keys.get_system_api_key_stats(db)
@@ -129,7 +134,7 @@ async def get_system_api_key_stats(
 async def get_api_key(
     api_key_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_admin_user),
+    auth_user: AuthUser = Depends(require_admin_or_permission("api_keys:read")),
 ):
     """Get a specific API key."""
     api_key = crud_api_keys.get_api_key_by_id(db, api_key_id)
@@ -145,7 +150,7 @@ async def get_api_key(
 async def get_api_key_stats(
     api_key_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_admin_user),
+    auth_user: AuthUser = Depends(require_admin_or_permission("api_keys:read")),
 ):
     """Get usage statistics for a specific API key."""
     stats = crud_api_keys.get_api_key_stats(db, api_key_id)

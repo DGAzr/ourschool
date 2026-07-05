@@ -16,18 +16,17 @@
 
 """Performance monitoring APIs."""
 
-from typing import Annotated, Dict, Any
+from typing import Annotated, Any, Dict
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends
 
-from app.models.user import User, UserRole
-from app.routers.auth import get_current_active_user
+from app.core.dual_auth import AuthUser, require_admin_or_permission
 from app.utils.performance import (
-    get_performance_stats,
-    reset_performance_stats,
-    log_performance_summary,
-    find_slow_operations,
     find_query_heavy_operations,
+    find_slow_operations,
+    get_performance_stats,
+    log_performance_summary,
+    reset_performance_stats,
 )
 
 router = APIRouter()
@@ -35,70 +34,43 @@ router = APIRouter()
 
 @router.get("/stats", response_model=Dict[str, Dict[str, Any]])
 def get_performance_statistics(
-    current_user: Annotated[User, Depends(get_current_active_user)],
+    auth_user: Annotated[AuthUser, Depends(require_admin_or_permission("performance:read"))],
 ):
     """Get current performance statistics (admin only)."""
-    if current_user.role != UserRole.ADMIN:
-        raise HTTPException(
-            status_code=403,
-            detail="Only administrators can access performance statistics",
-        )
-
     return get_performance_stats()
 
 
 @router.post("/reset")
 def reset_performance_statistics(
-    current_user: Annotated[User, Depends(get_current_active_user)],
+    auth_user: Annotated[AuthUser, Depends(require_admin_or_permission("performance:write"))],
 ):
     """Reset performance statistics (admin only)."""
-    if current_user.role != UserRole.ADMIN:
-        raise HTTPException(
-            status_code=403,
-            detail="Only administrators can reset performance statistics",
-        )
-
     reset_performance_stats()
     return {"message": "Performance statistics reset successfully"}
 
 
 @router.get("/summary")
 def performance_summary(
-    current_user: Annotated[User, Depends(get_current_active_user)],
+    auth_user: Annotated[AuthUser, Depends(require_admin_or_permission("performance:read"))],
 ):
     """Log performance summary to logs (admin only)."""
-    if current_user.role != UserRole.ADMIN:
-        raise HTTPException(
-            status_code=403, detail="Only administrators can access performance summary"
-        )
-
     log_performance_summary()
     return {"message": "Performance summary logged"}
 
 
 @router.get("/slow-operations")
 def get_slow_operations(
-    current_user: Annotated[User, Depends(get_current_active_user)],
+    auth_user: Annotated[AuthUser, Depends(require_admin_or_permission("performance:read"))],
     min_avg_time: float = 0.5,
 ):
     """Get operations that are slower than threshold (admin only)."""
-    if current_user.role != UserRole.ADMIN:
-        raise HTTPException(
-            status_code=403, detail="Only administrators can access performance data"
-        )
-
     return find_slow_operations(min_avg_time)
 
 
 @router.get("/query-heavy-operations")
 def get_query_heavy_operations(
-    current_user: Annotated[User, Depends(get_current_active_user)],
+    auth_user: Annotated[AuthUser, Depends(require_admin_or_permission("performance:read"))],
     min_avg_time: float = 0.1,
 ):
     """Get operations that are slower than threshold (admin only)."""
-    if current_user.role != UserRole.ADMIN:
-        raise HTTPException(
-            status_code=403, detail="Only administrators can access performance data"
-        )
-
     return find_query_heavy_operations(min_avg_time)

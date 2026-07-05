@@ -23,9 +23,18 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
+from app.core.dual_auth import (
+    AuthUser,
+    get_user_id_from_auth,
+    is_admin_user,
+    is_student_user,
+    require_admin_or_permission,
+    require_admin_or_student_self_or_permission,
+    require_student_or_permission,
+    require_user_or_permission,
+)
 from app.crud import reports as crud_reports
 from app.models.user import User, UserRole
-from app.routers.auth import get_current_active_user
 from app.schemas.reports import (
     AcademicYear,
     AdminReport,
@@ -45,65 +54,66 @@ router = APIRouter()
 @router.get("/student/overview", response_model=StudentReport)
 def get_student_report(
     db: Annotated[Session, Depends(get_db)],
-    current_user: Annotated[User, Depends(get_current_active_user)],
+    auth_user: Annotated[AuthUser, Depends(require_student_or_permission("reports:read"))],
 ):
     """Retrieve a report of the current student's academic progress."""
-    if current_user.role != UserRole.STUDENT:
-        raise HTTPException(status_code=403, detail="Not authorized")
-
-    return crud_reports.get_student_report(db, current_user.id)
+    student_id = get_user_id_from_auth(auth_user)
+    if student_id is None:
+        raise HTTPException(
+            status_code=400,
+            detail="X-On-Behalf-Of header required for API key access to this endpoint",
+        )
+    return crud_reports.get_student_report(db, student_id)
 
 
 @router.get("/admin/overview", response_model=AdminReport)
 def get_admin_report(
     db: Annotated[Session, Depends(get_db)],
-    current_user: Annotated[User, Depends(get_current_active_user)],
+    auth_user: Annotated[AuthUser, Depends(require_admin_or_permission("reports:read"))],
 ):
     """Retrieve a system-wide academic report for administrators."""
-    if current_user.role != UserRole.ADMIN:
-        raise HTTPException(status_code=403, detail="Not authorized")
-
     return crud_reports.get_admin_report(db)
 
 
 @router.get("/student/term-grades", response_model=List[TermGrade])
 def get_student_term_grades(
     db: Annotated[Session, Depends(get_db)],
-    current_user: Annotated[User, Depends(get_current_active_user)],
+    auth_user: Annotated[AuthUser, Depends(require_student_or_permission("reports:read"))],
     term_id: Optional[int] = None,
 ):
     """Retrieve the current student's grades for each term and subject."""
-    if current_user.role != UserRole.STUDENT:
-        raise HTTPException(status_code=403, detail="Not authorized")
-
-    return crud_reports.get_student_term_grades(db, current_user.id, term_id=term_id)
+    student_id = get_user_id_from_auth(auth_user)
+    if student_id is None:
+        raise HTTPException(
+            status_code=400,
+            detail="X-On-Behalf-Of header required for API key access to this endpoint",
+        )
+    return crud_reports.get_student_term_grades(db, student_id, term_id=term_id)
 
 
 @router.get("/student/subject-performance", response_model=List[SubjectPerformance])
 def get_student_subject_performance(
     db: Annotated[Session, Depends(get_db)],
-    current_user: Annotated[User, Depends(get_current_active_user)],
+    auth_user: Annotated[AuthUser, Depends(require_student_or_permission("reports:read"))],
     term_id: Optional[int] = None,
 ):
     """Retrieve the current student's academic performance by subject."""
-    if current_user.role != UserRole.STUDENT:
-        raise HTTPException(status_code=403, detail="Not authorized")
-
-    return crud_reports.get_student_subject_performance(
-        db, current_user.id, term_id=term_id
-    )
+    student_id = get_user_id_from_auth(auth_user)
+    if student_id is None:
+        raise HTTPException(
+            status_code=400,
+            detail="X-On-Behalf-Of header required for API key access to this endpoint",
+        )
+    return crud_reports.get_student_subject_performance(db, student_id, term_id=term_id)
 
 
 @router.get("/admin/student-progress", response_model=List[StudentProgress])
 def get_all_students_progress(
     db: Annotated[Session, Depends(get_db)],
-    current_user: Annotated[User, Depends(get_current_active_user)],
+    auth_user: Annotated[AuthUser, Depends(require_admin_or_permission("reports:read"))],
     term_id: Optional[int] = None,
 ):
     """Retrieve the academic progress for all students."""
-    if current_user.role != UserRole.ADMIN:
-        raise HTTPException(status_code=403, detail="Not authorized")
-
     return crud_reports.get_all_students_progress(db, term_id=term_id)
 
 
@@ -113,7 +123,7 @@ def get_all_students_progress(
 @router.get("/academic-years", response_model=List[AcademicYear])
 def get_academic_years(
     db: Annotated[Session, Depends(get_db)],
-    current_user: Annotated[User, Depends(get_current_active_user)],
+    auth_user: Annotated[AuthUser, Depends(require_user_or_permission("reports:read"))],
 ):
     """Get all available academic years from terms."""
     return crud_reports.get_academic_years(db)
@@ -123,7 +133,9 @@ def get_academic_years(
 def get_student_attendance_report(
     student_id: int,
     db: Annotated[Session, Depends(get_db)],
-    current_user: Annotated[User, Depends(get_current_active_user)],
+    auth_user: Annotated[AuthUser, Depends(
+        require_admin_or_student_self_or_permission("reports:read")
+    )],
     start_date: Optional[date] = Query(None, description="Start date for the report"),
     end_date: Optional[date] = Query(None, description="End date for the report"),
     academic_year: Optional[str] = Query(None, description="Academic year (optional)"),
@@ -132,17 +144,15 @@ def get_student_attendance_report(
     Get detailed attendance report for a specific student.
 
     Students can only view their own reports.
-    Admins can view reports for their students.
+    Admins and API keys can view reports for any student.
     """
-    # Authorization check
-    if current_user.role == UserRole.STUDENT:
-        if current_user.id != student_id:
+    if isinstance(auth_user, User) and is_student_user(auth_user):
+        if auth_user.id != student_id:
             raise HTTPException(
                 status_code=403,
                 detail="Students can only view their own attendance reports",
             )
-    elif current_user.role == UserRole.ADMIN:
-        # Admins can access reports for any student in homeschool context
+    elif is_admin_user(auth_user):
         student = (
             db.query(User)
             .filter(
@@ -153,8 +163,6 @@ def get_student_attendance_report(
         )
         if not student:
             raise HTTPException(status_code=404, detail="Student not found")
-    else:
-        raise HTTPException(status_code=403, detail="Not authorized")
 
     try:
         return crud_reports.get_student_attendance_report(
@@ -167,7 +175,7 @@ def get_student_attendance_report(
 @router.get("/attendance/bulk", response_model=BulkAttendanceReport)
 def get_bulk_attendance_report(
     db: Annotated[Session, Depends(get_db)],
-    current_user: Annotated[User, Depends(get_current_active_user)],
+    auth_user: Annotated[AuthUser, Depends(require_admin_or_permission("reports:read"))],
     start_date: Optional[date] = Query(None, description="Start date for the report"),
     end_date: Optional[date] = Query(None, description="End date for the report"),
     academic_year: Optional[str] = Query(None, description="Academic year (optional)"),
@@ -177,12 +185,6 @@ def get_bulk_attendance_report(
 
     Useful for compliance reporting.
     """
-    if current_user.role != UserRole.ADMIN:
-        raise HTTPException(
-            status_code=403,
-            detail="Only administrators can access bulk attendance reports",
-        )
-
     return crud_reports.get_bulk_attendance_report(
         db, start_date, end_date, academic_year
     )
@@ -191,18 +193,13 @@ def get_bulk_attendance_report(
 @router.get("/admin/assignments", response_model=AssignmentReport)
 def get_assignment_report(
     db: Annotated[Session, Depends(get_db)],
-    current_user: Annotated[User, Depends(get_current_active_user)],
+    auth_user: Annotated[AuthUser, Depends(require_admin_or_permission("reports:read"))],
     subject_id: Optional[int] = Query(None, description="Filter by subject ID"),
     student_id: Optional[int] = Query(None, description="Filter by student ID"),
     term_id: Optional[int] = Query(None, description="Filter by term ID"),
     status: Optional[str] = Query(None, description="Filter by assignment status"),
 ):
     """Get comprehensive assignment report for administrators."""
-    if current_user.role != UserRole.ADMIN:
-        raise HTTPException(
-            status_code=403, detail="Only administrators can access assignment reports"
-        )
-
     return crud_reports.get_assignment_report(
         db, subject_id, student_id, term_id, status
     )
@@ -213,22 +210,21 @@ def get_report_card(
     student_id: int,
     term_id: int,
     db: Annotated[Session, Depends(get_db)],
-    current_user: Annotated[User, Depends(get_current_active_user)],
+    auth_user: Annotated[AuthUser, Depends(
+        require_admin_or_student_self_or_permission("reports:read")
+    )],
 ):
     """
     Generate a comprehensive report card for a student for a specific term.
 
     Students can only view their own report cards.
-    Admins can view report cards for their students.
+    Admins and API keys can view report cards for any student.
     """
-    # Authorization check
-    if current_user.role == UserRole.STUDENT:
-        if current_user.id != student_id:
+    if isinstance(auth_user, User) and is_student_user(auth_user):
+        if auth_user.id != student_id:
             raise HTTPException(
                 status_code=403, detail="Students can only view their own report cards"
             )
-    elif current_user.role != UserRole.ADMIN:
-        raise HTTPException(status_code=403, detail="Not authorized")
 
     try:
         return crud_reports.get_report_card(db, student_id, term_id)

@@ -23,7 +23,9 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
+from app.core.api_auth import APIKeyUser
 from app.core.database import get_db
+from app.core.dual_auth import AuthUser, get_actor_name_from_auth, require_admin_or_permission
 from app.models.user import User
 from app.schemas.backup import (
     SystemBackup,
@@ -47,7 +49,7 @@ from .exporters import (
     export_users,
 )
 from .importers import WIPE_CONFIRMATION_PHRASE, import_system_data
-from .shared import log_backup_operation, require_admin_for_backup
+from .shared import log_backup_operation
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -56,14 +58,13 @@ router = APIRouter()
 @router.get("/export", response_model=SystemBackup)
 def export_system_backup(
     db: Annotated[Session, Depends(get_db)],
-    current_user: Annotated[User, Depends(require_admin_for_backup)],
+    auth_user: Annotated[AuthUser, Depends(require_admin_or_permission("backup:export"))],
 ):
     """Export complete system backup for data protection and migration."""
 
     try:
-        log_backup_operation(
-            "export", current_user.email, "Starting complete system backup"
-        )
+        actor = get_actor_name_from_auth(auth_user)
+        log_backup_operation("export", actor, "Starting complete system backup")
 
         # Export all data types
         users_data = export_users(db)
@@ -84,8 +85,7 @@ def export_system_backup(
         backup = SystemBackup(
             format_version="2.0",
             backup_timestamp=datetime.now(timezone.utc),
-            created_by=f"{current_user.first_name} {current_user.last_name}".strip()
-            or current_user.email,
+            created_by=actor,
             system_info={
                 "total_users": len(users_data),
                 "total_subjects": len(subjects_data),
@@ -116,7 +116,7 @@ def export_system_backup(
         total_objects = sum(backup.system_info.values())
         log_backup_operation(
             "export",
-            current_user.email,
+            actor,
             f"Backup completed successfully. Total objects: {total_objects}",
         )
         return backup
@@ -132,7 +132,7 @@ def export_system_backup(
 def import_system_backup(
     import_request: SystemBackupImportRequest,
     db: Annotated[Session, Depends(get_db)],
-    current_user: Annotated[User, Depends(require_admin_for_backup)],
+    auth_user: Annotated[AuthUser, Depends(require_admin_or_permission("backup:import"))],
 ):
     """Import complete system backup with intelligent conflict resolution."""
 
@@ -148,14 +148,28 @@ def import_system_backup(
                 ),
             )
 
+    # import_system_data mutates the live User object (for wipe-restore admin
+    # preservation), so we need a real User, not an APIKeyUser.
+    if isinstance(auth_user, APIKeyUser):
+        acting_id = getattr(auth_user, "acting_user_id", None)
+        if acting_id is None:
+            raise HTTPException(
+                status_code=400,
+                detail="X-On-Behalf-Of header required for API key backup import",
+            )
+        import_user = db.query(User).filter(User.id == acting_id).first()
+        if not import_user:
+            raise HTTPException(status_code=400, detail="On-Behalf-Of user not found")
+    else:
+        import_user = auth_user  # auth_user is already a User
+
+    actor = get_actor_name_from_auth(auth_user)
     try:
-        log_backup_operation(
-            "import", current_user.email, "Starting system backup import"
-        )
+        log_backup_operation("import", actor, "Starting system backup import")
 
         # Delegate to import handler
         result = import_system_data(
-            db, import_request.backup_data, current_user, import_request.import_options
+            db, import_request.backup_data, import_user, import_request.import_options
         )
 
         if result.success:
@@ -164,13 +178,13 @@ def import_system_backup(
             )
             log_backup_operation(
                 "import",
-                current_user.email,
+                actor,
                 f"Import completed successfully. {total} objects imported",
             )
         else:
             log_backup_operation(
                 "import",
-                current_user.email,
+                actor,
                 f"Import failed with {len(result.errors)} errors",
             )
 

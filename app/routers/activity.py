@@ -24,12 +24,11 @@ from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import desc, and_
 
 from app.core.database import get_db
+from app.core.dual_auth import AuthUser, get_user_id_from_auth, is_admin_user, require_user_or_permission
 from app.core.logging import get_logger, log_business_event
-from app.models.user import User, UserRole
 from app.models.assignment import StudentAssignment
 from app.models.attendance import AttendanceRecord
 from app.enums import AssignmentStatus
-from app.routers.auth import get_current_active_user
 
 logger = get_logger("activity")
 
@@ -113,13 +112,14 @@ class ActivityItem:
 @router.get("/recent")
 def get_recent_activity(
     db: Annotated[Session, Depends(get_db)],
-    current_user: Annotated[User, Depends(get_current_active_user)],
+    auth_user: Annotated[AuthUser, Depends(require_user_or_permission("activity:read"))],
     limit: int = Query(default=10, le=50),
     days: int = Query(default=7, le=30),
 ):
     """Get recent activity for the current user."""
+    actor_id = get_user_id_from_auth(auth_user)
     log_business_event(
-        "activity_fetch_recent", user_id=str(current_user.id), limit=limit, days=days
+        "activity_fetch_recent", user_id=str(actor_id), limit=limit, days=days
     )
 
     try:
@@ -129,20 +129,20 @@ def get_recent_activity(
 
         activities = []
 
-        if current_user.role == UserRole.ADMIN:
-            # Admin sees all activity
+        if is_admin_user(auth_user) or actor_id is None:
+            # Admin and API keys (no user identity) see all activity
             activities.extend(_get_assignment_activities(db, start_date, end_date))
             activities.extend(_get_attendance_activities(db, start_date, end_date))
         else:
             # Students see only their own activity
             activities.extend(
                 _get_student_assignment_activities(
-                    db, current_user.id, start_date, end_date
+                    db, actor_id, start_date, end_date
                 )
             )
             activities.extend(
                 _get_student_attendance_activities(
-                    db, current_user.id, start_date, end_date
+                    db, actor_id, start_date, end_date
                 )
             )
 
@@ -154,7 +154,7 @@ def get_recent_activity(
         activity_dicts = [activity.to_dict() for activity in activities]
 
         logger.info(
-            f"Retrieved {len(activity_dicts)} activities for user {current_user.id}"
+            f"Retrieved {len(activity_dicts)} activities for user {actor_id}"
         )
 
         return {

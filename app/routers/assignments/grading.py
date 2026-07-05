@@ -32,9 +32,9 @@ from app.models.assignment import (
     StudentAssignment,
 )
 from app.models.user import User, UserRole
-from app.routers.auth import get_current_active_user
 from app.core.dual_auth import (
     AuthUser,
+    get_user_id_from_auth,
     require_admin_or_permission,
 )
 from app.crud import points as points_crud
@@ -57,14 +57,9 @@ def grade_student_assignment(
     assignment_id: int,
     grade_data: StudentAssignmentGrade,
     db: Annotated[Session, Depends(get_db)],
-    current_user: Annotated[User, Depends(get_current_active_user)],
+    auth_user: Annotated[AuthUser, Depends(require_admin_or_permission("assignments:grade"))],
 ):
     """Grade a student assignment."""
-    if current_user.role != UserRole.ADMIN:
-        raise HTTPException(
-            status_code=403, detail="Only administrators can grade assignments"
-        )
-
     assignment = (
         db.query(StudentAssignment)
         .filter(StudentAssignment.id == assignment_id)
@@ -100,7 +95,7 @@ def grade_student_assignment(
     assignment.letter_grade = grade_data.letter_grade
     assignment.is_graded = True
     assignment.graded_date = date.today()
-    assignment.graded_by = current_user.id
+    assignment.graded_by = get_user_id_from_auth(auth_user)
 
     # Calculate percentage
     percentage = assignment.calculate_percentage_grade()
@@ -166,14 +161,9 @@ def grade_student_assignment(
 def bulk_grade_assignments(
     items: list[BulkGradeItem],
     db: Annotated[Session, Depends(get_db)],
-    current_user: Annotated[User, Depends(get_current_active_user)],
+    auth_user: Annotated[AuthUser, Depends(require_admin_or_permission("assignments:grade"))],
 ):
     """Grade multiple student assignments in one request. Each item is graded independently; one failure does not roll back others."""
-    if current_user.role != UserRole.ADMIN:
-        raise HTTPException(
-            status_code=403, detail="Only administrators can grade assignments"
-        )
-
     results: list[BulkGradeResult] = []
     points_enabled = points_crud.is_points_system_enabled(db)
     for item in items:
@@ -211,7 +201,7 @@ def bulk_grade_assignments(
                 assignment.teacher_feedback = item.teacher_feedback
                 assignment.is_graded = True
                 assignment.graded_date = date.today()
-                assignment.graded_by = current_user.id
+                assignment.graded_by = get_user_id_from_auth(auth_user)
 
                 percentage = assignment.calculate_percentage_grade()
                 if percentage is not None:
@@ -254,15 +244,11 @@ def bulk_grade_assignments(
 @router.get("/submitted", response_model=List[StudentAssignmentResponse])
 def get_submitted_assignments(
     db: Annotated[Session, Depends(get_db)],
-    current_user: Annotated[User, Depends(get_current_active_user)],
+    auth_user: Annotated[AuthUser, Depends(require_admin_or_permission("assignments:read"))],
     status: Optional[str] = Query(None),
     subject_id: Optional[int] = Query(None),
 ):
     """Get submitted assignments for grading (Admin only)."""
-    if current_user.role != UserRole.ADMIN:
-        raise HTTPException(
-            status_code=403, detail="Only administrators can view submitted assignments"
-        )
 
     # Start with assignments for students managed by this admin
     # We need to explicitly specify the join condition

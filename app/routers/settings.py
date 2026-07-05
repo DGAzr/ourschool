@@ -16,23 +16,23 @@
 
 """APIs for system settings management."""
 
+import json
 from typing import Annotated, List
+
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
+from app.core.dual_auth import AuthUser, require_admin_or_permission
 from app.crud import settings as crud_settings
-from app.models.user import User, UserRole
-from app.routers.auth import get_current_active_user
-import json
 from app.schemas.settings import (
+    AttendanceSettings,
+    GradeBand,
+    GradeScaleUpdate,
+    GradingSettings,
     SystemSetting,
     SystemSettingCreate,
     SystemSettingUpdate,
-    AttendanceSettings,
-    GradingSettings,
-    GradeBand,
-    GradeScaleUpdate,
     SystemSettingsGroup,
 )
 
@@ -42,24 +42,18 @@ router = APIRouter()
 @router.get("/", response_model=List[SystemSetting])
 def get_all_settings(
     db: Annotated[Session, Depends(get_db)],
-    current_user: Annotated[User, Depends(get_current_active_user)],
+    auth_user: Annotated[AuthUser, Depends(require_admin_or_permission("settings:read"))],
 ):
     """Get all system settings (admin only)."""
-    if current_user.role != UserRole.ADMIN:
-        raise HTTPException(status_code=403, detail="Not authorized")
-
     return crud_settings.get_all_settings(db)
 
 
 @router.get("/grouped", response_model=SystemSettingsGroup)
 def get_grouped_settings(
     db: Annotated[Session, Depends(get_db)],
-    current_user: Annotated[User, Depends(get_current_active_user)],
+    auth_user: Annotated[AuthUser, Depends(require_admin_or_permission("settings:read"))],
 ):
     """Get settings organized by category (admin only)."""
-    if current_user.role != UserRole.ADMIN:
-        raise HTTPException(status_code=403, detail="Not authorized")
-
     required_days = crud_settings.get_setting_value(
         db, "attendance.required_days_of_instruction", default_value=180, value_type=int
     )
@@ -89,12 +83,9 @@ def get_grouped_settings(
 def get_setting(
     setting_key: str,
     db: Annotated[Session, Depends(get_db)],
-    current_user: Annotated[User, Depends(get_current_active_user)],
+    auth_user: Annotated[AuthUser, Depends(require_admin_or_permission("settings:read"))],
 ):
     """Get a specific system setting (admin only)."""
-    if current_user.role != UserRole.ADMIN:
-        raise HTTPException(status_code=403, detail="Not authorized")
-
     setting = crud_settings.get_setting(db, setting_key)
     if not setting:
         raise HTTPException(status_code=404, detail="Setting not found")
@@ -106,12 +97,9 @@ def get_setting(
 def create_setting(
     setting: SystemSettingCreate,
     db: Annotated[Session, Depends(get_db)],
-    current_user: Annotated[User, Depends(get_current_active_user)],
+    auth_user: Annotated[AuthUser, Depends(require_admin_or_permission("settings:write"))],
 ):
     """Create a new system setting (admin only)."""
-    if current_user.role != UserRole.ADMIN:
-        raise HTTPException(status_code=403, detail="Not authorized")
-
     # Check if setting already exists
     existing = crud_settings.get_setting(db, setting.setting_key)
     if existing:
@@ -127,12 +115,9 @@ def update_setting(
     setting_key: str,
     setting_update: SystemSettingUpdate,
     db: Annotated[Session, Depends(get_db)],
-    current_user: Annotated[User, Depends(get_current_active_user)],
+    auth_user: Annotated[AuthUser, Depends(require_admin_or_permission("settings:write"))],
 ):
     """Update an existing system setting (admin only)."""
-    if current_user.role != UserRole.ADMIN:
-        raise HTTPException(status_code=403, detail="Not authorized")
-
     updated_setting = crud_settings.update_setting(db, setting_key, setting_update)
     if not updated_setting:
         raise HTTPException(status_code=404, detail="Setting not found")
@@ -144,12 +129,9 @@ def update_setting(
 def update_grade_scale(
     scale_update: GradeScaleUpdate,
     db: Annotated[Session, Depends(get_db)],
-    current_user: Annotated[User, Depends(get_current_active_user)],
+    auth_user: Annotated[AuthUser, Depends(require_admin_or_permission("settings:write"))],
 ):
     """Update the letter-grade threshold scale (admin only)."""
-    if current_user.role != UserRole.ADMIN:
-        raise HTTPException(status_code=403, detail="Not authorized")
-
     if not scale_update.scale:
         raise HTTPException(status_code=400, detail="Scale must have at least one band")
 
@@ -170,12 +152,9 @@ def update_grade_scale(
 def update_required_days_of_instruction(
     required_days: int,
     db: Annotated[Session, Depends(get_db)],
-    current_user: Annotated[User, Depends(get_current_active_user)],
+    auth_user: Annotated[AuthUser, Depends(require_admin_or_permission("settings:write"))],
 ):
     """Update the required days of instruction setting (admin only)."""
-    if current_user.role != UserRole.ADMIN:
-        raise HTTPException(status_code=403, detail="Not authorized")
-
     if required_days < 1 or required_days > 365:
         raise HTTPException(
             status_code=400, detail="Required days must be between 1 and 365"
@@ -194,12 +173,9 @@ def update_required_days_of_instruction(
 def update_skip_weekends(
     skip_weekends: bool,
     db: Annotated[Session, Depends(get_db)],
-    current_user: Annotated[User, Depends(get_current_active_user)],
+    auth_user: Annotated[AuthUser, Depends(require_admin_or_permission("settings:write"))],
 ):
     """Update whether weekends are excluded from instructional day counts (admin only)."""
-    if current_user.role != UserRole.ADMIN:
-        raise HTTPException(status_code=403, detail="Not authorized")
-
     return crud_settings.upsert_setting(
         db,
         "attendance.skip_weekends",
@@ -213,12 +189,9 @@ def update_skip_weekends(
 def update_count_excused(
     count_excused: bool,
     db: Annotated[Session, Depends(get_db)],
-    current_user: Annotated[User, Depends(get_current_active_user)],
+    auth_user: Annotated[AuthUser, Depends(require_admin_or_permission("settings:write"))],
 ):
     """Update whether excused absences count toward required instruction days (admin only)."""
-    if current_user.role != UserRole.ADMIN:
-        raise HTTPException(status_code=403, detail="Not authorized")
-
     return crud_settings.upsert_setting(
         db,
         "attendance.count_excused",

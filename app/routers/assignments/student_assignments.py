@@ -32,11 +32,14 @@ from app.models.assignment import (
 )
 from app.models.term import Term
 from app.models.user import User, UserRole
-from app.routers.auth import get_current_active_user
 from app.core.dual_auth import (
     AuthUser,
     get_user_id_from_auth,
+    is_admin_user,
+    is_student_user,
     require_admin_or_permission,
+    require_admin_or_student_self_or_permission,
+    require_student_or_permission,
 )
 from app.schemas.assignment import (
     AssignmentAssignmentRequest,
@@ -156,15 +159,15 @@ def assign_template_to_students(
 def get_student_assignments(
     student_id: int,
     db: Annotated[Session, Depends(get_db)],
-    current_user: Annotated[User, Depends(get_current_active_user)],
+    auth_user: Annotated[AuthUser, Depends(
+        require_admin_or_student_self_or_permission("assignments:read")
+    )],
     subject_id: Optional[int] = Query(None),
     status: Optional[str] = Query(None),
     include_archived: bool = Query(False),
 ):
     """Get assignments for a specific student."""
-    # Verify access - admin can see any student,
-    # students can only see their own
-    if current_user.role == UserRole.ADMIN:
+    if is_admin_user(auth_user):
         student = (
             db.query(User)
             .filter(User.id == student_id, User.role == UserRole.STUDENT)
@@ -172,10 +175,11 @@ def get_student_assignments(
         )
         if not student:
             raise HTTPException(status_code=404, detail="Student not found")
-    elif current_user.role == UserRole.STUDENT and current_user.id != student_id:
-        raise HTTPException(
-            status_code=403, detail="Students can only view their own assignments"
-        )
+    elif isinstance(auth_user, User) and is_student_user(auth_user):
+        if auth_user.id != student_id:
+            raise HTTPException(
+                status_code=403, detail="Students can only view their own assignments"
+            )
 
     query = (
         db.query(StudentAssignment)
@@ -204,7 +208,9 @@ def get_student_assignments(
 def get_student_assignment(
     assignment_id: int,
     db: Annotated[Session, Depends(get_db)],
-    current_user: Annotated[User, Depends(get_current_active_user)],
+    auth_user: Annotated[AuthUser, Depends(
+        require_admin_or_student_self_or_permission("assignments:read")
+    )],
 ):
     """Get a specific student assignment by ID."""
     assignment = (
@@ -217,18 +223,12 @@ def get_student_assignment(
     if not assignment:
         raise HTTPException(status_code=404, detail="Student assignment not found")
 
-    # Verify access
-    if current_user.role == UserRole.ADMIN:
-        # Admin can view any assignment
-        pass
-    elif current_user.role == UserRole.STUDENT:
-        # Student can only view their own assignment
-        if current_user.id != assignment.student_id:
+    # Students may only view their own assignments
+    if isinstance(auth_user, User) and is_student_user(auth_user):
+        if auth_user.id != assignment.student_id:
             raise HTTPException(
                 status_code=403, detail="Students can only view their own assignments"
             )
-    else:
-        raise HTTPException(status_code=403, detail="Access denied")
 
     return assignment
 
@@ -250,7 +250,9 @@ def update_student_assignment(
     assignment_id: int,
     assignment_update: StudentAssignmentUpdate,
     db: Annotated[Session, Depends(get_db)],
-    current_user: Annotated[User, Depends(get_current_active_user)],
+    auth_user: Annotated[AuthUser, Depends(
+        require_admin_or_student_self_or_permission("assignments:write")
+    )],
 ):
     """Update a student assignment."""
     assignment = (
@@ -262,9 +264,7 @@ def update_student_assignment(
     if not assignment:
         raise HTTPException(status_code=404, detail="Student assignment not found")
 
-    # Verify access
-    if current_user.role == UserRole.ADMIN:
-        # Admin can manage any student
+    if is_admin_user(auth_user):
         student = (
             db.query(User)
             .filter(User.id == assignment.student_id, User.role == UserRole.STUDENT)
@@ -272,18 +272,15 @@ def update_student_assignment(
         )
         if not student:
             raise HTTPException(status_code=404, detail="Student not found")
-    elif current_user.role == UserRole.STUDENT:
-        # Student can only update their own assignment
-        if current_user.id != assignment.student_id:
+    elif isinstance(auth_user, User) and is_student_user(auth_user):
+        if auth_user.id != assignment.student_id:
             raise HTTPException(
                 status_code=403, detail="Students can only update their own assignments"
             )
-    else:
-        raise HTTPException(status_code=403, detail="Access denied")
 
     update_data = assignment_update.dict(exclude_unset=True)
 
-    if current_user.role == UserRole.STUDENT:
+    if isinstance(auth_user, User) and is_student_user(auth_user):
         disallowed = set(update_data) - STUDENT_EDITABLE_ASSIGNMENT_FIELDS
         if disallowed:
             raise HTTPException(
@@ -333,14 +330,16 @@ def update_student_assignment(
 @router.get("/my-assignments", response_model=List[StudentAssignmentResponse])
 def get_my_assignments(
     db: Annotated[Session, Depends(get_db)],
-    current_user: Annotated[User, Depends(get_current_active_user)],
+    auth_user: Annotated[AuthUser, Depends(require_student_or_permission("assignments:read"))],
     status: Optional[str] = Query(None),
     subject_id: Optional[int] = Query(None),
 ):
     """Get assignments for the current user (student only)."""
-    if current_user.role != UserRole.STUDENT:
+    student_id = get_user_id_from_auth(auth_user)
+    if student_id is None:
         raise HTTPException(
-            status_code=403, detail="This endpoint is for students only"
+            status_code=400,
+            detail="X-On-Behalf-Of header required for API key access to this endpoint",
         )
 
     query = (
@@ -350,7 +349,7 @@ def get_my_assignments(
                 AssignmentTemplate.subject
             )
         )
-        .filter(StudentAssignment.student_id == current_user.id)
+        .filter(StudentAssignment.student_id == student_id)
     )
 
     if subject_id:
@@ -372,7 +371,9 @@ def get_my_assignments(
 def start_assignment(
     assignment_id: int,
     db: Annotated[Session, Depends(get_db)],
-    current_user: Annotated[User, Depends(get_current_active_user)],
+    auth_user: Annotated[AuthUser, Depends(
+        require_admin_or_student_self_or_permission("assignments:write")
+    )],
 ):
     """Mark an assignment as started by a student."""
     assignment = (
@@ -384,14 +385,10 @@ def start_assignment(
     if not assignment:
         raise HTTPException(status_code=404, detail="Assignment not found")
 
-    # Verify student access
-    if (
-        current_user.role == UserRole.STUDENT
-        and current_user.id != assignment.student_id
-    ):
-        raise HTTPException(status_code=403, detail="Access denied")
-    elif current_user.role == UserRole.ADMIN:
-        # Admin can manage any student
+    if isinstance(auth_user, User) and is_student_user(auth_user):
+        if auth_user.id != assignment.student_id:
+            raise HTTPException(status_code=403, detail="Access denied")
+    elif is_admin_user(auth_user):
         student = (
             db.query(User)
             .filter(User.id == assignment.student_id, User.role == UserRole.STUDENT)
@@ -416,7 +413,9 @@ def start_assignment(
 def complete_assignment(
     assignment_id: int,
     db: Annotated[Session, Depends(get_db)],
-    current_user: Annotated[User, Depends(get_current_active_user)],
+    auth_user: Annotated[AuthUser, Depends(
+        require_admin_or_student_self_or_permission("assignments:write")
+    )],
     submission_notes: Optional[str] = None,
     submission_artifacts: Optional[List[str]] = None,
 ):
@@ -430,14 +429,10 @@ def complete_assignment(
     if not assignment:
         raise HTTPException(status_code=404, detail="Assignment not found")
 
-    # Verify student access
-    if (
-        current_user.role == UserRole.STUDENT
-        and current_user.id != assignment.student_id
-    ):
-        raise HTTPException(status_code=403, detail="Access denied")
-    elif current_user.role == UserRole.ADMIN:
-        # Admin can manage any student
+    if isinstance(auth_user, User) and is_student_user(auth_user):
+        if auth_user.id != assignment.student_id:
+            raise HTTPException(status_code=403, detail="Access denied")
+    elif is_admin_user(auth_user):
         student = (
             db.query(User)
             .filter(User.id == assignment.student_id, User.role == UserRole.STUDENT)
@@ -468,7 +463,7 @@ def complete_assignment(
 def delete_student_assignment(
     assignment_id: int,
     db: Annotated[Session, Depends(get_db)],
-    current_user: Annotated[User, Depends(get_current_active_user)],
+    auth_user: Annotated[AuthUser, Depends(require_admin_or_permission("assignments:write"))],
 ):
     """Delete a student assignment (unassign from student)."""
     assignment = (
@@ -480,24 +475,18 @@ def delete_student_assignment(
     if not assignment:
         raise HTTPException(status_code=404, detail="Student assignment not found")
 
-    # Verify access - admin must manage the student
-    if current_user.role == UserRole.ADMIN:
-        student = (
-            db.query(User)
-            .filter(User.id == assignment.student_id, User.role == UserRole.STUDENT)
-            .first()
-        )
-        if not student:
-            raise HTTPException(status_code=403, detail="Access denied")
-    else:
-        raise HTTPException(
-            status_code=403, detail="Only administrators can delete student assignments"
-        )
+    student = (
+        db.query(User)
+        .filter(User.id == assignment.student_id, User.role == UserRole.STUDENT)
+        .first()
+    )
+    if not student:
+        raise HTTPException(status_code=403, detail="Access denied")
 
     db.delete(assignment)
     db.commit()
 
-    logger.info(f"Deleted student assignment {assignment_id} by user {current_user.id}")
+    logger.info("Deleted student assignment %s", assignment_id)
     return {"message": "Student assignment deleted successfully"}
 
 
@@ -508,7 +497,7 @@ def delete_student_assignment(
 def archive_student_assignment(
     assignment_id: int,
     db: Annotated[Session, Depends(get_db)],
-    current_user: Annotated[User, Depends(get_current_active_user)],
+    auth_user: Annotated[AuthUser, Depends(require_admin_or_permission("assignments:write"))],
 ):
     """Archive a student assignment."""
     assignment = (
@@ -520,20 +509,13 @@ def archive_student_assignment(
     if not assignment:
         raise HTTPException(status_code=404, detail="Student assignment not found")
 
-    # Verify access - admin must manage the student
-    if current_user.role == UserRole.ADMIN:
-        student = (
-            db.query(User)
-            .filter(User.id == assignment.student_id, User.role == UserRole.STUDENT)
-            .first()
-        )
-        if not student:
-            raise HTTPException(status_code=403, detail="Access denied")
-    else:
-        raise HTTPException(
-            status_code=403,
-            detail="Only administrators can archive student assignments",
-        )
+    student = (
+        db.query(User)
+        .filter(User.id == assignment.student_id, User.role == UserRole.STUDENT)
+        .first()
+    )
+    if not student:
+        raise HTTPException(status_code=403, detail="Access denied")
 
     # Set status to archived (we need to add this to the enum if it doesn't exist)
     assignment.status = (
@@ -542,7 +524,5 @@ def archive_student_assignment(
     db.commit()
     db.refresh(assignment)
 
-    logger.info(
-        f"Archived student assignment {assignment_id} by user {current_user.id}"
-    )
+    logger.info("Archived student assignment %s", assignment_id)
     return assignment

@@ -32,9 +32,9 @@ from app.models.assignment import (
 )
 from app.models.subject import Subject
 from app.models.user import User, UserRole
-from app.routers.auth import get_current_active_user
 from app.core.dual_auth import (
     AuthUser,
+    get_actor_name_from_auth,
     get_user_id_from_auth,
     is_admin_user,
     require_admin_or_permission,
@@ -169,7 +169,7 @@ def get_assignment_templates(
 def get_assignment_template(
     template_id: int,
     db: Annotated[Session, Depends(get_db)],
-    current_user: Annotated[User, Depends(get_current_active_user)],
+    auth_user: Annotated[AuthUser, Depends(require_admin_or_permission("assignments:read"))],
 ):
     """Get a specific assignment template."""
     query = (
@@ -180,8 +180,10 @@ def get_assignment_template(
         )
         .filter(AssignmentTemplate.id == template_id)
     )
-    if current_user.role != UserRole.ADMIN:
-        query = query.filter(AssignmentTemplate.created_by == current_user.id)
+    if not is_admin_user(auth_user):
+        owner_id = get_user_id_from_auth(auth_user)
+        if owner_id is not None:
+            query = query.filter(AssignmentTemplate.created_by == owner_id)
     template = query.first()
 
     if not template:
@@ -235,16 +237,9 @@ def update_assignment_template(
 def delete_assignment_template(
     template_id: int,
     db: Annotated[Session, Depends(get_db)],
-    current_user: Annotated[User, Depends(get_current_active_user)],
+    auth_user: Annotated[AuthUser, Depends(require_admin_or_permission("assignments:write"))],
 ):
     """Delete an assignment template."""
-    if current_user.role != UserRole.ADMIN:
-        raise HTTPException(
-            status_code=403,
-            detail="Only administrators can delete assignment templates",
-        )
-
-    # Since only admins can delete, they can delete any template
     template = (
         db.query(AssignmentTemplate)
         .filter(AssignmentTemplate.id == template_id)
@@ -273,7 +268,7 @@ def delete_assignment_template(
     db.delete(template)
     db.commit()
 
-    logger.info(f"Deleted assignment template {template_id} by user {current_user.id}")
+    logger.info("Deleted assignment template %s", template_id)
     return {"message": "Assignment template deleted successfully"}
 
 
@@ -283,15 +278,9 @@ def delete_assignment_template(
 def archive_assignment_template(
     template_id: int,
     db: Annotated[Session, Depends(get_db)],
-    current_user: Annotated[User, Depends(get_current_active_user)],
+    auth_user: Annotated[AuthUser, Depends(require_admin_or_permission("assignments:write"))],
 ):
     """Archive an assignment template."""
-    if current_user.role != UserRole.ADMIN:
-        raise HTTPException(
-            status_code=403, detail="Only administrators can archive templates"
-        )
-
-    # Since only admins can archive, they can archive any template
     template = (
         db.query(AssignmentTemplate)
         .filter(AssignmentTemplate.id == template_id)
@@ -318,19 +307,10 @@ def archive_assignment_template(
 def get_template_assignments(
     template_id: int,
     db: Annotated[Session, Depends(get_db)],
-    current_user: Annotated[User, Depends(get_current_active_user)],
+    auth_user: Annotated[AuthUser, Depends(require_admin_or_permission("assignments:read"))],
 ):
     """Get all student assignments for a specific template."""
-    if current_user.role != UserRole.ADMIN:
-        raise HTTPException(
-            status_code=403, detail="Only administrators can view template assignments"
-        )
-
-    # Verify template exists and is accessible by current user
-    query = db.query(AssignmentTemplate).filter(AssignmentTemplate.id == template_id)
-    if current_user.role != UserRole.ADMIN:
-        query = query.filter(AssignmentTemplate.created_by == current_user.id)
-    template = query.first()
+    template = db.query(AssignmentTemplate).filter(AssignmentTemplate.id == template_id).first()
 
     if not template:
         raise HTTPException(status_code=404, detail="Assignment template not found")
@@ -355,7 +335,7 @@ def get_template_assignments(
 def export_assignment_template(
     template_id: int,
     db: Annotated[Session, Depends(get_db)],
-    current_user: Annotated[User, Depends(get_current_active_user)],
+    auth_user: Annotated[AuthUser, Depends(require_admin_or_permission("assignments:read"))],
 ):
     """Export an assignment template for sharing with other homeschool families."""
     # Get template with subject
@@ -387,8 +367,7 @@ def export_assignment_template(
         materials_needed=template.materials_needed,
         export_metadata={
             "template_id": template_id,
-            "exported_by": f"{current_user.first_name} {current_user.last_name}".strip()
-            or current_user.email,
+            "exported_by": get_actor_name_from_auth(auth_user),
             "export_timestamp": str(datetime.now(timezone.utc)),
             "format_version": "1.0",
         },
@@ -401,15 +380,9 @@ def export_assignment_template(
 def import_assignment_template(
     import_request: AssignmentTemplateImport,
     db: Annotated[Session, Depends(get_db)],
-    current_user: Annotated[User, Depends(get_current_active_user)],
+    auth_user: Annotated[AuthUser, Depends(require_admin_or_permission("assignments:write"))],
 ):
     """Import an assignment template from another homeschool family."""
-    if current_user.role != UserRole.ADMIN:
-        raise HTTPException(
-            status_code=403,
-            detail="Only administrators can import assignment templates",
-        )
-
     try:
         assignment_data = import_request.assignment_data
 
@@ -460,7 +433,7 @@ def import_assignment_template(
             "prerequisites": assignment_data.prerequisites,
             "materials_needed": assignment_data.materials_needed,
             "is_exportable": True,
-            "created_by": current_user.id,
+            "created_by": get_user_id_from_auth(auth_user),
         }
 
         new_template = AssignmentTemplate(**template_dict)
@@ -483,7 +456,7 @@ def import_assignment_template(
 def bulk_export_assignment_templates(
     template_ids: List[int],
     db: Annotated[Session, Depends(get_db)],
-    current_user: Annotated[User, Depends(get_current_active_user)],
+    auth_user: Annotated[AuthUser, Depends(require_admin_or_permission("assignments:read"))],
 ):
     """Export multiple assignment templates as a single package."""
 
@@ -540,8 +513,7 @@ def bulk_export_assignment_templates(
     export_package = {
         "format_version": "1.0",
         "export_timestamp": datetime.now(timezone.utc),
-        "exported_by": f"{current_user.first_name} {current_user.last_name}".strip()
-        or current_user.email,
+        "exported_by": get_actor_name_from_auth(auth_user),
         "templates": exported_templates,
         "metadata": {
             "template_count": len(exported_templates),

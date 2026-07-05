@@ -22,9 +22,8 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
+from app.core.dual_auth import AuthUser, require_admin_or_permission, require_user_or_permission
 from app.crud import assignment_types as crud_types
-from app.models.user import User, UserRole
-from app.routers.auth import get_current_active_user
 from app.schemas.assignment_type import (
     AssignmentTypeCreate,
     AssignmentTypeResponse,
@@ -32,11 +31,6 @@ from app.schemas.assignment_type import (
 )
 
 router = APIRouter()
-
-
-def _require_admin(user: User) -> None:
-    if user.role != UserRole.ADMIN:
-        raise HTTPException(status_code=403, detail="Not authorized")
 
 
 def _to_response(db: Session, db_type) -> AssignmentTypeResponse:
@@ -48,7 +42,7 @@ def _to_response(db: Session, db_type) -> AssignmentTypeResponse:
 @router.get("/", response_model=List[AssignmentTypeResponse])
 def list_assignment_types(
     db: Annotated[Session, Depends(get_db)],
-    current_user: Annotated[User, Depends(get_current_active_user)],
+    auth_user: Annotated[AuthUser, Depends(require_user_or_permission("assignment_types:read"))],
     include_inactive: bool = True,
 ):
     """List assignment types. Available to any authenticated user."""
@@ -60,10 +54,9 @@ def list_assignment_types(
 def create_assignment_type(
     payload: AssignmentTypeCreate,
     db: Annotated[Session, Depends(get_db)],
-    current_user: Annotated[User, Depends(get_current_active_user)],
+    auth_user: Annotated[AuthUser, Depends(require_admin_or_permission("assignment_types:write"))],
 ):
     """Create a new assignment type (admin only)."""
-    _require_admin(current_user)
     db_type = crud_types.create_assignment_type(db, payload)
     return _to_response(db, db_type)
 
@@ -73,10 +66,9 @@ def update_assignment_type(
     type_id: int,
     payload: AssignmentTypeUpdate,
     db: Annotated[Session, Depends(get_db)],
-    current_user: Annotated[User, Depends(get_current_active_user)],
+    auth_user: Annotated[AuthUser, Depends(require_admin_or_permission("assignment_types:write"))],
 ):
     """Update an assignment type (admin only)."""
-    _require_admin(current_user)
     db_type = crud_types.update_assignment_type(db, type_id, payload)
     if not db_type:
         raise HTTPException(status_code=404, detail="Assignment type not found")
@@ -87,10 +79,9 @@ def update_assignment_type(
 def delete_assignment_type(
     type_id: int,
     db: Annotated[Session, Depends(get_db)],
-    current_user: Annotated[User, Depends(get_current_active_user)],
+    auth_user: Annotated[AuthUser, Depends(require_admin_or_permission("assignment_types:write"))],
 ):
     """Delete an assignment type (admin only). Blocked while still in use."""
-    _require_admin(current_user)
     try:
         crud_types.delete_assignment_type(db, type_id)
     except LookupError:

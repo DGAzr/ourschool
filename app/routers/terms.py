@@ -22,9 +22,16 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
+from app.core.dual_auth import (
+    AuthUser,
+    get_user_id_from_auth,
+    is_admin_user,
+    require_admin_or_permission,
+    require_admin_or_student_self_or_permission,
+    require_user_or_permission,
+)
 from app.models.term import Term
-from app.models.user import User, UserRole
-from app.routers.auth import get_current_active_user
+from app.models.user import User
 from app.schemas.term import TermCreate, TermResponse, TermUpdate
 from app.services.term_grading import TermGradingService
 
@@ -34,7 +41,7 @@ router = APIRouter()
 @router.get("/", response_model=List[TermResponse])
 def get_terms(
     db: Annotated[Session, Depends(get_db)],
-    current_user: Annotated[User, Depends(get_current_active_user)],
+    auth_user: Annotated[AuthUser, Depends(require_user_or_permission("terms:read"))],
 ):
     """Get all terms."""
     return db.query(Term).order_by(Term.start_date.desc()).all()
@@ -43,7 +50,7 @@ def get_terms(
 @router.get("/active", response_model=TermResponse)
 def get_active_term(
     db: Annotated[Session, Depends(get_db)],
-    current_user: Annotated[User, Depends(get_current_active_user)],
+    auth_user: Annotated[AuthUser, Depends(require_user_or_permission("terms:read"))],
 ):
     """Get the currently active term."""
     term = db.query(Term).filter(Term.is_active).first()
@@ -58,7 +65,7 @@ def get_active_term(
 def get_term(
     term_id: int,
     db: Annotated[Session, Depends(get_db)],
-    current_user: Annotated[User, Depends(get_current_active_user)],
+    auth_user: Annotated[AuthUser, Depends(require_user_or_permission("terms:read"))],
 ):
     """Get a specific term by ID."""
     term = db.query(Term).filter(Term.id == term_id).first()
@@ -73,15 +80,9 @@ def get_term(
 def create_term(
     term_data: TermCreate,
     db: Annotated[Session, Depends(get_db)],
-    current_user: Annotated[User, Depends(get_current_active_user)],
+    auth_user: Annotated[AuthUser, Depends(require_admin_or_permission("terms:write"))],
 ):
     """Create a new term."""
-    if current_user.role != UserRole.ADMIN:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Only administrators can create terms",
-        )
-
     # Validate dates
     if term_data.start_date >= term_data.end_date:
         raise HTTPException(
@@ -91,7 +92,7 @@ def create_term(
 
     # Create the term
     try:
-        db_term = Term(**term_data.dict(), created_by=current_user.id)
+        db_term = Term(**term_data.dict(), created_by=get_user_id_from_auth(auth_user))
 
         db.add(db_term)
         db.commit()
@@ -111,15 +112,9 @@ def update_term(
     term_id: int,
     term_data: TermUpdate,
     db: Annotated[Session, Depends(get_db)],
-    current_user: Annotated[User, Depends(get_current_active_user)],
+    auth_user: Annotated[AuthUser, Depends(require_admin_or_permission("terms:write"))],
 ):
     """Update a term."""
-    if current_user.role != UserRole.ADMIN:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Only administrators can update terms",
-        )
-
     term = db.query(Term).filter(Term.id == term_id).first()
     if not term:
         raise HTTPException(
@@ -152,15 +147,9 @@ def update_term(
 def activate_term(
     term_id: int,
     db: Annotated[Session, Depends(get_db)],
-    current_user: Annotated[User, Depends(get_current_active_user)],
+    auth_user: Annotated[AuthUser, Depends(require_admin_or_permission("terms:write"))],
 ):
     """Activate a term (deactivates all other terms)."""
-    if current_user.role != UserRole.ADMIN:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Only administrators can activate terms",
-        )
-
     term = db.query(Term).filter(Term.id == term_id).first()
     if not term:
         raise HTTPException(
@@ -183,15 +172,9 @@ def activate_term(
 def delete_term(
     term_id: int,
     db: Annotated[Session, Depends(get_db)],
-    current_user: Annotated[User, Depends(get_current_active_user)],
+    auth_user: Annotated[AuthUser, Depends(require_admin_or_permission("terms:write"))],
 ):
     """Delete a term."""
-    if current_user.role != UserRole.ADMIN:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Only administrators can delete terms",
-        )
-
     term = db.query(Term).filter(Term.id == term_id).first()
     if not term:
         raise HTTPException(
@@ -215,15 +198,9 @@ def delete_term(
 def auto_link_subjects_to_term(
     term_id: int,
     db: Annotated[Session, Depends(get_db)],
-    current_user: Annotated[User, Depends(get_current_active_user)],
+    auth_user: Annotated[AuthUser, Depends(require_admin_or_permission("terms:write"))],
 ):
     """Automatically link subjects to term based on assignment completion dates."""
-    if current_user.role != UserRole.ADMIN:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Only administrators can manage term subjects",
-        )
-
     term = db.query(Term).filter(Term.id == term_id).first()
     if not term:
         raise HTTPException(
@@ -241,16 +218,10 @@ def auto_link_subjects_to_term(
 def calculate_term_grades(
     term_id: int,
     db: Annotated[Session, Depends(get_db)],
-    current_user: Annotated[User, Depends(get_current_active_user)],
+    auth_user: Annotated[AuthUser, Depends(require_admin_or_permission("terms:write"))],
     student_id: int = None,
 ):
     """Calculate grades for all students (or specific student) in a term."""
-    if current_user.role != UserRole.ADMIN:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Only administrators can calculate grades",
-        )
-
     term = db.query(Term).filter(Term.id == term_id).first()
     if not term:
         raise HTTPException(
@@ -277,15 +248,9 @@ def calculate_term_grades(
 def get_term_grade_report(
     term_id: int,
     db: Annotated[Session, Depends(get_db)],
-    current_user: Annotated[User, Depends(get_current_active_user)],
+    auth_user: Annotated[AuthUser, Depends(require_admin_or_permission("terms:read"))],
 ):
     """Get comprehensive grade report for a term."""
-    if current_user.role != UserRole.ADMIN:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Only administrators can view grade reports",
-        )
-
     report = TermGradingService.get_term_grade_report(db, term_id)
 
     if "error" in report:
@@ -301,19 +266,18 @@ def get_student_term_report(
     term_id: int,
     student_id: int,
     db: Annotated[Session, Depends(get_db)],
-    current_user: Annotated[User, Depends(get_current_active_user)],
+    auth_user: Annotated[AuthUser, Depends(
+        require_admin_or_student_self_or_permission("terms:read")
+    )],
 ):
     """Get detailed grade report for a specific student in a term."""
-    # Allow students to view their own reports
-    if current_user.role == UserRole.STUDENT and current_user.id != student_id:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Students can only view their own reports",
-        )
-    if current_user.role not in (UserRole.ADMIN, UserRole.STUDENT):
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN, detail="Access denied"
-        )
+    # For JWT users: students may only view their own report
+    if isinstance(auth_user, User) and not is_admin_user(auth_user):
+        if auth_user.id != student_id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Students can only view their own reports",
+            )
 
     report = TermGradingService.get_student_term_report(db, term_id, student_id)
 
