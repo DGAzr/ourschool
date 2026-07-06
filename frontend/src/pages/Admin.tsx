@@ -838,8 +838,8 @@ const Admin: React.FC = () => {
       case 'attendance': return (
         <div>
           <SectionHeader title="Attendance & compliance" desc="Set the instructional-day target used for compliance." />
-          <div className="bg-panel border border-line rounded-card divide-y divide-line-2">
-            <div className="p-5">
+          <div className="bg-panel border border-line rounded-card divide-y divide-line-2 px-5">
+            <div className="py-5">
               <p className="text-[13.5px] font-medium text-ink mb-0.5">Required days of instruction</p>
               <p className="text-[12px] text-muted mb-3">Used for compliance tracking. Most jurisdictions require 160–200 days per year.</p>
               <div className="flex items-center gap-3">
