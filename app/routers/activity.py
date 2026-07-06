@@ -24,7 +24,13 @@ from sqlalchemy.orm import Session, joinedload
 from sqlalchemy import desc, and_
 
 from app.core.database import get_db
-from app.core.dual_auth import AuthUser, get_user_id_from_auth, is_admin_user, require_user_or_permission
+from app.core.dual_auth import (
+    AuthUser,
+    get_user_id_from_auth,
+    is_admin_user,
+    is_student_user,
+    require_user_or_permission,
+)
 from app.core.logging import get_logger, log_business_event
 from app.models.assignment import StudentAssignment
 from app.models.attendance import AttendanceRecord
@@ -129,8 +135,8 @@ def get_recent_activity(
 
         activities = []
 
-        if is_admin_user(auth_user) or actor_id is None:
-            # Admin and API keys (no user identity) see all activity
+        if is_admin_user(auth_user) or not is_student_user(auth_user):
+            # Admins and API keys (attributed or not) see all activity
             activities.extend(_get_assignment_activities(db, start_date, end_date))
             activities.extend(_get_attendance_activities(db, start_date, end_date))
         else:

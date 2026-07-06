@@ -32,7 +32,6 @@ from app.core.dual_auth import (
     get_auth_context_for_logging,
     get_user_id_from_auth,
     is_admin_user,
-    is_student_user,
 )
 from app.core.logging import get_logger
 from app.enums import UserRole
@@ -83,22 +82,19 @@ async def get_my_points_balance(
     db: Session = Depends(get_db),
 ):
     """Get current user's points balance (students only)."""
-    student_id = get_user_id_from_auth(auth_user)
-    if student_id is None:
+    # "My" endpoints need a student session identity; X-On-Behalf-Of only
+    # resolves admins, so API keys must use /points/students/{id} instead.
+    if not isinstance(auth_user, User):
         raise HTTPException(
-            status_code=400,
-            detail="X-On-Behalf-Of header required for API key access to this endpoint",
+            status_code=403,
+            detail="API keys cannot use 'my' endpoints; use /points/student/{student_id}/balance instead",
         )
 
     if not points_crud.is_points_system_enabled(db):
         raise HTTPException(status_code=403, detail="Points system is disabled")
 
-    student_points = points_crud.get_or_create_student_points(db, student_id)
-
-    student = db.query(User).filter(User.id == student_id).first()
-    student_points.student_name = (
-        f"{student.first_name} {student.last_name}" if student else ""
-    )
+    student_points = points_crud.get_or_create_student_points(db, auth_user.id)
+    student_points.student_name = f"{auth_user.first_name} {auth_user.last_name}"
 
     return student_points
 
@@ -111,24 +107,20 @@ async def get_my_points_ledger(
     db: Session = Depends(get_db),
 ):
     """Get current user's points ledger with transaction history (students only)."""
-    student_id = get_user_id_from_auth(auth_user)
-    if student_id is None:
+    if not isinstance(auth_user, User):
         raise HTTPException(
-            status_code=400,
-            detail="X-On-Behalf-Of header required for API key access to this endpoint",
+            status_code=403,
+            detail="API keys cannot use 'my' endpoints; use /points/student/{student_id}/ledger instead",
         )
 
     if not points_crud.is_points_system_enabled(db):
         raise HTTPException(status_code=403, detail="Points system is disabled")
 
     student_points, transactions, total_pages = points_crud.get_student_points_ledger(
-        db, student_id, page, per_page
+        db, auth_user.id, page, per_page
     )
 
-    student = db.query(User).filter(User.id == student_id).first()
-    student_points.student_name = (
-        f"{student.first_name} {student.last_name}" if student else ""
-    )
+    student_points.student_name = f"{auth_user.first_name} {auth_user.last_name}"
 
     for transaction in transactions:
         if transaction.admin_id and transaction.admin:

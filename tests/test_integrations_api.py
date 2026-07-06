@@ -322,3 +322,147 @@ def test_on_behalf_of_rejects_inactive_admin(client, seeded, db_session):
     body = {"name": "Nope2", "subject_id": seeded["subject"].id, "assignment_type": seeded["type_key"]}
     r = client.post("/api/assignments/templates", json=body, headers=_obo(write, inactive.username))
     assert r.status_code == 400, r.text
+
+
+# --------------------------------------------------------------------------
+# Expanded coverage: per-router permission enforcement
+# --------------------------------------------------------------------------
+
+
+def test_permission_matrix_for_expanded_read_endpoints(client, seeded):
+    """Each newly covered read endpoint honors exactly its own permission."""
+    cases = [
+        ("/api/terms/", "terms:read"),
+        ("/api/subjects/", "subjects:read"),
+        ("/api/assignment-types/", "assignment_types:read"),
+        ("/api/settings/", "settings:read"),
+        ("/api/journal/entries", "journal:read"),
+        ("/api/activity/recent", "activity:read"),
+        ("/api/reports/admin/overview", "reports:read"),
+        ("/api/performance/stats", "performance:read"),
+        ("/api/admin/api-keys/", "api_keys:read"),
+    ]
+    wrong = seeded["mint"]("students:read")
+    for url, perm in cases:
+        r = client.get(url, headers=_hdr(wrong))
+        assert r.status_code == 403, f"{url} without {perm}: {r.status_code} {r.text}"
+        r = client.get(url, headers=_hdr(seeded["mint"](perm)))
+        assert r.status_code == 200, f"{url} with {perm}: {r.status_code} {r.text}"
+
+
+# --------------------------------------------------------------------------
+# Journal writes: NOT NULL author_id requires attribution
+# --------------------------------------------------------------------------
+
+
+def test_journal_entry_via_api_key_requires_on_behalf_of(client, seeded):
+    key = seeded["mint"]("journal:write")
+    admin = seeded["admin"]
+    body = {"title": "Note", "content": "From MCP", "student_id": seeded["student"].id}
+
+    # Without attribution → 400 (author_id is NOT NULL, no user to attribute to).
+    r = client.post("/api/journal/entries", json=body, headers=_hdr(key))
+    assert r.status_code == 400, r.text
+
+    # With attribution → created and attributed to the admin.
+    r = client.post("/api/journal/entries", json=body, headers=_obo(key, admin.id))
+    assert r.status_code == 200, r.text
+    assert r.json()["author_name"] == f"{admin.first_name} {admin.last_name}"
+
+
+def test_journal_reply_via_api_key_requires_on_behalf_of(client, seeded):
+    write = seeded["mint"]("journal:write")
+    moderate = seeded["mint"]("journal:moderate")
+    admin = seeded["admin"]
+
+    r = client.post(
+        "/api/journal/entries",
+        json={"title": "Entry", "content": "text", "student_id": seeded["student"].id},
+        headers=_obo(write, admin.id),
+    )
+    entry_id = r.json()["id"]
+
+    r = client.post(
+        f"/api/journal/entries/{entry_id}/replies",
+        json={"text": "Nice work"},
+        headers=_hdr(moderate),
+    )
+    assert r.status_code == 400, r.text
+
+    r = client.post(
+        f"/api/journal/entries/{entry_id}/replies",
+        json={"text": "Nice work"},
+        headers=_obo(moderate, admin.id),
+    )
+    assert r.status_code == 200, r.text
+    assert r.json()["author_name"] == f"{admin.first_name} {admin.last_name}"
+
+
+# --------------------------------------------------------------------------
+# Activity feed: API keys always get the admin-scope feed
+# --------------------------------------------------------------------------
+
+
+def test_activity_feed_attributed_api_key_sees_all_activity(client, seeded):
+    key = seeded["mint"]("attendance:write", "activity:read")
+    student = seeded["student"]
+
+    r = client.post(
+        "/api/attendance/bulk",
+        json={"date": str(date.today()), "student_ids": [student.id], "status": "present"},
+        headers=_hdr(key),
+    )
+    assert r.status_code == 200, r.text
+
+    # An attributed key must get the full feed, not a per-user view scoped to
+    # the acting admin's (empty) student activity.
+    r = client.get("/api/activity/recent", headers=_obo(key, seeded["admin"].id))
+    assert r.status_code == 200, r.text
+    names = [a.get("student_name") for a in r.json()["activities"]]
+    assert f"{student.first_name} {student.last_name}" in names
+
+
+# --------------------------------------------------------------------------
+# "My" endpoints are session-identity sugar — API keys are rejected
+# --------------------------------------------------------------------------
+
+
+def test_my_endpoints_reject_api_keys(client, seeded, db_session):
+    from app.models.points import StudentPoints
+
+    admin = seeded["admin"]
+    points_key = seeded["mint"]("points:read")
+    assignments_key = seeded["mint"]("assignments:read")
+    reports_key = seeded["mint"]("reports:read")
+
+    cases = [
+        ("/api/points/my-balance", points_key),
+        ("/api/points/my-ledger", points_key),
+        ("/api/assignments/my-assignments", assignments_key),
+        ("/api/reports/student/overview", reports_key),
+        ("/api/reports/student/term-grades", reports_key),
+        ("/api/reports/student/subject-performance", reports_key),
+    ]
+    for url, key in cases:
+        for headers in (_hdr(key), _obo(key, admin.id)):
+            r = client.get(url, headers=headers)
+            assert r.status_code == 403, f"{url}: {r.status_code} {r.text}"
+
+    # Regression: /my-balance used to get_or_create a StudentPoints row for the
+    # on-behalf-of admin.
+    assert (
+        db_session.query(StudentPoints).filter(StudentPoints.student_id == admin.id).first()
+        is None
+    )
+
+
+# --------------------------------------------------------------------------
+# Permission registry consistency
+# --------------------------------------------------------------------------
+
+
+def test_permission_descriptions_match_available_permissions():
+    from app.crud.api_keys import AVAILABLE_PERMISSIONS
+    from app.schemas.api_key import PERMISSION_DESCRIPTIONS
+
+    assert set(PERMISSION_DESCRIPTIONS) == set(AVAILABLE_PERMISSIONS)

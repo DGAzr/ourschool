@@ -25,7 +25,6 @@ from sqlalchemy.orm import Session
 from app.core.database import get_db
 from app.core.dual_auth import (
     AuthUser,
-    get_user_id_from_auth,
     is_admin_user,
     is_student_user,
     require_admin_or_permission,
@@ -57,13 +56,15 @@ def get_student_report(
     auth_user: Annotated[AuthUser, Depends(require_student_or_permission("reports:read"))],
 ):
     """Retrieve a report of the current student's academic progress."""
-    student_id = get_user_id_from_auth(auth_user)
-    if student_id is None:
+    # Current-student endpoints need a student session identity; X-On-Behalf-Of
+    # only resolves admins, so API keys must use student-id-parameterized
+    # endpoints (e.g. /reports/report-card/{student_id}/{term_id}) instead.
+    if not isinstance(auth_user, User):
         raise HTTPException(
-            status_code=400,
-            detail="X-On-Behalf-Of header required for API key access to this endpoint",
+            status_code=403,
+            detail="API keys cannot use current-student endpoints; use a student-id-parameterized report endpoint instead",
         )
-    return crud_reports.get_student_report(db, student_id)
+    return crud_reports.get_student_report(db, auth_user.id)
 
 
 @router.get("/admin/overview", response_model=AdminReport)
@@ -82,13 +83,12 @@ def get_student_term_grades(
     term_id: Optional[int] = None,
 ):
     """Retrieve the current student's grades for each term and subject."""
-    student_id = get_user_id_from_auth(auth_user)
-    if student_id is None:
+    if not isinstance(auth_user, User):
         raise HTTPException(
-            status_code=400,
-            detail="X-On-Behalf-Of header required for API key access to this endpoint",
+            status_code=403,
+            detail="API keys cannot use current-student endpoints; use a student-id-parameterized report endpoint instead",
         )
-    return crud_reports.get_student_term_grades(db, student_id, term_id=term_id)
+    return crud_reports.get_student_term_grades(db, auth_user.id, term_id=term_id)
 
 
 @router.get("/student/subject-performance", response_model=List[SubjectPerformance])
@@ -98,13 +98,12 @@ def get_student_subject_performance(
     term_id: Optional[int] = None,
 ):
     """Retrieve the current student's academic performance by subject."""
-    student_id = get_user_id_from_auth(auth_user)
-    if student_id is None:
+    if not isinstance(auth_user, User):
         raise HTTPException(
-            status_code=400,
-            detail="X-On-Behalf-Of header required for API key access to this endpoint",
+            status_code=403,
+            detail="API keys cannot use current-student endpoints; use a student-id-parameterized report endpoint instead",
         )
-    return crud_reports.get_student_subject_performance(db, student_id, term_id=term_id)
+    return crud_reports.get_student_subject_performance(db, auth_user.id, term_id=term_id)
 
 
 @router.get("/admin/student-progress", response_model=List[StudentProgress])

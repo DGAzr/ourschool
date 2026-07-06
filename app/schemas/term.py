@@ -106,7 +106,8 @@ class Term(TermBase):
     is_active: bool
     created_at: datetime
     updated_at: datetime
-    created_by: int
+    # Nullable: SET NULL on creator deletion, or created by an unattributed API key.
+    created_by: Optional[int] = None
     is_current: bool
 
     class Config:
@@ -123,7 +124,8 @@ class TermResponse(TermBase):
     is_active: bool
     created_at: datetime
     updated_at: datetime
-    created_by: int
+    # Nullable: SET NULL on creator deletion, or created by an unattributed API key.
+    created_by: Optional[int] = None
 
     class Config:
         """Pydantic configuration."""

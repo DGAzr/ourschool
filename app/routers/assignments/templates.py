@@ -116,11 +116,10 @@ def get_assignment_templates(
         joinedload(AssignmentTemplate.subject), joinedload(AssignmentTemplate.creator)
     )
 
-    # Access control: admins and API keys see all; students see only their own.
-    if not is_admin_user(auth_user):
-        owner_id = get_user_id_from_auth(auth_user)  # None for API keys → full read
-        if owner_id is not None:
-            query = query.filter(AssignmentTemplate.created_by == owner_id)
+    # Access control: admins and API keys (attributed or not) see all;
+    # student sessions see only their own.
+    if isinstance(auth_user, User) and not is_admin_user(auth_user):
+        query = query.filter(AssignmentTemplate.created_by == auth_user.id)
 
     # Filter out archived templates unless explicitly requested
     if not include_archived:
@@ -172,19 +171,15 @@ def get_assignment_template(
     auth_user: Annotated[AuthUser, Depends(require_admin_or_permission("assignments:read"))],
 ):
     """Get a specific assignment template."""
-    query = (
+    template = (
         db.query(AssignmentTemplate)
         .options(
             joinedload(AssignmentTemplate.subject),
             joinedload(AssignmentTemplate.creator),
         )
         .filter(AssignmentTemplate.id == template_id)
+        .first()
     )
-    if not is_admin_user(auth_user):
-        owner_id = get_user_id_from_auth(auth_user)
-        if owner_id is not None:
-            query = query.filter(AssignmentTemplate.created_by == owner_id)
-    template = query.first()
 
     if not template:
         raise HTTPException(status_code=404, detail="Assignment template not found")

@@ -254,12 +254,12 @@ PERMISSION_DESCRIPTIONS = {
     ),
     "settings:read": PermissionInfo(
         permission="settings:read",
-        description="Read application settings",
+        description="Read application settings, including points presets and journal points",
         category="Settings",
     ),
     "settings:write": PermissionInfo(
         permission="settings:write",
-        description="Create and update application settings",
+        description="Create and update application settings, including the points system toggle and presets",
         category="Settings",
     ),
     "performance:read": PermissionInfo(

@@ -335,12 +335,14 @@ def get_my_assignments(
     subject_id: Optional[int] = Query(None),
 ):
     """Get assignments for the current user (student only)."""
-    student_id = get_user_id_from_auth(auth_user)
-    if student_id is None:
+    # "My" endpoints need a student session identity; X-On-Behalf-Of only
+    # resolves admins, so API keys must use the per-student endpoint instead.
+    if not isinstance(auth_user, User):
         raise HTTPException(
-            status_code=400,
-            detail="X-On-Behalf-Of header required for API key access to this endpoint",
+            status_code=403,
+            detail="API keys cannot use 'my' endpoints; use /assignments/students/{student_id}/assignments instead",
         )
+    student_id = auth_user.id
 
     query = (
         db.query(StudentAssignment)

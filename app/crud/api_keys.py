@@ -234,9 +234,9 @@ AVAILABLE_PERMISSIONS = [
     "journal:moderate",  # POST reactions/replies/mark-read; DELETE replies (admin moderation)
     # Activity
     "activity:read",  # GET /api/activity/recent
-    # Settings
-    "settings:read",  # GET /api/settings/* (all read endpoints)
-    "settings:write",  # POST/PUT /api/settings/* (all write endpoints)
+    # Settings (also covers points-settings: /api/points/toggle, /presets, /journal-points)
+    "settings:read",  # GET /api/settings/*, /api/points/presets, /api/points/journal-points
+    "settings:write",  # POST/PUT /api/settings/*; POST /api/points/toggle; PUT presets/journal-points
     # System / Infrastructure
     "performance:read",  # GET /api/performance/stats, /summary, /slow-operations, etc.
     "performance:write",  # POST /api/performance/reset

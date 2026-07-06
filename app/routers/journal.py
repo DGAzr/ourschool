@@ -17,7 +17,7 @@
 """Journal entry router."""
 
 from datetime import date, datetime, timedelta, timezone
-from typing import Annotated, List
+from typing import Annotated, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy import desc, func
@@ -125,8 +125,8 @@ def _entry_to_response(
 
 @router.get("/entries", response_model=List[JournalEntryWithAuthor])
 async def get_journal_entries(
-    student_id: int = None,
-    auth_user: Annotated[AuthUser, Depends(require_user_or_permission("journal:read"))] = None,
+    auth_user: Annotated[AuthUser, Depends(require_user_or_permission("journal:read"))],
+    student_id: Optional[int] = None,
     db: Session = Depends(get_db),
 ):
     query = db.query(JournalEntry).options(joinedload(JournalEntry.replies))
@@ -219,7 +219,14 @@ async def create_journal_entry(
                 status_code=status.HTTP_404_NOT_FOUND, detail="Student not found"
             )
 
+    # JournalEntry.author_id is NOT NULL, so an API key must supply an
+    # X-On-Behalf-Of admin to attribute the entry to.
     author_id = get_user_id_from_auth(auth_user)
+    if author_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="X-On-Behalf-Of header required for API key access to this endpoint",
+        )
 
     entry = JournalEntry(
         student_id=student_id,
@@ -381,7 +388,14 @@ async def add_reply(
             status_code=status.HTTP_404_NOT_FOUND, detail="Journal entry not found"
         )
 
+    # JournalReply.author_id is NOT NULL, so an API key must supply an
+    # X-On-Behalf-Of admin to attribute the reply to.
     author_id = get_user_id_from_auth(auth_user)
+    if author_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="X-On-Behalf-Of header required for API key access to this endpoint",
+        )
     reply = JournalReply(
         entry_id=entry_id,
         author_id=author_id,
