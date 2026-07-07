@@ -38,8 +38,9 @@ type Student = { id: number; first_name: string; last_name: string }
 interface QueuePanelProps {
   needsGradingCount: number
   overdueCount: number
-  queueFilter: 'needs' | 'overdue' | 'all'
-  setQueueFilter: (v: 'needs' | 'overdue' | 'all') => void
+  awaitingCount: number
+  queueFilter: 'needs' | 'overdue' | 'awaiting' | 'all'
+  setQueueFilter: (v: 'needs' | 'overdue' | 'awaiting' | 'all') => void
   selectedSubject: number | null
   setSelectedSubject: (v: number | null) => void
   selectedStudent: number | null
@@ -55,6 +56,7 @@ interface QueuePanelProps {
 const QueuePanel: React.FC<QueuePanelProps> = ({
   needsGradingCount,
   overdueCount,
+  awaitingCount,
   queueFilter,
   setQueueFilter,
   selectedSubject,
@@ -74,6 +76,7 @@ const QueuePanel: React.FC<QueuePanelProps> = ({
         segments={[
           { value: 'needs', label: 'To grade', count: needsGradingCount },
           { value: 'overdue', label: 'Overdue', count: overdueCount },
+          { value: 'awaiting', label: 'Awaiting', count: awaitingCount },
           { value: 'all', label: 'All' },
         ]}
         value={queueFilter}
@@ -416,7 +419,7 @@ const Grading: React.FC = () => {
   const location = useLocation()
   const incomingId: number | undefined = (location.state as { assignmentId?: number } | null)?.assignmentId
 
-  const [queueFilter, setQueueFilter] = useState<'needs' | 'overdue' | 'all'>(
+  const [queueFilter, setQueueFilter] = useState<'needs' | 'overdue' | 'awaiting' | 'all'>(
     incomingId ? 'all' : 'needs'
   )
   const [selectedQueueId, setSelectedQueueId] = useState<number | null>(incomingId ?? null)
@@ -457,6 +460,9 @@ const Grading: React.FC = () => {
 
   const needsGrading = allAssignments.filter(a => a.status === 'submitted' && !a.is_graded)
   const overdueAssignments = allAssignments.filter(a => a.status !== 'graded' && a.status !== 'excused' && isPastDateOnly(a.due_date))
+  const awaitingAssignments = allAssignments.filter(a =>
+    (a.status === 'not_started' || a.status === 'in_progress' || a.status === 'overdue') && !a.is_graded
+  )
   const awaitingSubmission = allAssignments.filter(a => a.status === 'not_started' || a.status === 'in_progress').length
 
   const termDateRange = activeTerm
@@ -474,6 +480,7 @@ const Grading: React.FC = () => {
 
   const queueItems = queueFilter === 'needs' ? needsGrading
     : queueFilter === 'overdue' ? overdueAssignments
+    : queueFilter === 'awaiting' ? awaitingAssignments
     : filteredAllAssignments
 
   const selectedAssignment = selectedQueueId
@@ -568,6 +575,7 @@ const Grading: React.FC = () => {
               <QueuePanel
                 needsGradingCount={needsGrading.length}
                 overdueCount={overdueAssignments.length}
+                awaitingCount={awaitingAssignments.length}
                 queueFilter={queueFilter}
                 setQueueFilter={setQueueFilter}
                 selectedSubject={selectedSubject}
@@ -606,6 +614,7 @@ const Grading: React.FC = () => {
               <QueuePanel
                 needsGradingCount={needsGrading.length}
                 overdueCount={overdueAssignments.length}
+                awaitingCount={awaitingAssignments.length}
                 queueFilter={queueFilter}
                 setQueueFilter={setQueueFilter}
                 selectedSubject={selectedSubject}

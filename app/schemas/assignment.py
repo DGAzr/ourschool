@@ -79,7 +79,12 @@ class AssignmentTemplateResponse(AssignmentTemplateBase):
     is_archived: bool
 
     # Computed fields
-    total_assigned: int = 0  # How many students have this assigned
+    total_assigned: int = (
+        0  # All student assignments ever created — used by delete guard
+    )
+    active_assigned: int = (
+        0  # Open or submitted only (excludes graded/excused) — drives the badge
+    )
     average_grade: Optional[float] = None  # Average grade across all students
 
     class Config:

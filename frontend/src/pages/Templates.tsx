@@ -541,10 +541,15 @@ const Templates: React.FC = () => {
                           {template.estimated_duration_minutes ? (
                             <span className="text-[11.5px] font-mono text-muted">{template.estimated_duration_minutes}m</span>
                           ) : null}
-                          {(template.total_assigned ?? 0) > 0 && (
-                            <span className="px-1.5 py-0.5 rounded bg-accent-soft text-accent text-[11px] font-mono font-semibold">
-                              {template.total_assigned} assigned
-                            </span>
+                          {(template.active_assigned ?? 0) > 0 && (
+                            <Link
+                              to={`/assignments?template=${template.id}`}
+                              onClick={e => e.stopPropagation()}
+                              aria-label={`View ${template.active_assigned} active assignment${template.active_assigned === 1 ? '' : 's'} from this template`}
+                              className="px-1.5 py-0.5 rounded bg-accent-soft text-accent text-[11px] font-mono font-semibold hover:bg-accent hover:text-white transition-colors"
+                            >
+                              {template.active_assigned} assigned
+                            </Link>
                           )}
                         </div>
                       </div>
@@ -562,10 +567,15 @@ const Templates: React.FC = () => {
                       </span>
                       {/* Assigned count — desktop only */}
                       <span className="hidden lg:flex flex-none w-[40px] justify-center">
-                        {(template.total_assigned ?? 0) > 0 ? (
-                          <span className="px-1.5 py-0.5 rounded bg-accent-soft text-accent text-[11px] font-mono font-semibold">
-                            {template.total_assigned}
-                          </span>
+                        {(template.active_assigned ?? 0) > 0 ? (
+                          <Link
+                            to={`/assignments?template=${template.id}`}
+                            onClick={e => e.stopPropagation()}
+                            aria-label={`View ${template.active_assigned} active assignment${template.active_assigned === 1 ? '' : 's'} from this template`}
+                            className="px-1.5 py-0.5 rounded bg-accent-soft text-accent text-[11px] font-mono font-semibold hover:bg-accent hover:text-white transition-colors"
+                          >
+                            {template.active_assigned}
+                          </Link>
                         ) : (
                           <span className="text-[11px] text-faintest">—</span>
                         )}

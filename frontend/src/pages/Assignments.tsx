@@ -17,7 +17,7 @@
  */
 
 import React, { useState, useEffect, useRef } from 'react'
-import { useNavigate, Link } from 'react-router-dom'
+import { useNavigate, Link, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { assignmentsApi } from '../services/assignments'
 import { termsApi } from '../services/terms'
@@ -39,9 +39,11 @@ const Assignments: React.FC = () => {
   const isAdmin = user?.role === 'admin'
   const { toast } = useToast()
   const navigate = useNavigate()
+  const [searchParams, setSearchParams] = useSearchParams()
+  const templateFilter = searchParams.get('template') ? parseInt(searchParams.get('template')!) : null
 
   // ── Filters ──
-  const [statusFilter, setStatusFilter] = useState<StatusFilter>('all')
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>('open')
   // undefined = not yet initialized (will default to active term); null = user explicitly chose "All terms"
   const [selectedTerm, setSelectedTerm] = useState<number | null | undefined>(undefined)
   const {
@@ -122,6 +124,7 @@ const Assignments: React.FC = () => {
     if (searchTerm && !stuName.includes(searchTerm.toLowerCase()) && !tplName.includes(searchTerm.toLowerCase())) return false
     if (selectedStudent && a.student_id !== selectedStudent) return false
     if (selectedSubject && a.template?.subject_id !== selectedSubject) return false
+    if (templateFilter && a.template_id !== templateFilter) return false
     if (selectedTerm) {
       const term = terms.find(t => t.id === selectedTerm)
       if (term && a.assigned_date) {
@@ -154,6 +157,7 @@ const Assignments: React.FC = () => {
     if (searchTerm && !stuName.includes(searchTerm.toLowerCase()) && !tplName.includes(searchTerm.toLowerCase())) return false
     if (selectedStudent && a.student_id !== selectedStudent) return false
     if (selectedSubject && a.template?.subject_id !== selectedSubject) return false
+    if (templateFilter && a.template_id !== templateFilter) return false
     if (selectedTerm) {
       const term = terms.find(t => t.id === selectedTerm)
       if (term && a.assigned_date) {
@@ -427,6 +431,30 @@ const Assignments: React.FC = () => {
               </select>
             )}
           </div>
+
+          {/* Active template filter chip */}
+          {templateFilter && (() => {
+            const templateName = allAssignments.find(a => a.template_id === templateFilter)?.template?.name ?? 'this template'
+            return (
+              <div className="flex items-center gap-2 mb-4 flex-wrap">
+                <span className="text-[12px] text-faint">Filtered by template:</span>
+                <span className="flex items-center gap-1.5 pl-2.5 pr-1.5 py-1 rounded-full bg-accent-soft text-accent text-[12px] font-semibold">
+                  {templateName}
+                  <button
+                    onClick={() => {
+                      const next = new URLSearchParams(searchParams)
+                      next.delete('template')
+                      setSearchParams(next)
+                    }}
+                    aria-label="Clear template filter"
+                    className="w-[16px] h-[16px] flex items-center justify-center rounded-full hover:bg-accent hover:text-white transition-colors text-[11px] leading-none"
+                  >
+                    ×
+                  </button>
+                </span>
+              </div>
+            )
+          })()}
 
           {/* Table */}
           <div className="bg-panel border border-line rounded-card overflow-hidden">

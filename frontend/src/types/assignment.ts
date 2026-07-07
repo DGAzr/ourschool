@@ -75,6 +75,7 @@ export interface AssignmentTemplate {
   created_at: string
   updated_at: string
   total_assigned?: number
+  active_assigned?: number
   average_grade?: number
 }
 

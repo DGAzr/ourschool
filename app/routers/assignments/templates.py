@@ -39,6 +39,7 @@ from app.core.dual_auth import (
     require_admin_or_permission,
     require_user_or_permission,
 )
+from app.enums import AssignmentStatus
 from app.crud import assignment_types as crud_types
 from app.schemas.assignment import (
     AssignmentTemplateCreate,
@@ -62,16 +63,34 @@ def _validate_assignment_type(db: Session, key: str) -> None:
 
 
 def _attach_template_stats(db: Session, templates: List[AssignmentTemplate]) -> None:
-    """Populate the computed total_assigned / average_grade response fields.
+    """Populate the computed total_assigned / active_assigned / average_grade response fields.
 
     ``total_assigned`` counts every student assignment ever created from the
-    template (including submitted/graded ones), matching the delete guard's
+    template (including graded/excused ones), matching the delete guard's
     "has student assignments" meaning — a fully-graded template is not "0".
+
+    ``active_assigned`` counts only non-terminal assignments (not_started,
+    in_progress, overdue, submitted), excluding graded and excused. This is the
+    count shown on the badge that links to the active-work view.
     """
+    _active_statuses = [
+        AssignmentStatus.NOT_STARTED,
+        AssignmentStatus.IN_PROGRESS,
+        AssignmentStatus.OVERDUE,
+        AssignmentStatus.SUBMITTED,
+    ]
     for template in templates:
         template.total_assigned = (
             db.query(StudentAssignment)
             .filter(StudentAssignment.template_id == template.id)
+            .count()
+        )
+        template.active_assigned = (
+            db.query(StudentAssignment)
+            .filter(
+                StudentAssignment.template_id == template.id,
+                StudentAssignment.status.in_(_active_statuses),
+            )
             .count()
         )
 
