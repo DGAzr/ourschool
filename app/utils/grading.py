@@ -130,6 +130,46 @@ def term_membership_filter(term):
     return (effective >= term.start_date) & (effective <= term.end_date)
 
 
+def assignment_status_filter(status):
+    """SQLAlchemy predicate for filtering student assignments by status string.
+
+    OVERDUE is derived, not stored: the status column only becomes OVERDUE when
+    the row happens to be touched, so reports compute overdue on the fly and a
+    plain column filter returns almost nothing. Filtering by ``overdue``
+    therefore matches unfinished work (not started / in progress / stale
+    OVERDUE rows) whose effective due date has passed. Other statuses filter
+    the column directly.
+
+    Raises ValueError for unknown status strings (same as AssignmentStatus()).
+    """
+    from datetime import date
+
+    from sqlalchemy import func
+
+    from app.enums import AssignmentStatus
+    from app.models.assignment import StudentAssignment
+
+    status_enum = (
+        status if isinstance(status, AssignmentStatus) else AssignmentStatus(status)
+    )
+    if status_enum != AssignmentStatus.OVERDUE:
+        return StudentAssignment.status == status_enum
+
+    effective_due = func.coalesce(
+        StudentAssignment.extended_due_date, StudentAssignment.due_date
+    )
+    return (
+        StudentAssignment.status.in_(
+            [
+                AssignmentStatus.NOT_STARTED,
+                AssignmentStatus.IN_PROGRESS,
+                AssignmentStatus.OVERDUE,
+            ]
+        )
+        & (effective_due < date.today())
+    )
+
+
 _DEFAULT_SCALE: List[Tuple[str, int]] = [
     ("A+", 97),
     ("A", 93),

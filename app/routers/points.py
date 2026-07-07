@@ -25,7 +25,7 @@ from app.core.database import get_db
 from app.core.dual_auth import (
     AuthUser,
     require_admin_or_permission,
-    require_student_or_permission,
+    require_student_session,
     require_user_or_permission,
     can_access_student_data,
     get_actor_name_from_auth,
@@ -48,6 +48,27 @@ from app.crud import points as points_crud
 
 logger = get_logger("points_api")
 router = APIRouter(prefix="/points", tags=["points"])
+
+
+def _attach_transaction_names(transactions, student: User | None = None) -> None:
+    """Populate display names on ledger rows.
+
+    Attribution prefers the actor name persisted at write time (covers API-key
+    writes, which have no admin user row), then the admin relationship, then a
+    generic label — manual adjustments only; assignment grade syncs are system
+    events and carry no admin_name.
+    """
+    for transaction in transactions:
+        if student is not None:
+            transaction.student_name = f"{student.first_name} {student.last_name}"
+        if transaction.actor_name:
+            transaction.admin_name = transaction.actor_name
+        elif transaction.admin_id and transaction.admin:
+            transaction.admin_name = (
+                f"{transaction.admin.first_name} {transaction.admin.last_name}"
+            )
+        elif transaction.transaction_type in ("admin_award", "admin_deduction"):
+            transaction.admin_name = "API Integration"
 
 
 @router.get("/status", response_model=PointsSystemStatus)
@@ -78,23 +99,17 @@ async def toggle_points_system(
 
 @router.get("/my-balance", response_model=StudentPoints)
 async def get_my_points_balance(
-    auth_user: AuthUser = Depends(require_student_or_permission("points:read")),
+    student: User = Depends(
+        require_student_session("/points/student/{student_id}/balance")
+    ),
     db: Session = Depends(get_db),
 ):
     """Get current user's points balance (students only)."""
-    # "My" endpoints need a student session identity; X-On-Behalf-Of only
-    # resolves admins, so API keys must use /points/students/{id} instead.
-    if not isinstance(auth_user, User):
-        raise HTTPException(
-            status_code=403,
-            detail="API keys cannot use 'my' endpoints; use /points/student/{student_id}/balance instead",
-        )
-
     if not points_crud.is_points_system_enabled(db):
         raise HTTPException(status_code=403, detail="Points system is disabled")
 
-    student_points = points_crud.get_or_create_student_points(db, auth_user.id)
-    student_points.student_name = f"{auth_user.first_name} {auth_user.last_name}"
+    student_points = points_crud.get_or_create_student_points(db, student.id)
+    student_points.student_name = f"{student.first_name} {student.last_name}"
 
     return student_points
 
@@ -103,30 +118,22 @@ async def get_my_points_balance(
 async def get_my_points_ledger(
     page: int = Query(1, ge=1, description="Page number"),
     per_page: int = Query(20, ge=1, le=100, description="Items per page"),
-    auth_user: AuthUser = Depends(require_student_or_permission("points:read")),
+    student: User = Depends(
+        require_student_session("/points/student/{student_id}/ledger")
+    ),
     db: Session = Depends(get_db),
 ):
     """Get current user's points ledger with transaction history (students only)."""
-    if not isinstance(auth_user, User):
-        raise HTTPException(
-            status_code=403,
-            detail="API keys cannot use 'my' endpoints; use /points/student/{student_id}/ledger instead",
-        )
-
     if not points_crud.is_points_system_enabled(db):
         raise HTTPException(status_code=403, detail="Points system is disabled")
 
     student_points, transactions, total_pages = points_crud.get_student_points_ledger(
-        db, auth_user.id, page, per_page
+        db, student.id, page, per_page
     )
 
-    student_points.student_name = f"{auth_user.first_name} {auth_user.last_name}"
+    student_points.student_name = f"{student.first_name} {student.last_name}"
 
-    for transaction in transactions:
-        if transaction.admin_id and transaction.admin:
-            transaction.admin_name = (
-                f"{transaction.admin.first_name} {transaction.admin.last_name}"
-            )
+    _attach_transaction_names(transactions, student=student)
 
     return PointsLedger(
         student_points=student_points,
@@ -156,8 +163,8 @@ async def get_student_points_balance(
     student_points = points_crud.get_student_points(db, student_id)
     if not student_points:
         student_points = points_crud.get_or_create_student_points(db, student_id)
-        if student_points.student:
-            student_points.student_name = f"{student_points.student.first_name} {student_points.student.last_name}"
+    if student_points.student:
+        student_points.student_name = f"{student_points.student.first_name} {student_points.student.last_name}"
 
     return student_points
 
@@ -190,13 +197,7 @@ async def get_student_points_ledger(
             f"{student_points.student.first_name} {student_points.student.last_name}"
         )
 
-    for transaction in transactions:
-        if transaction.admin_id and transaction.admin:
-            transaction.admin_name = (
-                f"{transaction.admin.first_name} {transaction.admin.last_name}"
-            )
-        elif not transaction.admin_id:
-            transaction.admin_name = "API Integration"
+    _attach_transaction_names(transactions, student=student_points.student)
 
     return PointsLedger(
         student_points=student_points,
@@ -226,11 +227,16 @@ async def adjust_student_points(
         raise HTTPException(status_code=404, detail="Student not found")
 
     admin_id = get_user_id_from_auth(auth_user)
+    actor_name = get_actor_name_from_auth(auth_user)
 
-    transaction = points_crud.admin_adjust_points(db, adjustment, admin_id)
+    # Persist the actor label so later ledger reads attribute the transaction
+    # the same way this response does (API keys have no admin user row).
+    transaction = points_crud.admin_adjust_points(
+        db, adjustment, admin_id, actor_name=actor_name
+    )
 
     transaction.student_name = f"{student.first_name} {student.last_name}"
-    transaction.admin_name = get_actor_name_from_auth(auth_user)
+    transaction.admin_name = actor_name
 
     auth_context = get_auth_context_for_logging(auth_user)
     logger.info(

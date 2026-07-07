@@ -8,6 +8,7 @@ succeeds with the right permission, (b) it is rejected (403) without it, and
 
 Requires a reachable PostgreSQL instance (see tests/conftest.py).
 """
+import json
 import uuid
 from datetime import date
 
@@ -531,3 +532,22 @@ def test_permission_descriptions_match_available_permissions():
     from app.schemas.api_key import PERMISSION_DESCRIPTIONS
 
     assert set(PERMISSION_DESCRIPTIONS) == set(AVAILABLE_PERMISSIONS)
+
+
+# --------------------------------------------------------------------------
+# Admin directory lookup for OBO resolution
+# --------------------------------------------------------------------------
+
+
+def test_list_admins_requires_users_read(client, seeded):
+    admin = seeded["admin"]
+
+    r = client.get("/api/users/admins", headers=_hdr(seeded["mint"]("students:read")))
+    assert r.status_code == 403, r.text
+
+    r = client.get("/api/users/admins", headers=_hdr(seeded["mint"]("users:read")))
+    assert r.status_code == 200, r.text
+    admins = r.json()
+    assert any(a["id"] == admin.id for a in admins)
+    assert all(a["role"] == "admin" for a in admins)
+    assert "hashed_password" not in json.dumps(admins)

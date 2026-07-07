@@ -17,6 +17,7 @@
 
 """CRUD operations for assignment reports."""
 
+from datetime import date
 from typing import Optional
 
 from app.models.assignment import (
@@ -30,7 +31,7 @@ from app.models.user import User, UserRole
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 from app.schemas import reports as schemas
-from app.utils.grading import term_membership_filter
+from app.utils.grading import assignment_status_filter, term_membership_filter
 from app.utils.performance import track_query_performance
 
 
@@ -63,6 +64,7 @@ def get_assignment_report(
             Subject.color.label("subject_color"),
             StudentAssignment.assigned_date,
             StudentAssignment.due_date,
+            StudentAssignment.extended_due_date,
             StudentAssignment.status,
             StudentAssignment.points_earned,
             func.coalesce(
@@ -106,7 +108,11 @@ def get_assignment_report(
             query = query.filter(term_membership_filter(term))
 
     if status:
-        query = query.filter(StudentAssignment.status == status)
+        try:
+            # "overdue" is derived from due dates, not the stored column
+            query = query.filter(assignment_status_filter(status))
+        except ValueError:
+            query = query.filter(StudentAssignment.status == status)
 
     # Execute query and get results
     assignment_data = query.order_by(StudentAssignment.assigned_date.desc()).all()
@@ -168,7 +174,21 @@ def get_assignment_report(
     pending_assignments = sum(
         1 for a in assignments if a.status == AssignmentStatus.SUBMITTED.value
     )
-    overdue_assignments = sum(1 for a in assignments if a.status == "overdue")
+    # Overdue is derived (unfinished + past effective due date), matching the
+    # status=overdue filter and the progress report, not the stale stored column.
+    today = date.today()
+    unfinished_statuses = {
+        AssignmentStatus.NOT_STARTED.value,
+        AssignmentStatus.IN_PROGRESS.value,
+        AssignmentStatus.OVERDUE.value,
+    }
+    overdue_assignments = sum(
+        1
+        for d in assignment_data
+        if (d.status.value if d.status else None) in unfinished_statuses
+        and (d.extended_due_date or d.due_date)
+        and (d.extended_due_date or d.due_date) < today
+    )
 
     # Calculate average grade
     graded_with_scores = [

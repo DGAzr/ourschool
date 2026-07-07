@@ -105,6 +105,7 @@ def grade_assignment_via_api(
     else:
         assignment.letter_grade = grade_data.letter_grade
 
+    assignment.backfill_lifecycle_dates_for_grading()
     assignment.update_status()
 
     # Automatically update term grades

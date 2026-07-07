@@ -39,7 +39,7 @@ from app.core.dual_auth import (
     is_student_user,
     require_admin_or_permission,
     require_admin_or_student_self_or_permission,
-    require_student_or_permission,
+    require_student_session,
 )
 from app.schemas.assignment import (
     AssignmentAssignmentRequest,
@@ -48,6 +48,7 @@ from app.schemas.assignment import (
     StudentAssignmentResponse,
     StudentAssignmentUpdate,
 )
+from app.utils.grading import assignment_status_filter
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -83,6 +84,12 @@ def assign_template_to_students(
 
     if not template:
         raise HTTPException(status_code=404, detail="Assignment template not found")
+
+    if template.is_archived:
+        raise HTTPException(
+            status_code=400,
+            detail="Cannot assign an archived template. Unarchive it first.",
+        )
 
     # Verify all students exist (admins can assign to any student in homeschool)
     students = (
@@ -198,7 +205,10 @@ def get_student_assignments(
         )
 
     if status:
-        query = query.filter(StudentAssignment.status == status)
+        try:
+            query = query.filter(assignment_status_filter(status))
+        except ValueError:
+            raise HTTPException(status_code=400, detail=f"Unknown status '{status}'")
 
     assignments = query.all()
     return assignments
@@ -291,6 +301,12 @@ def update_student_assignment(
                 status_code=403,
                 detail=f"You may not modify: {', '.join(sorted(disallowed))}",
             )
+        # Excusing (archiving) an assignment is an admin decision.
+        if update_data.get("status") == AssignmentStatus.EXCUSED:
+            raise HTTPException(
+                status_code=403,
+                detail="Only admins can mark an assignment as excused",
+            )
 
     # Handle submission_artifacts JSON serialization
     if (
@@ -334,21 +350,17 @@ def update_student_assignment(
 @router.get("/my-assignments", response_model=List[StudentAssignmentResponse])
 def get_my_assignments(
     db: Annotated[Session, Depends(get_db)],
-    auth_user: Annotated[
-        AuthUser, Depends(require_student_or_permission("assignments:read"))
+    student: Annotated[
+        User,
+        Depends(
+            require_student_session("/assignments/students/{student_id}/assignments")
+        ),
     ],
     status: Optional[str] = Query(None),
     subject_id: Optional[int] = Query(None),
 ):
     """Get assignments for the current user (student only)."""
-    # "My" endpoints need a student session identity; X-On-Behalf-Of only
-    # resolves admins, so API keys must use the per-student endpoint instead.
-    if not isinstance(auth_user, User):
-        raise HTTPException(
-            status_code=403,
-            detail="API keys cannot use 'my' endpoints; use /assignments/students/{student_id}/assignments instead",
-        )
-    student_id = auth_user.id
+    student_id = student.id
 
     query = (
         db.query(StudentAssignment)
@@ -366,7 +378,10 @@ def get_my_assignments(
         )
 
     if status:
-        query = query.filter(StudentAssignment.status == status)
+        try:
+            query = query.filter(assignment_status_filter(status))
+        except ValueError:
+            raise HTTPException(status_code=400, detail=f"Unknown status '{status}'")
 
     assignments = query.order_by(StudentAssignment.due_date.asc().nullslast()).all()
     return assignments

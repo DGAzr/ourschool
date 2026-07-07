@@ -76,7 +76,7 @@ const StudentsReport: React.FC<StudentsReportProps> = ({
   const grade = sel
     ? Math.round(sel.overall_grade ?? sel.average_grade ?? 0)
     : 0
-  const subjects = sel ? (sel.subject_grades ?? sel.subjects ?? []) : []
+  const subjects = sel ? (sel.subjects ?? []) : []
   const ti = trendInfo(sel?.trend ?? 0)
 
   return (
@@ -294,7 +294,7 @@ const StudentsReport: React.FC<StudentsReportProps> = ({
                         fontWeight: 600,
                       }}
                     >
-                      {Math.round(b.average_percentage)}%
+                      {b.average_percentage != null ? `${Math.round(b.average_percentage)}%` : 'N/A'}
                     </span>
                   </div>
                   <div
@@ -309,8 +309,8 @@ const StudentsReport: React.FC<StudentsReportProps> = ({
                       style={{
                         height: '100%',
                         borderRadius: '9999px',
-                        width: `${b.average_percentage}%`,
-                        background: barColor(b.average_percentage),
+                        width: `${b.average_percentage ?? 0}%`,
+                        background: barColor(b.average_percentage ?? 0),
                       }}
                     />
                   </div>

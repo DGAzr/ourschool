@@ -97,7 +97,10 @@ def get_or_create_student_points(db: Session, student_id: int) -> StudentPoints:
 
 
 def create_point_transaction(
-    db: Session, transaction: PointTransactionCreate, admin_id: Optional[int] = None
+    db: Session,
+    transaction: PointTransactionCreate,
+    admin_id: Optional[int] = None,
+    actor_name: Optional[str] = None,
 ) -> PointTransaction:
     """Create a new point transaction and update student balance."""
     # Create the transaction record
@@ -109,6 +112,7 @@ def create_point_transaction(
         source_description=transaction.source_description,
         notes=transaction.notes,
         admin_id=admin_id,
+        actor_name=actor_name,
     )
     db.add(db_transaction)
 
@@ -127,7 +131,10 @@ def create_point_transaction(
 
 
 def admin_adjust_points(
-    db: Session, adjustment: AdminPointAdjustment, admin_id: int
+    db: Session,
+    adjustment: AdminPointAdjustment,
+    admin_id: Optional[int],
+    actor_name: Optional[str] = None,
 ) -> PointTransaction:
     """Admin manual point adjustment."""
     transaction_type = "admin_award" if adjustment.amount > 0 else "admin_deduction"
@@ -140,7 +147,9 @@ def admin_adjust_points(
         notes=adjustment.notes,
     )
 
-    return create_point_transaction(db, transaction_data, admin_id)
+    return create_point_transaction(
+        db, transaction_data, admin_id, actor_name=actor_name
+    )
 
 
 def award_assignment_points(

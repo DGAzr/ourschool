@@ -173,6 +173,17 @@ def get_recent_activity(
         raise HTTPException(status_code=500, detail="Failed to retrieve activity")
 
 
+def _event_in_window(event_date, start_date: datetime, end_date: datetime) -> bool:
+    """Whether a date-valued event falls inside the requested window.
+
+    Assignment rows are pre-filtered by ``updated_at``, but each activity is
+    labeled by its own event date (graded/submitted/assigned). A bulk edit can
+    touch rows whose events are far older than the window, so every emitted
+    item must be gated by its event date too.
+    """
+    return start_date.date() <= event_date <= end_date.date()
+
+
 def _get_assignment_activities(
     db: Session, start_date: datetime, end_date: datetime
 ) -> List[ActivityItem]:
@@ -206,6 +217,7 @@ def _get_assignment_activities(
         if (
             assignment.status == AssignmentStatus.SUBMITTED
             and assignment.submitted_date
+            and _event_in_window(assignment.submitted_date, start_date, end_date)
         ):
             activities.append(
                 ActivityItem(
@@ -227,7 +239,11 @@ def _get_assignment_activities(
                 )
             )
 
-        if assignment.percentage_grade is not None and assignment.graded_date:
+        if (
+            assignment.percentage_grade is not None
+            and assignment.graded_date
+            and _event_in_window(assignment.graded_date, start_date, end_date)
+        ):
             activities.append(
                 ActivityItem(
                     activity_type="assignment_graded",
@@ -328,6 +344,7 @@ def _get_student_assignment_activities(
         if (
             assignment.status == AssignmentStatus.SUBMITTED
             and assignment.submitted_date
+            and _event_in_window(assignment.submitted_date, start_date, end_date)
         ):
             activities.append(
                 ActivityItem(
@@ -348,7 +365,11 @@ def _get_student_assignment_activities(
                 )
             )
 
-        if assignment.percentage_grade is not None and assignment.graded_date:
+        if (
+            assignment.percentage_grade is not None
+            and assignment.graded_date
+            and _event_in_window(assignment.graded_date, start_date, end_date)
+        ):
             activities.append(
                 ActivityItem(
                     activity_type="my_assignment_graded",
@@ -372,6 +393,7 @@ def _get_student_assignment_activities(
         if (
             assignment.status == AssignmentStatus.NOT_STARTED
             and assignment.assigned_date
+            and _event_in_window(assignment.assigned_date, start_date, end_date)
         ):
             activities.append(
                 ActivityItem(

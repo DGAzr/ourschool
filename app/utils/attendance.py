@@ -102,16 +102,16 @@ def calculate_attendance_rate(
     """
     Calculate attendance rate from recorded attendance days.
 
-    When ``total_school_days`` is provided (the number of school days in the
-    reporting period), that figure is used as the denominator so that
-    un-recorded days lower the rate — giving an accurate picture of how many
-    school days the student was actually in attendance.  This is the preferred
-    mode for compliance reporting.
+    When ``total_school_days`` is omitted (the default, used by every report:
+    admin overview, student progress, report card, and attendance reports) the
+    denominator is the number of *recorded* days — unrecorded days are days
+    school wasn't held, not misses. Compliance toward required instructional
+    days is tracked separately via present-day counts against
+    ``required_days_of_instruction``.
 
-    When ``total_school_days`` is omitted the denominator falls back to the
-    number of *recorded* rows only (legacy behaviour), which inflates the rate
-    if absences were never entered.  Returns ``None`` when the denominator is
-    zero.
+    When ``total_school_days`` is provided, that figure is used as the
+    denominator instead, so unrecorded days lower the rate.  Returns ``None``
+    when the denominator is zero.
 
     Args:
         attendance_records: List of AttendanceRecord objects

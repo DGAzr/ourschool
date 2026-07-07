@@ -373,10 +373,10 @@ const ReportCard: React.FC<ReportCardProps> = ({
                         fontSize: 12,
                       }}
                     >
-                      {s.percentage_grade.toFixed(1)}%
+                      {s.percentage_grade != null ? `${s.percentage_grade.toFixed(1)}%` : 'N/A'}
                     </td>
                     <td style={{ padding: '9px 6px', textAlign: 'center', fontWeight: 700 }}>
-                      {s.letter_grade}
+                      {s.letter_grade ?? '—'}
                     </td>
                   </tr>
                 ))}

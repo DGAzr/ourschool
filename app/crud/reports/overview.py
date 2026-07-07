@@ -521,12 +521,13 @@ def get_all_students_progress(db: Session, term_id: Optional[int] = None):
         )
 
         graded_assignments = [a for a in student.assigned_assignments if _is_graded(a)]
-        _, _, avg_grade = compute_weighted_grade(
+        _, overall_possible, avg_grade = compute_weighted_grade(
             (_grade_item(a) for a in graded_assignments), type_weights
         )
 
         # Current term grade (effective due date within the selected/active term)
         current_term_grade = 0.0
+        term_possible = 0.0
         if active_term:
             term_assignments = [
                 a
@@ -535,7 +536,7 @@ def get_all_students_progress(db: Session, term_id: Optional[int] = None):
                 <= effective_due_date(a)
                 <= active_term.end_date
             ]
-            _, _, current_term_grade = compute_weighted_grade(
+            _, term_possible, current_term_grade = compute_weighted_grade(
                 (_grade_item(a) for a in term_assignments), type_weights
             )
 
@@ -576,10 +577,17 @@ def get_all_students_progress(db: Session, term_id: Optional[int] = None):
             else 0
         )
 
-        current_term_letter_grade = calculate_letter_grade(
-            current_term_grade, grade_scale
+        # No graded work → no grade, not an alarming 0%/F.
+        current_term_letter_grade = (
+            calculate_letter_grade(current_term_grade, grade_scale)
+            if term_possible > 0
+            else None
         )
-        overall_letter_grade = calculate_letter_grade(avg_grade, grade_scale)
+        overall_letter_grade = (
+            calculate_letter_grade(avg_grade, grade_scale)
+            if overall_possible > 0
+            else None
+        )
 
         # Get last activity date
         last_activity_date = None
@@ -606,15 +614,21 @@ def get_all_students_progress(db: Session, term_id: Optional[int] = None):
                 last_name=student.last_name or "",
                 email=student.email or "",
                 grade_level=student.grade_level,
-                current_term_percentage=round(current_term_grade, 2),
+                current_term_percentage=(
+                    round(current_term_grade, 2) if term_possible > 0 else None
+                ),
                 current_term_letter_grade=current_term_letter_grade,
-                overall_grade=round(avg_grade, 2),
+                overall_grade=(
+                    round(avg_grade, 2) if overall_possible > 0 else None
+                ),
                 overall_letter_grade=overall_letter_grade,
                 total_assignments=total_assignments,
                 completed_assignments=completed_assignments,
                 pending_assignments=pending_assignments,
                 overdue_assignments=overdue_assignments,
-                average_grade=round(avg_grade, 2),
+                average_grade=(
+                    round(avg_grade, 2) if overall_possible > 0 else None
+                ),
                 completion_rate=round(completion_rate, 2),
                 attendance_rate=(
                     round(student_attendance_rate, 2)
@@ -623,7 +637,6 @@ def get_all_students_progress(db: Session, term_id: Optional[int] = None):
                 ),
                 last_activity_date=last_activity_date,
                 subjects=student_subject_performance,
-                subject_grades=student_subject_performance,  # Provide both for compatibility
                 grade_series=grade_series,
                 trend=s_trend,
                 journal_summary=journal_str,

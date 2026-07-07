@@ -211,6 +211,24 @@ async def list_students(
     return db.query(User).filter(User.role == UserRole.STUDENT).all()
 
 
+@router.get("/admins", response_model=List[UserSchema])
+async def list_admins(
+    auth_user: AuthUser = Depends(require_admin_or_permission("users:read")),
+    db: Session = Depends(get_db),
+):
+    """Get all active admins.
+
+    Accessible to API keys with users:read so integrations can resolve a valid
+    X-On-Behalf-Of target by name instead of needing a hardcoded ID.
+    """
+    return (
+        db.query(User)
+        .filter(User.role == UserRole.ADMIN, User.is_active)
+        .order_by(User.first_name, User.last_name)
+        .all()
+    )
+
+
 @router.get("/{user_id}", response_model=UserSchema)
 def read_user(
     user_id: int,

@@ -97,7 +97,7 @@ function cellStyle(status: string | null | undefined, weekend: boolean): React.C
 interface FullYearCalendarProps {
   startIso: string
   endIso: string
-  dailyAttendance: StudentAttendanceReport['daily_attendance']
+  dailyAttendance: StudentAttendanceReport['daily_records']
   loading?: boolean
 }
 
@@ -188,7 +188,7 @@ const InstructionDaysRows: React.FC<InstructionDaysRowsProps> = ({ students }) =
             {/* Secondary: attendance rate */}
             <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 5 }}>
               <span style={{ fontSize: 11, color: 'var(--faint)' }}>
-                Rate: {s.attendance_percentage.toFixed(1)}%
+                Rate: {s.attendance_rate.toFixed(1)}%
                 <span style={{ color: 'var(--faint)', marginLeft: 6 }}>
                   ({s.present_days}P · {s.absent_days}A · {s.late_days}L · {s.excused_days}E)
                 </span>
@@ -285,7 +285,7 @@ const AttendanceReport: React.FC<AttendanceReportProps> = ({
             String(s.late_days),
             String(s.excused_days),
             String(s.absent_days),
-            `${s.attendance_percentage.toFixed(1)}%`,
+            `${s.attendance_rate.toFixed(1)}%`,
           ]
         }),
       ]
@@ -296,7 +296,7 @@ const AttendanceReport: React.FC<AttendanceReportProps> = ({
     } else if (attendanceReport) {
       const rows = [
         ['Date', 'Status', 'Notes'],
-        ...attendanceReport.daily_attendance.map(d => [d.date, d.status, d.notes || '']),
+        ...attendanceReport.daily_records.map(d => [d.date, d.status, d.notes || '']),
       ]
       downloadCSV(
         rows.map(r => r.map(c => `"${c}"`).join(',')).join('\n'),
@@ -453,7 +453,7 @@ const AttendanceReport: React.FC<AttendanceReportProps> = ({
                 <FullYearCalendar
                   startIso={calendarStart}
                   endIso={calendarEnd}
-                  dailyAttendance={selectedStudentCalendarReport?.daily_attendance ?? []}
+                  dailyAttendance={selectedStudentCalendarReport?.daily_records ?? []}
                   loading={calendarStudentLoading}
                 />
               </div>
@@ -464,7 +464,7 @@ const AttendanceReport: React.FC<AttendanceReportProps> = ({
               {/* Per-student KPI: instruction days vs required */}
               <div className="bg-panel border border-line rounded-card p-5">
                 <h3 style={{ margin: '0 0 12px', fontSize: 15, fontWeight: 600, color: 'var(--ink)' }}>
-                  {attendanceReport.student_name}
+                  {attendanceReport.summary.student_name}
                 </h3>
                 <InstructionDaysRows students={[attendanceReport.summary]} />
               </div>
@@ -508,7 +508,7 @@ const AttendanceReport: React.FC<AttendanceReportProps> = ({
                   <FullYearCalendar
                     startIso={calendarStart}
                     endIso={calendarEnd}
-                    dailyAttendance={attendanceReport.daily_attendance}
+                    dailyAttendance={attendanceReport.daily_records}
                   />
                 </div>
 
@@ -519,7 +519,7 @@ const AttendanceReport: React.FC<AttendanceReportProps> = ({
                     <Button variant="secondary" size="sm" icon={<Download size={13} />} onClick={handleDownload}>CSV</Button>
                   </div>
                   <div style={{ maxHeight: 420, overflowY: 'auto' }}>
-                    {attendanceReport.daily_attendance.map(day => {
+                    {attendanceReport.daily_records.map(day => {
                       const statusColor =
                         day.status === 'present' ? 'var(--pos-fg)' :
                         day.status === 'absent'  ? 'var(--neg-fg)' :

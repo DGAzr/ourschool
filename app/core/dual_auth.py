@@ -127,31 +127,32 @@ def require_admin_or_permission(permission: str):
     return auth_dependency
 
 
-def require_student_or_permission(permission: str):
+def require_student_session(alternative: str):
     """
-    Dependency factory that requires either:
-    - Student user role accessing their own data (for user sessions)
-    - Specific permission (for API keys)
+    Dependency factory for current-user ("my") endpoints: requires a logged-in
+    student session and returns the resolved User.
+
+    The API surface is admin-scoped automation with no student identity, so
+    API keys are rejected outright, with a pointer to the student-id-
+    parameterized equivalent (``alternative``).
     """
 
     async def auth_dependency(
         auth_user: AuthUser = Depends(get_current_user_or_api_key),
-    ) -> AuthUser:
-        if isinstance(auth_user, User):
-            # User session - must be student (additional checks needed in endpoint)
-            if auth_user.role != UserRole.STUDENT:
-                raise HTTPException(
-                    status_code=status.HTTP_403_FORBIDDEN,
-                    detail="Student role required or admin access needed",
-                )
-        elif isinstance(auth_user, APIKeyUser):
-            # API key - check permission
-            if not auth_user.has_permission(permission):
-                raise HTTPException(
-                    status_code=status.HTTP_403_FORBIDDEN,
-                    detail=f"Permission '{permission}' required",
-                )
-
+    ) -> User:
+        if isinstance(auth_user, APIKeyUser):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=(
+                    "API keys cannot use current-user endpoints; "
+                    f"use {alternative} instead"
+                ),
+            )
+        if auth_user.role != UserRole.STUDENT:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Student role required or admin access needed",
+            )
         return auth_user
 
     return auth_dependency

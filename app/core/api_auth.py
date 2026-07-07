@@ -29,7 +29,14 @@ from app.models.user import User, UserRole
 
 
 class APIKeyUser:
-    """Represents an API key with permissions for authentication."""
+    """Represents an API key with permissions for authentication.
+
+    Design rule: the API-key surface is admin-scoped automation. A key may
+    read/write any student's data subject to its permissions and attribute
+    writes to an admin via X-On-Behalf-Of (admin-only, fail-closed), but it
+    has no student identity — current-user ("my") endpoints reject keys, and
+    nothing on the API surface can author content as a student.
+    """
 
     def __init__(
         self,

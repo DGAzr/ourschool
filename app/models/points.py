@@ -94,6 +94,10 @@ class PointTransaction(Base):
     admin_id = Column(
         Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True
     )  # Admin who made manual adjustment
+    actor_name = Column(
+        String(255), nullable=True
+    )  # Display name of the actor at write time (e.g. "API: key-name"); needed
+    # because API-key writes have no admin user row to attribute to
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     # Relationships

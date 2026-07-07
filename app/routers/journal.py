@@ -19,7 +19,7 @@
 from datetime import date, datetime, timedelta, timezone
 from typing import Annotated, List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy import desc, func
 from sqlalchemy.orm import Session, joinedload
 
@@ -127,6 +127,8 @@ def _entry_to_response(
 async def get_journal_entries(
     auth_user: Annotated[AuthUser, Depends(require_user_or_permission("journal:read"))],
     student_id: Optional[int] = None,
+    skip: int = Query(0, ge=0),
+    limit: int = Query(100, ge=1, le=500),
     db: Session = Depends(get_db),
 ):
     query = db.query(JournalEntry).options(joinedload(JournalEntry.replies))
@@ -136,7 +138,12 @@ async def get_journal_entries(
     elif (is_admin_user(auth_user) or not isinstance(auth_user, User)) and student_id:
         query = query.filter(JournalEntry.student_id == student_id)
 
-    entries = query.order_by(JournalEntry.entry_date.desc()).all()
+    entries = (
+        query.order_by(JournalEntry.entry_date.desc(), JournalEntry.id.desc())
+        .offset(skip)
+        .limit(limit)
+        .all()
+    )
 
     streak_cache: dict = {}
     result = []
@@ -226,7 +233,9 @@ async def create_journal_entry(
             )
 
     # JournalEntry.author_id is NOT NULL, so an API key must supply an
-    # X-On-Behalf-Of admin to attribute the entry to.
+    # X-On-Behalf-Of admin to attribute the entry to. The API surface is
+    # admin-only automation: entries created via API key are admin-authored
+    # notes, never written "as" the student.
     author_id = get_user_id_from_auth(auth_user)
     if author_id is None:
         raise HTTPException(

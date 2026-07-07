@@ -32,8 +32,9 @@ class TermGrade(BaseModel):
     subject_color: str
     total_points: float
     earned_points: float
-    percentage: float
-    letter_grade: str
+    # None until something is graded (0%/F would misread as failing)
+    percentage: Optional[float] = None
+    letter_grade: Optional[str] = None
     assignments_count: int
     completed_count: int
 
@@ -61,8 +62,9 @@ class SubjectPerformance(BaseModel):
 
     subject_id: int
     subject_name: str
-    average_percentage: float
-    letter_grade: str
+    # None until something is graded (0%/F would misread as failing)
+    average_percentage: Optional[float] = None
+    letter_grade: Optional[str] = None
     total_assignments: int
     completed_assignments: int
     points_earned: Optional[float] = None
@@ -85,20 +87,20 @@ class StudentProgress(BaseModel):
     last_name: str
     email: str
     grade_level: Optional[int] = None
-    current_term_percentage: float
-    current_term_letter_grade: str
-    overall_grade: float
-    overall_letter_grade: str
+    # Grade fields are None until something is graded (0%/F would misread as failing)
+    current_term_percentage: Optional[float] = None
+    current_term_letter_grade: Optional[str] = None
+    overall_grade: Optional[float] = None
+    overall_letter_grade: Optional[str] = None
     total_assignments: int
     completed_assignments: int
     pending_assignments: int
     overdue_assignments: int
-    average_grade: float
+    average_grade: Optional[float] = None
     completion_rate: float
     attendance_rate: Optional[float] = None
     last_activity_date: Optional[str] = None
     subjects: List[SubjectPerformance] = []
-    subject_grades: List[SubjectPerformance] = []  # Alias for subjects
     grade_series: List[float] = []
     trend: int = 0
     journal_summary: str = ""
@@ -193,14 +195,13 @@ class AttendanceReportSummary(BaseModel):
     student_last_name: str
     grade_level: Optional[int] = None
     total_school_days: int
-    total_possible_days: int  # Alias for total_school_days
     required_days_of_instruction: int  # Required instructional days for calculation
     present_days: int
     absent_days: int
     late_days: int
     excused_days: int
+    # Attended / recorded days (unrecorded days are not counted as misses)
     attendance_rate: float
-    attendance_percentage: float  # Alias for attendance_rate
     start_date: date
     end_date: date
     first_absence_date: Optional[str] = None
@@ -216,15 +217,11 @@ class AttendanceReportDetail(BaseModel):
 
 
 class StudentAttendanceReport(BaseModel):
-    """Schema for student attendance reports."""
+    """Schema for student attendance reports. Student identity lives in summary."""
 
-    student_id: int
-    student_name: str
-    grade_level: Optional[int] = None
     academic_year: Optional[str] = None
     summary: AttendanceReportSummary
     daily_records: List[AttendanceReportDetail]
-    daily_attendance: List[AttendanceReportDetail]  # Alias for daily_records
 
 
 class BulkAttendanceReportOverallStats(BaseModel):
@@ -246,7 +243,6 @@ class BulkAttendanceReport(BaseModel):
     end_date: date
     total_school_days: int
     students: List[AttendanceReportSummary]
-    student_attendance: List[AttendanceReportSummary]  # Alias for students
     overall_stats: BulkAttendanceReportOverallStats
 
 
@@ -321,8 +317,9 @@ class ReportCardSubjectGrade(BaseModel):
     assignments_total: int
     points_earned: float
     points_possible: float
-    percentage_grade: float
-    letter_grade: str
+    # None until something is graded (0%/F would misread as failing)
+    percentage_grade: Optional[float] = None
+    letter_grade: Optional[str] = None
     comments: Optional[str] = None
 
 

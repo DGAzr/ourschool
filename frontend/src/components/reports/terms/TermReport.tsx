@@ -92,12 +92,18 @@ const TermReport: React.FC<TermReportProps> = ({ termGrades, loading }) => {
                   </div>
                 </div>
                 <div className="flex items-center gap-2 flex-none">
-                  <span className={`font-mono font-bold text-[18px] ${gradeColor(grade.percentage)}`}>
-                    {grade.percentage.toFixed(1)}%
-                  </span>
-                  <span className={`text-[11px] font-bold px-2 py-0.5 rounded-pill ${gradeBg(grade.percentage)}`}>
-                    {grade.letter_grade}
-                  </span>
+                  {grade.percentage != null ? (
+                    <>
+                      <span className={`font-mono font-bold text-[18px] ${gradeColor(grade.percentage)}`}>
+                        {grade.percentage.toFixed(1)}%
+                      </span>
+                      <span className={`text-[11px] font-bold px-2 py-0.5 rounded-pill ${gradeBg(grade.percentage)}`}>
+                        {grade.letter_grade}
+                      </span>
+                    </>
+                  ) : (
+                    <span className="text-[12px] font-semibold text-muted">Not graded yet</span>
+                  )}
                 </div>
               </div>
             ))}

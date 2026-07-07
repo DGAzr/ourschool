@@ -29,7 +29,7 @@ from app.core.dual_auth import (
     is_student_user,
     require_admin_or_permission,
     require_admin_or_student_self_or_permission,
-    require_student_or_permission,
+    require_student_session,
     require_user_or_permission,
 )
 from app.crud import reports as crud_reports
@@ -53,20 +53,13 @@ router = APIRouter()
 @router.get("/student/overview", response_model=StudentReport)
 def get_student_report(
     db: Annotated[Session, Depends(get_db)],
-    auth_user: Annotated[
-        AuthUser, Depends(require_student_or_permission("reports:read"))
+    student: Annotated[
+        User,
+        Depends(require_student_session("/reports/report-card/{student_id}/{term_id}")),
     ],
 ):
     """Retrieve a report of the current student's academic progress."""
-    # Current-student endpoints need a student session identity; X-On-Behalf-Of
-    # only resolves admins, so API keys must use student-id-parameterized
-    # endpoints (e.g. /reports/report-card/{student_id}/{term_id}) instead.
-    if not isinstance(auth_user, User):
-        raise HTTPException(
-            status_code=403,
-            detail="API keys cannot use current-student endpoints; use a student-id-parameterized report endpoint instead",
-        )
-    return crud_reports.get_student_report(db, auth_user.id)
+    return crud_reports.get_student_report(db, student.id)
 
 
 @router.get("/admin/overview", response_model=AdminReport)
@@ -83,36 +76,28 @@ def get_admin_report(
 @router.get("/student/term-grades", response_model=List[TermGrade])
 def get_student_term_grades(
     db: Annotated[Session, Depends(get_db)],
-    auth_user: Annotated[
-        AuthUser, Depends(require_student_or_permission("reports:read"))
+    student: Annotated[
+        User,
+        Depends(require_student_session("/reports/report-card/{student_id}/{term_id}")),
     ],
     term_id: Optional[int] = None,
 ):
     """Retrieve the current student's grades for each term and subject."""
-    if not isinstance(auth_user, User):
-        raise HTTPException(
-            status_code=403,
-            detail="API keys cannot use current-student endpoints; use a student-id-parameterized report endpoint instead",
-        )
-    return crud_reports.get_student_term_grades(db, auth_user.id, term_id=term_id)
+    return crud_reports.get_student_term_grades(db, student.id, term_id=term_id)
 
 
 @router.get("/student/subject-performance", response_model=List[SubjectPerformance])
 def get_student_subject_performance(
     db: Annotated[Session, Depends(get_db)],
-    auth_user: Annotated[
-        AuthUser, Depends(require_student_or_permission("reports:read"))
+    student: Annotated[
+        User,
+        Depends(require_student_session("/reports/report-card/{student_id}/{term_id}")),
     ],
     term_id: Optional[int] = None,
 ):
     """Retrieve the current student's academic performance by subject."""
-    if not isinstance(auth_user, User):
-        raise HTTPException(
-            status_code=403,
-            detail="API keys cannot use current-student endpoints; use a student-id-parameterized report endpoint instead",
-        )
     return crud_reports.get_student_subject_performance(
-        db, auth_user.id, term_id=term_id
+        db, student.id, term_id=term_id
     )
 
 

@@ -26,7 +26,6 @@ from sqlalchemy.orm import Session, joinedload
 
 from app.core.database import get_db
 from app.models.assignment import (
-    AssignmentStatus,
     AssignmentTemplate,
     StudentAssignment,
 )
@@ -60,6 +59,31 @@ def _validate_assignment_type(db: Session, key: str) -> None:
     type_row = crud_types.get_by_key(db, key)
     if type_row is None or not type_row.is_active:
         raise HTTPException(status_code=400, detail=f"Unknown assignment type '{key}'")
+
+
+def _attach_template_stats(db: Session, templates: List[AssignmentTemplate]) -> None:
+    """Populate the computed total_assigned / average_grade response fields.
+
+    ``total_assigned`` counts every student assignment ever created from the
+    template (including submitted/graded ones), matching the delete guard's
+    "has student assignments" meaning — a fully-graded template is not "0".
+    """
+    for template in templates:
+        template.total_assigned = (
+            db.query(StudentAssignment)
+            .filter(StudentAssignment.template_id == template.id)
+            .count()
+        )
+
+        avg_result = (
+            db.query(func.avg(StudentAssignment.percentage_grade))
+            .filter(
+                StudentAssignment.template_id == template.id,
+                StudentAssignment.is_graded,
+            )
+            .scalar()
+        )
+        template.average_grade = float(avg_result) if avg_result else None
 
 
 # Assignment Template Management
@@ -136,30 +160,7 @@ def get_assignment_templates(
 
     templates = query.offset(skip).limit(limit).all()
 
-    # Populate computed fields for each template
-    for template in templates:
-        # Count current assignments for this template (exclude submitted/graded)
-        template.total_assigned = (
-            db.query(StudentAssignment)
-            .filter(
-                StudentAssignment.template_id == template.id,
-                StudentAssignment.status.notin_(
-                    [AssignmentStatus.SUBMITTED, AssignmentStatus.GRADED]
-                ),
-            )
-            .count()
-        )
-
-        # Calculate average grade
-        avg_result = (
-            db.query(func.avg(StudentAssignment.percentage_grade))
-            .filter(
-                StudentAssignment.template_id == template.id,
-                StudentAssignment.is_graded,
-            )
-            .scalar()
-        )
-        template.average_grade = float(avg_result) if avg_result else None
+    _attach_template_stats(db, templates)
 
     return templates
 
@@ -185,6 +186,8 @@ def get_assignment_template(
 
     if not template:
         raise HTTPException(status_code=404, detail="Assignment template not found")
+
+    _attach_template_stats(db, [template])
 
     return template
 

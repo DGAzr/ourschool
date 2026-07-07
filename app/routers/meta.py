@@ -46,4 +46,7 @@ def get_meta(db: Annotated[Session, Depends(get_db)]):
         # API-key writes may attribute to a real admin via this header
         # (value: user ID or username; must be an active admin).
         "on_behalf_of_header": "X-On-Behalf-Of",
+        # The API-key surface is admin automation only: keys never act as or
+        # for a student (student identity exists only in student sessions).
+        "api_scope": "admin",
     }

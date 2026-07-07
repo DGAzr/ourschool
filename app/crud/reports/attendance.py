@@ -84,11 +84,13 @@ def get_student_attendance_report(
 
     # Get attendance statistics
     attendance_stats = get_attendance_statistics(attendance_records)
-    # Use school-days denominator so unrecorded days accurately lower the rate.
+    # Recorded-days rate (attended / recorded days): unrecorded days are days
+    # school simply wasn't held, not misses. This matches every other rate in
+    # the app (admin overview, student progress, report card); compliance is
+    # tracked separately via present_days vs required_days_of_instruction.
     attendance_rate = (
         calculate_attendance_rate(
             attendance_records,
-            total_school_days=total_school_days,
             count_excused=att_settings["count_excused"],
         )
         or 0.0
@@ -104,14 +106,12 @@ def get_student_attendance_report(
         student_last_name=student.last_name,
         grade_level=student.grade_level,
         total_school_days=total_school_days,
-        total_possible_days=total_school_days,  # Alias for frontend
         required_days_of_instruction=required_days_of_instruction,
         present_days=attendance_stats["present_days"],
         absent_days=attendance_stats["absent_days"],
         late_days=attendance_stats["late_days"],
         excused_days=attendance_stats["excused_days"],
         attendance_rate=round(attendance_rate, 2),
-        attendance_percentage=round(attendance_rate, 2),  # Alias for frontend
         start_date=start_date,
         end_date=end_date,
         first_absence_date=first_absence_date,
@@ -127,13 +127,9 @@ def get_student_attendance_report(
     ]
 
     return schemas.StudentAttendanceReport(
-        student_id=student.id,
-        student_name=f"{student.first_name} {student.last_name}",
-        grade_level=student.grade_level,
         academic_year=academic_year,
         summary=summary,
         daily_records=daily_records,
-        daily_attendance=daily_records,  # Alias for frontend
     )
 
 
@@ -177,11 +173,10 @@ def get_bulk_attendance_report(
 
         # Calculate totals using utility functions
         attendance_stats = get_attendance_statistics(attendance_records)
-        # Use school-days denominator so unrecorded days accurately lower the rate.
+        # Recorded-days rate — see get_student_attendance_report.
         attendance_rate = (
             calculate_attendance_rate(
                 attendance_records,
-                total_school_days=total_school_days,
                 count_excused=att_settings["count_excused"],
             )
             or 0.0
@@ -197,14 +192,12 @@ def get_bulk_attendance_report(
                 student_last_name=student.last_name,
                 grade_level=student.grade_level,
                 total_school_days=total_school_days,
-                total_possible_days=total_school_days,  # Alias for frontend
                 required_days_of_instruction=required_days_of_instruction,
                 present_days=attendance_stats["present_days"],
                 absent_days=attendance_stats["absent_days"],
                 late_days=attendance_stats["late_days"],
                 excused_days=attendance_stats["excused_days"],
                 attendance_rate=round(attendance_rate, 2),
-                attendance_percentage=round(attendance_rate, 2),  # Alias for frontend
                 start_date=start_date,
                 end_date=end_date,
                 first_absence_date=first_absence_date,
@@ -239,6 +232,5 @@ def get_bulk_attendance_report(
         end_date=end_date,
         total_school_days=total_school_days,
         students=student_summaries,
-        student_attendance=student_summaries,  # Alias for frontend
         overall_stats=overall_stats,
     )

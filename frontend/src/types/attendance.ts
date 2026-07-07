@@ -39,14 +39,13 @@ export interface AttendanceReportSummary {
   student_last_name: string
   grade_level?: number
   total_school_days: number
-  total_possible_days: number
   required_days_of_instruction: number
   present_days: number
   absent_days: number
   late_days: number
   excused_days: number
+  // attended / recorded days (unrecorded days are not counted as misses)
   attendance_rate: number
-  attendance_percentage: number
   start_date: string
   end_date: string
   first_absence_date?: string
@@ -60,13 +59,9 @@ interface AttendanceReportDetail {
 }
 
 export interface StudentAttendanceReport {
-  student_id: number
-  student_name: string
-  grade_level?: number
   academic_year?: string
   summary: AttendanceReportSummary
   daily_records: AttendanceReportDetail[]
-  daily_attendance: AttendanceReportDetail[]
 }
 
 export interface BulkAttendanceReport {
@@ -75,7 +70,6 @@ export interface BulkAttendanceReport {
   end_date: string
   total_school_days: number
   students: AttendanceReportSummary[]
-  student_attendance: AttendanceReportSummary[]
   overall_stats: {
     total_students: number
     average_attendance_rate: number

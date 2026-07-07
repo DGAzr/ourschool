@@ -162,6 +162,11 @@ PERMISSION_DESCRIPTIONS = {
         description="Read student information and profiles",
         category="Students",
     ),
+    "users:read": PermissionInfo(
+        permission="users:read",
+        description="List active admins (e.g. to resolve X-On-Behalf-Of by name)",
+        category="Users",
+    ),
     "assignments:read": PermissionInfo(
         permission="assignments:read",
         description="Read assignment data and submissions",

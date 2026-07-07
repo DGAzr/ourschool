@@ -237,6 +237,71 @@ class TermGradingService:
 
         return calculate_letter_grade(percentage, scale)
 
+    # Reports below are returned straight from dict-returning endpoints with no
+    # response_model, so every ORM object must be reduced to a public-safe dict
+    # here — embedding a User row would leak hashed_password and friends.
+
+    @staticmethod
+    def _serialize_term(term: Term) -> Dict:
+        return {
+            "id": term.id,
+            "name": term.name,
+            "academic_year": term.academic_year,
+            "start_date": term.start_date,
+            "end_date": term.end_date,
+            "is_active": term.is_active,
+        }
+
+    @staticmethod
+    def _serialize_student(student: User) -> Dict:
+        return {
+            "id": student.id,
+            "first_name": student.first_name,
+            "last_name": student.last_name,
+            "grade_level": student.grade_level,
+        }
+
+    @staticmethod
+    def _serialize_subject(subject: Subject) -> Dict:
+        return {
+            "id": subject.id,
+            "name": subject.name,
+            "color": subject.color,
+        }
+
+    @staticmethod
+    def _serialize_grade(grade: StudentTermGrade) -> Dict:
+        return {
+            "points_earned": grade.current_points_earned,
+            "points_possible": grade.current_points_possible,
+            "percentage": grade.current_percentage,
+            "letter_grade": grade.current_letter_grade,
+            "assignments_completed": grade.assignments_completed,
+            "assignments_total": grade.assignments_total,
+            "last_calculated": grade.last_calculated,
+        }
+
+    @staticmethod
+    def _serialize_assignment(assignment: StudentAssignment) -> Dict:
+        return {
+            "id": assignment.id,
+            "template_id": assignment.template_id,
+            "name": assignment.template.name if assignment.template else None,
+            "assignment_type": (
+                assignment.template.assignment_type if assignment.template else None
+            ),
+            "status": assignment.status,
+            "assigned_date": assignment.assigned_date,
+            "due_date": assignment.due_date,
+            "extended_due_date": assignment.extended_due_date,
+            "points_earned": assignment.points_earned,
+            "max_points": assignment.max_points,
+            "percentage_grade": assignment.percentage_grade,
+            "letter_grade": assignment.letter_grade,
+            "is_graded": assignment.is_graded,
+            "graded_date": assignment.graded_date,
+        }
+
     @staticmethod
     def get_term_grade_report(db: Session, term_id: int) -> Dict:
         """Generate a comprehensive grade report for a term."""
@@ -263,16 +328,19 @@ class TermGradingService:
             student_id = grade.student_id
             if student_id not in students_data:
                 students_data[student_id] = {
-                    "student": grade.student,
+                    "student": TermGradingService._serialize_student(grade.student),
                     "subjects": [],
                     "overall_percentage": 0,
+                    "overall_letter_grade": None,
                     "total_points_earned": 0,
                     "total_points_possible": 0,
                 }
 
             subject_data = {
-                "subject": grade.term_subject.subject,
-                "grade": grade,
+                "subject": TermGradingService._serialize_subject(
+                    grade.term_subject.subject
+                ),
+                "grade": TermGradingService._serialize_grade(grade),
                 "percentage": grade.current_percentage,
                 "letter_grade": grade.current_letter_grade,
                 "points_earned": grade.current_points_earned,
@@ -301,10 +369,12 @@ class TermGradingService:
                 )
 
         return {
-            "term": term,
+            "term": TermGradingService._serialize_term(term),
             "students": list(students_data.values()),
             "total_students": len(students_data),
-            "total_subjects": {g.term_subject.subject_id for g in student_grades},
+            "total_subjects": len(
+                {g.term_subject.subject_id for g in student_grades}
+            ),
         }
 
     @staticmethod
@@ -356,9 +426,14 @@ class TermGradingService:
 
             subjects_detail.append(
                 {
-                    "subject": grade.term_subject.subject,
-                    "grade": grade,
-                    "assignments": assignments,
+                    "subject": TermGradingService._serialize_subject(
+                        grade.term_subject.subject
+                    ),
+                    "grade": TermGradingService._serialize_grade(grade),
+                    "assignments": [
+                        TermGradingService._serialize_assignment(a)
+                        for a in assignments
+                    ],
                     "assignment_count": len(assignments),
                 }
             )
@@ -375,8 +450,8 @@ class TermGradingService:
             )
 
         return {
-            "term": term,
-            "student": student,
+            "term": TermGradingService._serialize_term(term),
+            "student": TermGradingService._serialize_student(student),
             "subjects": subjects_detail,
             "overall_percentage": overall_percentage,
             "overall_letter_grade": overall_letter_grade,

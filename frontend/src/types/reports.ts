@@ -28,8 +28,9 @@ export interface TermGrade {
   subject_color: string
   total_points: number
   earned_points: number
-  percentage: number
-  letter_grade: string
+  // null until something is graded
+  percentage: number | null
+  letter_grade: string | null
   assignments_count: number
   completed_count: number
 }
@@ -44,8 +45,9 @@ export interface SubjectPerformance {
   subject_id: number
   subject_name: string
   subject_color?: string
-  average_percentage: number
-  letter_grade: string
+  // null until something is graded
+  average_percentage: number | null
+  letter_grade: string | null
   total_assignments: number
   completed_assignments: number
   points_earned?: number
@@ -61,20 +63,20 @@ export interface StudentProgress {
   last_name: string
   email: string
   grade_level?: number
-  current_term_percentage: number
-  current_term_letter_grade: string
-  overall_grade: number
-  overall_letter_grade: string
+  // grade fields are null until something is graded
+  current_term_percentage: number | null
+  current_term_letter_grade: string | null
+  overall_grade: number | null
+  overall_letter_grade: string | null
   total_assignments: number
   completed_assignments: number
   pending_assignments: number
   overdue_assignments: number
-  average_grade: number
+  average_grade: number | null
   completion_rate: number
   attendance_rate?: number
   last_activity_date?: string
   subjects: SubjectPerformance[]
-  subject_grades?: SubjectPerformance[]
   grade_series: number[]
   trend: number
   journal_summary: string
@@ -198,8 +200,9 @@ export interface ReportCardSubjectGrade {
   assignments_total: number
   points_earned: number
   points_possible: number
-  percentage_grade: number
-  letter_grade: string
+  // null until something is graded
+  percentage_grade: number | null
+  letter_grade: string | null
   comments?: string
 }
 

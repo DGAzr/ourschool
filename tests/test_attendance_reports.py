@@ -38,12 +38,17 @@ def test_attendance_report_math(client, admin_headers, student_factory):
     assert summary["late_days"] == 1
     assert summary["absent_days"] == 1
     assert summary["excused_days"] == 1
-    # present + late + excused (counted by default) over school days: 4/5
+    # present + late + excused (counted by default) over recorded days: 4/5
     assert summary["attendance_rate"] == pytest.approx(80.0)
 
 
-def test_unrecorded_days_lower_the_rate(client, admin_headers, student_factory):
-    """Only 1 of 5 school days recorded → rate uses the 5-day denominator."""
+def test_unrecorded_days_do_not_count_as_misses(client, admin_headers, student_factory):
+    """Only 1 of 5 school days recorded → rate uses recorded days (1/1).
+
+    Unrecorded days are days school wasn't held, not absences; the recorded-days
+    rule matches the admin overview, student progress, and report card rates.
+    total_school_days still reports the full window for compliance tracking.
+    """
     student, _ = student_factory()
     r = client.post(
         "/api/attendance/",
@@ -60,7 +65,7 @@ def test_unrecorded_days_lower_the_rate(client, admin_headers, student_factory):
     assert r.status_code == 200, r.text
     summary = r.json()["summary"]
     assert summary["total_school_days"] == 5
-    assert summary["attendance_rate"] == pytest.approx(20.0)
+    assert summary["attendance_rate"] == pytest.approx(100.0)
 
 
 def test_student_can_view_own_report_but_not_others(

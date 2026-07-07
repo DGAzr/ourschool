@@ -204,6 +204,8 @@ def get_system_api_key_stats(db: Session) -> Dict[str, Any]:
 AVAILABLE_PERMISSIONS = [
     # Students
     "students:read",  # GET /api/users/students, /students/lookup, /students/{id}/info
+    # Users
+    "users:read",  # GET /api/users/admins (admin directory, e.g. to resolve X-On-Behalf-Of)
     # Assignments
     "assignments:read",  # GET /api/integrations/assignments/{id};
     #     GET /api/assignments/templates, /all-assignments,

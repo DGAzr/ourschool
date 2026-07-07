@@ -4,7 +4,7 @@
 
 OurSchool is a self-hosted homeschool management system for families who take attendance seriously, grade assignments carefully, and really don't want to maintain a pile of spreadsheets. It handles the administrative grind — attendance, subjects, assignments, grading, reports, and a shameless gamification points system — so you can spend more time on the actual teaching.
 
-> **Beta — `v1.0.0-beta.12`**  
+> **Beta — `v1.0.0-beta.13`**  
 > Pre-stable software. The database schema may have breaking changes until the planned 2026–2027 stable release. Use the built-in system backup/restore (with dry-run preview) to safeguard your data between updates.
 
 
@@ -160,11 +160,14 @@ curl -H "X-API-Key: os_YOUR_KEY_HERE" \
 
 Every endpoint accepts a Bearer token. Endpoints in the assignments, attendance, points, users-lookup, and integrations groups also accept an API key carrying the matching permission; everything else (users admin, backup, settings, API-key management, …) is session-only.
 
+**Design rule:** the API-key surface is admin automation only. A key may read or write any student's data (subject to its permissions) and attribute writes to a real admin via `X-On-Behalf-Of`, but it never acts *as* a student: current-user endpoints (`/my-*`, `/reports/student/*`) require a student login session, and nothing on the API surface can author content in a student's name.
+
 ### API Key Permissions
 
 | Permission | What it grants |
 |------------|----------------|
 | `students:read` | List and look up students (`/api/users/students`, `/api/users/students/lookup`, `/api/users/students/{id}/info`) |
+| `users:read` | List active admins (`/api/users/admins`), e.g. to resolve an `X-On-Behalf-Of` target by name |
 | `assignments:read` | Read templates, assignments, and student progress |
 | `assignments:write` | Create/update templates; assign templates to students |
 | `assignments:grade` | Grade student assignments |
@@ -204,7 +207,7 @@ for student in r.json()["student_points"]:
 
 ### Endpoint reference
 
-The complete API surface as of `v1.0.0-beta.12`. Set `ENABLE_API_DOCS=true` for the interactive version (request/response schemas included) at `/docs`.
+The complete API surface as of `v1.0.0-beta.13`. Set `ENABLE_API_DOCS=true` for the interactive version (request/response schemas included) at `/docs`.
 
 <details>
 <summary><strong>Expand the full endpoint list</strong></summary>
@@ -228,6 +231,7 @@ The complete API surface as of `v1.0.0-beta.12`. Set `ENABLE_API_DOCS=true` for 
 | `GET /api/users/students` | List all students (admin or `students:read`) |
 | `GET /api/users/students/lookup` | Lightweight student lookup (`students:read`) |
 | `GET /api/users/students/{student_id}/info` | Student details (`students:read`) |
+| `GET /api/users/admins` | List active admins (admin or `users:read`) |
 | `GET /api/users/{user_id}` | Get a user |
 | `PUT /api/users/{user_id}` | Update a user (admins: any field; students: own profile fields) |
 | `DELETE /api/users/{user_id}` | Delete a user (admin) |
@@ -320,7 +324,7 @@ The complete API surface as of `v1.0.0-beta.12`. Set `ENABLE_API_DOCS=true` for 
 | Endpoint | Description |
 |----------|-------------|
 | `GET /api/journal/entries` | List journal entries (admins see all; students see their own) |
-| `POST /api/journal/entries` | Create an entry |
+| `POST /api/journal/entries` | Create an entry (API keys must attribute via `X-On-Behalf-Of` admin) |
 | `GET /api/journal/entries/{entry_id}` | Get an entry |
 | `PUT /api/journal/entries/{entry_id}` | Update an entry |
 | `DELETE /api/journal/entries/{entry_id}` | Delete an entry |

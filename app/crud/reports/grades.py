@@ -112,13 +112,12 @@ def get_student_term_grades(
         data["earned_points"] = earned_points
         data["total_points"] = total_points
 
-        letter_grade = calculate_letter_grade(percentage, grade_scale)
+        # No graded work yet → no grade, not an alarming 0%/F.
+        if total_points > 0:
+            data["percentage"] = round(percentage, 2)
+            data["letter_grade"] = calculate_letter_grade(percentage, grade_scale)
 
-        result.append(
-            schemas.TermGrade(
-                **data, percentage=round(percentage, 2), letter_grade=letter_grade
-            )
-        )
+        result.append(schemas.TermGrade(**data))
 
     return result
 
@@ -228,11 +227,16 @@ def get_student_subject_performance(
         points_possible = sum(term.total_points for term in data["terms"])
         if points_possible > 0:
             avg_percentage = (
-                sum(term.percentage * term.total_points for term in data["terms"])
+                sum(
+                    term.percentage * term.total_points
+                    for term in data["terms"]
+                    if term.percentage is not None
+                )
                 / points_possible
             )
         else:
-            avg_percentage = 0.0
+            # No graded work yet → no grade, not an alarming 0%/F.
+            avg_percentage = None
 
         # Calculate trend data for this subject
         trend_data = _calculate_subject_trend_data(
@@ -243,8 +247,14 @@ def get_student_subject_performance(
             schemas.SubjectPerformance(
                 subject_id=data["subject_id"],
                 subject_name=data["subject_name"],
-                average_percentage=round(avg_percentage, 2),
-                letter_grade=calculate_letter_grade(avg_percentage, grade_scale),
+                average_percentage=(
+                    round(avg_percentage, 2) if avg_percentage is not None else None
+                ),
+                letter_grade=(
+                    calculate_letter_grade(avg_percentage, grade_scale)
+                    if avg_percentage is not None
+                    else None
+                ),
                 total_assignments=data["total_assignments"],
                 completed_assignments=data["completed_assignments"],
                 points_earned=points_earned,
@@ -341,8 +351,15 @@ def get_report_card(db: Session, student_id: int, term_id: int) -> schemas.Repor
                 assignments_total=data["assignments_total"],
                 points_earned=points_earned,
                 points_possible=points_possible,
-                percentage_grade=round(percentage, 2),
-                letter_grade=calculate_letter_grade(percentage, grade_scale),
+                # No graded work yet → no grade, not an alarming 0%/F.
+                percentage_grade=(
+                    round(percentage, 2) if points_possible > 0 else None
+                ),
+                letter_grade=(
+                    calculate_letter_grade(percentage, grade_scale)
+                    if points_possible > 0
+                    else None
+                ),
             )
         )
 

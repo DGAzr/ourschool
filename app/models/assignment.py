@@ -217,9 +217,33 @@ class StudentAssignment(Base):
             self.percentage_grade = (self.points_earned / self.max_points) * 100
         return self.percentage_grade
 
+    def backfill_lifecycle_dates_for_grading(self):
+        """Backfill started/submitted/completed dates when grading.
+
+        Grading unsubmitted work is allowed (a parent often grades work that
+        was done on paper), but graded rows with null submitted/completed
+        dates skew completion counts and activity feeds. Any date already set
+        is left untouched.
+        """
+        from datetime import date
+
+        today = self.graded_date or date.today()
+        if self.started_date is None:
+            self.started_date = today
+        if self.submitted_date is None:
+            self.submitted_date = today
+        if self.completed_date is None:
+            self.completed_date = today
+
     def update_status(self):
         """Update status based on current state."""
         from datetime import date
+
+        # EXCUSED is an explicit admin decision (also used as "archived") and
+        # cannot be derived from dates/grades, so recomputation must never
+        # clobber it. Un-excusing requires explicitly setting another status.
+        if self.status == AssignmentStatus.EXCUSED:
+            return
 
         today = date.today()
         effective_due_date = self.extended_due_date or self.due_date

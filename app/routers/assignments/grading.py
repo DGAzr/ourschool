@@ -44,6 +44,7 @@ from app.schemas.assignment import (
     StudentAssignmentGrade,
     StudentAssignmentResponse,
 )
+from app.utils.grading import assignment_status_filter
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -110,6 +111,7 @@ def grade_student_assignment(
     else:
         assignment.letter_grade = grade_data.letter_grade
 
+    assignment.backfill_lifecycle_dates_for_grading()
     assignment.update_status()
 
     # Automatically update term grades
@@ -213,6 +215,7 @@ def bulk_grade_assignments(
                         percentage, get_grade_scale(db)
                     )
 
+                assignment.backfill_lifecycle_dates_for_grading()
                 assignment.update_status()
                 assignment.update_term_grade(db)
 
@@ -325,10 +328,9 @@ def get_all_assignments_for_grading(
 
     # Apply filters
     if status:
-        # Convert string status to enum
         try:
-            status_enum = AssignmentStatus(status)
-            query = query.filter(StudentAssignment.status == status_enum)
+            # "overdue" is derived from due dates, not the stored column
+            query = query.filter(assignment_status_filter(status))
         except ValueError:
             # Invalid status, return empty results
             return []
