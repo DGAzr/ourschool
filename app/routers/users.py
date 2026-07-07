@@ -202,16 +202,11 @@ def update_me(
 
 
 @router.get("/students", response_model=List[UserSchema])
-def list_students(
-    db: Annotated[Session, Depends(get_db)],
-    current_user: Annotated[User, Depends(get_current_active_user)],
+async def list_students(
+    auth_user: AuthUser = Depends(require_admin_or_permission("students:read")),
+    db: Session = Depends(get_db),
 ):
     """Get all students managed by the current admin."""
-    if current_user.role != UserRole.ADMIN:
-        raise HTTPException(
-            status_code=403, detail="Only administrators can list students"
-        )
-
     # Return all students for admins in homeschool context
     return db.query(User).filter(User.role == UserRole.STUDENT).all()
 

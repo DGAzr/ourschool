@@ -203,7 +203,7 @@ def get_system_api_key_stats(db: Session) -> Dict[str, Any]:
 # /api/meta discovery contract never advertises capabilities that don't exist.
 AVAILABLE_PERMISSIONS = [
     # Students
-    "students:read",  # GET /api/users/students/lookup, /students/{id}/info
+    "students:read",  # GET /api/users/students, /students/lookup, /students/{id}/info
     # Assignments
     "assignments:read",  # GET /api/integrations/assignments/{id};
     #     GET /api/assignments/templates, /all-assignments,

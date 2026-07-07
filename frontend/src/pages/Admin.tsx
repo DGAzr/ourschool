@@ -1764,7 +1764,7 @@ const Admin: React.FC = () => {
             <CreateAPIKeyModal
               isOpen={showCreateKey}
               onClose={() => setShowCreateKey(false)}
-              onSuccess={() => { setShowCreateKey(false); apiKeysHook.refreshData() }}
+              onSuccess={() => apiKeysHook.refreshData()}
               error={apiKeysHook.error}
               setError={apiKeysHook.setError}
             />

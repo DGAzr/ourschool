@@ -190,6 +190,22 @@ def test_attendance_bulk_write_and_read_via_api_key(client, seeded):
 
 
 # --------------------------------------------------------------------------
+# Student roster
+# --------------------------------------------------------------------------
+
+
+def test_list_students_via_api_key(client, seeded):
+    # Rejected without students:read.
+    r = client.get("/api/users/students", headers=_hdr(seeded["mint"]("attendance:read")))
+    assert r.status_code == 403, r.text
+
+    # The canonical roster endpoint works with students:read.
+    r = client.get("/api/users/students", headers=_hdr(seeded["mint"]("students:read")))
+    assert r.status_code == 200, r.text
+    assert any(s["id"] == seeded["student"].id for s in r.json())
+
+
+# --------------------------------------------------------------------------
 # Discovery contract
 # --------------------------------------------------------------------------
 

@@ -4,7 +4,7 @@
 
 OurSchool is a self-hosted homeschool management system for families who take attendance seriously, grade assignments carefully, and really don't want to maintain a pile of spreadsheets. It handles the administrative grind — attendance, subjects, assignments, grading, reports, and a shameless gamification points system — so you can spend more time on the actual teaching.
 
-> **Beta — `v1.0.0-beta.10`**  
+> **Beta — `v1.0.0-beta.11`**  
 > Pre-stable software. The database schema may have breaking changes until the planned 2026–2027 stable release. Use the built-in system backup/restore (with dry-run preview) to safeguard your data between updates.
 
 
@@ -164,7 +164,7 @@ Every endpoint accepts a Bearer token. Endpoints in the assignments, attendance,
 
 | Permission | What it grants |
 |------------|----------------|
-| `students:read` | Look up students (`/api/users/students/lookup`, `/api/users/students/{id}/info`) |
+| `students:read` | List and look up students (`/api/users/students`, `/api/users/students/lookup`, `/api/users/students/{id}/info`) |
 | `assignments:read` | Read templates, assignments, and student progress |
 | `assignments:write` | Create/update templates; assign templates to students |
 | `assignments:grade` | Grade student assignments |
@@ -204,7 +204,7 @@ for student in r.json()["student_points"]:
 
 ### Endpoint reference
 
-The complete API surface as of `v1.0.0-beta.10`. Set `ENABLE_API_DOCS=true` for the interactive version (request/response schemas included) at `/docs`.
+The complete API surface as of `v1.0.0-beta.11`. Set `ENABLE_API_DOCS=true` for the interactive version (request/response schemas included) at `/docs`.
 
 <details>
 <summary><strong>Expand the full endpoint list</strong></summary>
@@ -225,7 +225,7 @@ The complete API surface as of `v1.0.0-beta.10`. Set `ENABLE_API_DOCS=true` for 
 | `GET /api/users/me` | Current user profile |
 | `PUT /api/users/me` | Update own profile (name, email, username, theme preference) |
 | `POST /api/users/me/change-password` | Change own password |
-| `GET /api/users/students` | List all students (admin) |
+| `GET /api/users/students` | List all students (admin or `students:read`) |
 | `GET /api/users/students/lookup` | Lightweight student lookup (`students:read`) |
 | `GET /api/users/students/{student_id}/info` | Student details (`students:read`) |
 | `GET /api/users/{user_id}` | Get a user |
