@@ -4,7 +4,7 @@
 
 OurSchool is a self-hosted homeschool management system for families who take attendance seriously, grade assignments carefully, and really don't want to maintain a pile of spreadsheets. It handles the administrative grind — attendance, subjects, assignments, grading, reports, and a shameless gamification points system — so you can spend more time on the actual teaching.
 
-> **Beta — `v1.0.0-beta.13`**  
+> **Beta — `v1.0.0-beta.12`**  
 > Pre-stable software. The database schema may have breaking changes until the planned 2026–2027 stable release. Use the built-in system backup/restore (with dry-run preview) to safeguard your data between updates.
 
 
@@ -207,7 +207,7 @@ for student in r.json()["student_points"]:
 
 ### Endpoint reference
 
-The complete API surface as of `v1.0.0-beta.13`. Set `ENABLE_API_DOCS=true` for the interactive version (request/response schemas included) at `/docs`.
+The complete API surface as of `v1.0.0-beta`. Set `ENABLE_API_DOCS=true` for the interactive version (request/response schemas included) at `/docs`.
 
 <details>
 <summary><strong>Expand the full endpoint list</strong></summary>
