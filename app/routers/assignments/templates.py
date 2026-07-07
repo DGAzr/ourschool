@@ -168,7 +168,9 @@ def get_assignment_templates(
 def get_assignment_template(
     template_id: int,
     db: Annotated[Session, Depends(get_db)],
-    auth_user: Annotated[AuthUser, Depends(require_admin_or_permission("assignments:read"))],
+    auth_user: Annotated[
+        AuthUser, Depends(require_admin_or_permission("assignments:read"))
+    ],
 ):
     """Get a specific assignment template."""
     template = (
@@ -232,7 +234,9 @@ def update_assignment_template(
 def delete_assignment_template(
     template_id: int,
     db: Annotated[Session, Depends(get_db)],
-    auth_user: Annotated[AuthUser, Depends(require_admin_or_permission("assignments:write"))],
+    auth_user: Annotated[
+        AuthUser, Depends(require_admin_or_permission("assignments:write"))
+    ],
 ):
     """Delete an assignment template."""
     template = (
@@ -273,7 +277,9 @@ def delete_assignment_template(
 def archive_assignment_template(
     template_id: int,
     db: Annotated[Session, Depends(get_db)],
-    auth_user: Annotated[AuthUser, Depends(require_admin_or_permission("assignments:write"))],
+    auth_user: Annotated[
+        AuthUser, Depends(require_admin_or_permission("assignments:write"))
+    ],
 ):
     """Archive an assignment template."""
     template = (
@@ -302,10 +308,16 @@ def archive_assignment_template(
 def get_template_assignments(
     template_id: int,
     db: Annotated[Session, Depends(get_db)],
-    auth_user: Annotated[AuthUser, Depends(require_admin_or_permission("assignments:read"))],
+    auth_user: Annotated[
+        AuthUser, Depends(require_admin_or_permission("assignments:read"))
+    ],
 ):
     """Get all student assignments for a specific template."""
-    template = db.query(AssignmentTemplate).filter(AssignmentTemplate.id == template_id).first()
+    template = (
+        db.query(AssignmentTemplate)
+        .filter(AssignmentTemplate.id == template_id)
+        .first()
+    )
 
     if not template:
         raise HTTPException(status_code=404, detail="Assignment template not found")
@@ -330,7 +342,9 @@ def get_template_assignments(
 def export_assignment_template(
     template_id: int,
     db: Annotated[Session, Depends(get_db)],
-    auth_user: Annotated[AuthUser, Depends(require_admin_or_permission("assignments:read"))],
+    auth_user: Annotated[
+        AuthUser, Depends(require_admin_or_permission("assignments:read"))
+    ],
 ):
     """Export an assignment template for sharing with other homeschool families."""
     # Get template with subject
@@ -375,7 +389,9 @@ def export_assignment_template(
 def import_assignment_template(
     import_request: AssignmentTemplateImport,
     db: Annotated[Session, Depends(get_db)],
-    auth_user: Annotated[AuthUser, Depends(require_admin_or_permission("assignments:write"))],
+    auth_user: Annotated[
+        AuthUser, Depends(require_admin_or_permission("assignments:write"))
+    ],
 ):
     """Import an assignment template from another homeschool family."""
     try:
@@ -451,7 +467,9 @@ def import_assignment_template(
 def bulk_export_assignment_templates(
     template_ids: List[int],
     db: Annotated[Session, Depends(get_db)],
-    auth_user: Annotated[AuthUser, Depends(require_admin_or_permission("assignments:read"))],
+    auth_user: Annotated[
+        AuthUser, Depends(require_admin_or_permission("assignments:read"))
+    ],
 ):
     """Export multiple assignment templates as a single package."""
 

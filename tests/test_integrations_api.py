@@ -158,6 +158,55 @@ def test_list_templates_via_api_key(client, seeded):
     assert any(t["name"] == "Listed" for t in r.json())
 
 
+def test_complete_assignment_via_api_key(client, seeded):
+    """The /complete endpoint accepts a JSON object body (regression: it used
+    to demand a bare JSON list, 422-ing every real client)."""
+    write = seeded["mint"]("assignments:write")
+
+    # Author + assign so there is something to complete.
+    r = client.post(
+        "/api/assignments/templates",
+        json={"name": "Essay", "subject_id": seeded["subject"].id, "assignment_type": seeded["type_key"], "max_points": 10},
+        headers=_hdr(write),
+    )
+    template_id = r.json()["id"]
+    seeded["activate_term"]()
+    r = client.post(
+        "/api/assignments/assign",
+        json={"template_id": template_id, "student_ids": [seeded["student"].id]},
+        headers=_hdr(write),
+    )
+    assignment_id = r.json()["created_assignments"][0]["id"]
+
+    # Rejected without assignments:write.
+    r = client.post(
+        f"/api/assignments/student-assignments/{assignment_id}/complete",
+        json={},
+        headers=_hdr(seeded["mint"]("assignments:read")),
+    )
+    assert r.status_code == 403, r.text
+
+    # Notes and artifacts arrive via the object body.
+    r = client.post(
+        f"/api/assignments/student-assignments/{assignment_id}/complete",
+        json={"submission_notes": "Done via MCP", "submission_artifacts": ["https://example.com/essay.pdf"]},
+        headers=_hdr(write),
+    )
+    assert r.status_code == 200, r.text
+    data = r.json()
+    assert data["status"] == "submitted"
+    assert data["submission_notes"] == "Done via MCP"
+    assert data["submission_artifacts"] == ["https://example.com/essay.pdf"]
+
+    # An empty object body (no notes) is also valid.
+    r = client.post(
+        f"/api/assignments/student-assignments/{assignment_id}/complete",
+        json={},
+        headers=_hdr(write),
+    )
+    assert r.status_code == 200, r.text
+
+
 # --------------------------------------------------------------------------
 # Attendance read/write
 # --------------------------------------------------------------------------

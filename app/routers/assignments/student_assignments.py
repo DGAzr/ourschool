@@ -44,6 +44,7 @@ from app.core.dual_auth import (
 from app.schemas.assignment import (
     AssignmentAssignmentRequest,
     AssignmentAssignmentResponse,
+    StudentAssignmentCompleteRequest,
     StudentAssignmentResponse,
     StudentAssignmentUpdate,
 )
@@ -159,9 +160,10 @@ def assign_template_to_students(
 def get_student_assignments(
     student_id: int,
     db: Annotated[Session, Depends(get_db)],
-    auth_user: Annotated[AuthUser, Depends(
-        require_admin_or_student_self_or_permission("assignments:read")
-    )],
+    auth_user: Annotated[
+        AuthUser,
+        Depends(require_admin_or_student_self_or_permission("assignments:read")),
+    ],
     subject_id: Optional[int] = Query(None),
     status: Optional[str] = Query(None),
     include_archived: bool = Query(False),
@@ -208,9 +210,10 @@ def get_student_assignments(
 def get_student_assignment(
     assignment_id: int,
     db: Annotated[Session, Depends(get_db)],
-    auth_user: Annotated[AuthUser, Depends(
-        require_admin_or_student_self_or_permission("assignments:read")
-    )],
+    auth_user: Annotated[
+        AuthUser,
+        Depends(require_admin_or_student_self_or_permission("assignments:read")),
+    ],
 ):
     """Get a specific student assignment by ID."""
     assignment = (
@@ -250,9 +253,10 @@ def update_student_assignment(
     assignment_id: int,
     assignment_update: StudentAssignmentUpdate,
     db: Annotated[Session, Depends(get_db)],
-    auth_user: Annotated[AuthUser, Depends(
-        require_admin_or_student_self_or_permission("assignments:write")
-    )],
+    auth_user: Annotated[
+        AuthUser,
+        Depends(require_admin_or_student_self_or_permission("assignments:write")),
+    ],
 ):
     """Update a student assignment."""
     assignment = (
@@ -330,7 +334,9 @@ def update_student_assignment(
 @router.get("/my-assignments", response_model=List[StudentAssignmentResponse])
 def get_my_assignments(
     db: Annotated[Session, Depends(get_db)],
-    auth_user: Annotated[AuthUser, Depends(require_student_or_permission("assignments:read"))],
+    auth_user: Annotated[
+        AuthUser, Depends(require_student_or_permission("assignments:read"))
+    ],
     status: Optional[str] = Query(None),
     subject_id: Optional[int] = Query(None),
 ):
@@ -373,9 +379,10 @@ def get_my_assignments(
 def start_assignment(
     assignment_id: int,
     db: Annotated[Session, Depends(get_db)],
-    auth_user: Annotated[AuthUser, Depends(
-        require_admin_or_student_self_or_permission("assignments:write")
-    )],
+    auth_user: Annotated[
+        AuthUser,
+        Depends(require_admin_or_student_self_or_permission("assignments:write")),
+    ],
 ):
     """Mark an assignment as started by a student."""
     assignment = (
@@ -415,13 +422,15 @@ def start_assignment(
 def complete_assignment(
     assignment_id: int,
     db: Annotated[Session, Depends(get_db)],
-    auth_user: Annotated[AuthUser, Depends(
-        require_admin_or_student_self_or_permission("assignments:write")
-    )],
-    submission_notes: Optional[str] = None,
-    submission_artifacts: Optional[List[str]] = None,
+    auth_user: Annotated[
+        AuthUser,
+        Depends(require_admin_or_student_self_or_permission("assignments:write")),
+    ],
+    payload: Optional[StudentAssignmentCompleteRequest] = None,
 ):
     """Mark an assignment as completed by a student."""
+    submission_notes = payload.submission_notes if payload else None
+    submission_artifacts = payload.submission_artifacts if payload else None
     assignment = (
         db.query(StudentAssignment)
         .filter(StudentAssignment.id == assignment_id)
@@ -465,7 +474,9 @@ def complete_assignment(
 def delete_student_assignment(
     assignment_id: int,
     db: Annotated[Session, Depends(get_db)],
-    auth_user: Annotated[AuthUser, Depends(require_admin_or_permission("assignments:write"))],
+    auth_user: Annotated[
+        AuthUser, Depends(require_admin_or_permission("assignments:write"))
+    ],
 ):
     """Delete a student assignment (unassign from student)."""
     assignment = (
@@ -499,7 +510,9 @@ def delete_student_assignment(
 def archive_student_assignment(
     assignment_id: int,
     db: Annotated[Session, Depends(get_db)],
-    auth_user: Annotated[AuthUser, Depends(require_admin_or_permission("assignments:write"))],
+    auth_user: Annotated[
+        AuthUser, Depends(require_admin_or_permission("assignments:write"))
+    ],
 ):
     """Archive a student assignment."""
     assignment = (

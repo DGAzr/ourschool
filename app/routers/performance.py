@@ -34,7 +34,9 @@ router = APIRouter()
 
 @router.get("/stats", response_model=Dict[str, Dict[str, Any]])
 def get_performance_statistics(
-    auth_user: Annotated[AuthUser, Depends(require_admin_or_permission("performance:read"))],
+    auth_user: Annotated[
+        AuthUser, Depends(require_admin_or_permission("performance:read"))
+    ],
 ):
     """Get current performance statistics (admin only)."""
     return get_performance_stats()
@@ -42,7 +44,9 @@ def get_performance_statistics(
 
 @router.post("/reset")
 def reset_performance_statistics(
-    auth_user: Annotated[AuthUser, Depends(require_admin_or_permission("performance:write"))],
+    auth_user: Annotated[
+        AuthUser, Depends(require_admin_or_permission("performance:write"))
+    ],
 ):
     """Reset performance statistics (admin only)."""
     reset_performance_stats()
@@ -51,7 +55,9 @@ def reset_performance_statistics(
 
 @router.get("/summary")
 def performance_summary(
-    auth_user: Annotated[AuthUser, Depends(require_admin_or_permission("performance:read"))],
+    auth_user: Annotated[
+        AuthUser, Depends(require_admin_or_permission("performance:read"))
+    ],
 ):
     """Log performance summary to logs (admin only)."""
     log_performance_summary()
@@ -60,7 +66,9 @@ def performance_summary(
 
 @router.get("/slow-operations")
 def get_slow_operations(
-    auth_user: Annotated[AuthUser, Depends(require_admin_or_permission("performance:read"))],
+    auth_user: Annotated[
+        AuthUser, Depends(require_admin_or_permission("performance:read"))
+    ],
     min_avg_time: float = 0.5,
 ):
     """Get operations that are slower than threshold (admin only)."""
@@ -69,7 +77,9 @@ def get_slow_operations(
 
 @router.get("/query-heavy-operations")
 def get_query_heavy_operations(
-    auth_user: Annotated[AuthUser, Depends(require_admin_or_permission("performance:read"))],
+    auth_user: Annotated[
+        AuthUser, Depends(require_admin_or_permission("performance:read"))
+    ],
     min_avg_time: float = 0.1,
 ):
     """Get operations that are slower than threshold (admin only)."""

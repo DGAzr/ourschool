@@ -167,7 +167,11 @@ async def get_journal_entry(
             status_code=status.HTTP_404_NOT_FOUND, detail="Journal entry not found"
         )
 
-    if isinstance(auth_user, User) and is_student_user(auth_user) and entry.student_id != auth_user.id:
+    if (
+        isinstance(auth_user, User)
+        and is_student_user(auth_user)
+        and entry.student_id != auth_user.id
+    ):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="You can only view your own journal entries",
@@ -180,7 +184,9 @@ async def get_journal_entry(
 @router.post("/entries", response_model=JournalEntryWithAuthor)
 async def create_journal_entry(
     entry_data: JournalEntryCreate,
-    auth_user: Annotated[AuthUser, Depends(require_user_or_permission("journal:write"))],
+    auth_user: Annotated[
+        AuthUser, Depends(require_user_or_permission("journal:write"))
+    ],
     db: Session = Depends(get_db),
 ):
     if is_student_user(auth_user):
@@ -285,7 +291,9 @@ async def create_journal_entry(
 async def update_journal_entry(
     entry_id: int,
     entry_data: JournalEntryUpdate,
-    auth_user: Annotated[AuthUser, Depends(require_user_or_permission("journal:write"))],
+    auth_user: Annotated[
+        AuthUser, Depends(require_user_or_permission("journal:write"))
+    ],
     db: Session = Depends(get_db),
 ):
     entry = (
@@ -299,7 +307,11 @@ async def update_journal_entry(
             status_code=status.HTTP_404_NOT_FOUND, detail="Journal entry not found"
         )
 
-    if isinstance(auth_user, User) and is_student_user(auth_user) and entry.author_id != auth_user.id:
+    if (
+        isinstance(auth_user, User)
+        and is_student_user(auth_user)
+        and entry.author_id != auth_user.id
+    ):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="You can only edit your own journal entries",
@@ -328,7 +340,9 @@ async def update_journal_entry(
 @router.delete("/entries/{entry_id}")
 async def delete_journal_entry(
     entry_id: int,
-    auth_user: Annotated[AuthUser, Depends(require_user_or_permission("journal:write"))],
+    auth_user: Annotated[
+        AuthUser, Depends(require_user_or_permission("journal:write"))
+    ],
     db: Session = Depends(get_db),
 ):
     entry = db.query(JournalEntry).filter(JournalEntry.id == entry_id).first()
@@ -337,7 +351,11 @@ async def delete_journal_entry(
             status_code=status.HTTP_404_NOT_FOUND, detail="Journal entry not found"
         )
 
-    if isinstance(auth_user, User) and is_student_user(auth_user) and entry.author_id != auth_user.id:
+    if (
+        isinstance(auth_user, User)
+        and is_student_user(auth_user)
+        and entry.author_id != auth_user.id
+    ):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="You can only delete your own journal entries",
@@ -352,7 +370,9 @@ async def delete_journal_entry(
 async def set_reactions(
     entry_id: int,
     body: ReactionsUpdate,
-    auth_user: Annotated[AuthUser, Depends(require_admin_or_permission("journal:moderate"))],
+    auth_user: Annotated[
+        AuthUser, Depends(require_admin_or_permission("journal:moderate"))
+    ],
     db: Session = Depends(get_db),
 ):
     entry = (
@@ -379,7 +399,9 @@ async def set_reactions(
 async def add_reply(
     entry_id: int,
     body: ReplyCreate,
-    auth_user: Annotated[AuthUser, Depends(require_admin_or_permission("journal:moderate"))],
+    auth_user: Annotated[
+        AuthUser, Depends(require_admin_or_permission("journal:moderate"))
+    ],
     db: Session = Depends(get_db),
 ):
     entry = db.query(JournalEntry).filter(JournalEntry.id == entry_id).first()
@@ -426,7 +448,9 @@ async def add_reply(
 @router.post("/entries/{entry_id}/mark-read", response_model=JournalEntryWithAuthor)
 async def mark_entry_read(
     entry_id: int,
-    auth_user: Annotated[AuthUser, Depends(require_admin_or_permission("journal:moderate"))],
+    auth_user: Annotated[
+        AuthUser, Depends(require_admin_or_permission("journal:moderate"))
+    ],
     db: Session = Depends(get_db),
 ):
     entry = (
@@ -452,7 +476,9 @@ async def mark_entry_read(
 @router.delete("/replies/{reply_id}")
 async def delete_reply(
     reply_id: int,
-    auth_user: Annotated[AuthUser, Depends(require_admin_or_permission("journal:moderate"))],
+    auth_user: Annotated[
+        AuthUser, Depends(require_admin_or_permission("journal:moderate"))
+    ],
     db: Session = Depends(get_db),
 ):
     reply = db.query(JournalReply).filter(JournalReply.id == reply_id).first()
@@ -516,7 +542,9 @@ async def get_composer_data(
 
 @router.get("/students", response_model=List[dict])
 async def get_students_for_journal(
-    auth_user: Annotated[AuthUser, Depends(require_admin_or_permission("journal:read"))],
+    auth_user: Annotated[
+        AuthUser, Depends(require_admin_or_permission("journal:read"))
+    ],
     db: Session = Depends(get_db),
 ):
     students = db.query(User).filter(User.role == UserRole.STUDENT).all()

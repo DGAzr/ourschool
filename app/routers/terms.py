@@ -266,9 +266,9 @@ def get_student_term_report(
     term_id: int,
     student_id: int,
     db: Annotated[Session, Depends(get_db)],
-    auth_user: Annotated[AuthUser, Depends(
-        require_admin_or_student_self_or_permission("terms:read")
-    )],
+    auth_user: Annotated[
+        AuthUser, Depends(require_admin_or_student_self_or_permission("terms:read"))
+    ],
 ):
     """Get detailed grade report for a specific student in a term."""
     # For JWT users: students may only view their own report

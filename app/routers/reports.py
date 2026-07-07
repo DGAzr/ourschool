@@ -53,7 +53,9 @@ router = APIRouter()
 @router.get("/student/overview", response_model=StudentReport)
 def get_student_report(
     db: Annotated[Session, Depends(get_db)],
-    auth_user: Annotated[AuthUser, Depends(require_student_or_permission("reports:read"))],
+    auth_user: Annotated[
+        AuthUser, Depends(require_student_or_permission("reports:read"))
+    ],
 ):
     """Retrieve a report of the current student's academic progress."""
     # Current-student endpoints need a student session identity; X-On-Behalf-Of
@@ -70,7 +72,9 @@ def get_student_report(
 @router.get("/admin/overview", response_model=AdminReport)
 def get_admin_report(
     db: Annotated[Session, Depends(get_db)],
-    auth_user: Annotated[AuthUser, Depends(require_admin_or_permission("reports:read"))],
+    auth_user: Annotated[
+        AuthUser, Depends(require_admin_or_permission("reports:read"))
+    ],
 ):
     """Retrieve a system-wide academic report for administrators."""
     return crud_reports.get_admin_report(db)
@@ -79,7 +83,9 @@ def get_admin_report(
 @router.get("/student/term-grades", response_model=List[TermGrade])
 def get_student_term_grades(
     db: Annotated[Session, Depends(get_db)],
-    auth_user: Annotated[AuthUser, Depends(require_student_or_permission("reports:read"))],
+    auth_user: Annotated[
+        AuthUser, Depends(require_student_or_permission("reports:read"))
+    ],
     term_id: Optional[int] = None,
 ):
     """Retrieve the current student's grades for each term and subject."""
@@ -94,7 +100,9 @@ def get_student_term_grades(
 @router.get("/student/subject-performance", response_model=List[SubjectPerformance])
 def get_student_subject_performance(
     db: Annotated[Session, Depends(get_db)],
-    auth_user: Annotated[AuthUser, Depends(require_student_or_permission("reports:read"))],
+    auth_user: Annotated[
+        AuthUser, Depends(require_student_or_permission("reports:read"))
+    ],
     term_id: Optional[int] = None,
 ):
     """Retrieve the current student's academic performance by subject."""
@@ -103,13 +111,17 @@ def get_student_subject_performance(
             status_code=403,
             detail="API keys cannot use current-student endpoints; use a student-id-parameterized report endpoint instead",
         )
-    return crud_reports.get_student_subject_performance(db, auth_user.id, term_id=term_id)
+    return crud_reports.get_student_subject_performance(
+        db, auth_user.id, term_id=term_id
+    )
 
 
 @router.get("/admin/student-progress", response_model=List[StudentProgress])
 def get_all_students_progress(
     db: Annotated[Session, Depends(get_db)],
-    auth_user: Annotated[AuthUser, Depends(require_admin_or_permission("reports:read"))],
+    auth_user: Annotated[
+        AuthUser, Depends(require_admin_or_permission("reports:read"))
+    ],
     term_id: Optional[int] = None,
 ):
     """Retrieve the academic progress for all students."""
@@ -132,9 +144,9 @@ def get_academic_years(
 def get_student_attendance_report(
     student_id: int,
     db: Annotated[Session, Depends(get_db)],
-    auth_user: Annotated[AuthUser, Depends(
-        require_admin_or_student_self_or_permission("reports:read")
-    )],
+    auth_user: Annotated[
+        AuthUser, Depends(require_admin_or_student_self_or_permission("reports:read"))
+    ],
     start_date: Optional[date] = Query(None, description="Start date for the report"),
     end_date: Optional[date] = Query(None, description="End date for the report"),
     academic_year: Optional[str] = Query(None, description="Academic year (optional)"),
@@ -174,7 +186,9 @@ def get_student_attendance_report(
 @router.get("/attendance/bulk", response_model=BulkAttendanceReport)
 def get_bulk_attendance_report(
     db: Annotated[Session, Depends(get_db)],
-    auth_user: Annotated[AuthUser, Depends(require_admin_or_permission("reports:read"))],
+    auth_user: Annotated[
+        AuthUser, Depends(require_admin_or_permission("reports:read"))
+    ],
     start_date: Optional[date] = Query(None, description="Start date for the report"),
     end_date: Optional[date] = Query(None, description="End date for the report"),
     academic_year: Optional[str] = Query(None, description="Academic year (optional)"),
@@ -192,7 +206,9 @@ def get_bulk_attendance_report(
 @router.get("/admin/assignments", response_model=AssignmentReport)
 def get_assignment_report(
     db: Annotated[Session, Depends(get_db)],
-    auth_user: Annotated[AuthUser, Depends(require_admin_or_permission("reports:read"))],
+    auth_user: Annotated[
+        AuthUser, Depends(require_admin_or_permission("reports:read"))
+    ],
     subject_id: Optional[int] = Query(None, description="Filter by subject ID"),
     student_id: Optional[int] = Query(None, description="Filter by student ID"),
     term_id: Optional[int] = Query(None, description="Filter by term ID"),
@@ -209,9 +225,9 @@ def get_report_card(
     student_id: int,
     term_id: int,
     db: Annotated[Session, Depends(get_db)],
-    auth_user: Annotated[AuthUser, Depends(
-        require_admin_or_student_self_or_permission("reports:read")
-    )],
+    auth_user: Annotated[
+        AuthUser, Depends(require_admin_or_student_self_or_permission("reports:read"))
+    ],
 ):
     """
     Generate a comprehensive report card for a student for a specific term.

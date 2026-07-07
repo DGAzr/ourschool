@@ -114,6 +114,33 @@ class StudentAssignmentBulkCreate(BaseModel):
     custom_max_points: Optional[int] = Field(None, ge=1, le=1000)
 
 
+def _validate_artifact_urls(v):
+    """Validate that artifact links are valid URLs."""
+    if v is None:
+        return v
+
+    import re
+
+    url_pattern = re.compile(
+        r"^https?://"  # http:// or https://
+        r"(?:(?:[A-Z0-9](?:[A-Z0-9-]{0,61}[A-Z0-9])?\.)+[A-Z]{2,6}\.?|"  # domain...
+        r"localhost|"  # localhost...
+        r"\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})"  # ...or ip
+        r"(?::\d+)?"  # optional port
+        r"(?:/?|[/?]\S+)$",
+        re.IGNORECASE,
+    )
+
+    validated_urls = []
+    for url in v:
+        if url.strip():  # Only validate non-empty URLs
+            if not url_pattern.match(url.strip()):
+                raise ValueError(f"Invalid URL format: {url}")
+            validated_urls.append(url.strip())
+
+    return validated_urls
+
+
 class StudentAssignmentUpdate(BaseModel):
     """Schema for updating student assignments."""
 
@@ -131,30 +158,20 @@ class StudentAssignmentUpdate(BaseModel):
 
     @validator("submission_artifacts")
     def validate_artifact_urls(cls, v):
-        """Validate that artifact links are valid URLs."""
-        if v is None:
-            return v
+        return _validate_artifact_urls(v)
 
-        import re
 
-        url_pattern = re.compile(
-            r"^https?://"  # http:// or https://
-            r"(?:(?:[A-Z0-9](?:[A-Z0-9-]{0,61}[A-Z0-9])?\.)+[A-Z]{2,6}\.?|"  # domain...
-            r"localhost|"  # localhost...
-            r"\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})"  # ...or ip
-            r"(?::\d+)?"  # optional port
-            r"(?:/?|[/?]\S+)$",
-            re.IGNORECASE,
-        )
+class StudentAssignmentCompleteRequest(BaseModel):
+    """Request body for marking a student assignment completed/submitted."""
 
-        validated_urls = []
-        for url in v:
-            if url.strip():  # Only validate non-empty URLs
-                if not url_pattern.match(url.strip()):
-                    raise ValueError(f"Invalid URL format: {url}")
-                validated_urls.append(url.strip())
+    submission_notes: Optional[str] = None
+    submission_artifacts: Optional[List[str]] = Field(
+        None, description="List of external artifact links"
+    )
 
-        return validated_urls
+    @validator("submission_artifacts")
+    def validate_artifact_urls(cls, v):
+        return _validate_artifact_urls(v)
 
 
 class StudentAssignmentGrade(BaseModel):

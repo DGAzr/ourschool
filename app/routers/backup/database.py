@@ -25,7 +25,11 @@ from sqlalchemy.orm import Session
 
 from app.core.api_auth import APIKeyUser
 from app.core.database import get_db
-from app.core.dual_auth import AuthUser, get_actor_name_from_auth, require_admin_or_permission
+from app.core.dual_auth import (
+    AuthUser,
+    get_actor_name_from_auth,
+    require_admin_or_permission,
+)
 from app.models.user import User
 from app.schemas.backup import (
     SystemBackup,
@@ -58,7 +62,9 @@ router = APIRouter()
 @router.get("/export", response_model=SystemBackup)
 def export_system_backup(
     db: Annotated[Session, Depends(get_db)],
-    auth_user: Annotated[AuthUser, Depends(require_admin_or_permission("backup:export"))],
+    auth_user: Annotated[
+        AuthUser, Depends(require_admin_or_permission("backup:export"))
+    ],
 ):
     """Export complete system backup for data protection and migration."""
 
@@ -132,7 +138,9 @@ def export_system_backup(
 def import_system_backup(
     import_request: SystemBackupImportRequest,
     db: Annotated[Session, Depends(get_db)],
-    auth_user: Annotated[AuthUser, Depends(require_admin_or_permission("backup:import"))],
+    auth_user: Annotated[
+        AuthUser, Depends(require_admin_or_permission("backup:import"))
+    ],
 ):
     """Import complete system backup with intelligent conflict resolution."""
 

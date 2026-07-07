@@ -42,7 +42,9 @@ router = APIRouter()
 @router.get("/", response_model=List[SystemSetting])
 def get_all_settings(
     db: Annotated[Session, Depends(get_db)],
-    auth_user: Annotated[AuthUser, Depends(require_admin_or_permission("settings:read"))],
+    auth_user: Annotated[
+        AuthUser, Depends(require_admin_or_permission("settings:read"))
+    ],
 ):
     """Get all system settings (admin only)."""
     return crud_settings.get_all_settings(db)
@@ -51,7 +53,9 @@ def get_all_settings(
 @router.get("/grouped", response_model=SystemSettingsGroup)
 def get_grouped_settings(
     db: Annotated[Session, Depends(get_db)],
-    auth_user: Annotated[AuthUser, Depends(require_admin_or_permission("settings:read"))],
+    auth_user: Annotated[
+        AuthUser, Depends(require_admin_or_permission("settings:read"))
+    ],
 ):
     """Get settings organized by category (admin only)."""
     required_days = crud_settings.get_setting_value(
@@ -83,7 +87,9 @@ def get_grouped_settings(
 def get_setting(
     setting_key: str,
     db: Annotated[Session, Depends(get_db)],
-    auth_user: Annotated[AuthUser, Depends(require_admin_or_permission("settings:read"))],
+    auth_user: Annotated[
+        AuthUser, Depends(require_admin_or_permission("settings:read"))
+    ],
 ):
     """Get a specific system setting (admin only)."""
     setting = crud_settings.get_setting(db, setting_key)
@@ -97,7 +103,9 @@ def get_setting(
 def create_setting(
     setting: SystemSettingCreate,
     db: Annotated[Session, Depends(get_db)],
-    auth_user: Annotated[AuthUser, Depends(require_admin_or_permission("settings:write"))],
+    auth_user: Annotated[
+        AuthUser, Depends(require_admin_or_permission("settings:write"))
+    ],
 ):
     """Create a new system setting (admin only)."""
     # Check if setting already exists
@@ -115,7 +123,9 @@ def update_setting(
     setting_key: str,
     setting_update: SystemSettingUpdate,
     db: Annotated[Session, Depends(get_db)],
-    auth_user: Annotated[AuthUser, Depends(require_admin_or_permission("settings:write"))],
+    auth_user: Annotated[
+        AuthUser, Depends(require_admin_or_permission("settings:write"))
+    ],
 ):
     """Update an existing system setting (admin only)."""
     updated_setting = crud_settings.update_setting(db, setting_key, setting_update)
@@ -129,7 +139,9 @@ def update_setting(
 def update_grade_scale(
     scale_update: GradeScaleUpdate,
     db: Annotated[Session, Depends(get_db)],
-    auth_user: Annotated[AuthUser, Depends(require_admin_or_permission("settings:write"))],
+    auth_user: Annotated[
+        AuthUser, Depends(require_admin_or_permission("settings:write"))
+    ],
 ):
     """Update the letter-grade threshold scale (admin only)."""
     if not scale_update.scale:
@@ -152,7 +164,9 @@ def update_grade_scale(
 def update_required_days_of_instruction(
     required_days: int,
     db: Annotated[Session, Depends(get_db)],
-    auth_user: Annotated[AuthUser, Depends(require_admin_or_permission("settings:write"))],
+    auth_user: Annotated[
+        AuthUser, Depends(require_admin_or_permission("settings:write"))
+    ],
 ):
     """Update the required days of instruction setting (admin only)."""
     if required_days < 1 or required_days > 365:
@@ -173,7 +187,9 @@ def update_required_days_of_instruction(
 def update_skip_weekends(
     skip_weekends: bool,
     db: Annotated[Session, Depends(get_db)],
-    auth_user: Annotated[AuthUser, Depends(require_admin_or_permission("settings:write"))],
+    auth_user: Annotated[
+        AuthUser, Depends(require_admin_or_permission("settings:write"))
+    ],
 ):
     """Update whether weekends are excluded from instructional day counts (admin only)."""
     return crud_settings.upsert_setting(
@@ -189,7 +205,9 @@ def update_skip_weekends(
 def update_count_excused(
     count_excused: bool,
     db: Annotated[Session, Depends(get_db)],
-    auth_user: Annotated[AuthUser, Depends(require_admin_or_permission("settings:write"))],
+    auth_user: Annotated[
+        AuthUser, Depends(require_admin_or_permission("settings:write"))
+    ],
 ):
     """Update whether excused absences count toward required instruction days (admin only)."""
     return crud_settings.upsert_setting(

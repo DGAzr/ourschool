@@ -118,7 +118,9 @@ class ActivityItem:
 @router.get("/recent")
 def get_recent_activity(
     db: Annotated[Session, Depends(get_db)],
-    auth_user: Annotated[AuthUser, Depends(require_user_or_permission("activity:read"))],
+    auth_user: Annotated[
+        AuthUser, Depends(require_user_or_permission("activity:read"))
+    ],
     limit: int = Query(default=10, le=50),
     days: int = Query(default=7, le=30),
 ):
@@ -142,14 +144,10 @@ def get_recent_activity(
         else:
             # Students see only their own activity
             activities.extend(
-                _get_student_assignment_activities(
-                    db, actor_id, start_date, end_date
-                )
+                _get_student_assignment_activities(db, actor_id, start_date, end_date)
             )
             activities.extend(
-                _get_student_attendance_activities(
-                    db, actor_id, start_date, end_date
-                )
+                _get_student_attendance_activities(db, actor_id, start_date, end_date)
             )
 
         # Sort by timestamp (newest first) and limit
@@ -159,9 +157,7 @@ def get_recent_activity(
         # Convert to dictionaries
         activity_dicts = [activity.to_dict() for activity in activities]
 
-        logger.info(
-            f"Retrieved {len(activity_dicts)} activities for user {actor_id}"
-        )
+        logger.info(f"Retrieved {len(activity_dicts)} activities for user {actor_id}")
 
         return {
             "activities": activity_dicts,

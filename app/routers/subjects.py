@@ -22,7 +22,11 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
-from app.core.dual_auth import AuthUser, require_admin_or_permission, require_user_or_permission
+from app.core.dual_auth import (
+    AuthUser,
+    require_admin_or_permission,
+    require_user_or_permission,
+)
 from app.models.assignment import AssignmentTemplate
 from app.models.subject import Subject
 from app.schemas.subject import Subject as SubjectSchema, SubjectCreate, SubjectUpdate
@@ -40,7 +44,9 @@ def _get_subject_or_404(db: Session, subject_id: int) -> Subject:
 @router.get("/", response_model=List[SubjectSchema])
 def list_subjects(
     db: Annotated[Session, Depends(get_db)],
-    auth_user: Annotated[AuthUser, Depends(require_user_or_permission("subjects:read"))],
+    auth_user: Annotated[
+        AuthUser, Depends(require_user_or_permission("subjects:read"))
+    ],
 ):
     """List all subjects."""
     return db.query(Subject).order_by(Subject.name).all()
@@ -50,7 +56,9 @@ def list_subjects(
 def create_subject(
     subject: SubjectCreate,
     db: Annotated[Session, Depends(get_db)],
-    auth_user: Annotated[AuthUser, Depends(require_admin_or_permission("subjects:write"))],
+    auth_user: Annotated[
+        AuthUser, Depends(require_admin_or_permission("subjects:write"))
+    ],
 ):
     """Create a new subject."""
     db_subject = Subject(**subject.dict())
@@ -65,7 +73,9 @@ def update_subject(
     subject_id: int,
     subject_update: SubjectUpdate,
     db: Annotated[Session, Depends(get_db)],
-    auth_user: Annotated[AuthUser, Depends(require_admin_or_permission("subjects:write"))],
+    auth_user: Annotated[
+        AuthUser, Depends(require_admin_or_permission("subjects:write"))
+    ],
 ):
     """Update a subject."""
     subject = _get_subject_or_404(db, subject_id)
@@ -80,7 +90,9 @@ def update_subject(
 def delete_subject(
     subject_id: int,
     db: Annotated[Session, Depends(get_db)],
-    auth_user: Annotated[AuthUser, Depends(require_admin_or_permission("subjects:write"))],
+    auth_user: Annotated[
+        AuthUser, Depends(require_admin_or_permission("subjects:write"))
+    ],
 ):
     """Delete a subject. Blocked if any assignment templates reference it."""
     subject = _get_subject_or_404(db, subject_id)

@@ -57,7 +57,9 @@ def grade_student_assignment(
     assignment_id: int,
     grade_data: StudentAssignmentGrade,
     db: Annotated[Session, Depends(get_db)],
-    auth_user: Annotated[AuthUser, Depends(require_admin_or_permission("assignments:grade"))],
+    auth_user: Annotated[
+        AuthUser, Depends(require_admin_or_permission("assignments:grade"))
+    ],
 ):
     """Grade a student assignment."""
     assignment = (
@@ -161,7 +163,9 @@ def grade_student_assignment(
 def bulk_grade_assignments(
     items: list[BulkGradeItem],
     db: Annotated[Session, Depends(get_db)],
-    auth_user: Annotated[AuthUser, Depends(require_admin_or_permission("assignments:grade"))],
+    auth_user: Annotated[
+        AuthUser, Depends(require_admin_or_permission("assignments:grade"))
+    ],
 ):
     """Grade multiple student assignments in one request. Each item is graded independently; one failure does not roll back others."""
     results: list[BulkGradeResult] = []
@@ -244,7 +248,9 @@ def bulk_grade_assignments(
 @router.get("/submitted", response_model=List[StudentAssignmentResponse])
 def get_submitted_assignments(
     db: Annotated[Session, Depends(get_db)],
-    auth_user: Annotated[AuthUser, Depends(require_admin_or_permission("assignments:read"))],
+    auth_user: Annotated[
+        AuthUser, Depends(require_admin_or_permission("assignments:read"))
+    ],
     status: Optional[str] = Query(None),
     subject_id: Optional[int] = Query(None),
 ):
