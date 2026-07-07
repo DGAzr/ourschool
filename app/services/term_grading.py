@@ -372,9 +372,7 @@ class TermGradingService:
             "term": TermGradingService._serialize_term(term),
             "students": list(students_data.values()),
             "total_students": len(students_data),
-            "total_subjects": len(
-                {g.term_subject.subject_id for g in student_grades}
-            ),
+            "total_subjects": len({g.term_subject.subject_id for g in student_grades}),
         }
 
     @staticmethod
@@ -431,8 +429,7 @@ class TermGradingService:
                     ),
                     "grade": TermGradingService._serialize_grade(grade),
                     "assignments": [
-                        TermGradingService._serialize_assignment(a)
-                        for a in assignments
+                        TermGradingService._serialize_assignment(a) for a in assignments
                     ],
                     "assignment_count": len(assignments),
                 }

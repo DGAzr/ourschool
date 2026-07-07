@@ -158,16 +158,13 @@ def assignment_status_filter(status):
     effective_due = func.coalesce(
         StudentAssignment.extended_due_date, StudentAssignment.due_date
     )
-    return (
-        StudentAssignment.status.in_(
-            [
-                AssignmentStatus.NOT_STARTED,
-                AssignmentStatus.IN_PROGRESS,
-                AssignmentStatus.OVERDUE,
-            ]
-        )
-        & (effective_due < date.today())
-    )
+    return StudentAssignment.status.in_(
+        [
+            AssignmentStatus.NOT_STARTED,
+            AssignmentStatus.IN_PROGRESS,
+            AssignmentStatus.OVERDUE,
+        ]
+    ) & (effective_due < date.today())
 
 
 _DEFAULT_SCALE: List[Tuple[str, int]] = [

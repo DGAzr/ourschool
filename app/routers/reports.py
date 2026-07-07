@@ -96,9 +96,7 @@ def get_student_subject_performance(
     term_id: Optional[int] = None,
 ):
     """Retrieve the current student's academic performance by subject."""
-    return crud_reports.get_student_subject_performance(
-        db, student.id, term_id=term_id
-    )
+    return crud_reports.get_student_subject_performance(db, student.id, term_id=term_id)
 
 
 @router.get("/admin/student-progress", response_model=List[StudentProgress])

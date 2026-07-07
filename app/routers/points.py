@@ -164,7 +164,9 @@ async def get_student_points_balance(
     if not student_points:
         student_points = points_crud.get_or_create_student_points(db, student_id)
     if student_points.student:
-        student_points.student_name = f"{student_points.student.first_name} {student_points.student.last_name}"
+        student_points.student_name = (
+            f"{student_points.student.first_name} {student_points.student.last_name}"
+        )
 
     return student_points
 

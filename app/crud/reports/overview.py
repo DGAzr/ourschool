@@ -618,17 +618,13 @@ def get_all_students_progress(db: Session, term_id: Optional[int] = None):
                     round(current_term_grade, 2) if term_possible > 0 else None
                 ),
                 current_term_letter_grade=current_term_letter_grade,
-                overall_grade=(
-                    round(avg_grade, 2) if overall_possible > 0 else None
-                ),
+                overall_grade=(round(avg_grade, 2) if overall_possible > 0 else None),
                 overall_letter_grade=overall_letter_grade,
                 total_assignments=total_assignments,
                 completed_assignments=completed_assignments,
                 pending_assignments=pending_assignments,
                 overdue_assignments=overdue_assignments,
-                average_grade=(
-                    round(avg_grade, 2) if overall_possible > 0 else None
-                ),
+                average_grade=(round(avg_grade, 2) if overall_possible > 0 else None),
                 completion_rate=round(completion_rate, 2),
                 attendance_rate=(
                     round(student_attendance_rate, 2)
