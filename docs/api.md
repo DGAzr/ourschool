@@ -18,7 +18,7 @@ curl -H "X-API-Key: os_YOUR_KEY_HERE" \
   http://localhost:8000/api/points/admin/overview
 ```
 
-Every endpoint accepts a Bearer token. Endpoints in the assignments, attendance, points, users-lookup, and integrations groups also accept an API key carrying the matching permission; everything else (users admin, backup, settings, API-key management, …) is session-only.
+Every authenticated endpoint accepts a Bearer token. Most admin automation endpoints also accept an API key carrying the matching permission listed below. User self-service, student-only operations, authentication, user creation/management, and API-key mutation remain session-only. A few capability URLs (shop images and Paperless thumbnails), health checks, and the first-user bootstrap are intentionally unauthenticated.
 
 **Design rule:** the API-key surface is admin automation only. A key may read or write any student's data (subject to its permissions) and attribute writes to a real admin via `X-On-Behalf-Of`, but it never acts *as* a student: current-user endpoints (`/my-*`, `/reports/student/*`) require a student login session, and nothing on the API surface can author content in a student's name.
 
@@ -31,10 +31,34 @@ Every endpoint accepts a Bearer token. Endpoints in the assignments, attendance,
 | `assignments:read` | Read templates, assignments, and student progress |
 | `assignments:write` | Create/update templates; assign templates to students |
 | `assignments:grade` | Grade student assignments |
+| `assignment_types:read` | Read assignment types |
+| `assignment_types:write` | Create, update, and delete assignment types |
 | `attendance:read` | Read attendance records |
 | `attendance:write` | Create/update/delete attendance records (incl. bulk) |
 | `points:read` | Read student points balances and transaction history |
 | `points:write` | Adjust student points |
+| `terms:read` | Read terms, active term, grade reports, and student term reports |
+| `terms:write` | Create, update, activate, and delete terms; link subjects and calculate grades |
+| `subjects:read` | Read subjects |
+| `subjects:write` | Create, update, and delete subjects |
+| `shop:read` | Read the reward catalog, redemption queue, and shop overview |
+| `shop:write` | Manage shop categories, items, images, and redemptions |
+| `lessons:read` | Read lesson plans |
+| `lessons:write` | Create, update, reorder, and delete lesson plans |
+| `paperless:read` | Read Paperless connection status, cached documents, thumbnails, and content |
+| `paperless:write` | Configure and sync Paperless and manage document attachments |
+| `reports:read` | Read student, admin, attendance, assignment, and report-card reports |
+| `journal:read` | Read journal entries and composer data |
+| `journal:write` | Create, update, and delete journal entries |
+| `journal:moderate` | Reply, react, mark read, and delete journal entries or replies |
+| `activity:read` | Read the recent activity feed |
+| `settings:read` | Read application settings, points presets, and journal-points settings |
+| `settings:write` | Create or update settings, toggle points, and update points presets |
+| `performance:read` | Read performance statistics and slow-operation reports |
+| `performance:write` | Reset performance statistics |
+| `backup:export` | Export a full system backup |
+| `backup:import` | Import a system backup (can overwrite all data) |
+| `api_keys:read` | Read API-key metadata and usage statistics |
 
 ## MCP / enum discovery
 
@@ -67,7 +91,7 @@ for student in r.json()["student_points"]:
 
 ## Endpoint reference
 
-The complete API surface as of `v1.0.0`. Set `ENABLE_API_DOCS=true` for the interactive version (request/response schemas included) at `/docs`.
+The complete API surface as of `v1.1-beta`. Set `ENABLE_API_DOCS=true` for the interactive version (request/response schemas included) at `/docs`.
 
 <details>
 <summary><strong>Expand the full endpoint list</strong></summary>
@@ -135,6 +159,7 @@ The complete API surface as of `v1.0.0`. Set `ENABLE_API_DOCS=true` for the inte
 
 | Endpoint | Description |
 |----------|-------------|
+| `POST /api/assignments/compose` | Create a template and optionally assign it to students in one transaction (`assignments:write`) |
 | `GET /api/assignments/templates` | List templates (supports `search`) (`assignments:read`) |
 | `POST /api/assignments/templates` | Create a template (`assignments:write`) |
 | `GET /api/assignments/templates/{template_id}` | Get a template |
@@ -212,6 +237,50 @@ The complete API surface as of `v1.0.0`. Set `ENABLE_API_DOCS=true` for the inte
 | `GET /api/points/journal-points` | Points awarded per journal submission |
 | `PUT /api/points/journal-points` | Set journal submission points (admin) |
 
+### Points shop
+
+All shop operations except the image capability URL require the points system to be enabled.
+
+| Endpoint | Description |
+|----------|-------------|
+| `GET /api/shop/categories` | List categories and active-item counts (`shop:read`) |
+| `POST /api/shop/categories` | Create a category (`shop:write`) |
+| `PUT /api/shop/categories/{category_id}` | Update a category (`shop:write`) |
+| `DELETE /api/shop/categories/{category_id}` | Delete an unused category (`shop:write`) |
+| `GET /api/shop/items` | List items; students see active items only (`shop:read`) |
+| `POST /api/shop/items` | Create an item (`shop:write`) |
+| `GET /api/shop/items/{item_id}` | Get one item (`shop:read`) |
+| `PUT /api/shop/items/{item_id}` | Update an item (`shop:write`) |
+| `PATCH /api/shop/items/{item_id}` | Toggle an item's live/hidden state (`shop:write`) |
+| `DELETE /api/shop/items/{item_id}` | Delete an item and its stored images (`shop:write`) |
+| `PUT /api/shop/items/reorder` | Set storefront item order (`shop:write`) |
+| `POST /api/shop/redeem` | Redeem an item (student session only) |
+| `GET /api/shop/my-redemptions` | Current student's redemption history (student session only) |
+| `PUT /api/shop/my-goal` | Set or clear the current student's savings goal (student session only) |
+| `GET /api/shop/redemptions` | Redemption queue, filtered by `pending`, `ready`, or `history` (`shop:read`) |
+| `POST /api/shop/redemptions/{redemption_id}/approve` | Approve a pending redemption (`shop:write`) |
+| `POST /api/shop/redemptions/{redemption_id}/decline` | Decline and refund a pending redemption (`shop:write`) |
+| `POST /api/shop/redemptions/{redemption_id}/fulfill` | Mark an approved redemption fulfilled (`shop:write`) |
+| `GET /api/shop/admin/overview` | Shop summary counts (`shop:read`) |
+| `POST /api/shop/images` | Upload a shop image and return its capability URL (`shop:write`) |
+| `GET /api/shop/images/{image_id}` | Serve an immutable shop image by capability URL (no authentication) |
+
+### Lesson planning
+
+Lesson writes synchronize assignments generated from the lesson's linked templates. Deleting a lesson removes ungraded generated work and preserves graded work as orphaned assignments.
+
+| Endpoint | Description |
+|----------|-------------|
+| `GET /api/lessons/` | List lessons, optionally filtered by an inclusive date range (`lessons:read`) |
+| `POST /api/lessons/` | Create a lesson with students, templates, materials, and resources (`lessons:write`) |
+| `GET /api/lessons/my-lessons` | Current student's upcoming lessons; supports date filters (student session only) |
+| `GET /api/lessons/{lesson_id}` | Get one lesson (`lessons:read`) |
+| `PUT /api/lessons/{lesson_id}` | Update a lesson and synchronize generated assignments (`lessons:write`) |
+| `DELETE /api/lessons/{lesson_id}` | Delete a lesson while preserving graded work (`lessons:write`) |
+| `PATCH /api/lessons/{lesson_id}/materials/{material_id}` | Toggle a prep material's gathered state (`lessons:write`) |
+| `PATCH /api/lessons/reorder` | Reorder lessons or move them between dates; taught lessons are locked (`lessons:write`) |
+| `PATCH /api/lessons/{lesson_id}/status` | Set a lesson's planning/taught status (`lessons:write`) |
+
 ### Reports
 
 | Endpoint | Description |
@@ -269,10 +338,35 @@ The complete API surface as of `v1.0.0`. Set `ENABLE_API_DOCS=true` for the inte
 | `GET /api/integrations/assignments/{assignment_id}` | Assignment details (`assignments:read`) |
 | `POST /api/integrations/assignments/{assignment_id}/grade` | Grade an assignment (`assignments:grade`) |
 
+### Paperless-ngx integration
+
+Connection management and attachment writes require an admin session or `paperless:write`. Document-library reads require an authenticated user or `paperless:read`; student access to document content is limited to material attached to their lessons or assignments. Cached metadata and attachments survive a disconnect.
+
+| Endpoint | Description |
+|----------|-------------|
+| `POST /api/integrations/paperless/test` | Test server credentials without saving them (`paperless:write`) |
+| `POST /api/integrations/paperless/connect` | Validate and store a connection, then perform the initial sync (`paperless:write`) |
+| `GET /api/integrations/paperless/scope-options` | Fetch live tags and document types for configuring sync scope (`paperless:write`) |
+| `GET /api/integrations/paperless/status` | Connection status, cached counts, settings, and mappings (`paperless:read`) |
+| `PATCH /api/integrations/paperless/settings` | Update sync scope, toggles, and tag/document-type mappings (`paperless:write`) |
+| `DELETE /api/integrations/paperless/connection` | Disconnect while retaining cached documents and attachments (`paperless:write`) |
+| `POST /api/integrations/paperless/sync` | Run a synchronous metadata sync (`paperless:write`) |
+| `GET /api/integrations/paperless/documents` | Search and filter cached documents; optionally rank for a lesson (`paperless:read`) |
+| `GET /api/integrations/paperless/documents/{document_id}` | Document details and lesson/template usage (`paperless:read`) |
+| `GET /api/integrations/paperless/documents/{external_id}/thumbnail` | Serve a cached thumbnail by capability URL (no authentication) |
+| `GET /api/integrations/paperless/documents/{document_id}/content` | Stream inline or attachment content; student access is attachment-scoped (`paperless:read` or authorized session) |
+| `POST /api/integrations/paperless/lessons/{lesson_id}/materials` | Attach a cached document to a lesson (`paperless:write`) |
+| `DELETE /api/integrations/paperless/lessons/{lesson_id}/materials/{document_id}` | Detach a document from a lesson (`paperless:write`) |
+| `POST /api/integrations/paperless/templates/{template_id}/materials` | Attach a student-visible document to an assignment template (`paperless:write`) |
+| `DELETE /api/integrations/paperless/templates/{template_id}/materials/{document_id}` | Detach a document from an assignment template (`paperless:write`) |
+| `POST /api/integrations/paperless/student-assignments/{assignment_id}/materials` | Attach a one-off document to a student assignment (`paperless:write`) |
+| `DELETE /api/integrations/paperless/student-assignments/{assignment_id}/materials/{document_id}` | Detach a one-off document from a student assignment (`paperless:write`) |
+
 ### Discovery & monitoring
 
 | Endpoint | Description |
 |----------|-------------|
+| `GET /` | API name, version, and documentation URL |
 | `GET /api/meta` | Assignment types, status enums, and API-key permissions (for MCP/AI clients) |
 | `GET /api/activity/recent` | Recent activity feed |
 | `GET /api/performance/stats` | API performance statistics (admin) |
@@ -286,4 +380,3 @@ The complete API surface as of `v1.0.0`. Set `ENABLE_API_DOCS=true` for the inte
 | `GET /health/db` | Database connectivity check |
 
 </details>
-
