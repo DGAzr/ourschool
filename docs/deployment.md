@@ -278,7 +278,8 @@ crontab -e
 # database) — an unverified backup is a hope, not a backup.
 ```
 
-Also take a manual backup **before every upgrade** (see [MIGRATIONS.md](MIGRATIONS.md)).
+Also take a manual backup **before every upgrade** (see the
+[migration guide](migrations.md)).
 
 
 ## Monitoring

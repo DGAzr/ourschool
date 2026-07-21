@@ -19,7 +19,7 @@ container startup process; no intermediate release is required.
 >   pg_dump -U postgres ourschool > backup_$(date +%Y%m%d_%H%M%S).sql
 > ```
 >
-> See "Backup and Restore" in [README.Docker.md](README.Docker.md) for the
+> See "Backup and Restore" in the [deployment guide](deployment.md) for the
 > full backup/restore story, including the built-in JSON export.
 
 ## Checking migration status
@@ -64,7 +64,7 @@ python -m alembic downgrade -1
 2. Do **not** retry blindly — note the failing revision in the error output.
 3. Restore the pre-upgrade backup, pin `IMAGE_TAG` back to the previous
    release, and start the stack again.
-4. Report the failure (see [SECURITY.md](SECURITY.md) for contact, or open a
+4. Report the failure (see [SECURITY.md](../SECURITY.md) for contact, or open a
    GitHub issue) with the log output and your previous version.
 
 ## For contributors: creating migrations

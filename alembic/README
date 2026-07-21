@@ -1,5 +1,5 @@
 OurSchool uses this directory for its Alembic migration environment.
 
-See ../MIGRATIONS.md for upgrade, rollback, troubleshooting, and contributor
-guidance. Migration files live in versions/ and must remain a single linear
-chain.
+See ../docs/migrations.md for upgrade, rollback, troubleshooting, and
+contributor guidance. Migration files live in versions/ and must remain a
+single linear chain.

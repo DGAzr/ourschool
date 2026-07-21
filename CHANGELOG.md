@@ -101,7 +101,7 @@ on the critical data paths, unified versioning, and frontend completeness.
   it at runtime; the frontend gets it via the `APP_VERSION` build arg).
 - Fixed `IMAGE_TAG` default drift across compose/env.EXAMPLE/READMEs (all
   `v`-prefixed and consistent).
-- New `RELEASING.md` checklist; `MIGRATIONS.md` rewritten as user-facing
+- New `docs/releasing.md` checklist; `docs/migrations.md` rewritten as user-facing
   upgrade guidance with a prominent back-up-before-upgrading step.
 
 **Frontend**
@@ -122,7 +122,7 @@ on the critical data paths, unified versioning, and frontend completeness.
   removed the unused `FRONTEND_HOST`; corrected the misleading
   `VITE_API_BASE_URL` guidance (it is build-time-baked; GHCR images use
   `/api`).
-- Scheduled-backup guidance (cron example) in README.Docker.md; restore
+- Scheduled-backup guidance (cron example) in `docs/deployment.md`; restore
   semantics documented as merge, not replace.
 
 ### API surface for AI workflows
