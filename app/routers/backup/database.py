@@ -42,12 +42,23 @@ from .exporters import (
     export_attendance_records,
     export_grade_history,
     export_journal_entries,
+    export_lesson_paperless_materials,
+    export_lessons,
+    export_paperless_doctype_maps,
+    export_paperless_documents,
+    export_paperless_tag_maps,
     export_point_transactions,
+    export_shop_categories,
+    export_shop_images,
+    export_shop_items,
+    export_shop_redemptions,
+    export_student_assignment_paperless_materials,
     export_student_assignments,
     export_student_points,
     export_student_term_grades,
     export_subjects,
     export_system_settings,
+    export_template_paperless_materials,
     export_term_subjects,
     export_terms,
     export_users,
@@ -85,6 +96,17 @@ def export_system_backup(
         journal_data = export_journal_entries(db)
         student_points_data = export_student_points(db)
         point_transactions_data = export_point_transactions(db)
+        shop_categories_data = export_shop_categories(db)
+        shop_images_data = export_shop_images(db)
+        shop_items_data = export_shop_items(db)
+        shop_redemptions_data = export_shop_redemptions(db)
+        lessons_data = export_lessons(db)
+        paperless_tag_maps_data = export_paperless_tag_maps(db)
+        paperless_doctype_maps_data = export_paperless_doctype_maps(db)
+        paperless_documents_data = export_paperless_documents(db)
+        lesson_paperless_data = export_lesson_paperless_materials(db)
+        template_paperless_data = export_template_paperless_materials(db)
+        sa_paperless_data = export_student_assignment_paperless_materials(db)
         system_settings_data = export_system_settings(db)
 
         # Create system backup
@@ -102,6 +124,17 @@ def export_system_backup(
                 "total_journal_entries": len(journal_data),
                 "total_student_points": len(student_points_data),
                 "total_point_transactions": len(point_transactions_data),
+                "total_shop_categories": len(shop_categories_data),
+                "total_shop_images": len(shop_images_data),
+                "total_shop_items": len(shop_items_data),
+                "total_shop_redemptions": len(shop_redemptions_data),
+                "total_lessons": len(lessons_data),
+                "total_paperless_documents": len(paperless_documents_data),
+                "total_paperless_attachments": (
+                    len(lesson_paperless_data)
+                    + len(template_paperless_data)
+                    + len(sa_paperless_data)
+                ),
                 "total_system_settings": len(system_settings_data),
             },
             users=users_data,
@@ -116,6 +149,17 @@ def export_system_backup(
             journal_entries=journal_data,
             student_points=student_points_data,
             point_transactions=point_transactions_data,
+            shop_categories=shop_categories_data,
+            shop_images=shop_images_data,
+            shop_items=shop_items_data,
+            shop_redemptions=shop_redemptions_data,
+            lessons=lessons_data,
+            paperless_tag_maps=paperless_tag_maps_data,
+            paperless_doctype_maps=paperless_doctype_maps_data,
+            paperless_documents=paperless_documents_data,
+            lesson_paperless_materials=lesson_paperless_data,
+            template_paperless_materials=template_paperless_data,
+            student_assignment_paperless_materials=sa_paperless_data,
             system_settings=system_settings_data,
         )
 

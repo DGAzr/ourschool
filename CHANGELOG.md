@@ -6,7 +6,126 @@ All notable changes to OurSchool are documented here.
 
 ## [Unreleased]
 
-No changes yet.
+### Teacher workflow unification
+
+One coherent flow for creating, assigning, and grading work — the scattered
+modals and the parallel "template" vs. "assignment" surfaces are gone.
+
+- **Assignment Composer** — a single create/assign surface replaces the old
+  quick-assign, template-create, and template-edit modals. From one drawer you
+  can assign work to students and, with **Save to library**, keep it as a
+  reusable template. Backed by a new `POST /assignments/compose` endpoint.
+- **Grading desk consolidation** — `GradeForm` (points-based, with real
+  validation) is now the only grading UI; the separate grade modal is deleted.
+  Fixes a validation gap that let invalid scores through, and there is no
+  letter-grade *input* anywhere — letter grades are display-only, derived from
+  the score.
+- **Grade without leaving the queue** — excuse, archive, and unassign actions
+  are available directly from the grading desk.
+- **Reopen & archive on assignments** — excused work can be reopened and graded
+  work archived, both individually and in bulk, from the assignments page.
+- **Lesson planner** — create templates in place via the composer, and search
+  the template library when planning; dead client-side search removed.
+- **Shared UI** — a canonical `ActionMenu` replaces hand-rolled row menus, and a
+  reusable `AssignmentInfo` display is shared across surfaces.
+- **Data** — new `is_library` flag on assignments (migration) distinguishes
+  reusable library templates from assigned work.
+
+### Paperless-ngx integration
+
+Connect OurSchool to a self-hosted [Paperless-ngx](https://docs.paperless-ngx.com/)
+document server and use your scanned worksheets and reference documents as
+teaching materials.
+
+- **Connection & sync** — Admin → Paperless: test and connect with a server URL
+  and API token (the token is stored encrypted; rotating `SECRET_KEY` requires a
+  reconnect). Sync caches document metadata locally and is incremental — OCR
+  keywords are only re-fetched when a document actually changed. The sync can be
+  scoped to selected Paperless tags and/or document types; documents deleted on
+  the Paperless side are soft-flagged rather than cascade-removed.
+- **Mappings** — Paperless tags map to OurSchool subjects and Paperless document
+  types map to material kinds. Name matches are mapped automatically; manual
+  remaps stick across syncs.
+- **Materials on everything** — attach documents to lessons (teacher prep), to
+  assignment templates (visible to every student assigned from them), or to a
+  single student assignment (one-off). Attachments snapshot their display fields,
+  so they keep rendering even if the document or the Paperless connection goes
+  away.
+- **Student access** — students view or download attached documents through an
+  authorized content proxy; they can only reach documents attached to their own
+  work. Thumbnails are served via unguessable capability URLs.
+- **Smart picker** — when attaching documents to a lesson, the picker ranks the
+  library by subject match, title similarity, and OCR keywords (trigram-indexed
+  search).
+- New API-key permissions: `paperless:read`, `paperless:write` (two migrations).
+
+### Points Shop
+
+A reward catalog for the points system: students spend the points they earn on
+graded work.
+
+- **Storefront** — admins stock categories and items with photos, point costs,
+  optional stock limits, and live/hidden status; items can be reordered. Item
+  photos are stored in the database and served via capability URLs.
+- **Redemption workflow** — items are either instant or request-fulfillment.
+  Requests move pending → approved (ready) → fulfilled, or are declined with an
+  automatic `refund` transaction restoring the points. Redemptions snapshot the
+  item name and cost, so history stays accurate if items are later edited or
+  deleted.
+- **Student view** — browse the shop, redeem, review redemption history, and set
+  a goal item to save toward (with progress against the current balance).
+- **Admin** — store manager and redemption queue under Admin → Shop, plus an
+  at-a-glance overview.
+- Gated behind the existing points-system toggle; disabled shops hide all shop
+  UI. New API-key permissions: `shop:read`, `shop:write` (two migrations).
+
+### Lesson planner
+
+Plan instruction by date, then let the planner drive the assignment workflow.
+
+- **Date-based planning board** — lessons carry a title, objective, duration,
+  notes, and status (planned / in progress / taught). Lessons can be reordered
+  within a day; taught lessons are locked.
+- **Templates on lessons** — link assignment templates to a lesson with
+  per-link overrides (due date, max points, instructions). Saving the lesson
+  syncs real student assignments for the lesson's assigned students; deleting a
+  lesson orphans (rather than deletes) graded work.
+- **Prep tracking** — a per-lesson materials checklist with a "gathered" toggle,
+  plus ordered resource links.
+- **Student view** — students see their scheduled lessons via My Lessons.
+- New API-key permissions: `lessons:read`, `lessons:write` (two migrations).
+
+---
+
+## [v1.0.0-beta.14] — 2026-07-07
+
+- UI fixes and improvements across the assignments, grading, and templates
+  pages.
+- Fixed inconsistent padding in the Attendance & compliance settings card
+  (community contribution, #24).
+
+## [v1.0.0-beta.13] — 2026-07-07
+
+- README/API-reference corrections and CI formatting fixes; no functional
+  changes.
+
+## [v1.0.0-beta.12] — 2026-07-07
+
+- Continued API-key coverage work and API bug fixes.
+- Point transactions now record the acting admin's name (migration), so ledger
+  history survives account changes.
+
+## [v1.0.0-beta.11] — 2026-07-06
+
+- **API-key coverage for (nearly) the whole API** — terms, subjects, assignment
+  types, journal, reports, settings, activity, performance, backup, and API-key
+  metadata endpoints now accept scoped API keys through the dual-auth pattern,
+  expanding the permission registry well beyond the original eight scopes
+  (all advertised via `GET /api/meta` and `GET /api/admin/api-keys/permissions`).
+- Fixed API key creation; added schemas to the API-key settings endpoints.
+- Login screen logo.
+
+---
 
 ## [1.0.0] — 2026-07-20
 

@@ -40,10 +40,11 @@ These tests are self-contained (no database required) and cover three concerns:
 
 import os
 
-import pytest
-
+# SECRET_KEY is required at config import; DATABASE_URL is not (the engine is
+# lazy) and must NOT be set here — a module-level placeholder would leak into
+# conftest at collection time and turn its "no DB configured → skip" path into
+# hundreds of connection errors.
 os.environ.setdefault("SECRET_KEY", "test-secret-key-not-for-production-123456")
-os.environ.setdefault("DATABASE_URL", "postgresql+psycopg://unused:unused@localhost/unused")
 
 from app.core.security import (  # noqa: E402
     get_password_hash,

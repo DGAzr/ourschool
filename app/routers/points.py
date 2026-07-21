@@ -18,6 +18,8 @@
 Points system API endpoints.
 """
 
+from typing import Optional
+
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
@@ -50,7 +52,7 @@ logger = get_logger("points_api")
 router = APIRouter(prefix="/points", tags=["points"])
 
 
-def _attach_transaction_names(transactions, student: User | None = None) -> None:
+def _attach_transaction_names(transactions, student: Optional[User] = None) -> None:
     """Populate display names on ledger rows.
 
     Attribution prefers the actor name persisted at write time (covers API-key
@@ -110,6 +112,7 @@ async def get_my_points_balance(
 
     student_points = points_crud.get_or_create_student_points(db, student.id)
     student_points.student_name = f"{student.first_name} {student.last_name}"
+    points_crud.attach_goal_item(student_points)
 
     return student_points
 
@@ -132,6 +135,7 @@ async def get_my_points_ledger(
     )
 
     student_points.student_name = f"{student.first_name} {student.last_name}"
+    points_crud.attach_goal_item(student_points)
 
     _attach_transaction_names(transactions, student=student)
 

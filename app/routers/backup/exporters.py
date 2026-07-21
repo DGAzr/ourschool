@@ -16,14 +16,25 @@
 
 """Data export utilities for backup operations."""
 
+import base64
 from typing import List
 
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 
 from app.models.assignment import AssignmentTemplate, StudentAssignment
 from app.models.attendance import AttendanceRecord
 from app.models.journal import JournalEntry
+from app.models.lesson import Lesson
+from app.models.paperless import (
+    LessonPaperlessMaterial,
+    PaperlessDoctypeMap,
+    PaperlessDocument,
+    PaperlessTagMap,
+    StudentAssignmentPaperlessMaterial,
+    TemplatePaperlessMaterial,
+)
 from app.models.points import PointTransaction, StudentPoints
+from app.models.shop import ShopCategory, ShopImage, ShopItem, ShopRedemption
 from app.models.subject import Subject
 from app.models.term import GradeHistory, StudentTermGrade, Term, TermSubject
 from app.models.user import User
@@ -32,12 +43,27 @@ from app.schemas.backup import (
     AttendanceRecordBackup,
     GradeHistoryBackup,
     JournalEntryBackup,
+    LessonBackup,
+    LessonMaterialBackup,
+    LessonResourceBackup,
+    LessonPaperlessMaterialBackup,
+    LessonStudentRefBackup,
+    LessonTemplateLinkBackup,
+    PaperlessDoctypeMapBackup,
+    PaperlessDocumentBackup,
+    PaperlessTagMapBackup,
     PointTransactionBackup,
+    ShopCategoryBackup,
+    ShopImageBackup,
+    ShopItemBackup,
+    ShopRedemptionBackup,
     StudentAssignmentBackup,
+    StudentAssignmentPaperlessMaterialBackup,
     StudentPointsBackup,
     StudentTermGradeBackup,
     SubjectBackup,
     SystemSettingsBackup,
+    TemplatePaperlessMaterialBackup,
     TermBackup,
     TermSubjectBackup,
     UserBackup,
@@ -111,10 +137,12 @@ def export_assignment_templates(db: Session) -> List[AssignmentTemplateBackup]:
     """Export all assignment templates."""
     templates_data = []
     templates = db.query(AssignmentTemplate).all()
+    creator_ids = {t.created_by for t in templates if t.created_by is not None}
+    creator_emails = {
+        user.id: user.email for user in db.query(User).filter(User.id.in_(creator_ids))
+    }
     for template in templates:
-        # Get creator email
-        creator = db.query(User).filter(User.id == template.created_by).first()
-        creator_email = creator.email if creator else "unknown@system.local"
+        creator_email = creator_emails.get(template.created_by, "unknown@system.local")
 
         templates_data.append(
             AssignmentTemplateBackup(
@@ -313,7 +341,10 @@ def export_system_settings(db: Session) -> List[SystemSettingsBackup]:
 def export_student_points(db: Session) -> List[StudentPointsBackup]:
     """Export all student point balances."""
     points_data = []
-    for sp in db.query(StudentPoints).all():
+    query = db.query(StudentPoints).options(
+        joinedload(StudentPoints.student), joinedload(StudentPoints.goal_item)
+    )
+    for sp in query.all():
         points_data.append(
             StudentPointsBackup(
                 student_external_id=sp.student.external_id if sp.student else None,
@@ -321,6 +352,9 @@ def export_student_points(db: Session) -> List[StudentPointsBackup]:
                 current_balance=sp.current_balance,
                 total_earned=sp.total_earned,
                 total_spent=sp.total_spent,
+                goal_item_external_id=(
+                    sp.goal_item.external_id if sp.goal_item else None
+                ),
                 created_at=sp.created_at,
                 updated_at=sp.updated_at,
             )
@@ -344,3 +378,312 @@ def export_point_transactions(db: Session) -> List[PointTransactionBackup]:
             )
         )
     return transactions_data
+
+
+def export_shop_categories(db: Session) -> List[ShopCategoryBackup]:
+    """Export all shop categories."""
+    return [
+        ShopCategoryBackup(
+            external_id=c.external_id,
+            name=c.name,
+            color=c.color,
+            icon=c.icon,
+            sort_order=c.sort_order,
+            created_at=c.created_at,
+        )
+        for c in db.query(ShopCategory).all()
+    ]
+
+
+def export_shop_images(db: Session) -> List[ShopImageBackup]:
+    """Export all shop images (bytes base64-encoded for JSON safety)."""
+    return [
+        ShopImageBackup(
+            external_id=img.external_id,
+            mime_type=img.mime_type,
+            size_bytes=img.size_bytes,
+            data_b64=base64.b64encode(img.data).decode("ascii"),
+            created_at=img.created_at,
+        )
+        for img in db.query(ShopImage).all()
+    ]
+
+
+def export_shop_items(db: Session) -> List[ShopItemBackup]:
+    """Export all shop items (category referenced by external_id)."""
+    items = []
+    for item in db.query(ShopItem).options(joinedload(ShopItem.category)).all():
+        items.append(
+            ShopItemBackup(
+                external_id=item.external_id,
+                name=item.name,
+                category_external_id=(
+                    item.category.external_id if item.category else ""
+                ),
+                description=item.description,
+                cost_points=item.cost_points,
+                quantity_available=item.quantity_available,
+                fulfillment_type=item.fulfillment_type,
+                is_active=item.is_active,
+                display_order=item.display_order,
+                image_ids=list(item.image_ids or []),
+                total_redeemed=item.total_redeemed,
+                created_at=item.created_at,
+                updated_at=item.updated_at,
+            )
+        )
+    return items
+
+
+def export_shop_redemptions(db: Session) -> List[ShopRedemptionBackup]:
+    """Export all shop redemptions.
+
+    Transaction-link FKs and decided_by are not exported: point transactions
+    carry no stable external id, so those links can't be rebuilt on restore.
+    """
+    redemptions = []
+    query = db.query(ShopRedemption).options(
+        joinedload(ShopRedemption.student), joinedload(ShopRedemption.item)
+    )
+    for r in query.all():
+        redemptions.append(
+            ShopRedemptionBackup(
+                external_id=r.external_id,
+                student_external_id=r.student.external_id if r.student else None,
+                student_email=r.student.email if r.student else "Unknown",
+                item_external_id=r.item.external_id if r.item else None,
+                item_name=r.item_name,
+                cost_points=r.cost_points,
+                fulfillment_type=r.fulfillment_type,
+                status=r.status,
+                created_at=r.created_at,
+                decided_at=r.decided_at,
+                fulfilled_at=r.fulfilled_at,
+            )
+        )
+    return redemptions
+
+
+def export_lessons(db: Session) -> List[LessonBackup]:
+    """Export all lessons with their nested students/templates/materials/resources.
+
+    Subject, creator, students, and linked templates are referenced by
+    external_id (with natural-key fallbacks) so the importer can remap them.
+    The subject/students/templates/materials/resources relationships are
+    selectin-loaded by the model; only the creator needs an explicit option.
+    """
+    lessons_data = []
+    query = (
+        db.query(Lesson)
+        .options(joinedload(Lesson.creator))
+        .order_by(Lesson.date, Lesson.position, Lesson.id)
+    )
+    for lesson in query.all():
+        lessons_data.append(
+            LessonBackup(
+                external_id=lesson.external_id,
+                date=lesson.date,
+                title=lesson.title,
+                objective=lesson.objective,
+                duration_minutes=lesson.duration_minutes,
+                notes=lesson.notes,
+                position=lesson.position,
+                status=lesson.status.value,
+                subject_external_id=(
+                    lesson.subject.external_id if lesson.subject else None
+                ),
+                subject_name=lesson.subject.name if lesson.subject else None,
+                created_by_external_id=(
+                    lesson.creator.external_id if lesson.creator else None
+                ),
+                created_by_email=lesson.creator.email if lesson.creator else None,
+                students=[
+                    LessonStudentRefBackup(
+                        student_external_id=s.external_id,
+                        student_email=s.email,
+                    )
+                    for s in lesson.students
+                ],
+                templates=[
+                    LessonTemplateLinkBackup(
+                        template_external_id=(
+                            link.template.external_id if link.template else None
+                        ),
+                        template_name=(
+                            link.template.name if link.template else "Unknown"
+                        ),
+                        custom_due_date=link.custom_due_date,
+                        custom_max_points=link.custom_max_points,
+                        custom_instructions=link.custom_instructions,
+                    )
+                    for link in lesson.templates
+                ],
+                materials=[
+                    LessonMaterialBackup(
+                        label=m.label,
+                        is_gathered=m.is_gathered,
+                        position=m.position,
+                    )
+                    for m in lesson.materials
+                ],
+                resources=[
+                    LessonResourceBackup(
+                        label=r.label,
+                        url=r.url,
+                        position=r.position,
+                    )
+                    for r in lesson.resources
+                ],
+                created_at=lesson.created_at,
+                updated_at=lesson.updated_at,
+            )
+        )
+    return lessons_data
+
+
+def export_paperless_tag_maps(db: Session) -> List[PaperlessTagMapBackup]:
+    """Export Paperless tag → subject mappings (subject by external_id)."""
+    return [
+        PaperlessTagMapBackup(
+            paperless_tag_id=m.paperless_tag_id,
+            paperless_tag_name=m.paperless_tag_name,
+            subject_external_id=m.subject.external_id if m.subject else None,
+            subject_name=m.subject.name if m.subject else None,
+            auto_matched=m.auto_matched,
+        )
+        for m in db.query(PaperlessTagMap).all()
+    ]
+
+
+def export_paperless_doctype_maps(db: Session) -> List[PaperlessDoctypeMapBackup]:
+    """Export Paperless document type → material kind mappings."""
+    return [
+        PaperlessDoctypeMapBackup(
+            paperless_doctype_id=m.paperless_doctype_id,
+            paperless_doctype_name=m.paperless_doctype_name,
+            material_kind=m.material_kind,
+        )
+        for m in db.query(PaperlessDoctypeMap).all()
+    ]
+
+
+def export_paperless_documents(db: Session) -> List[PaperlessDocumentBackup]:
+    """Export the cached document metadata (thumbnails excluded by design)."""
+    return [
+        PaperlessDocumentBackup(
+            external_id=doc.external_id,
+            paperless_id=doc.paperless_id,
+            asn=doc.asn,
+            title=doc.title,
+            correspondent=doc.correspondent,
+            paperless_doctype_id=doc.paperless_doctype_id,
+            material_kind=doc.material_kind,
+            subject_external_id=doc.subject.external_id if doc.subject else None,
+            subject_name=doc.subject.name if doc.subject else None,
+            tag_ids=list(doc.tag_ids or []),
+            page_count=doc.page_count,
+            paperless_created=doc.paperless_created,
+            paperless_added=doc.paperless_added,
+            paperless_modified=doc.paperless_modified,
+            keywords=doc.keywords,
+            present=doc.present,
+            synced_at=doc.synced_at,
+        )
+        for doc in db.query(PaperlessDocument).all()
+    ]
+
+
+def _subjects_by_id(db: Session) -> dict:
+    """id → Subject lookup for resolving attachment snapshot subject FKs
+    (the link models carry subject_id without a relationship)."""
+    return {s.id: s for s in db.query(Subject).all()}
+
+
+def _attachment_snapshot(link, subjects: dict) -> dict:
+    """Shared snapshot fields for the three attachment backup schemas."""
+    subject = subjects.get(link.subject_id) if link.subject_id else None
+    return {
+        "document_paperless_id": link.document.paperless_id,
+        "title": link.title,
+        "asn": link.asn,
+        "material_kind": link.material_kind,
+        "subject_external_id": subject.external_id if subject else None,
+        "subject_name": subject.name if subject else None,
+        "page_count": link.page_count,
+        "correspondent": link.correspondent,
+        "created_at": link.created_at,
+    }
+
+
+def export_lesson_paperless_materials(
+    db: Session,
+) -> List[LessonPaperlessMaterialBackup]:
+    """Export lesson ↔ Paperless document attachments (lesson by external_id)."""
+    subjects = _subjects_by_id(db)
+    query = db.query(LessonPaperlessMaterial).options(
+        joinedload(LessonPaperlessMaterial.lesson)
+    )
+    return [
+        LessonPaperlessMaterialBackup(
+            lesson_external_id=link.lesson.external_id,
+            **_attachment_snapshot(link, subjects),
+        )
+        for link in query.all()
+        if link.lesson is not None and link.document is not None
+    ]
+
+
+def export_template_paperless_materials(
+    db: Session,
+) -> List[TemplatePaperlessMaterialBackup]:
+    """Export template ↔ Paperless document attachments."""
+    subjects = _subjects_by_id(db)
+    query = db.query(TemplatePaperlessMaterial).options(
+        joinedload(TemplatePaperlessMaterial.template)
+    )
+    return [
+        TemplatePaperlessMaterialBackup(
+            template_external_id=link.template.external_id,
+            template_name=link.template.name,
+            **_attachment_snapshot(link, subjects),
+        )
+        for link in query.all()
+        if link.template is not None and link.document is not None
+    ]
+
+
+def export_student_assignment_paperless_materials(
+    db: Session,
+) -> List[StudentAssignmentPaperlessMaterialBackup]:
+    """Export one-off assignment ↔ document attachments.
+
+    StudentAssignments have no external_id, so links are keyed by the same
+    (student, template, due_date) triple the assignment importer dedupes on.
+    Links whose assignment lost its student or template can't be re-keyed and
+    are skipped.
+    """
+    subjects = _subjects_by_id(db)
+    query = db.query(StudentAssignmentPaperlessMaterial).options(
+        joinedload(StudentAssignmentPaperlessMaterial.student_assignment)
+    )
+    exported = []
+    for link in query.all():
+        sa = link.student_assignment
+        if (
+            sa is None
+            or link.document is None
+            or sa.student is None
+            or sa.template is None
+        ):
+            continue
+        exported.append(
+            StudentAssignmentPaperlessMaterialBackup(
+                student_external_id=sa.student.external_id,
+                student_email=sa.student.email,
+                template_external_id=sa.template.external_id,
+                assignment_template_name=sa.template.name,
+                due_date=sa.due_date,
+                **_attachment_snapshot(link, subjects),
+            )
+        )
+    return exported

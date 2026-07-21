@@ -1,9 +1,8 @@
 {
   "$schema": "https://unpkg.com/knip@latest/schema.json",
   "project": ["src/**/*.{ts,tsx}"],
-  // Reserved for upcoming component tests; not yet imported anywhere.
+  // user-event is reserved for interaction-heavy tests; not yet imported.
   "ignoreDependencies": [
-    "@testing-library/react",
     "@testing-library/user-event"
   ]
 }

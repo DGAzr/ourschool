@@ -18,6 +18,7 @@
 
 import { getErrorMessage } from '../services/api'
 import React, { useState, useEffect, useCallback } from 'react'
+import { Link } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { pointsApi, type PointsLedger } from '../services/points'
 import { useAssignmentTypes } from '../contexts/AssignmentTypesContext'
@@ -37,6 +38,7 @@ import {
   BookOpen,
   Eye,
   EyeOff,
+  RotateCcw,
 } from 'lucide-react'
 
 const MyPoints: React.FC = () => {
@@ -124,6 +126,13 @@ const MyPoints: React.FC = () => {
         </div>
       )
     }
+    if (transactionType === 'refund') {
+      return (
+        <div className="w-8 h-8 rounded-field flex items-center justify-center flex-shrink-0 bg-[var(--pos-bg)] text-[var(--pos-fg)]">
+          <RotateCcw size={15} />
+        </div>
+      )
+    }
     return (
       <div className="w-8 h-8 rounded-field flex items-center justify-center flex-shrink-0 bg-panel-2 text-muted">
         <Coins size={15} />
@@ -139,6 +148,7 @@ const MyPoints: React.FC = () => {
     if (transactionType === 'admin_award') return 'Award'
     if (transactionType === 'admin_deduction') return 'Deduction'
     if (transactionType === 'spending') return 'Spending'
+    if (transactionType === 'refund') return 'Refund'
     return 'Transaction'
   }
 
@@ -244,6 +254,31 @@ const MyPoints: React.FC = () => {
               <ShoppingCart size={14} className="text-muted" />
               <span className="text-muted">Spent</span>
               <span className="font-semibold text-ink font-mono">{points.total_spent.toLocaleString()}</span>
+            </div>
+          </div>
+        )}
+
+        {/* Saving-toward strip (goal picked in the Points Shop). */}
+        {balanceVisible && points.goal_item_name && points.goal_item_cost != null && (
+          <div className="mt-4 pt-4 border-t border-line">
+            <div className="h-2.5 rounded-full overflow-hidden" style={{ background: 'var(--track)' }}>
+              <div
+                className="h-full"
+                style={{
+                  width: `${Math.min(100, Math.round((points.current_balance / points.goal_item_cost) * 100))}%`,
+                  background: 'linear-gradient(90deg, var(--accent), var(--gold))',
+                }}
+              />
+            </div>
+            <div className="mt-1.5 flex items-center justify-between text-[12px]">
+              <span className="text-muted">
+                Saving toward <span className="font-semibold text-ink">{points.goal_item_name}</span>
+              </span>
+              <Link to="/shop" className="font-semibold text-accent hover:text-ink transition-colors">
+                {points.current_balance >= points.goal_item_cost
+                  ? 'Unlocked — visit the shop →'
+                  : `${(points.goal_item_cost - points.current_balance).toLocaleString()} pts to go`}
+              </Link>
             </div>
           </div>
         )}

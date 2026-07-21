@@ -16,7 +16,7 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-import React from 'react'
+import React, { useState } from 'react'
 import { ReportCard as ReportCardType, ReportCardSubjectGrade } from '../../../types/reports'
 
 interface ReportCardProps {
@@ -30,17 +30,6 @@ interface ReportCardProps {
   availableTermsForReportCard: Array<{ id: number; name: string; academic_year: string }>
   generateReportCard: () => Promise<void>
   isAdmin: boolean
-}
-
-function autoComment(studentName: string, overall: number): string {
-  const first = studentName.split(' ')[0]
-  if (overall >= 90) {
-    return `${first} has had an outstanding term — consistent effort, strong reflection in the journal, and excellent follow-through across every subject.`
-  }
-  if (overall >= 78) {
-    return `${first} is making steady progress. Continued focus on completion and a few weaker subjects will lift the overall grade further.`
-  }
-  return `${first} has had a challenging term. We recommend extra support in areas of weakness and re-establishing a daily study routine to rebuild momentum.`
 }
 
 function formatDate(dateStr: string): string {
@@ -66,6 +55,7 @@ const ReportCard: React.FC<ReportCardProps> = ({
   isAdmin,
 }) => {
   const rc = reportCard
+  const [teacherComments, setTeacherComments] = useState('')
 
   return (
     <div>
@@ -170,6 +160,44 @@ const ReportCard: React.FC<ReportCardProps> = ({
             ))}
           </select>
         </div>
+
+        {isAdmin && (
+          <div style={{ flex: '1 1 260px', minWidth: 260 }}>
+            <label
+              htmlFor="rc-teacher-comments"
+              style={{
+                display: 'block',
+                fontSize: 11,
+                fontWeight: 600,
+                letterSpacing: '.05em',
+                textTransform: 'uppercase',
+                color: 'var(--faint)',
+                marginBottom: 6,
+              }}
+            >
+              Teacher comments
+            </label>
+            <textarea
+              id="rc-teacher-comments"
+              value={teacherComments}
+              onChange={(e) => setTeacherComments(e.target.value)}
+              rows={2}
+              placeholder="Appears on the printed card; leave blank for hand-written lines."
+              style={{
+                width: '100%',
+                padding: '8px 12px',
+                border: '1px solid var(--field-border)',
+                background: 'var(--field-bg)',
+                borderRadius: 9,
+                fontSize: 13.5,
+                fontFamily: 'inherit',
+                color: 'var(--ink)',
+                outline: 'none',
+                resize: 'vertical',
+              }}
+            />
+          </div>
+        )}
 
         <div style={{ flex: 1 }} />
 
@@ -482,18 +510,38 @@ const ReportCard: React.FC<ReportCardProps> = ({
               >
                 Teacher comments
               </div>
-              <p
-                style={{
-                  margin: 0,
-                  fontSize: 14,
-                  lineHeight: 1.6,
-                  fontStyle: 'italic',
-                  color: '#333',
-                }}
-              >
-                {rc.teacher_comments ||
-                  autoComment(rc.student_name, rc.summary.overall_percentage)}
-              </p>
+              {!isAdmin ? (
+                <p
+                  style={{
+                    margin: 0,
+                    fontSize: 14,
+                    lineHeight: 1.6,
+                    fontStyle: 'italic',
+                    color: '#333',
+                  }}
+                >
+                  Snapshot only — not an official report card.
+                </p>
+              ) : teacherComments.trim() ? (
+                <p
+                  style={{
+                    margin: 0,
+                    fontSize: 14,
+                    lineHeight: 1.6,
+                    fontStyle: 'italic',
+                    color: '#333',
+                    whiteSpace: 'pre-wrap',
+                  }}
+                >
+                  {teacherComments}
+                </p>
+              ) : (
+                <div aria-label="Space for hand-written comments">
+                  {[0, 1, 2].map((i) => (
+                    <div key={i} style={{ borderBottom: '1px solid #c9c9c9', height: 26 }} />
+                  ))}
+                </div>
+              )}
             </div>
 
             {/* Signatures */}

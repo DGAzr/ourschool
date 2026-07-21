@@ -170,7 +170,7 @@ const StudentComposer: React.FC<ComposerProps> = ({ composerData, onSaved }) => 
         onClick={() => setOpen(true)}
         className="w-full mb-8 py-4 bg-panel border border-line rounded-card-lg text-left px-5 text-faint hover:text-muted hover:border-field-border transition-colors shadow-card"
       >
-        <span className="font-serif text-[16px]">Start writing today's reflection…</span>
+        <span className="text-[14.5px]">Start writing today's reflection…</span>
       </button>
     )
   }
@@ -236,7 +236,7 @@ const StudentComposer: React.FC<ComposerProps> = ({ composerData, onSaved }) => 
           aria-label="Journal entry"
           suppressContentEditableWarning
           onInput={e => setEditorEmpty((e.currentTarget.innerText?.trim().length ?? 0) === 0)}
-          className="min-h-[120px] font-serif text-[15.5px] leading-relaxed text-ink focus:outline-none empty:before:content-[attr(data-placeholder)] empty:before:text-faintest"
+          className="min-h-[120px] text-[14.5px] leading-relaxed text-ink focus:outline-none empty:before:content-[attr(data-placeholder)] empty:before:text-faintest"
           data-placeholder="Start writing… there's no wrong way to do this."
         />
       </div>
@@ -397,7 +397,7 @@ const StudentEntryCard: React.FC<EntryCardProps> = ({ entry, index, total, onDel
                   className="flex-shrink-0"
                 />
               )}
-              <h3 className="font-serif text-[18px] font-semibold text-ink">{entry.title}</h3>
+              <h3 className="text-[17px] font-semibold text-ink">{entry.title}</h3>
             </div>
             <span className="font-mono text-[11.5px] text-faint flex-none">{formatDate(entry.entry_date)}</span>
           </div>
@@ -418,7 +418,7 @@ const StudentEntryCard: React.FC<EntryCardProps> = ({ entry, index, total, onDel
           )}
 
           {/* Content */}
-          <div className="prose prose-sm max-w-none text-ink-2 font-serif text-[14.5px] leading-relaxed">
+          <div className="prose prose-sm max-w-none text-ink-2 text-[14px] leading-relaxed">
             <MarkdownRenderer content={entry.content} />
           </div>
         </div>
@@ -545,7 +545,7 @@ const AdminEntryPanel: React.FC<AdminEntryPanelProps> = ({ entry, onReacted, onR
                   className="flex-shrink-0"
                 />
               )}
-              <h3 className="font-serif text-[17px] font-semibold text-ink">{entry.title}</h3>
+              <h3 className="text-[16px] font-semibold text-ink">{entry.title}</h3>
               {entry.needs_response && (
                 <span className="px-2 py-[2px] rounded-pill bg-[#ff6b6b22] text-[#ff6b6b] text-[11px] font-semibold">Awaiting reply</span>
               )}
@@ -579,7 +579,7 @@ const AdminEntryPanel: React.FC<AdminEntryPanelProps> = ({ entry, onReacted, onR
       </div>
 
       {/* Body */}
-      <div className="px-5 py-4 font-serif text-[14.5px] leading-relaxed text-ink-2 space-y-3">
+      <div className="px-5 py-4 text-[14px] leading-relaxed text-ink-2 space-y-3">
         <MarkdownRenderer content={entry.content} />
         {entry.win && (
           <div className="px-3 py-2.5 bg-[var(--accent-soft)] border border-[var(--accent-line)] rounded-[10px]">
@@ -591,7 +591,7 @@ const AdminEntryPanel: React.FC<AdminEntryPanelProps> = ({ entry, onReacted, onR
           <div>
             <p className="text-[10.5px] font-semibold text-faint uppercase tracking-[.06em] mb-1.5">Goals</p>
             {entry.goals.map((g, i) => (
-              <div key={i} className="flex items-center gap-2 mb-1 font-sans">
+              <div key={i} className="flex items-center gap-2 mb-1">
                 <span className={`w-3.5 h-3.5 rounded-[3px] border flex-none ${g.done ? 'bg-accent border-accent' : 'border-field-border'}`} />
                 <span className={`text-[13px] ${g.done ? 'line-through text-faint' : 'text-ink'}`}>{g.text}</span>
               </div>
@@ -773,9 +773,9 @@ const Journal: React.FC = () => {
   }
 
   return (
-    <div>
+    <div style={{ height: 'calc(100vh - 4rem)', display: 'flex', flexDirection: 'column', minHeight: 520 }}>
       {error && (
-        <div className="mb-4 px-4 py-3 rounded-card text-[13px] text-neg-fg bg-neg-bg border border-neg-fg/20">
+        <div className="flex-none mb-4 px-4 py-3 rounded-card text-[13px] text-neg-fg bg-neg-bg border border-neg-fg/20">
           {error}
           <button aria-label="Dismiss error" onClick={() => setError(null)} className="ml-3 text-neg-fg/60 hover:text-neg-fg">✕</button>
         </div>
@@ -785,11 +785,11 @@ const Journal: React.FC = () => {
           STUDENT VIEW
       ═══════════════════════════ */}
       {!isAdmin && (
-        <div className="max-w-[760px] mx-auto pb-24">
+        <div className="max-w-[760px] mx-auto w-full flex-1 min-h-0 overflow-y-auto pb-24">
           {/* Greeting + stats */}
           <div className="flex flex-wrap items-start justify-between gap-4 mb-6">
             <div className="min-w-0">
-              <h1 className="font-serif text-[28px] sm:text-[32px] font-medium tracking-[-0.01em] text-ink leading-tight">
+              <h1 className="text-[27px] font-bold tracking-[-0.02em] text-ink leading-tight">
                 {greeting}, {user.first_name || user.username}.
               </h1>
               <p className="mt-1.5 text-muted text-[14px]">{todayLabel} · What's on your mind today?</p>
@@ -821,13 +821,13 @@ const Journal: React.FC = () => {
 
           {/* Timeline */}
           <div className="flex items-center gap-2.5 mb-4">
-            <h2 className="font-serif text-[21px] font-medium text-ink">Your journey</h2>
+            <h2 className="text-[18px] font-bold tracking-[-0.01em] text-ink">Your journey</h2>
             <span className="font-mono text-[12px] text-faint">{entries.length} entries</span>
           </div>
 
           {entries.length === 0 ? (
             <div className="py-14 text-center">
-              <p className="font-serif text-[18px] text-ink-2 mb-2">No entries yet</p>
+              <p className="text-[15px] font-semibold text-ink-2 mb-2">No entries yet</p>
               <p className="text-[13px] text-faint">Your journal will appear here once you start writing.</p>
             </div>
           ) : (
@@ -850,7 +850,7 @@ const Journal: React.FC = () => {
           ADMIN VIEW
       ═══════════════════════════ */}
       {isAdmin && (
-        <div className="flex flex-col lg:flex-row lg:h-[calc(100vh-10rem)] lg:min-h-[520px] gap-4">
+        <div className="flex flex-col lg:flex-row flex-1 min-h-0 gap-4">
           {/* Student roster — horizontal chips on mobile, side rail on desktop */}
           <div className="lg:flex-none lg:w-[250px] lg:bg-panel lg:border lg:border-line lg:rounded-card lg:flex lg:flex-col lg:min-h-0">
             {/* Desktop search */}
@@ -985,7 +985,7 @@ const Journal: React.FC = () => {
               </div>
             </div>
 
-            <div className="flex-1 lg:overflow-y-auto space-y-4 mt-4 lg:mt-0">
+            <div className="flex-1 overflow-y-auto space-y-4 mt-4 lg:mt-0">
               {filteredEntries.length === 0 ? (
                 <div className="py-14 text-center bg-panel border border-line rounded-card">
                   <p className="text-[15px] font-semibold text-ink-2 mb-1">

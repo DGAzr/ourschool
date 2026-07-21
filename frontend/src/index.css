@@ -47,6 +47,16 @@
   --color-pos-soft:       var(--pos-soft);
   --color-nav-active:     var(--nav-active);
 
+  /* Points Shop semantic colors */
+  --color-gold:           var(--gold);
+  --color-gold-soft:      var(--gold-soft);
+  --color-neutral:        var(--neutral);
+  --color-neutral-soft:   var(--neutral-soft);
+  --color-info:           var(--info);
+  --color-info-soft:      var(--info-soft);
+  --color-neg:            var(--neg);
+  --color-neg-soft:       var(--neg-soft);
+
   --color-btn-primary-bg: var(--btn-primary-bg);
   --color-btn-primary-fg: var(--btn-primary-fg);
 
@@ -126,6 +136,16 @@
   --pos:         #4E8D6E;
   --pos-soft:    #E3EFE7;
 
+  /* Points Shop semantic tokens */
+  --gold:        #C0892F;
+  --gold-soft:   #F6EFDD;
+  --neutral:     #9A8A4F;
+  --neutral-soft:#F2EEDD;
+  --info:        #4F7CAC;
+  --info-soft:   #E5ECF5;
+  --neg:         #B05A4E;
+  --neg-soft:    #F6E0DE;
+
   /* Shadows */
   --shadow:    rgba(33,31,27,.14);
   --shadow-lg: rgba(33,31,27,.30);
@@ -183,6 +203,16 @@
   --pos:         #82C29B;
   --pos-soft:    #1E2C23;
 
+  /* Points Shop semantic tokens */
+  --gold:        #D7A24F;
+  --gold-soft:   #2C2718;
+  --neutral:     #D7A24F;
+  --neutral-soft:#2C2718;
+  --info:        #8AA6C8;
+  --info-soft:   #1F2A38;
+  --neg:         #E68A7A;
+  --neg-soft:    #38211F;
+
   --shadow:    rgba(0,0,0,.5);
   --shadow-lg: rgba(0,0,0,.62);
   --overlay:   rgba(8,7,6,.62);
@@ -235,6 +265,19 @@ body {
   to   { transform: none; }
 }
 .animate-modal-in { animation: modalIn .22s cubic-bezier(.2, .8, .2, 1); }
+
+@keyframes drawerIn {
+  from { transform: translateX(100%); }
+  to   { transform: translateX(0); }
+}
+.animate-drawer-in { animation: drawerIn .22s cubic-bezier(.2, .7, .2, 1); }
+
+/* Points Shop goal-progress shimmer (subtle sheen sweeping the fill). */
+@keyframes shimmer {
+  0%   { background-position: -160% 0; }
+  100% { background-position: 260% 0; }
+}
+.animate-shimmer { animation: shimmer 3s linear infinite; }
 
 /* ── Scrollbar ─────────────────────────────────────────────────────── */
 ::-webkit-scrollbar       { width: 6px; height: 6px; }

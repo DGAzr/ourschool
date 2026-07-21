@@ -20,6 +20,8 @@
  * Assignment and assessment related types
  */
 
+import { PaperlessMaterial } from './paperless'
+
 /**
  * Admin-managed assignment type / grade-book category.
  * `weight` is a category percentage (0-100).
@@ -70,6 +72,7 @@ export interface AssignmentTemplate {
   prerequisites?: string
   materials_needed?: string
   is_exportable: boolean
+  is_library: boolean
   is_archived: boolean
   created_by: number
   created_at: string
@@ -77,6 +80,9 @@ export interface AssignmentTemplate {
   total_assigned?: number
   active_assigned?: number
   average_grade?: number
+  // Paperless-NGX documents attached to this template; students view/download
+  // them from their assignment detail.
+  paperless_materials?: PaperlessMaterial[]
 }
 
 export interface StudentAssignment {
@@ -107,6 +113,9 @@ export interface StudentAssignment {
   created_at: string
   updated_at: string
   template?: AssignmentTemplate
+  // One-off Paperless materials on this instance (template materials ride
+  // inside template.paperless_materials).
+  paperless_materials?: PaperlessMaterial[]
 }
 
 export interface AssignmentTemplateCreate {
@@ -121,6 +130,21 @@ export interface AssignmentTemplateCreate {
   prerequisites?: string
   materials_needed?: string
   is_exportable: boolean
+  is_library?: boolean
+}
+
+export interface AssignmentComposeRequest extends AssignmentTemplateCreate {
+  is_library: boolean
+  student_ids: number[]
+  assigned_date?: string
+  due_date?: string
+  custom_instructions?: string
+  custom_max_points?: number
+}
+
+export interface AssignmentComposeResponse {
+  template: AssignmentTemplate
+  created_assignment_ids: number[]
 }
 
 export interface AssignmentTemplateUpdate {
@@ -144,6 +168,8 @@ export interface AssignmentAssignmentRequest {
   assigned_date?: string
   custom_instructions?: string
   custom_max_points?: number
+  // One-off Paperless materials attached to every assignment in the batch.
+  paperless_document_ids?: number[]
 }
 
 export interface AssignmentAssignmentResponse {

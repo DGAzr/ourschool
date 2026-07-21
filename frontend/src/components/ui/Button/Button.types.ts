@@ -26,7 +26,7 @@ import { ButtonHTMLAttributes, ReactNode } from 'react'
  * - `success`: Positive action with green background
  * - `outline`: Transparent background with colored border
  */
-export type ButtonVariant = 'primary' | 'secondary' | 'danger' | 'success' | 'outline'
+type ButtonVariant = 'primary' | 'secondary' | 'danger' | 'success' | 'outline'
 
 /**
  * Available button sizes

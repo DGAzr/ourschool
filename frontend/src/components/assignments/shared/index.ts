@@ -16,8 +16,5 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-export { default as AssignmentModalBase } from './AssignmentModalBase'
 export { default as AssignmentFormFields } from './AssignmentFormFields'
 export { default as AssignmentFormError } from './AssignmentFormError'
-export { default as AssignmentModalFooter } from './AssignmentModalFooter'
-export { useAssignmentForm } from './useAssignmentForm'

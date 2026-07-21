@@ -45,10 +45,13 @@ from app.routers import (
     backup,
     integrations,
     journal,
+    lessons,
     meta,
+    paperless,
     performance,
     points,
     reports,
+    shop,
     subjects,
     terms,
     users,
@@ -174,6 +177,7 @@ app.include_router(attendance.router, prefix="/api/attendance", tags=["attendanc
 app.include_router(subjects.router, prefix="/api/subjects", tags=["subjects"])
 app.include_router(meta.router, prefix="/api", tags=["meta"])
 app.include_router(assignments.router, prefix="/api/assignments", tags=["assignments"])
+app.include_router(lessons.router, prefix="/api/lessons", tags=["lessons"])
 app.include_router(
     assignment_types.router, prefix="/api/assignment-types", tags=["assignment-types"]
 )
@@ -182,10 +186,12 @@ app.include_router(reports.router, prefix="/api/reports", tags=["reports"])
 app.include_router(journal.router, prefix="/api/journal", tags=["journal"])
 app.include_router(backup.router, prefix="/api/backup", tags=["backup"])
 app.include_router(points.router, prefix="/api", tags=["points"])
+app.include_router(shop.router, prefix="/api", tags=["shop"])
 app.include_router(settings_router.router, prefix="/api/settings", tags=["settings"])
 app.include_router(performance.router, prefix="/api/performance", tags=["performance"])
 app.include_router(api_keys.router, prefix="/api", tags=["api-keys"])
 app.include_router(integrations.router, prefix="/api", tags=["integrations"])
+app.include_router(paperless.router, prefix="/api", tags=["paperless"])
 
 
 @app.get("/")

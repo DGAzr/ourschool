@@ -19,6 +19,8 @@
 import React, { useState } from 'react'
 import { Outlet, Link, useNavigate, useLocation } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
+import { usePointsStatus } from '../contexts/PointsStatusContext'
+import { usePaperlessStatusContext } from '../contexts/PaperlessStatusContext'
 import { useTheme } from '../contexts/ThemeContext'
 import PointsDisplay from './PointsDisplay'
 import { User } from '../types'
@@ -38,6 +40,10 @@ import { type LucideIcon,
   Moon,
   Monitor,
   BookOpen,
+  FolderOpen,
+  NotebookPen,
+  ShoppingBag,
+  Store,
 } from 'lucide-react'
 
 const OurSchoolMark: React.FC = () => (
@@ -107,10 +113,22 @@ const SidebarContent: React.FC<SidebarContentProps> = ({
     <nav className="flex-1 py-3 overflow-y-auto">
       {navigation.map((item) => {
         const Icon = item.icon
-        const isActive =
-          item.href === '/'
+        // A nav item matches an exact path or a subpath. When several items
+        // match (e.g. Settings "/admin" and Shop "/admin/shop" both prefix
+        // "/admin/shop"), only the most specific — longest href — wins, so
+        // sibling modules under a shared prefix don't co-highlight.
+        const matches = (href: string) =>
+          href === '/'
             ? pathname === '/'
-            : pathname.startsWith(item.href)
+            : pathname === href || pathname.startsWith(href + '/')
+        const isActive =
+          matches(item.href) &&
+          !navigation.some(
+            (other) =>
+              other.href !== item.href &&
+              other.href.length > item.href.length &&
+              matches(other.href)
+          )
         return (
           <Link
             key={item.name}
@@ -185,23 +203,48 @@ const Layout: React.FC = () => {
   }
 
   const isAdmin = user?.role === 'admin'
+  const { enabled: pointsEnabled, ready: pointsReady } = usePointsStatus()
+  const showShop = pointsReady && pointsEnabled
+
+  // Materials mirrors Paperless-NGX, so its nav item only appears once the
+  // integration is connected. The shared provider fetches once per session
+  // and every connect/disconnect writes back through it, so this updates
+  // immediately without per-navigation polling.
+  const { connected: paperlessConnected } = usePaperlessStatusContext()
 
   const navigation = [
     { name: 'Dashboard', href: '/', icon: Home },
     ...(isAdmin
       ? [
           { name: 'Attendance', href: '/attendance', icon: Calendar },
+          { name: 'Lesson Planning', href: '/lessons', icon: NotebookPen },
+          // Materials appears only when Paperless-NGX is connected.
+          ...(paperlessConnected
+            ? [{ name: 'Materials', href: '/materials', icon: FolderOpen }]
+            : []),
           { name: 'Assignments', href: '/assignments', icon: ClipboardList },
           { name: 'Templates', href: '/templates', icon: BookOpen },
           { name: 'Grading', href: '/grading', icon: GraduationCap },
           { name: 'Journal', href: '/journal', icon: PenTool },
           { name: 'Reports', href: '/reports', icon: BarChart3 },
+          // Shop is hidden when the points system is disabled.
+          ...(showShop
+            ? [{ name: 'Shop', href: '/admin/shop', icon: Store }]
+            : []),
           { name: 'Settings', href: '/admin', icon: Settings },
         ]
       : [
           { name: 'Assignments', href: '/assignments', icon: ClipboardList },
+          { name: 'My Lessons', href: '/my-lessons', icon: NotebookPen },
+          { name: 'My Attendance', href: '/attendance', icon: Calendar },
           { name: 'Journal', href: '/journal', icon: PenTool },
-          { name: 'My Points', href: '/my-points', icon: Coins },
+          // Points pages hide together when the points system is disabled.
+          ...(showShop
+            ? [
+                { name: 'My Points', href: '/my-points', icon: Coins },
+                { name: 'Points Shop', href: '/shop', icon: ShoppingBag },
+              ]
+            : []),
           { name: 'My Progress', href: '/reports', icon: BarChart3 },
         ]),
   ]

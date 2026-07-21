@@ -20,12 +20,16 @@ import { getErrorMessage } from '../services/api'
 import React, { useState, useEffect, useCallback, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
+import { usePointsStatus } from '../contexts/PointsStatusContext'
+import { usePaperlessStatusContext } from '../contexts/PaperlessStatusContext'
 import { useToast } from '../components/ui/useToast'
 import Toggle from '../components/ui/Toggle'
 import ConfirmDialog from '../components/ui/ConfirmDialog'
 import { Button, Input, Select, SegmentedControl, Pill, IconPickerButton, Icon } from '../components/ui'
 import { useAPIKeys } from '../hooks/useAPIKeys'
 import { APIKeyTable, CreateAPIKeyModal } from '../components/api-keys'
+import IntegrationShelf from '../components/admin/IntegrationShelf'
+import PaperlessIntegrationPanel from '../components/paperless/PaperlessIntegrationPanel'
 import ErrorBoundary from '../components/ErrorBoundary'
 import { settingsApi, type GradeBand } from '../services/settings'
 import { pointsApi, type PointsSystemStatus, type AwardPreset, type AdminPointsOverview, type StudentPoints, type PointsLedger } from '../services/points'
@@ -111,6 +115,7 @@ const Admin: React.FC = () => {
   const { toast } = useToast()
   const navigate = useNavigate()
   const { refresh: refreshAssignmentTypes } = useAssignmentTypes()
+  const { refresh: refreshPointsStatus } = usePointsStatus()
   const [section, setSection] = useState<SectionKey>('overview')
   const [pendingAction, setPendingAction] = useState<PendingAction | null>(null)
 
@@ -182,6 +187,8 @@ const Admin: React.FC = () => {
   // ── API key management ──
   const apiKeysHook = useAPIKeys()
   const [showCreateKey, setShowCreateKey] = useState(false)
+  const { connected: paperlessConnected, ready: paperlessReady } =
+    usePaperlessStatusContext()
 
   // ── Points management ──
   const [pointsOverview, setPointsOverview] = useState<AdminPointsOverview | null>(null)
@@ -394,6 +401,8 @@ const Admin: React.FC = () => {
     try {
       const r = await pointsApi.toggleSystem()
       setPointsStatus(s => s ? { ...s, enabled: r.enabled } : s)
+      // Refresh app-wide status so the nav shows/hides the Shop immediately.
+      await refreshPointsStatus()
       toast(`Points system ${r.enabled ? 'enabled' : 'disabled'}`)
     } catch { toast('Failed to toggle points', 'danger') }
     finally { setTogglingPoints(false) }
@@ -1128,7 +1137,14 @@ const Admin: React.FC = () => {
                           <tr><td colSpan={5} className="px-5 py-10 text-center text-[13px] text-muted">No students with points yet.</td></tr>
                         ) : pointsOverview.student_points.map(sp => (
                           <tr key={sp.id} className="hover:bg-panel-2 transition-colors">
-                            <td className="px-5 py-3.5 text-[13.5px] font-semibold text-ink whitespace-nowrap">{sp.student_name}</td>
+                            <td className="px-5 py-3.5 whitespace-nowrap">
+                              <p className="text-[13.5px] font-semibold text-ink">{sp.student_name}</p>
+                              {sp.goal_item_name && (
+                                <p className="text-[11px] text-muted mt-0.5">
+                                  <span style={{ color: 'var(--accent)' }} aria-hidden>◆</span> Saving toward: {sp.goal_item_name}
+                                </p>
+                              )}
+                            </td>
                             <td className="px-5 py-3.5 font-mono text-[13.5px] font-semibold text-ink whitespace-nowrap">{sp.current_balance.toLocaleString()}</td>
                             <td className="px-5 py-3.5 font-mono text-[13px] text-pos-fg whitespace-nowrap">+{sp.total_earned.toLocaleString()}</td>
                             <td className="px-5 py-3.5 font-mono text-[13px] text-neg-fg whitespace-nowrap">−{sp.total_spent.toLocaleString()}</td>
@@ -1733,33 +1749,65 @@ const Admin: React.FC = () => {
 
       case 'api': return (
         <div>
-          <div className="flex items-center justify-between mb-6">
-            <div>
-              <h2 className="text-[18px] font-semibold text-ink tracking-[-0.01em]">Integrations & API</h2>
-              <p className="mt-0.5 text-[13px] text-muted">Connect external tools with secure API keys.</p>
-            </div>
-            <button onClick={() => setShowCreateKey(true)} className="h-[34px] px-4 rounded-field bg-btn-primary-bg text-btn-primary-fg text-[13.5px] font-semibold hover:opacity-90 transition-opacity flex items-center gap-2">
-              <Plus className="w-4 h-4" /> Create API Key
-            </button>
+          <div className="mb-6">
+            <h2 className="text-[18px] font-semibold text-ink tracking-[-0.01em]">Integrations</h2>
+            <p className="mt-0.5 text-[13px] text-muted">Connect and manage external tools. Expand a shelf to configure it.</p>
           </div>
-          <div className="flex items-start gap-2.5 bg-sub-bg border border-sub-fg/20 rounded-card p-4 mb-5 text-[13px] text-sub-fg">
-            <AlertTriangle size={15} className="flex-shrink-0 mt-0.5" />
-            <span>API keys grant direct access to student data. Only create keys for trusted applications and review their scope.</span>
+
+          <div className="space-y-3">
+            {/* Paperless-NGX */}
+            <IntegrationShelf
+              icon={FileText}
+              title="Paperless-NGX"
+              description="Pull scanned lesson materials from your document server into planning, the Materials library, and assignments."
+              badge={
+                paperlessReady && (
+                  <Pill variant={paperlessConnected ? 'pos' : 'ns'}>
+                    {paperlessConnected ? 'Connected' : 'Not connected'}
+                  </Pill>
+                )
+              }
+              defaultOpen
+            >
+              <ErrorBoundary>
+                <PaperlessIntegrationPanel />
+              </ErrorBoundary>
+            </IntegrationShelf>
+
+            {/* Custom / API keys */}
+            <IntegrationShelf
+              icon={Key}
+              title="Custom / API"
+              description="Grant external applications direct access to OurSchool data using secure API keys."
+            >
+              <div className="pt-4 space-y-4">
+                <div className="flex items-start gap-2.5 bg-sub-bg border border-sub-fg/20 rounded-card p-4 text-[13px] text-sub-fg">
+                  <AlertTriangle size={15} className="flex-shrink-0 mt-0.5" />
+                  <span>API keys grant direct access to student data. Only create keys for trusted applications and review their scope.</span>
+                </div>
+                <div className="flex justify-end">
+                  <button onClick={() => setShowCreateKey(true)} className="h-[34px] px-4 rounded-field bg-btn-primary-bg text-btn-primary-fg text-[13.5px] font-semibold hover:opacity-90 transition-opacity flex items-center gap-2">
+                    <Plus className="w-4 h-4" /> Create API Key
+                  </button>
+                </div>
+                <ErrorBoundary>
+                  <APIKeyTable
+                    apiKeys={apiKeysHook.apiKeys}
+                    expandedStats={apiKeysHook.expandedStats}
+                    onToggleStatsExpanded={apiKeysHook.toggleStatsExpanded}
+                    onToggleActive={apiKeysHook.toggleAPIKeyActive}
+                    onDelete={apiKeysHook.deleteAPIKey}
+                    refreshing={apiKeysHook.refreshing}
+                    autoRefresh={apiKeysHook.autoRefresh}
+                    onToggleAutoRefresh={apiKeysHook.toggleAutoRefresh}
+                    lastRefresh={apiKeysHook.lastRefresh}
+                    onRefresh={apiKeysHook.refreshData}
+                  />
+                </ErrorBoundary>
+              </div>
+            </IntegrationShelf>
           </div>
-          <ErrorBoundary>
-            <APIKeyTable
-              apiKeys={apiKeysHook.apiKeys}
-              expandedStats={apiKeysHook.expandedStats}
-              onToggleStatsExpanded={apiKeysHook.toggleStatsExpanded}
-              onToggleActive={apiKeysHook.toggleAPIKeyActive}
-              onDelete={apiKeysHook.deleteAPIKey}
-              refreshing={apiKeysHook.refreshing}
-              autoRefresh={apiKeysHook.autoRefresh}
-              onToggleAutoRefresh={apiKeysHook.toggleAutoRefresh}
-              lastRefresh={apiKeysHook.lastRefresh}
-              onRefresh={apiKeysHook.refreshData}
-            />
-          </ErrorBoundary>
+
           <ErrorBoundary>
             <CreateAPIKeyModal
               isOpen={showCreateKey}

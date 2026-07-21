@@ -30,6 +30,11 @@ from app.models.assignment import (
     AssignmentTemplate,
     StudentAssignment,
 )
+from app.models.paperless import (
+    PaperlessDocument,
+    StudentAssignmentPaperlessMaterial,
+    snapshot_fields,
+)
 from app.models.term import Term
 from app.models.user import User, UserRole
 from app.core.dual_auth import (
@@ -112,6 +117,24 @@ def assign_template_to_students(
             "not found or access denied",
         )
 
+    # One-off Paperless materials for every assignment in this batch —
+    # validated up front so a bad document id fails the whole request before
+    # anything is created.
+    doc_ids = list(dict.fromkeys(assignment_request.paperless_document_ids))
+    docs = (
+        db.query(PaperlessDocument).filter(PaperlessDocument.id.in_(doc_ids)).all()
+        if doc_ids
+        else []
+    )
+    missing_doc_ids = set(doc_ids) - {doc.id for doc in docs}
+    if missing_doc_ids:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Paperless documents with IDs "
+            f"{sorted(missing_doc_ids)} not found",
+        )
+    material_snapshots = [(doc.id, snapshot_fields(doc)) for doc in docs]
+
     created_assignments = []
     failed_assignments = []
 
@@ -132,6 +155,10 @@ def assign_template_to_students(
                 custom_max_points=assignment_request.custom_max_points,
                 assigned_by=assigned_by,
             )
+            student_assignment.paperless_materials = [
+                StudentAssignmentPaperlessMaterial(document_id=doc_id, **snap)
+                for doc_id, snap in material_snapshots
+            ]
 
             db.add(student_assignment)
             created_assignments.append(student_assignment)
@@ -291,6 +318,20 @@ def update_student_assignment(
             raise HTTPException(
                 status_code=403, detail="Students can only update their own assignments"
             )
+
+    if (
+        assignment_update.custom_max_points is not None
+        and assignment.points_earned is not None
+        and assignment.points_earned > assignment_update.custom_max_points
+    ):
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                f"Custom max points ({assignment_update.custom_max_points}) cannot be "
+                f"lower than the recorded grade ({assignment.points_earned}). "
+                "Clear or adjust the grade first."
+            ),
+        )
 
     update_data = assignment_update.dict(exclude_unset=True)
 

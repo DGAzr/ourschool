@@ -33,6 +33,35 @@ describe('api request wrapper', () => {
     expect((init.headers as Record<string, string>).Authorization).toBe('Bearer tok123')
   })
 
+  it('sends JSON Content-Type on normal requests', async () => {
+    fetchMock.mockResolvedValue(jsonResponse(200, { ok: true }))
+
+    await api.post('/things', { a: 1 })
+
+    const [, init] = fetchMock.mock.calls[0]
+    expect((init.headers as Record<string, string>)['Content-Type']).toBe(
+      'application/json'
+    )
+  })
+
+  it('omits the JSON Content-Type for FormData uploads (postForm)', async () => {
+    localStorage.setItem(STORAGE_KEYS.TOKEN, 'tok123')
+    fetchMock.mockResolvedValue(jsonResponse(200, { id: 'img1', url: '/api/shop/images/img1' }))
+
+    const form = new FormData()
+    form.append('file', new Blob(['x'], { type: 'image/png' }), 'p.png')
+    await api.postForm('/shop/images', form)
+
+    const [url, init] = fetchMock.mock.calls[0]
+    expect(url).toBe('/api/shop/images')
+    const headers = init.headers as Record<string, string>
+    // Browser must set the multipart boundary itself.
+    expect(headers['Content-Type']).toBeUndefined()
+    // Auth still travels.
+    expect(headers.Authorization).toBe('Bearer tok123')
+    expect(init.body).toBeInstanceOf(FormData)
+  })
+
   it('returns parsed JSON on success and null on 204', async () => {
     fetchMock.mockResolvedValueOnce(jsonResponse(200, { id: 7 }))
     await expect(api.get('/things/7')).resolves.toEqual({ id: 7 })

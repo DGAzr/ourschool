@@ -81,16 +81,8 @@ def grade_student_assignment(
     if not student:
         raise HTTPException(status_code=404, detail="Student not found")
 
-    # Validate points don't exceed maximum
+    # Points earned may exceed the maximum (e.g. extra credit) — no upper bound.
     max_points = assignment.max_points
-    if grade_data.points_earned > max_points:
-        raise HTTPException(
-            status_code=400,
-            detail=(
-                f"Points earned ({grade_data.points_earned}) "
-                f"cannot exceed maximum points ({max_points})"
-            ),
-        )
 
     # Update grade
     assignment.points_earned = grade_data.points_earned
@@ -189,19 +181,9 @@ def bulk_grade_assignments(
                 )
                 continue
 
-            max_points = assignment.max_points
-            if item.points_earned > max_points:
-                results.append(
-                    BulkGradeResult(
-                        assignment_id=item.assignment_id,
-                        success=False,
-                        error=f"Points {item.points_earned} exceed maximum {max_points}",
-                    )
-                )
-                continue
-
-            # Each item commits or rolls back independently via a savepoint, so
-            # one failure never discards previously-applied items.
+            # Points earned may exceed the maximum (e.g. extra credit) — no upper
+            # bound is enforced. Each item commits or rolls back independently via
+            # a savepoint, so one failure never discards previously-applied items.
             with db.begin_nested():
                 assignment.points_earned = item.points_earned
                 assignment.teacher_feedback = item.teacher_feedback

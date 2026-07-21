@@ -145,7 +145,7 @@ ALLOWED_ORIGINS=http://localhost:4173
 - **Image**: `ghcr.io/dgazr/ourschool-frontend:${IMAGE_TAG}` (GHCR) or built from `Dockerfile.frontend` (source)
 - **Port**: 4173 → 80 (nginx; customizable via `FRONTEND_PORT`)
 - **Depends on**: backend `service_healthy` — won't start until the API is ready
-- **Health check**: `wget -qO- http://localhost:80` — 30s interval, 3 retries
+- **Health check**: `wget -qO- http://localhost:80` — 30s interval, 3 retries, 10s start period
 
 
 ## Common Docker Commands

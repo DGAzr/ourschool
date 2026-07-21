@@ -232,6 +232,36 @@ PERMISSION_DESCRIPTIONS = {
         description="Create, update, and delete subjects",
         category="Subjects",
     ),
+    "shop:read": PermissionInfo(
+        permission="shop:read",
+        description="Read shop categories, items, redemptions, and overview counts",
+        category="Shop",
+    ),
+    "shop:write": PermissionInfo(
+        permission="shop:write",
+        description="Manage shop categories/items, work the redemption queue, and upload images",
+        category="Shop",
+    ),
+    "lessons:read": PermissionInfo(
+        permission="lessons:read",
+        description="Read planned lessons",
+        category="Lessons",
+    ),
+    "lessons:write": PermissionInfo(
+        permission="lessons:write",
+        description="Create, update, reorder, and delete lessons",
+        category="Lessons",
+    ),
+    "paperless:read": PermissionInfo(
+        permission="paperless:read",
+        description="Read Paperless-NGX connection status and cached documents",
+        category="Paperless",
+    ),
+    "paperless:write": PermissionInfo(
+        permission="paperless:write",
+        description="Manage the Paperless-NGX connection, sync, mappings, and attachments",
+        category="Paperless",
+    ),
     "reports:read": PermissionInfo(
         permission="reports:read",
         description="Read student, admin, attendance, assignment, and report-card reports",

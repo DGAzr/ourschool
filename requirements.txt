@@ -22,3 +22,14 @@ bcrypt==5.0.0
 # Data validation and settings
 pydantic[email]==2.13.4
 pydantic-settings==2.14.2
+
+# Image processing for the Points Shop (upload validation, downscale, re-encode)
+Pillow==11.3.0
+
+# Outbound HTTP client for the Paperless-NGX integration.
+# <0.28 matches the dev pin (keeps Starlette's TestClient(app=...) working).
+httpx<0.28
+# Fernet encryption for integration secrets (Paperless API token at rest).
+# Already installed transitively via python-jose[cryptography]; declared
+# explicitly because app/core/crypto.py imports it directly.
+cryptography>=42

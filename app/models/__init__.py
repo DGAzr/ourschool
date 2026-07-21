@@ -27,6 +27,24 @@ from .assignment import (
 from .assignment_type import AssignmentTypeConfig
 from .attendance import AttendanceRecord, AttendanceStatus
 from .journal import JournalEntry, JournalReply
+from .lesson import (
+    Lesson,
+    LessonMaterial,
+    LessonResource,
+    LessonTemplate,
+    lesson_students,
+)
+from .paperless import (
+    LessonPaperlessMaterial,
+    PaperlessConnection,
+    PaperlessDoctypeMap,
+    PaperlessDocument,
+    PaperlessTagMap,
+    PaperlessThumbnail,
+    StudentAssignmentPaperlessMaterial,
+    TemplatePaperlessMaterial,
+)
+from .shop import ShopCategory, ShopImage, ShopItem, ShopRedemption
 from .subject import Subject
 from .term import GradeHistory, StudentTermGrade, Term, TermSubject, TermType
 from .user import User, UserRole
@@ -43,12 +61,29 @@ __all__ = [
     "GradeHistory",
     "JournalEntry",
     "JournalReply",
+    "Lesson",
+    "LessonMaterial",
+    "LessonPaperlessMaterial",
+    "LessonResource",
+    "LessonTemplate",
+    "lesson_students",
+    "PaperlessConnection",
+    "PaperlessDoctypeMap",
+    "PaperlessDocument",
+    "PaperlessTagMap",
+    "PaperlessThumbnail",
     "PointTransaction",
+    "ShopCategory",
+    "ShopImage",
+    "ShopItem",
+    "ShopRedemption",
     "StudentAssignment",
+    "StudentAssignmentPaperlessMaterial",
     "StudentPoints",
     "StudentTermGrade",
     "Subject",
     "SystemSettings",
+    "TemplatePaperlessMaterial",
     "Term",
     "TermSubject",
     "TermType",

@@ -98,6 +98,11 @@ class AssignmentTemplate(Base):
     )
     is_archived = Column(Boolean, default=False, nullable=False)
 
+    # Library templates appear in the Templates page and pickers; one-offs
+    # (created by the composer's "Save to library" toggle being off) exist
+    # only to back their assignments.
+    is_library = Column(Boolean, default=True, server_default="true", nullable=False)
+
     # Relationships
     # selectin avoids N+1 when iterating templates and touching .subject
     subject = relationship(
@@ -106,6 +111,15 @@ class AssignmentTemplate(Base):
     creator = relationship("User", foreign_keys=[created_by])
     student_assignments = relationship(
         "StudentAssignment", back_populates="template", cascade="all, delete-orphan"
+    )
+    # Paperless-NGX documents attached to this template; assigned students can
+    # view/download them through the authorized content proxy.
+    paperless_materials = relationship(
+        "TemplatePaperlessMaterial",
+        back_populates="template",
+        cascade="all, delete-orphan",
+        order_by="TemplatePaperlessMaterial.id",
+        lazy="selectin",
     )
 
 
@@ -130,6 +144,7 @@ class StudentAssignment(Base):
         ),
         Index("idx_student_assignments_template_id", "template_id"),
         Index("idx_student_assignments_student_id", "student_id"),
+        Index("idx_student_assignments_lesson_id", "lesson_id"),
     )
 
     id = Column(Integer, primary_key=True, index=True)
@@ -138,6 +153,12 @@ class StudentAssignment(Base):
     template_id = Column(Integer, ForeignKey("assignment_templates.id"), nullable=False)
     student_id = Column(
         Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )
+    # Set when this SA was created by saving a lesson with a linked template.
+    # SET NULL (not a junction): exactly one lesson owns an SA, and the orphan
+    # rule ("keep graded work, unlink it") is expressed by nulling this out.
+    lesson_id = Column(
+        Integer, ForeignKey("lessons.id", ondelete="SET NULL"), nullable=True
     )
 
     # Assignment details
@@ -201,6 +222,16 @@ class StudentAssignment(Base):
     assigned_by_user = relationship("User", foreign_keys=[assigned_by])
     graded_by_user = relationship("User", foreign_keys=[graded_by])
     grade_history = relationship("GradeHistory", back_populates="assignment")
+    lesson = relationship("Lesson", foreign_keys=[lesson_id])
+    # One-off Paperless materials for THIS assignment, on top of the
+    # template's permanent ones; the student sees both sets merged.
+    paperless_materials = relationship(
+        "StudentAssignmentPaperlessMaterial",
+        back_populates="student_assignment",
+        cascade="all, delete-orphan",
+        order_by="StudentAssignmentPaperlessMaterial.id",
+        lazy="selectin",
+    )
 
     @property
     def max_points(self) -> int:

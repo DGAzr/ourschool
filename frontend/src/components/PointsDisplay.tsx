@@ -18,6 +18,7 @@
 
 import React, { useState, useEffect } from 'react'
 import { useAuth } from '../contexts/AuthContext'
+import { usePointsStatus } from '../contexts/PointsStatusContext'
 import { pointsApi, type StudentPoints } from '../services/points'
 import { Coins, Eye, EyeOff } from 'lucide-react'
 
@@ -28,37 +29,21 @@ interface PointsDisplayProps {
 
 const PointsDisplay: React.FC<PointsDisplayProps> = ({ compact = false, className = '' }) => {
   const { user } = useAuth()
+  const { enabled: systemEnabled, ready, balanceVersion } = usePointsStatus()
   const [points, setPoints] = useState<StudentPoints | null>(null)
-  const [isLoading, setIsLoading] = useState(true)
   const [isVisible, setIsVisible] = useState(true)
-  const [systemEnabled, setSystemEnabled] = useState(false)
 
   useEffect(() => {
-    const loadPointsData = async () => {
-      if (!user || user.role !== 'student') {
-        setIsLoading(false)
-        return
-      }
-
-      try {
-        const status = await pointsApi.getSystemStatus()
-        setSystemEnabled(status.enabled)
-
-        if (status.enabled) {
-          const pointsData = await pointsApi.getMyBalance()
-          setPoints(pointsData)
-        }
-      } catch {
-        setSystemEnabled(false)
-      } finally {
-        setIsLoading(false)
-      }
+    if (!user || user.role !== 'student' || !ready || !systemEnabled) {
+      return
     }
+    pointsApi
+      .getMyBalance()
+      .then(setPoints)
+      .catch(() => setPoints(null))
+  }, [user, ready, systemEnabled, balanceVersion])
 
-    loadPointsData()
-  }, [user])
-
-  if (!user || user.role !== 'student' || !systemEnabled || isLoading || !points) {
+  if (!user || user.role !== 'student' || !systemEnabled || !points) {
     return null
   }
 

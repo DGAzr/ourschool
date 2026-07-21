@@ -25,7 +25,7 @@
  */
 export const letterGrade = (pts: number, max: number): string => {
   if (max <= 0) return 'F'
-  const pct = Math.round((Math.max(0, Math.min(max, pts)) / max) * 100)
+  const pct = Math.round((Math.max(0, pts) / max) * 100)
   if (pct >= 97) return 'A+'
   if (pct >= 93) return 'A'
   if (pct >= 90) return 'A−'

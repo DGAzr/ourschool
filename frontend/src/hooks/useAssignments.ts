@@ -26,9 +26,11 @@ interface UseAssignmentsProps {
   adminViewMode: 'templates' | 'grading'
   selectedSubject: number | null
   includeArchived?: boolean
+  /** Set false when another component on the page owns this data. */
+  enabled?: boolean
 }
 
-export const useAssignments = ({ isAdmin, adminViewMode, selectedSubject, includeArchived }: UseAssignmentsProps) => {
+export const useAssignments = ({ isAdmin, adminViewMode, selectedSubject, includeArchived, enabled = true }: UseAssignmentsProps) => {
   const [templates, setTemplates] = useState<AssignmentTemplate[]>([])
   const [studentAssignments, setStudentAssignments] = useState<StudentAssignment[]>([])
   const [submittedAssignments] = useState<StudentAssignment[]>([])
@@ -42,6 +44,10 @@ export const useAssignments = ({ isAdmin, adminViewMode, selectedSubject, includ
   // load, and user-triggered refreshes go through `refetch` below. State is
   // only set from promise callbacks, never synchronously.
   const fetchData = useCallback(() => {
+    if (!enabled) {
+      // Async like the real loads so setState stays out of the effect body.
+      return Promise.resolve().then(() => setLoading(false))
+    }
     const load = isAdmin
       ? // Admin sees assignment templates and submitted assignments
         Promise.all([
@@ -90,7 +96,7 @@ export const useAssignments = ({ isAdmin, adminViewMode, selectedSubject, includ
       .finally(() => {
         setLoading(false)
       })
-  }, [isAdmin, selectedSubject, adminViewMode, includeArchived])
+  }, [isAdmin, selectedSubject, adminViewMode, includeArchived, enabled])
 
   // User-triggered refresh: shows the loading spinner while refetching.
   const refetch = useCallback(async () => {

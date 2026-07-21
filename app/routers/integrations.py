@@ -57,7 +57,6 @@ def grade_assignment_via_api(
 
     Raises:
         HTTPException: 404 if assignment not found
-        HTTPException: 400 if points exceed maximum or other validation fails
     """
     assignment = (
         db.query(StudentAssignment)
@@ -68,16 +67,8 @@ def grade_assignment_via_api(
     if not assignment:
         raise HTTPException(status_code=404, detail="Student assignment not found")
 
-    # Validate points don't exceed maximum
+    # Points earned may exceed the maximum (e.g. extra credit) — no upper bound.
     max_points = assignment.max_points
-    if grade_data.points_earned > max_points:
-        raise HTTPException(
-            status_code=400,
-            detail=(
-                f"Points earned ({grade_data.points_earned}) "
-                f"cannot exceed maximum points ({max_points})"
-            ),
-        )
 
     # Update grade
     assignment.points_earned = grade_data.points_earned

@@ -37,6 +37,12 @@ const getAuthHeaders = (): Record<string, string> => {
   return headers
 }
 
+/** Auth-only headers (no Content-Type) for multipart/FormData requests. */
+const getAuthOnlyHeaders = (): Record<string, string> => {
+  const token = localStorage.getItem(STORAGE_KEYS.TOKEN)
+  return token ? { Authorization: `Bearer ${token}` } : {}
+}
+
 let redirecting = false
 
 /**
@@ -73,9 +79,13 @@ const parseError = async (response: Response): Promise<string> => {
 
 /** Single code path for every request: auth headers, 401 handling, errors. */
 const request = async (endpoint: string, init: RequestInit = {}) => {
+  // FormData bodies must NOT carry a JSON Content-Type — the browser sets the
+  // multipart boundary itself. Send auth-only headers in that case.
+  const baseHeaders =
+    init.body instanceof FormData ? getAuthOnlyHeaders() : getAuthHeaders()
   const response = await fetch(`${API_BASE}${endpoint}`, {
     ...init,
-    headers: { ...getAuthHeaders(), ...(init.headers || {}) }
+    headers: { ...baseHeaders, ...(init.headers || {}) }
   })
 
   if (response.status === 401) {
@@ -113,7 +123,32 @@ export const api = {
   put: (endpoint: string, data?: unknown) =>
     request(endpoint, { method: 'PUT', body: JSON.stringify(data ?? {}) }),
 
+  patch: (endpoint: string, data?: unknown) =>
+    request(endpoint, { method: 'PATCH', body: JSON.stringify(data ?? {}) }),
+
+  // Multipart upload: pass a FormData; request() omits the JSON Content-Type
+  // so the browser sets the multipart boundary.
+  postForm: (endpoint: string, form: FormData) =>
+    request(endpoint, { method: 'POST', body: form }),
+
   delete: (endpoint: string) => request(endpoint, { method: 'DELETE' }),
+
+  // Authenticated binary fetch (e.g. streamed document content). Returns a
+  // Blob; callers turn it into an object URL for inline viewing/downloads.
+  getBlob: async (endpoint: string): Promise<Blob> => {
+    const response = await fetch(`${API_BASE}${endpoint}`, {
+      method: 'GET',
+      headers: getAuthOnlyHeaders()
+    })
+    if (response.status === 401) {
+      handleUnauthorized()
+      throw new Error('Your session has expired. Please log in again.')
+    }
+    if (!response.ok) {
+      throw new Error(await parseError(response))
+    }
+    return response.blob()
+  },
 
   // Authentication-specific methods
   extendSession: async () => {

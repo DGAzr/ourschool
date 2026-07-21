@@ -24,6 +24,8 @@ import {
   StudentAssignment,
   AssignmentAssignmentRequest,
   AssignmentAssignmentResponse,
+  AssignmentComposeRequest,
+  AssignmentComposeResponse,
   StudentAssignmentProgressSummary,
   AssignmentTemplateExport,
   AssignmentTemplateImportRequest,
@@ -85,6 +87,12 @@ export const assignmentsApi = {
   // Assignment Assignment (assign templates to students)
   async assignToStudents(assignment: AssignmentAssignmentRequest): Promise<AssignmentAssignmentResponse> {
     const response = await api.post('/assignments/assign', assignment)
+    return response
+  },
+
+  // Unified compose (create template + optionally assign in one call)
+  async compose(data: AssignmentComposeRequest): Promise<AssignmentComposeResponse> {
+    const response = await api.post('/assignments/compose', data)
     return response
   },
 

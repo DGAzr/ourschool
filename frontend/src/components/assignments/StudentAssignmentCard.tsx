@@ -21,6 +21,8 @@ import { Archive, Trash2 } from 'lucide-react'
 import { StudentAssignment, Subject } from '../../types'
 import { assignmentUtils } from '../../services/assignments'
 import { formatDateOnly } from '../../utils/formatters'
+import { effectiveDueDate, isOverdue } from '../../utils/studentAssignments'
+import { letterGrade } from '../../utils/grading'
 import MarkdownRenderer from '../common/MarkdownRenderer'
 
 interface StudentAssignmentCardProps {
@@ -31,6 +33,8 @@ interface StudentAssignmentCardProps {
   onComplete?: (assignment: StudentAssignment) => void
   onArchive?: (assignment: StudentAssignment) => void
   onDelete?: (assignment: StudentAssignment) => void
+  /** When set, the card body is clickable and opens the detail view. */
+  onView?: (assignment: StudentAssignment) => void
 }
 
 const statusBadge = (status: string) => {
@@ -57,9 +61,17 @@ const StudentAssignmentCard: React.FC<StudentAssignmentCardProps> = ({
   onStart,
   onComplete,
   onArchive,
-  onDelete
+  onDelete,
+  onView
 }) => {
   const template = assignment.template
+
+  // Derived from dates: the stored OVERDUE status is only recomputed when the
+  // row is touched, so late work can still read "not started".
+  const overdue = isOverdue(assignment)
+  const effectiveStatus = overdue ? 'overdue' : assignment.status
+  const dueDate = effectiveDueDate(assignment)
+  const maxPts = assignment.custom_max_points ?? template?.max_points ?? 100
 
   const renderActionButton = () => {
     if (assignment.status === 'not_started' && onStart) {
@@ -92,19 +104,24 @@ const StudentAssignmentCard: React.FC<StudentAssignmentCardProps> = ({
       )
     }
 
-    if (assignment.is_graded) {
-      return (
-        <div className="flex-1 h-[34px] px-4 rounded-field bg-pos-bg text-pos-fg text-[13px] font-medium flex items-center justify-center">
-          Graded: {assignment.letter_grade || 'Not Set'}
-        </div>
-      )
-    }
-
     return null
   }
 
   return (
-    <div className="bg-panel border border-line rounded-card-lg overflow-hidden hover:border-accent/30 transition-colors">
+    <div
+      onClick={
+        onView
+          ? e => {
+              // Buttons and links keep their own behavior.
+              if ((e.target as HTMLElement).closest('button, a')) return
+              onView(assignment)
+            }
+          : undefined
+      }
+      className={`bg-panel border border-line rounded-card-lg overflow-hidden hover:border-accent/30 transition-colors ${
+        onView ? 'cursor-pointer' : ''
+      }`}
+    >
       {/* Subject color stripe */}
       <div className="h-1" style={{ backgroundColor: subject?.color || 'var(--accent)' }} />
 
@@ -122,17 +139,19 @@ const StudentAssignmentCard: React.FC<StudentAssignmentCardProps> = ({
             </div>
             <div className="flex items-center gap-2 text-[12.5px] text-muted">
               <span>{subject?.name}</span>
-              {assignment.due_date && (
+              {dueDate && (
                 <>
                   <span className="text-faintest">·</span>
-                  <span>Due {formatDateOnly(assignment.due_date, { month: 'short', day: 'numeric', year: 'numeric' })}</span>
+                  <span className={overdue ? 'text-neg-fg font-semibold' : ''}>
+                    Due {formatDateOnly(dueDate, { month: 'short', day: 'numeric', year: 'numeric' })}
+                  </span>
                 </>
               )}
             </div>
           </div>
 
-          <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold uppercase tracking-wide ${statusBadge(assignment.status)}`}>
-            {assignment.status.replace('_', ' ')}
+          <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold uppercase tracking-wide ${statusBadge(effectiveStatus)}`}>
+            {effectiveStatus.replace('_', ' ')}
           </span>
         </div>
 
@@ -146,7 +165,7 @@ const StudentAssignmentCard: React.FC<StudentAssignmentCardProps> = ({
         {/* Meta row */}
         <div className="flex items-center justify-between text-[12.5px] text-muted mb-4">
           <div className="flex items-center gap-3">
-            <span>📋 {assignment.custom_max_points || template?.max_points || 0} pts</span>
+            <span>📋 {maxPts} pts</span>
             {template?.estimated_duration_minutes && (
               <span>⏱ {assignmentUtils.formatDuration(template.estimated_duration_minutes)}</span>
             )}
@@ -172,6 +191,28 @@ const StudentAssignmentCard: React.FC<StudentAssignmentCardProps> = ({
             {assignment.submission_artifacts && assignment.submission_artifacts.length > 0 && (
               <p className="text-[12px] text-muted">
                 {assignment.submission_artifacts.length} link{assignment.submission_artifacts.length !== 1 ? 's' : ''} submitted
+              </p>
+            )}
+          </div>
+        )}
+
+        {/* Grade + teacher feedback */}
+        {assignment.is_graded && assignment.points_earned != null && (
+          <div className="mb-4 px-3 py-2.5 bg-pos-bg border border-[var(--pos-fg)]/20 rounded-field">
+            <div className="flex items-baseline justify-between gap-2">
+              <span className="font-mono text-[16px] font-semibold text-pos-fg">
+                {assignment.points_earned} / {maxPts}
+                <span className="ml-1.5 text-[13px]">
+                  ({assignment.letter_grade ?? letterGrade(assignment.points_earned, maxPts)})
+                </span>
+              </span>
+              {onView && (
+                <span className="text-[12px] text-accent font-semibold">View details →</span>
+              )}
+            </div>
+            {assignment.teacher_feedback && (
+              <p className="text-[12.5px] text-ink-2 mt-1.5 leading-relaxed line-clamp-3">
+                {assignment.teacher_feedback}
               </p>
             )}
           </div>

@@ -18,14 +18,18 @@
 
 import React, { useState, useEffect } from 'react'
 import { useAuth } from '../contexts/AuthContext'
+import { usePointsStatus } from '../contexts/PointsStatusContext'
 import { settingsApi } from '../services/settings'
 import { pointsApi, type PointsSystemStatus } from '../services/points'
-import { Settings, Save, AlertTriangle, CheckCircle, Calendar, Coins, Key, ExternalLink } from 'lucide-react'
+import { useNavigate } from 'react-router-dom'
+import { Settings, Save, AlertTriangle, CheckCircle, Calendar, Coins, FileText, Key, ExternalLink } from 'lucide-react'
 import { Button, EmptyState, Input, Spinner } from '../components/ui'
 import { getErrorMessage } from '../services/api'
 
 const AdminSettings: React.FC = () => {
   const { user } = useAuth()
+  const navigate = useNavigate()
+  const { refresh: refreshPointsStatus } = usePointsStatus()
   // Note: removed settings state as it was only used to extract required_days
   const [requiredDays, setRequiredDays] = useState<number>(180)
   const [pointsStatus, setPointsStatus] = useState<PointsSystemStatus | null>(null)
@@ -89,6 +93,9 @@ const AdminSettings: React.FC = () => {
 
       const result = await pointsApi.toggleSystem()
       setSuccessMessage(`Points system ${result.enabled ? 'enabled' : 'disabled'} successfully!`)
+
+      // Refresh the app-wide status so the nav shows/hides the Shop immediately.
+      await refreshPointsStatus()
 
       // Reload settings to get the updated status
       setLoading(true)
@@ -267,6 +274,30 @@ const AdminSettings: React.FC = () => {
               </div>
             </div>
           </div>
+        </div>
+      </div>
+
+      {/* Integrations */}
+      <div className="bg-panel border border-line rounded-card p-6">
+        <div className="flex items-center gap-2 mb-4">
+          <FileText className="h-4 w-4 text-faint" />
+          <h2 className="text-[15px] font-semibold text-ink">Integrations</h2>
+        </div>
+
+        <div className="flex items-center justify-between gap-6">
+          <div>
+            <h3 className="text-[13.5px] font-semibold text-ink">Paperless-NGX</h3>
+            <p className="text-[13px] text-muted">
+              Connect your document server to pull scanned lesson materials into planning and assignments.
+            </p>
+          </div>
+          <Button
+            onClick={() => navigate('/admin/settings/paperless')}
+            icon={<FileText className="h-4 w-4" />}
+            className="flex-shrink-0"
+          >
+            Configure
+          </Button>
         </div>
       </div>
 

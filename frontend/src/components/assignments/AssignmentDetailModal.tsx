@@ -26,18 +26,28 @@ import {
   BookOpen,
   MessageSquare,
   Paperclip,
-  ExternalLink,
   CheckCircle,
   AlertCircle,
   Users
 } from 'lucide-react'
 import { assignmentsApi } from '../../services/assignments'
+import { paperlessApi } from '../../services/paperless'
 import { StudentAssignment, AssignmentTemplate } from '../../types'
 import MarkdownRenderer from '../common/MarkdownRenderer'
 import { formatDateOnly } from '../../utils/formatters'
 import Modal from '../ui/Modal'
 import Button from '../ui/Button'
+import { Spinner, useToast } from '../ui'
 import { getErrorMessage } from '../../services/api'
+import { useAuth } from '../../contexts/AuthContext'
+import { usePaperlessStatus } from '../../hooks/usePaperlessStatus'
+import DocumentThumb from '../materials/DocumentThumb'
+import DocumentViewerModal from '../materials/DocumentViewerModal'
+import PaperlessPickerModal from '../lessons/PaperlessPickerModal'
+import { kindBadge } from '../materials/materialsLogic'
+import { PaperlessMaterial } from '../../types/paperless'
+import { attachedIds, combinedMaterials } from './assignmentMaterialsLogic'
+import { AssignmentInfo, SubmissionCard } from './AssignmentInfo'
 
 interface AssignmentDetailModalProps {
   assignmentId: number
@@ -80,9 +90,17 @@ const AssignmentDetailModalContent: React.FC<AssignmentDetailModalProps> = ({
   isOpen,
   onClose
 }) => {
+  const { toast } = useToast()
+  const { user } = useAuth()
+  const { status: paperlessStatus } = usePaperlessStatus()
   const [assignment, setAssignment] = useState<DetailedAssignment | null>(null)
   const [loading, setLoading] = useState(isOpen && !!assignmentId)
   const [error, setError] = useState<string | null>(null)
+  const [viewingMaterial, setViewingMaterial] = useState<PaperlessMaterial | null>(null)
+  // One-off materials on this instance; editable by admins (write-through).
+  const [instanceMaterials, setInstanceMaterials] = useState<PaperlessMaterial[]>([])
+  const [pickerOpen, setPickerOpen] = useState(false)
+  const [busyDocId, setBusyDocId] = useState<number | null>(null)
 
   useEffect(() => {
     if (!isOpen || !assignmentId) return
@@ -91,6 +109,7 @@ const AssignmentDetailModalContent: React.FC<AssignmentDetailModalProps> = ({
         const data = await assignmentsApi.getStudentAssignment(assignmentId)
         if (data.template) {
           setAssignment(data as DetailedAssignment)
+          setInstanceMaterials(data.paperless_materials ?? [])
           setError(null)
         } else {
           setError('Assignment template not found')
@@ -103,6 +122,29 @@ const AssignmentDetailModalContent: React.FC<AssignmentDetailModalProps> = ({
     }
     fetchAssignmentDetails()
   }, [isOpen, assignmentId, studentId])
+
+  const isAdmin = user?.role === 'admin'
+  const canEditMaterials = isAdmin && paperlessStatus?.connected === true
+  const materialRows = combinedMaterials(
+    assignment?.template?.paperless_materials ?? [],
+    instanceMaterials
+  )
+
+  const handleRemoveInstanceMaterial = async (material: PaperlessMaterial) => {
+    if (!assignment) return
+    setBusyDocId(material.document_id)
+    try {
+      await paperlessApi.detachFromAssignment(assignment.id, material.document_id)
+      setInstanceMaterials((prev) =>
+        prev.filter((m) => m.document_id !== material.document_id)
+      )
+      toast('Material removed from this assignment')
+    } catch (err) {
+      toast(getErrorMessage(err, 'Could not remove document'), 'danger')
+    } finally {
+      setBusyDocId(null)
+    }
+  }
 
   const pct = assignment?.percentage_grade
   const pctColor = pct == null ? 'text-muted' : pct >= 90 ? 'text-pos-fg' : pct >= 70 ? 'text-accent' : 'text-neg-fg'
@@ -178,32 +220,80 @@ const AssignmentDetailModalContent: React.FC<AssignmentDetailModalProps> = ({
               <div className={SECTION}>
                 <h3 className={SECTION_TITLE}><FileText className="w-4 h-4 text-muted" /> Assignment Details</h3>
 
-                {assignment.template?.description && (
-                  <div className="mb-4">
-                    <p className="text-[11.5px] font-semibold text-muted uppercase tracking-wide mb-1.5">Description</p>
-                    <div className="text-[13.5px] text-ink">
-                      <MarkdownRenderer content={assignment.template.description} />
-                    </div>
-                  </div>
-                )}
+                <AssignmentInfo
+                  description={assignment.template?.description}
+                  instructions={assignment.template?.instructions}
+                  customInstructions={assignment.custom_instructions}
+                />
+              </div>
+            )}
 
-                {assignment.template?.instructions && (
-                  <div className="mb-4">
-                    <p className="text-[11.5px] font-semibold text-muted uppercase tracking-wide mb-1.5">Instructions</p>
-                    <div className="text-[13.5px] text-ink">
-                      <MarkdownRenderer content={assignment.template.instructions} />
+            {/* Attached documents (template materials + this assignment's) */}
+            {(materialRows.length > 0 || canEditMaterials) && (
+              <div className={SECTION}>
+                <h3 className={SECTION_TITLE}>
+                  <Paperclip className="w-4 h-4 text-muted" /> Attached Documents
+                </h3>
+                <div className="space-y-1.5">
+                  {materialRows.map(({ material, fromTemplate, fromInstance }) => (
+                    <div
+                      key={material.document_id}
+                      className="flex items-center gap-3 px-3 py-2 bg-panel border border-line rounded-field"
+                    >
+                      <DocumentThumb
+                        externalId={material.external_id}
+                        title={material.title}
+                        className="w-[28px] h-[36px] flex-shrink-0"
+                      />
+                      <div className="flex-1 min-w-0">
+                        <p className="text-[13px] font-medium text-ink truncate">
+                          {material.title}
+                        </p>
+                        <p className="font-mono text-[9.5px] text-faint tracking-wide">
+                          {kindBadge(material.material_kind)}
+                          {material.page_count ? ` · ${material.page_count} pp` : ''}
+                          {isAdmin &&
+                            ` · ${
+                              fromTemplate && fromInstance
+                                ? 'TEMPLATE + THIS ASSIGNMENT'
+                                : fromTemplate
+                                  ? 'TEMPLATE'
+                                  : 'THIS ASSIGNMENT'
+                            }`}
+                        </p>
+                      </div>
+                      {canEditMaterials &&
+                        fromInstance &&
+                        (busyDocId === material.document_id ? (
+                          <Spinner size="sm" />
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveInstanceMaterial(material)}
+                            className="text-[12px] font-medium text-muted hover:text-danger transition-colors flex-shrink-0"
+                          >
+                            Remove
+                          </button>
+                        ))}
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setViewingMaterial(material)}
+                      >
+                        View
+                      </Button>
                     </div>
-                  </div>
-                )}
-
-                {assignment.custom_instructions && (
-                  <div className="px-3 py-2.5 bg-accent/6 border border-accent/20 rounded-field">
-                    <p className="text-[11.5px] font-semibold text-accent uppercase tracking-wide mb-1">Custom Instructions</p>
-                    <div className="text-[13px] text-ink">
-                      <MarkdownRenderer content={assignment.custom_instructions} />
-                    </div>
-                  </div>
-                )}
+                  ))}
+                  {canEditMaterials && (
+                    <button
+                      type="button"
+                      onClick={() => setPickerOpen(true)}
+                      className="w-full py-2.5 rounded-[10px] border border-dashed border-btn-border text-[12.5px] font-semibold text-faint hover:text-ink hover:border-faint transition-colors"
+                    >
+                      ＋ Attach to this assignment
+                    </button>
+                  )}
+                </div>
               </div>
             )}
 
@@ -249,39 +339,10 @@ const AssignmentDetailModalContent: React.FC<AssignmentDetailModalProps> = ({
               <div className={SECTION}>
                 <h3 className={SECTION_TITLE}><Users className="w-4 h-4 text-muted" /> Your Submission</h3>
 
-                {assignment.submission_notes && (
-                  <div className="mb-3">
-                    <p className="text-[11.5px] font-semibold text-muted uppercase tracking-wide mb-1.5 flex items-center gap-1.5">
-                      <MessageSquare className="w-3.5 h-3.5" /> Notes
-                    </p>
-                    <div className="px-3 py-2.5 bg-accent/6 border border-accent/15 rounded-field text-[13px] text-ink whitespace-pre-wrap">
-                      {assignment.submission_notes}
-                    </div>
-                  </div>
-                )}
-
-                {assignment.submission_artifacts && assignment.submission_artifacts.length > 0 && (
-                  <div>
-                    <p className="text-[11.5px] font-semibold text-muted uppercase tracking-wide mb-1.5 flex items-center gap-1.5">
-                      <Paperclip className="w-3.5 h-3.5" /> Links ({assignment.submission_artifacts.length})
-                    </p>
-                    <div className="space-y-1.5">
-                      {assignment.submission_artifacts.map((link, i) => (
-                        <div key={i} className="flex items-center gap-2 px-3 py-2 bg-panel border border-line rounded-field">
-                          <ExternalLink className="w-3.5 h-3.5 text-accent flex-shrink-0" />
-                          <a
-                            href={link}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="text-[13px] text-accent underline hover:opacity-80 break-all"
-                          >
-                            {link}
-                          </a>
-                        </div>
-                      ))}
-                    </div>
-                  </div>
-                )}
+                <SubmissionCard
+                  notes={assignment.submission_notes}
+                  artifacts={assignment.submission_artifacts}
+                />
               </div>
             )}
 
@@ -337,6 +398,28 @@ const AssignmentDetailModalContent: React.FC<AssignmentDetailModalProps> = ({
           </>
         )}
       </div>
+
+      <DocumentViewerModal
+        material={viewingMaterial}
+        onClose={() => setViewingMaterial(null)}
+      />
+
+      {canEditMaterials && assignment && (
+        <PaperlessPickerModal
+          isOpen={pickerOpen}
+          onClose={() => setPickerOpen(false)}
+          attachedDocumentIds={attachedIds(
+            assignment.template?.paperless_materials ?? [],
+            instanceMaterials
+          )}
+          subjectId={assignment.template?.subject_id}
+          attach={(doc) => paperlessApi.attachToAssignment(assignment.id, doc.id)}
+          attachNoun="assignment"
+          onAttached={(added) =>
+            setInstanceMaterials((prev) => [...prev, ...added])
+          }
+        />
+      )}
     </Modal>
   )
 }

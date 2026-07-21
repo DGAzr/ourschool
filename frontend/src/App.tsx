@@ -19,6 +19,8 @@
 import { Routes, Route } from 'react-router-dom'
 import { useAuth } from './contexts/AuthContext'
 import { AuthProvider } from './contexts/AuthProvider'
+import { PointsStatusProvider } from './contexts/PointsStatusProvider'
+import { PaperlessStatusProvider } from './contexts/PaperlessStatusProvider'
 import { ThemeProvider } from './contexts/ThemeProvider'
 import { AssignmentTypesProvider } from './contexts/AssignmentTypesProvider'
 import Layout from './components/Layout'
@@ -33,6 +35,10 @@ const Dashboard = lazy(() => import('./pages/Dashboard'))
 const Attendance = lazy(() => import('./pages/Attendance'))
 const Assignments = lazy(() => import('./pages/Assignments'))
 const Templates = lazy(() => import('./pages/Templates'))
+const LessonPlanning = lazy(() => import('./pages/LessonPlanning'))
+const MyLessons = lazy(() => import('./pages/MyLessons'))
+const Materials = lazy(() => import('./pages/Materials'))
+const PaperlessSettings = lazy(() => import('./pages/PaperlessSettings'))
 const Grading = lazy(() => import('./pages/Grading'))
 const Profile = lazy(() => import('./pages/Profile'))
 const Reports = lazy(() => import('./pages/Reports'))
@@ -40,6 +46,8 @@ const Journal = lazy(() => import('./pages/Journal'))
 const Admin = lazy(() => import('./pages/Admin'))
 const AdminSettings = lazy(() => import('./pages/AdminSettings'))
 const MyPoints = lazy(() => import('./pages/MyPoints'))
+const Shop = lazy(() => import('./pages/Shop'))
+const AdminShop = lazy(() => import('./pages/AdminShop'))
 const ChangePasswordRequired = lazy(() => import('./pages/ChangePasswordRequired'))
 
 const PageLoadingSpinner = () => (
@@ -87,6 +95,8 @@ function AppContent() {
   return (
     <ThemeProvider>
       <ToastProvider>
+      <PointsStatusProvider>
+      <PaperlessStatusProvider>
       <AssignmentTypesProvider>
       <Suspense fallback={<PageLoadingSpinner />}>
         <Routes>
@@ -96,18 +106,26 @@ function AppContent() {
             <Route path="attendance" element={<Attendance />} />
             <Route path="assignments" element={<Assignments />} />
             <Route path="templates" element={<Templates />} />
+            <Route path="lessons" element={<LessonPlanning />} />
+            <Route path="my-lessons" element={<MyLessons />} />
+            <Route path="materials" element={<Materials />} />
             <Route path="grading" element={<Grading />} />
             <Route path="reports" element={<Reports />} />
             <Route path="journal" element={<Journal />} />
             <Route path="profile" element={<Profile />} />
             <Route path="admin" element={<Admin />} />
             <Route path="admin/settings" element={<AdminSettings />} />
+            <Route path="admin/settings/paperless" element={<PaperlessSettings />} />
+            <Route path="admin/shop" element={<AdminShop />} />
             <Route path="my-points" element={<MyPoints />} />
+            <Route path="shop" element={<Shop />} />
           </Route>
         </Routes>
       </Suspense>
       <TokenExpiryWarning onExtendSession={extendSession} />
       </AssignmentTypesProvider>
+      </PaperlessStatusProvider>
+      </PointsStatusProvider>
       </ToastProvider>
     </ThemeProvider>
   )

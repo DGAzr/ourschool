@@ -25,73 +25,24 @@ import { attendanceApi } from '../services/attendance'
 import { reportsApi } from '../services/reports'
 import { termsApi } from '../services/terms'
 import { settingsApi } from '../services/settings'
+import StudentAttendanceView from '../components/attendance/StudentAttendanceView'
 import { AttendanceRecord, User } from '../types'
 import { AcademicYear } from '../types/reports'
+import {
+  AttendanceDisplayStatus as Status,
+  cellStyle,
+  firstDowOfMonth,
+  formatDateShort,
+  isFuture,
+  monthDays,
+  monthsInRange,
+} from '../utils/attendance'
+import { addDays, todayISO } from '../utils/dates'
 
 // ── helpers ──────────────────────────────────────────────────────────────
-type Status = 'present' | 'absent' | 'excused'
-
-const toLocalIso = (d: Date) =>
-  `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
-
-const todayIso = () => toLocalIso(new Date())
-
 function formatDateLong(iso: string) {
   const [y, m, d] = iso.split('-').map(Number)
   return new Date(y, m - 1, d).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })
-}
-
-function formatDateShort(iso: string) {
-  const [y, m, d] = iso.split('-').map(Number)
-  return new Date(y, m - 1, d).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
-}
-
-function shiftDate(iso: string, days: number) {
-  const [y, m, d] = iso.split('-').map(Number)
-  const dt = new Date(y, m - 1, d)
-  dt.setDate(dt.getDate() + days)
-  return toLocalIso(dt)
-}
-
-function isFuture(iso: string) { return iso > todayIso() }
-
-// Month calendar helpers
-function monthDays(year: number, month: number) {
-  const days: { iso: string; day: number }[] = []
-  const last = new Date(year, month, 0).getDate()
-  for (let d = 1; d <= last; d++) {
-    const iso = `${year}-${String(month).padStart(2, '0')}-${String(d).padStart(2, '0')}`
-    days.push({ iso, day: d })
-  }
-  return days
-}
-
-function firstDowOfMonth(year: number, month: number) {
-  return new Date(year, month - 1, 1).getDay()
-}
-
-/** Returns an array of { year, month } objects for every month in [startIso, endIso] */
-function monthsInRange(startIso: string, endIso: string): { year: number; month: number }[] {
-  const [sy, sm] = startIso.split('-').map(Number)
-  const [ey, em] = endIso.split('-').map(Number)
-  const months: { year: number; month: number }[] = []
-  let y = sy, m = sm
-  while (y < ey || (y === ey && m <= em)) {
-    months.push({ year: y, month: m })
-    m++
-    if (m > 12) { m = 1; y++ }
-  }
-  return months
-}
-
-// ── cell colors ───────────────────────────────────────────────────────────
-const cellStyle = (status: Status | undefined, iso: string): React.CSSProperties => {
-  if (isFuture(iso)) return { background: 'var(--panel-2)', opacity: 0.4 }
-  if (!status) return { background: 'var(--track)' }
-  if (status === 'present') return { background: 'var(--pos-bg)', color: 'var(--pos-fg)' }
-  if (status === 'absent')  return { background: 'var(--neg-bg)', color: 'var(--neg-fg)' }
-  if (status === 'excused') return { background: 'var(--exc-bg)', color: 'var(--exc-fg)' }
-  return {}
 }
 
 const STATUSES: { value: Status; label: string }[] = [
@@ -102,11 +53,16 @@ const STATUSES: { value: Status; label: string }[] = [
 
 // ── component ─────────────────────────────────────────────────────────────
 const Attendance: React.FC = () => {
-  useAuth()
+  const { user } = useAuth()
+  if (user && user.role !== 'admin') return <StudentAttendanceView />
+  return <AdminAttendance />
+}
+
+const AdminAttendance: React.FC = () => {
   const { toast } = useToast()
 
   const [tab, setTab] = useState<'take' | 'history'>('take')
-  const [activeDate, setActiveDate] = useState(todayIso())
+  const [activeDate, setActiveDate] = useState(todayISO())
   const [students, setStudents] = useState<User[]>([])
   const [records, setRecords] = useState<AttendanceRecord[]>([])
   const [requiredDays, setRequiredDays] = useState(180)
@@ -142,7 +98,7 @@ const Attendance: React.FC = () => {
   // within the selected year's date range and not in the future.
   // This is the legally relevant metric: each student needs `requiredDays` of instruction.
   const perStudentDays = React.useMemo(() => {
-    const today = todayIso()
+    const today = todayISO()
     const yearStart = selectedYearObj?.start_date ?? ''
     const yearEnd   = selectedYearObj?.end_date   ?? ''
     const map: Record<number, number> = {}
@@ -360,17 +316,17 @@ const Attendance: React.FC = () => {
             </div>
             <div className="flex items-center gap-1.5">
               <button
-                onClick={() => setActiveDate(d => shiftDate(d, -1))}
+                onClick={() => setActiveDate(d => addDays(d, -1))}
                 aria-label="Previous day"
                 className="w-8 h-8 flex items-center justify-center rounded-field border border-btn-border text-muted hover:text-ink hover:bg-panel-2 transition-colors"
               ><ChevronLeft size={15} /></button>
               <button
-                onClick={() => setActiveDate(todayIso())}
-                disabled={activeDate === todayIso()}
+                onClick={() => setActiveDate(todayISO())}
+                disabled={activeDate === todayISO()}
                 className="px-3 py-1.5 rounded-field border border-btn-border text-[12px] font-semibold text-ink-2 hover:bg-panel-2 disabled:opacity-40 transition-colors"
               >Today</button>
               <button
-                onClick={() => setActiveDate(d => shiftDate(d, 1))}
+                onClick={() => setActiveDate(d => addDays(d, 1))}
                 aria-label="Next day"
                 className="w-8 h-8 flex items-center justify-center rounded-field border border-btn-border text-muted hover:text-ink hover:bg-panel-2 transition-colors"
               ><ChevronRight size={15} /></button>
@@ -573,7 +529,7 @@ const Attendance: React.FC = () => {
                     <div className="grid grid-cols-7 gap-1 min-w-[280px]">
                       {Array.from({ length: firstDow }).map((_, i) => <div key={`empty-${i}`} />)}
                       {days.map(({ iso, day }) => {
-                        const isToday = iso === todayIso()
+                        const isToday = iso === todayISO()
                         const future = isFuture(iso)
                         // Aggregate across students: if any absent → absent; if any excused → excused; else present
                         const dayStatuses = students.map(s => statusForStudent(s.id, iso)).filter(Boolean)

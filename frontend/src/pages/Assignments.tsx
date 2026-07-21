@@ -16,20 +16,23 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-import React, { useState, useEffect, useRef } from 'react'
+import React, { useState, useEffect } from 'react'
 import { useNavigate, Link, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { assignmentsApi } from '../services/assignments'
+import { getErrorMessage } from '../services/api'
 import { termsApi } from '../services/terms'
 import { useAssignments } from '../hooks/useAssignments'
 import { useAssignmentFilters } from '../hooks/useAssignmentFilters'
-import { Pill, statusToPillVariant, SubjectDot, useToast } from '../components/ui'
+import { Pill, statusToPillVariant, SubjectDot, useToast, ActionMenu } from '../components/ui'
 import ConfirmDialog from '../components/ui/ConfirmDialog'
-import StudentAssignmentCard from '../components/assignments/StudentAssignmentCard'
-import SubmissionDialog from '../components/assignments/SubmissionDialog'
-import QuickAssignModal from '../components/assignments/QuickAssignModal'
+import StudentAssignmentsView from '../components/assignments/StudentAssignmentsView'
+import AssignmentComposer from '../components/assignments/composer/AssignmentComposer'
+import { ComposerMode } from '../components/assignments/composer/composerLogic'
+import { AssignmentInfo, SubmissionCard } from '../components/assignments/AssignmentInfo'
 import { StudentAssignment, Term } from '../types'
-import { formatDateOnly, isPastDateOnly } from '../utils/formatters'
+import { formatDateOnly } from '../utils/formatters'
+import { isOverdue } from '../utils/assignmentStatus'
 import { letterGrade } from '../utils/grading'
 
 type StatusFilter = 'all' | 'open' | 'to_grade' | 'graded' | 'excused'
@@ -53,41 +56,33 @@ const Assignments: React.FC = () => {
     setSelectedSubject,
     selectedStudent,
     setSelectedStudent,
-    filterStudentAssignments,
   } = useAssignmentFilters()
 
-  // ── Data ──
+  // ── Data (admin only; StudentAssignmentsView owns the student fetch) ──
   const {
     allAssignments,
-    studentAssignments,
     subjects,
     students,
     loading,
     error,
     refetch,
-    setError,
-  } = useAssignments({ isAdmin, adminViewMode: 'grading', selectedSubject })
+  } = useAssignments({ isAdmin, adminViewMode: 'grading', selectedSubject, enabled: isAdmin })
 
   // Terms are admin-only and have no hook equivalent — loaded locally
   const [terms, setTerms] = useState<Term[]>([])
 
   // ── Selection ──
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set())
-  const [menuOpenId, setMenuOpenId] = useState<number | null>(null)
   const [expandedId, setExpandedId] = useState<number | null>(null)
 
   // ── Bulk action state ──
   const [bulkLoading, setBulkLoading] = useState(false)
 
   // ── Modals ──
-  const [showQuickAssign, setShowQuickAssign] = useState(false)
-  const [submittingAssignment, setSubmittingAssignment] = useState<StudentAssignment | null>(null)
-  const [showSubmissionDialog, setShowSubmissionDialog] = useState(false)
+  const [composer, setComposer] = useState<ComposerMode | null>(null)
   const [unassigningAssignment, setUnassigningAssignment] = useState<StudentAssignment | null>(null)
   const [unassignLoading, setUnassignLoading] = useState(false)
   const [showBulkUnassignConfirm, setShowBulkUnassignConfirm] = useState(false)
-
-  const menuRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
     if (!isAdmin) return
@@ -101,22 +96,10 @@ const Assignments: React.FC = () => {
       .catch(() => {})
   }, [isAdmin])
 
-  // Close menu on outside click
-  useEffect(() => {
-    const handler = (e: MouseEvent) => {
-      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
-        setMenuOpenId(null)
-      }
-    }
-    document.addEventListener('mousedown', handler)
-    return () => document.removeEventListener('mousedown', handler)
-  }, [])
-
   const getSubjectById = (id: number) => subjects.find(s => s.id === id)
 
   // ── Filter logic ──
   const filteredAssignments = allAssignments.filter(a => {
-    const isOverdue = isPastDateOnly(a.due_date) && a.status !== 'graded' && a.status !== 'submitted' && a.status !== 'excused'
     const stu = students.find(s => s.id === a.student_id)
     const stuName = stu ? `${stu.first_name} ${stu.last_name}`.toLowerCase() : ''
     const tplName = a.template?.name?.toLowerCase() ?? ''
@@ -133,7 +116,7 @@ const Assignments: React.FC = () => {
     }
 
     switch (statusFilter) {
-      case 'open': return a.status === 'not_started' || a.status === 'in_progress' || isOverdue
+      case 'open': return a.status === 'not_started' || a.status === 'in_progress' || isOverdue(a)
       case 'to_grade': return a.status === 'submitted' && !a.is_graded
       case 'graded': return a.is_graded || a.status === 'graded'
       case 'excused': return a.status === 'excused'
@@ -169,17 +152,11 @@ const Assignments: React.FC = () => {
 
   const tabCounts = {
     all: baseFiltered.length,
-    open: baseFiltered.filter(a => {
-      const isOverdue = isPastDateOnly(a.due_date) && a.status !== 'graded' && a.status !== 'submitted' && a.status !== 'excused'
-      return a.status === 'not_started' || a.status === 'in_progress' || isOverdue
-    }).length,
+    open: baseFiltered.filter(a => a.status === 'not_started' || a.status === 'in_progress' || isOverdue(a)).length,
     to_grade: baseFiltered.filter(a => a.status === 'submitted' && !a.is_graded).length,
     graded: baseFiltered.filter(a => a.is_graded || a.status === 'graded').length,
     excused: baseFiltered.filter(a => a.status === 'excused').length,
   }
-
-  // ── Student view filters ──
-  const filteredStudentAssignments = filterStudentAssignments(studentAssignments)
 
   // ── Handlers ──
   const studentNameFor = (assignment: StudentAssignment | null) => {
@@ -191,15 +168,33 @@ const Assignments: React.FC = () => {
     try {
       await assignmentsApi.updateStudentAssignment(assignment.id, { status: 'excused' })
       refetch()
-      setMenuOpenId(null)
       toast('Assignment excused')
-    } catch {
-      toast('Failed to excuse assignment', 'danger')
+    } catch (err) {
+      toast(getErrorMessage(err, 'Failed to excuse assignment'), 'danger')
+    }
+  }
+
+  const handleReopenAssignment = async (assignment: StudentAssignment) => {
+    try {
+      await assignmentsApi.updateStudentAssignment(assignment.id, { status: 'not_started' })
+      refetch()
+      toast('Assignment reopened')
+    } catch (err) {
+      toast(getErrorMessage(err, 'Failed to reopen assignment'), 'danger')
+    }
+  }
+
+  const handleArchiveAssignment = async (assignment: StudentAssignment) => {
+    try {
+      await assignmentsApi.archiveStudentAssignment(assignment.id)
+      refetch()
+      toast('Assignment archived')
+    } catch (err) {
+      toast(getErrorMessage(err, 'Failed to archive assignment'), 'danger')
     }
   }
 
   const handleUnassignAssignment = (assignment: StudentAssignment) => {
-    setMenuOpenId(null)
     setUnassigningAssignment(assignment)
   }
 
@@ -218,34 +213,6 @@ const Assignments: React.FC = () => {
     }
   }
 
-  const handleStartAssignment = async (assignmentId: number) => {
-    try {
-      await assignmentsApi.startAssignment(assignmentId)
-      refetch()
-    } catch {
-      setError('Failed to start assignment')
-    }
-  }
-
-  const handleCompleteAssignment = (assignment: StudentAssignment) => {
-    if (assignment.status === 'in_progress') {
-      setSubmittingAssignment(assignment)
-      setShowSubmissionDialog(true)
-    }
-  }
-
-  const handleSubmitAssignment = async (submissionData: { submission_notes?: string; submission_artifacts?: string[] }) => {
-    if (!submittingAssignment) return
-    try {
-      await assignmentsApi.updateStudentAssignment(submittingAssignment.id, { status: 'submitted', ...submissionData })
-      setShowSubmissionDialog(false)
-      setSubmittingAssignment(null)
-      refetch()
-    } catch {
-      setError('Failed to submit assignment')
-    }
-  }
-
   // ── Bulk handlers ──
   const handleBulkExcuse = async () => {
     const ids = Array.from(selectedIds)
@@ -257,6 +224,21 @@ const Assignments: React.FC = () => {
       refetch()
     } catch {
       toast('Some assignments could not be excused', 'danger')
+    } finally {
+      setBulkLoading(false)
+    }
+  }
+
+  const handleBulkArchive = async () => {
+    const ids = Array.from(selectedIds)
+    setBulkLoading(true)
+    try {
+      await Promise.all(ids.map(id => assignmentsApi.archiveStudentAssignment(id)))
+      toast(`${ids.length} assignment${ids.length !== 1 ? 's' : ''} archived`)
+      setSelectedIds(new Set())
+      refetch()
+    } catch {
+      toast('Some assignments could not be archived', 'danger')
     } finally {
       setBulkLoading(false)
     }
@@ -341,17 +323,25 @@ const Assignments: React.FC = () => {
             </p>
           )}
         </div>
+        {isAdmin && (
+          <button
+            onClick={() => setComposer({ kind: 'create', showAssign: true, libraryDefault: false })}
+            className="h-[34px] px-4 text-[13px] font-semibold rounded-field bg-btn-primary-bg text-btn-primary-fg hover:opacity-90 transition-opacity flex items-center gap-1.5 mt-1"
+          >
+            <span className="text-[17px] leading-none" style={{ marginTop: -1 }}>+</span> New assignment
+          </button>
+        )}
       </div>
 
       {/* ── Error ── */}
-      {error && (
+      {isAdmin && error && (
         <div className="mb-4 px-4 py-3 rounded-card text-[13px] text-neg-fg bg-neg-bg border border-neg-fg/20">
           {error}
         </div>
       )}
 
       {/* ── Loading ── */}
-      {loading && (
+      {isAdmin && loading && (
         <div className="flex items-center justify-center py-16">
           <div className="w-6 h-6 border-2 border-line border-t-accent rounded-full animate-spin" />
         </div>
@@ -494,9 +484,8 @@ const Assignments: React.FC = () => {
                   {sortedAssignments.map((assignment, idx) => {
                     const stu = students.find(s => s.id === assignment.student_id)
                     const sub = assignment.template?.subject_id ? getSubjectById(assignment.template.subject_id) : undefined
-                    const isOverdue = isPastDateOnly(assignment.due_date) &&
-                      assignment.status !== 'graded' && assignment.status !== 'submitted' && assignment.status !== 'excused'
-                    const effectiveStatus = isOverdue ? 'overdue' : assignment.status
+                    const overdue = isOverdue(assignment)
+                    const effectiveStatus = overdue ? 'overdue' : assignment.status
                     const isSelected = selectedIds.has(assignment.id)
                     const isLast = idx === sortedAssignments.length - 1
                     const initials = stu ? `${stu.first_name[0]}${stu.last_name[0]}` : '?'
@@ -568,7 +557,7 @@ const Assignments: React.FC = () => {
                         {/* Due */}
                         <td className="px-3 py-3.5">
                           {assignment.due_date ? (
-                            <span className={`font-mono text-[13px] tabular-nums ${isOverdue ? 'text-neg-fg' : 'text-ink-2'}`}>
+                            <span className={`font-mono text-[13px] tabular-nums ${overdue ? 'text-neg-fg' : 'text-ink-2'}`}>
                               {formatDateOnly(assignment.due_date, { month: 'short', day: 'numeric' })}
                             </span>
                           ) : (
@@ -602,41 +591,27 @@ const Assignments: React.FC = () => {
 
                         {/* ⋯ Menu */}
                         <td className="pr-4 py-3.5 w-10">
-                          <div className="relative flex justify-end" ref={menuOpenId === assignment.id ? menuRef : undefined}>
-                            <button
-                              onClick={() => setMenuOpenId(menuOpenId === assignment.id ? null : assignment.id)}
-                              aria-label={`Actions for ${assignment.template?.name ?? 'assignment'}`}
-                              className="w-[30px] h-[30px] rounded-[7px] border border-line text-muted flex items-center justify-center text-[16px] opacity-0 group-hover:opacity-100 transition-opacity hover:bg-track"
-                            >
-                              ⋯
-                            </button>
-                            {menuOpenId === assignment.id && (
-                              <div className="absolute right-0 top-[34px] z-20 bg-panel border border-field-border rounded-[10px] shadow-menu p-1 w-36 animate-pop">
-                                {isActive && (
-                                  <>
-                                    <button
-                                      onClick={() => { setMenuOpenId(null); navigate('/grading', { state: { assignmentId: assignment.id } }) }}
-                                      className="w-full text-left px-2.5 py-2 text-[13px] text-ink-2 hover:bg-track rounded-[6px]"
-                                    >
-                                      Grade
-                                    </button>
-                                    <button
-                                      onClick={() => handleExcuseAssignment(assignment)}
-                                      className="w-full text-left px-2.5 py-2 text-[13px] text-ink-2 hover:bg-track rounded-[6px]"
-                                    >
-                                      Excuse
-                                    </button>
-                                    <div className="h-px bg-line-2 my-1 mx-1.5" />
-                                  </>
-                                )}
-                                <button
-                                  onClick={() => handleUnassignAssignment(assignment)}
-                                  className="w-full text-left px-2.5 py-2 text-[13px] text-danger hover:bg-track rounded-[6px]"
-                                >
-                                  Unassign
-                                </button>
-                              </div>
-                            )}
+                          <div className="flex justify-end">
+                            <ActionMenu
+                              ariaLabel={`Actions for ${assignment.template?.name ?? 'assignment'}`}
+                              revealOnHover
+                              items={[
+                                ...(isActive
+                                  ? [
+                                      { label: 'Grade', onSelect: () => navigate('/grading', { state: { assignmentId: assignment.id } }) },
+                                      { label: 'Excuse', onSelect: () => handleExcuseAssignment(assignment) },
+                                      'separator' as const,
+                                    ]
+                                  : []),
+                                ...(assignment.status === 'excused'
+                                  ? [{ label: 'Reopen', onSelect: () => handleReopenAssignment(assignment) }, 'separator' as const]
+                                  : []),
+                                ...(assignment.is_graded
+                                  ? [{ label: 'Archive', onSelect: () => handleArchiveAssignment(assignment) }, 'separator' as const]
+                                  : []),
+                                { label: 'Unassign', onSelect: () => handleUnassignAssignment(assignment), danger: true },
+                              ]}
+                            />
                           </div>
                         </td>
                       </tr>
@@ -681,53 +656,15 @@ const Assignments: React.FC = () => {
 
                               <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
                                 {/* Assignment info */}
-                                {(assignment.template?.description || assignment.template?.instructions || assignment.custom_instructions) && (
-                                  <div className="space-y-3">
-                                    {assignment.template?.description && (
-                                      <div>
-                                        <p className="text-[11px] font-semibold text-faint uppercase tracking-[.06em] mb-1">Description</p>
-                                        <p className="text-[13px] text-ink-2 leading-relaxed whitespace-pre-wrap">{assignment.template.description}</p>
-                                      </div>
-                                    )}
-                                    {assignment.template?.instructions && (
-                                      <div>
-                                        <p className="text-[11px] font-semibold text-faint uppercase tracking-[.06em] mb-1">Instructions</p>
-                                        <p className="text-[13px] text-ink-2 leading-relaxed whitespace-pre-wrap">{assignment.template.instructions}</p>
-                                      </div>
-                                    )}
-                                    {assignment.custom_instructions && (
-                                      <div>
-                                        <p className="text-[11px] font-semibold text-faint uppercase tracking-[.06em] mb-1">Custom instructions</p>
-                                        <p className="text-[13px] text-ink-2 leading-relaxed whitespace-pre-wrap">{assignment.custom_instructions}</p>
-                                      </div>
-                                    )}
-                                  </div>
-                                )}
+                                <AssignmentInfo
+                                  description={assignment.template?.description}
+                                  instructions={assignment.template?.instructions}
+                                  customInstructions={assignment.custom_instructions}
+                                />
 
                                 {/* Submission + grade */}
                                 <div className="space-y-3">
-                                  {assignment.submission_notes && (
-                                    <div className="bg-panel border border-line-3 rounded-[10px] p-3.5">
-                                      <p className="text-[11px] font-semibold text-faint uppercase tracking-[.06em] mb-1.5">Student submission</p>
-                                      <p className="text-[13px] text-ink-2 leading-relaxed">{assignment.submission_notes}</p>
-                                      {assignment.submission_artifacts && assignment.submission_artifacts.length > 0 && (
-                                        <div className="flex gap-2 mt-2.5 flex-wrap">
-                                          {assignment.submission_artifacts.map((af, i) => (
-                                            <a
-                                              key={i}
-                                              href={af}
-                                              target="_blank"
-                                              rel="noopener noreferrer"
-                                              className="inline-flex items-center gap-1.5 px-2.5 py-1.5 bg-panel-2 border border-line rounded-[7px] text-[12px] text-accent hover:underline"
-                                            >
-                                              <svg width="10" height="10" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" /></svg>
-                                              {af}
-                                            </a>
-                                          ))}
-                                        </div>
-                                      )}
-                                    </div>
-                                  )}
+                                  <SubmissionCard notes={assignment.submission_notes} artifacts={assignment.submission_artifacts} />
 
                                   {assignment.is_graded && assignment.points_earned != null && (
                                     <div className="bg-pos-bg border border-pos-fg/20 rounded-[10px] p-3.5">
@@ -777,6 +714,13 @@ const Assignments: React.FC = () => {
                 Excuse
               </button>
               <button
+                onClick={handleBulkArchive}
+                disabled={bulkLoading}
+                className="h-[30px] px-3 text-[12.5px] font-semibold text-btn-primary-fg/80 hover:text-btn-primary-fg rounded-[7px] hover:bg-btn-primary-fg/10 transition-colors disabled:opacity-50"
+              >
+                Archive
+              </button>
+              <button
                 onClick={() => setShowBulkUnassignConfirm(true)}
                 disabled={bulkLoading}
                 className="h-[30px] px-3 text-[12.5px] font-semibold text-btn-primary-fg/80 hover:text-btn-primary-fg rounded-[7px] hover:bg-btn-primary-fg/10 transition-colors disabled:opacity-50"
@@ -797,74 +741,18 @@ const Assignments: React.FC = () => {
       )}
 
       {/* ════════════════════════════════════════
-          STUDENT VIEW
+          STUDENT VIEW (owns its own data/loading)
       ════════════════════════════════════════ */}
-      {!loading && !isAdmin && (
-        <>
-          <div className="flex items-center gap-3 mb-4">
-            <div className="relative flex-1 max-w-[280px]">
-              <svg className="absolute left-3 top-1/2 -translate-y-1/2 text-faint" width="14" height="14" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
-                <circle cx="11" cy="11" r="8" /><path d="m21 21-4.35-4.35" />
-              </svg>
-              <input
-                type="text"
-                placeholder="Search assignments…"
-                value={searchTerm}
-                onChange={e => setSearchTerm(e.target.value)}
-                className="w-full pl-8 pr-3 py-2 bg-field-bg border border-field-border rounded-field text-[13px] text-ink placeholder:text-faintest focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent"
-              />
-            </div>
-            <select
-              value={selectedSubject ?? ''}
-              onChange={e => setSelectedSubject(e.target.value ? parseInt(e.target.value) : null)}
-              className="h-[34px] px-3 bg-field-bg border border-field-border rounded-field text-[13px] text-ink"
-            >
-              <option value="">All Subjects</option>
-              {subjects.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-            </select>
-          </div>
-
-          <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-4">
-            {filteredStudentAssignments.length === 0 ? (
-              <div className="col-span-full py-14 text-center">
-                <p className="text-[15px] font-semibold text-ink-2 mb-1">
-                  {searchTerm || selectedSubject ? 'No assignments match your filters' : 'No assignments yet'}
-                </p>
-                <p className="text-[13px] text-faint">
-                  {searchTerm || selectedSubject ? 'Try clearing your filters.' : 'Your assigned work will appear here.'}
-                </p>
-              </div>
-            ) : filteredStudentAssignments.map(assignment => (
-              <StudentAssignmentCard
-                key={assignment.id}
-                assignment={assignment}
-                subject={assignment.template?.subject_id ? getSubjectById(assignment.template.subject_id) : undefined}
-                isAdmin={false}
-                onStart={handleStartAssignment}
-                onComplete={handleCompleteAssignment}
-                onDelete={handleUnassignAssignment}
-              />
-            ))}
-          </div>
-        </>
-      )}
+      {!isAdmin && <StudentAssignmentsView />}
 
       {/* ── Modals ── */}
-      {showQuickAssign && (
-        <QuickAssignModal
-          isOpen={showQuickAssign}
-          onClose={() => setShowQuickAssign(false)}
-          onSuccess={() => { setShowQuickAssign(false); refetch() }}
-        />
-      )}
-
-      {showSubmissionDialog && submittingAssignment && (
-        <SubmissionDialog
-          assignment={submittingAssignment}
-          isOpen={showSubmissionDialog}
-          onClose={() => { setShowSubmissionDialog(false); setSubmittingAssignment(null) }}
-          onSubmit={handleSubmitAssignment}
-          loading={false}
+      {composer && (
+        <AssignmentComposer
+          mode={composer}
+          subjects={subjects}
+          students={students}
+          onClose={() => setComposer(null)}
+          onSuccess={() => { setComposer(null); refetch() }}
         />
       )}
 

@@ -309,7 +309,7 @@ const StudentsReport: React.FC<StudentsReportProps> = ({
                       style={{
                         height: '100%',
                         borderRadius: '9999px',
-                        width: `${b.average_percentage ?? 0}%`,
+                        width: `${Math.min(100, b.average_percentage ?? 0)}%`,
                         background: barColor(b.average_percentage ?? 0),
                       }}
                     />

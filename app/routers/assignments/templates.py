@@ -17,7 +17,7 @@
 """Assignment template endpoints: CRUD, archive, and export/import."""
 
 import logging
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from typing import Annotated, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -30,6 +30,7 @@ from app.models.assignment import (
     StudentAssignment,
 )
 from app.models.subject import Subject
+from app.models.term import Term
 from app.models.user import User, UserRole
 from app.core.dual_auth import (
     AuthUser,
@@ -41,7 +42,10 @@ from app.core.dual_auth import (
 )
 from app.enums import AssignmentStatus
 from app.crud import assignment_types as crud_types
+from app.routers.validators import validate_students
 from app.schemas.assignment import (
+    AssignmentComposeRequest,
+    AssignmentComposeResponse,
     AssignmentTemplateCreate,
     AssignmentTemplateExport,
     AssignmentTemplateImport,
@@ -138,6 +142,82 @@ def create_assignment_template(
     return db_template
 
 
+@router.post("/compose", response_model=AssignmentComposeResponse)
+def compose_assignment(
+    request: AssignmentComposeRequest,
+    db: Annotated[Session, Depends(get_db)],
+    auth_user: Annotated[
+        AuthUser, Depends(require_admin_or_permission("assignments:write"))
+    ],
+):
+    """Create a template and assign it to students in one transaction.
+
+    With an empty student_ids this is plain template creation. Any failure
+    (unknown subject/student, missing active term) rolls back the template too.
+    """
+    subject = db.query(Subject).filter(Subject.id == request.subject_id).first()
+    if not subject:
+        raise HTTPException(status_code=404, detail="Subject not found")
+
+    _validate_assignment_type(db, request.assignment_type)
+
+    if request.student_ids:
+        active_term = db.query(Term).filter(Term.is_active).first()
+        if not active_term:
+            raise HTTPException(
+                status_code=400,
+                detail="No active term found. "
+                "Please set an active term before assigning assignments.",
+            )
+        validate_students(db, request.student_ids)
+
+    creator_id = get_user_id_from_auth(auth_user)
+    template = AssignmentTemplate(
+        **request.dict(
+            exclude={
+                "student_ids",
+                "assigned_date",
+                "due_date",
+                "custom_instructions",
+                "custom_max_points",
+            }
+        ),
+        created_by=creator_id,
+    )
+    db.add(template)
+    db.flush()
+
+    assigned_date = request.assigned_date or date.today()
+    created = []
+    for student_id in request.student_ids:
+        sa = StudentAssignment(
+            template_id=template.id,
+            student_id=student_id,
+            assigned_date=assigned_date,
+            due_date=request.due_date,
+            custom_instructions=request.custom_instructions,
+            custom_max_points=request.custom_max_points,
+            assigned_by=creator_id,
+        )
+        db.add(sa)
+        created.append(sa)
+
+    db.commit()
+    db.refresh(template)
+
+    logger.info(
+        "Composed template %s with %s assignment(s) by %s",
+        template.id,
+        len(created),
+        creator_id if creator_id is not None else "API key",
+    )
+    _attach_template_stats(db, [template])
+    return AssignmentComposeResponse(
+        template=template,
+        created_assignment_ids=[sa.id for sa in created],
+    )
+
+
 @router.get("/templates", response_model=List[AssignmentTemplateResponse])
 def get_assignment_templates(
     db: Annotated[Session, Depends(get_db)],
@@ -147,6 +227,7 @@ def get_assignment_templates(
     subject_id: Optional[int] = Query(None),
     search: Optional[str] = Query(None),
     include_archived: bool = Query(False),
+    include_one_offs: bool = Query(False),
     skip: int = Query(0, ge=0),
     limit: int = Query(100, ge=1, le=1000),
 ):
@@ -167,6 +248,10 @@ def get_assignment_templates(
     # Filter out archived templates unless explicitly requested
     if not include_archived:
         query = query.filter(AssignmentTemplate.is_archived.is_(False))
+
+    # One-off templates back their assignments but are not library content.
+    if not include_one_offs:
+        query = query.filter(AssignmentTemplate.is_library.is_(True))
 
     # Apply optional filters
     if subject_id:

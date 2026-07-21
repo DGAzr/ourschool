@@ -23,6 +23,7 @@ import json
 from pydantic import BaseModel, Field, validator
 
 from app.enums import AssignmentStatus, AssignmentType
+from app.schemas.paperless import PaperlessMaterialResponse
 
 if TYPE_CHECKING:
     pass
@@ -46,6 +47,7 @@ class AssignmentTemplateBase(BaseModel):
     prerequisites: Optional[str] = None
     materials_needed: Optional[str] = None
     is_exportable: bool = True
+    is_library: bool = True
 
 
 class AssignmentTemplateCreate(AssignmentTemplateBase):
@@ -67,6 +69,7 @@ class AssignmentTemplateUpdate(BaseModel):
     materials_needed: Optional[str] = None
     is_exportable: Optional[bool] = None
     is_archived: Optional[bool] = None
+    is_library: Optional[bool] = None
 
 
 class AssignmentTemplateResponse(AssignmentTemplateBase):
@@ -87,10 +90,31 @@ class AssignmentTemplateResponse(AssignmentTemplateBase):
     )
     average_grade: Optional[float] = None  # Average grade across all students
 
+    # Paperless-NGX documents attached to this template; students see these
+    # on assignments created from it (view/download via the content proxy).
+    paperless_materials: List[PaperlessMaterialResponse] = []
+
     class Config:
         """Pydantic configuration."""
 
         from_attributes = True
+
+
+class AssignmentComposeRequest(AssignmentTemplateCreate):
+    """Create a template (library or one-off) and optionally assign it, atomically."""
+
+    student_ids: List[int] = Field(default_factory=list)
+    assigned_date: Optional[date] = None
+    due_date: Optional[date] = None
+    custom_instructions: Optional[str] = None
+    custom_max_points: Optional[int] = Field(None, ge=1, le=1000)
+
+
+class AssignmentComposeResponse(BaseModel):
+    """Result of a compose call."""
+
+    template: AssignmentTemplateResponse
+    created_assignment_ids: List[int] = Field(default_factory=list)
 
 
 # Student Assignment Schemas
@@ -231,6 +255,9 @@ class StudentAssignmentResponse(StudentAssignmentBase):
 
     # Related data
     template: Optional[AssignmentTemplateResponse] = None
+    # One-off Paperless materials on THIS instance (the template's permanent
+    # ones ride inside `template.paperless_materials`).
+    paperless_materials: List[PaperlessMaterialResponse] = []
 
     # student: Optional['User'] = None  # Causes serialization issues
 
@@ -273,6 +300,8 @@ class AssignmentAssignmentRequest(BaseModel):
     assigned_date: Optional[date] = None
     custom_instructions: Optional[str] = None
     custom_max_points: Optional[int] = Field(None, ge=1, le=1000)
+    # One-off Paperless materials attached to every assignment in this batch.
+    paperless_document_ids: List[int] = []
 
 
 class AssignmentAssignmentResponse(BaseModel):

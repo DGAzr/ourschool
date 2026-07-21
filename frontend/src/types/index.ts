@@ -33,6 +33,12 @@ export * from './assignment'
 // Subject types
 export * from './subject'
 
+// Lesson planning types
+export * from './lesson'
+
+// Paperless-NGX integration types
+export * from './paperless'
+
 // Term types
 export * from './term'
 

@@ -53,6 +53,13 @@ class StudentPoints(Base):
     total_spent = Column(
         Integer, default=0, nullable=False
     )  # Lifetime points spent/deducted
+    # The shop item the student is saving toward (their chosen goal). NULL = none
+    # chosen (frontend falls back to the cheapest unaffordable item).
+    goal_item_id = Column(
+        Integer,
+        ForeignKey("shop_items.id", ondelete="SET NULL"),
+        nullable=True,
+    )
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
@@ -60,6 +67,7 @@ class StudentPoints(Base):
 
     # Relationships
     student = relationship("User", back_populates="student_points")
+    goal_item = relationship("ShopItem")
 
 
 class PointTransaction(Base):
@@ -81,7 +89,8 @@ class PointTransaction(Base):
     )  # Positive for awards, negative for deductions/spending
     transaction_type = Column(
         String(50), nullable=False, index=True
-    )  # 'assignment', 'admin_award', 'admin_deduction', 'spending'
+    )  # 'assignment', 'admin_award', 'admin_deduction', 'spending', 'refund',
+    # 'journal_submission'
     source_id = Column(
         Integer, nullable=True
     )  # ID of assignment if transaction_type is 'assignment'

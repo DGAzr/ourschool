@@ -500,11 +500,13 @@ def test_my_endpoints_reject_api_keys(client, seeded, db_session):
     points_key = seeded["mint"]("points:read")
     assignments_key = seeded["mint"]("assignments:read")
     reports_key = seeded["mint"]("reports:read")
+    lessons_key = seeded["mint"]("lessons:read")
 
     cases = [
         ("/api/points/my-balance", points_key),
         ("/api/points/my-ledger", points_key),
         ("/api/assignments/my-assignments", assignments_key),
+        ("/api/lessons/my-lessons", lessons_key),
         ("/api/reports/student/overview", reports_key),
         ("/api/reports/student/term-grades", reports_key),
         ("/api/reports/student/subject-performance", reports_key),

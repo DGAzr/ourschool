@@ -19,6 +19,7 @@
 import React, { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
+import { useAssignmentTypes } from '../contexts/AssignmentTypesContext'
 import { assignmentsApi } from '../services/assignments'
 
 // Hooks
@@ -26,12 +27,11 @@ import { useAssignments } from '../hooks/useAssignments'
 import { useAssignmentFilters } from '../hooks/useAssignmentFilters'
 
 // Components
-import { SubjectDot, Icon } from '../components/ui'
+import { SubjectDot, Icon, ActionMenu } from '../components/ui'
 import ConfirmDialog from '../components/ui/ConfirmDialog'
 import StudentAssignmentCard from '../components/assignments/StudentAssignmentCard'
-import CreateTemplateModal from '../components/assignments/CreateTemplateModal'
-import EditTemplateModal from '../components/assignments/EditTemplateModal'
-import AssignTemplateModal from '../components/assignments/AssignTemplateModal'
+import AssignmentComposer from '../components/assignments/composer/AssignmentComposer'
+import { ComposerMode } from '../components/assignments/composer/composerLogic'
 import { ExportAssignmentModal } from '../components/assignments/ExportAssignmentModal'
 import { ImportAssignmentModal } from '../components/assignments/ImportAssignmentModal'
 import SubmissionDialog from '../components/assignments/SubmissionDialog'
@@ -44,17 +44,13 @@ const Templates: React.FC = () => {
   const { user } = useAuth()
   const isAdmin = user?.role === 'admin'
 
-  // Modal states
-  const [showCreateModal, setShowCreateModal] = useState(false)
-  const [showEditModal, setShowEditModal] = useState(false)
-  const [showAssignModal, setShowAssignModal] = useState(false)
+  // Composer + modal states
+  const [composer, setComposer] = useState<ComposerMode | null>(null)
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const [showArchiveConfirm, setShowArchiveConfirm] = useState(false)
   const [showExportModal, setShowExportModal] = useState(false)
   const [showImportModal, setShowImportModal] = useState(false)
   const [showSubmissionDialog, setShowSubmissionDialog] = useState(false)
-  const [editingTemplate, setEditingTemplate] = useState<AssignmentTemplate | null>(null)
-  const [assigningTemplate, setAssigningTemplate] = useState<AssignmentTemplate | null>(null)
   const [deletingTemplate, setDeletingTemplate] = useState<AssignmentTemplate | null>(null)
   const [archivingTemplate, setArchivingTemplate] = useState<AssignmentTemplate | null>(null)
   const [deletingLoading, setDeletingLoading] = useState(false)
@@ -69,7 +65,6 @@ const Templates: React.FC = () => {
       return new Set<string>(raw ? JSON.parse(raw) : [])
     } catch { return new Set() }
   })
-  const [menuOpenId, setMenuOpenId] = useState<number | null>(null)
   const [showArchived, setShowArchived] = useState(false)
 
   useEffect(() => {
@@ -108,17 +103,19 @@ const Templates: React.FC = () => {
     includeArchived: showArchived,
   })
 
+  // Assignment types (labels + filter options come from the provider)
+  const { types, getTypeLabel } = useAssignmentTypes()
+
   // Utility functions
   const getSubjectById = (id: number) => subjects.find(s => s.id === id)
 
   // Event handlers
   const handleCreateTemplate = () => {
-    setShowCreateModal(true)
+    setComposer({ kind: 'create', showAssign: true, libraryDefault: true })
   }
 
   const handleEditTemplate = (template: AssignmentTemplate) => {
-    setEditingTemplate(template)
-    setShowEditModal(true)
+    setComposer({ kind: 'edit', template })
   }
 
   const handleDeleteTemplate = (template: AssignmentTemplate) => {
@@ -127,8 +124,7 @@ const Templates: React.FC = () => {
   }
 
   const handleAssignTemplate = (template: AssignmentTemplate) => {
-    setAssigningTemplate(template)
-    setShowAssignModal(true)
+    setComposer({ kind: 'assign', template })
   }
 
   const handleArchiveTemplate = (template: AssignmentTemplate) => {
@@ -140,7 +136,6 @@ const Templates: React.FC = () => {
     try {
       await assignmentsApi.archiveTemplate(template.id) // toggle — unarchives when already archived
       refetch()
-      setMenuOpenId(null)
     } catch {
       setError('Failed to unarchive template')
     }
@@ -340,11 +335,6 @@ const Templates: React.FC = () => {
     return groups
   })()
 
-  const TYPE_LABELS: Record<string, string> = {
-    homework: 'Homework', quiz: 'Quiz', test: 'Test', project: 'Project',
-    essay: 'Essay', lab: 'Lab', presentation: 'Presentation', other: 'Other',
-  }
-
   return (
     <div>
       {/* ── Page header ── */}
@@ -440,7 +430,7 @@ const Templates: React.FC = () => {
                 className="h-[34px] px-3 bg-field-bg border border-field-border rounded-field text-[13px] text-ink focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent"
               >
                 <option value="">All Types</option>
-                {Object.entries(TYPE_LABELS).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+                {types.filter(t => t.is_active).map(t => <option key={t.key} value={t.key}>{t.name}</option>)}
               </select>
               <button
                 onClick={() => setShowArchived(v => !v)}
@@ -533,7 +523,7 @@ const Templates: React.FC = () => {
                         {/* Mobile-only metadata row (hidden on desktop) */}
                         <div className="flex items-center gap-2 mt-1 lg:hidden">
                           <span className="inline-block px-2 py-[2px] rounded-pill bg-track text-ink-2 text-[11px] font-semibold">
-                            {TYPE_LABELS[template.assignment_type] ?? template.assignment_type}
+                            {getTypeLabel(template.assignment_type)}
                           </span>
                           {template.max_points != null && (
                             <span className="text-[11.5px] font-mono text-ink-2">{template.max_points} pts</span>
@@ -555,7 +545,7 @@ const Templates: React.FC = () => {
                       </div>
                       {/* Type pill — desktop only */}
                       <span className="hidden lg:inline-block flex-none px-2.5 py-[3px] rounded-pill bg-track text-ink-2 text-[11.5px] font-semibold">
-                        {TYPE_LABELS[template.assignment_type] ?? template.assignment_type}
+                        {getTypeLabel(template.assignment_type)}
                       </span>
                       {/* Points — desktop only */}
                       <span className="hidden lg:inline flex-none w-[62px] text-right font-mono tabular-nums text-[13px] text-ink-2">
@@ -590,34 +580,24 @@ const Templates: React.FC = () => {
                             Assign
                           </button>
                         )}
-                        <div className="relative">
-                          <button
-                            onClick={() => setMenuOpenId(menuOpenId === template.id ? null : template.id)}
-                            aria-label={`Actions for ${template.name}`}
-                            className="w-[30px] h-[30px] border border-line bg-panel rounded-[7px] text-muted flex items-center justify-center text-[16px] leading-none hover:bg-track transition-colors"
-                          >
-                            ⋯
-                          </button>
-                          {menuOpenId === template.id && (
-                            <div className="absolute right-0 top-[34px] z-20 bg-panel border border-field-border rounded-[10px] shadow-menu p-1 w-40 animate-pop">
-                              {!template.is_archived && (
-                                <>
-                                  <button onClick={() => { handleEditTemplate(template); setMenuOpenId(null) }} className="w-full text-left px-2.5 py-2 text-[13px] text-ink-2 hover:bg-track rounded-[6px]">Edit</button>
-                                  <button onClick={() => { handleExportTemplate(template); setMenuOpenId(null) }} className="w-full text-left px-2.5 py-2 text-[13px] text-ink-2 hover:bg-track rounded-[6px]">Export</button>
-                                  <button onClick={() => { handleArchiveTemplate(template); setMenuOpenId(null) }} className="w-full text-left px-2.5 py-2 text-[13px] text-ink-2 hover:bg-track rounded-[6px]">Archive</button>
-                                  <div className="h-px bg-line-2 my-1 mx-1.5" />
-                                </>
-                              )}
-                              {template.is_archived && (
-                                <>
-                                  <button onClick={() => handleUnarchiveTemplate(template)} className="w-full text-left px-2.5 py-2 text-[13px] text-ink-2 hover:bg-track rounded-[6px]">Unarchive</button>
-                                  <div className="h-px bg-line-2 my-1 mx-1.5" />
-                                </>
-                              )}
-                              <button onClick={() => { handleDeleteTemplate(template); setMenuOpenId(null) }} className="w-full text-left px-2.5 py-2 text-[13px] text-danger hover:bg-track rounded-[6px]">Delete</button>
-                            </div>
-                          )}
-                        </div>
+                        <ActionMenu
+                          ariaLabel={`Actions for ${template.name}`}
+                          items={
+                            template.is_archived
+                              ? [
+                                  { label: 'Unarchive', onSelect: () => handleUnarchiveTemplate(template) },
+                                  'separator',
+                                  { label: 'Delete', onSelect: () => handleDeleteTemplate(template), danger: true },
+                                ]
+                              : [
+                                  { label: 'Edit', onSelect: () => handleEditTemplate(template) },
+                                  { label: 'Export', onSelect: () => handleExportTemplate(template) },
+                                  { label: 'Archive', onSelect: () => handleArchiveTemplate(template) },
+                                  'separator',
+                                  { label: 'Delete', onSelect: () => handleDeleteTemplate(template), danger: true },
+                                ]
+                          }
+                        />
                       </div>
                     </div>
                   ))}
@@ -685,47 +665,15 @@ const Templates: React.FC = () => {
 
       {/* ── Modals ── */}
 
-      {/* Create Template Modal */}
-      {showCreateModal && (
-        <CreateTemplateModal
+      {/* Assignment composer (create / edit / assign) */}
+      {composer && (
+        <AssignmentComposer
+          mode={composer}
           subjects={subjects}
-            onClose={() => setShowCreateModal(false)}
-          onSuccess={() => {
-            setShowCreateModal(false)
-            refetch()
-          }}
-        />
-      )}
-
-      {/* Edit Template Modal */}
-      {showEditModal && editingTemplate && (
-        <EditTemplateModal
-          template={editingTemplate}
-          subjects={subjects}
-          onClose={() => {
-            setShowEditModal(false)
-            setEditingTemplate(null)
-          }}
-          onSuccess={() => {
-            setShowEditModal(false)
-            setEditingTemplate(null)
-            refetch()
-          }}
-        />
-      )}
-
-      {/* Assign Template Modal */}
-      {showAssignModal && assigningTemplate && (
-        <AssignTemplateModal
-          template={assigningTemplate}
           students={students}
-          onClose={() => {
-            setShowAssignModal(false)
-            setAssigningTemplate(null)
-          }}
+          onClose={() => setComposer(null)}
           onSuccess={() => {
-            setShowAssignModal(false)
-            setAssigningTemplate(null)
+            setComposer(null)
             refetch()
           }}
         />

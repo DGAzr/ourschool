@@ -64,6 +64,25 @@ class AssignmentStatus(enum.Enum):
     EXCUSED = "excused"
 
 
+class LessonStatus(enum.Enum):
+    """Status values for lesson planning."""
+
+    PLANNED = "planned"
+    READY = "ready"
+    TAUGHT = "taught"
+
+
+class MaterialKind(enum.Enum):
+    """Kinds of Paperless-NGX lesson material (mapped from document types)."""
+
+    WORKSHEET = "worksheet"
+    TEST = "test"
+    READING = "reading"
+    REFERENCE = "reference"
+    FORM = "form"
+    OTHER = "other"
+
+
 class UserRole(enum.Enum):
     """User roles in the system."""
 

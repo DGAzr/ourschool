@@ -30,6 +30,7 @@ ALLOWED_TRANSACTION_TYPES = {
     "admin_deduction",
     "journal_submission",
     "spending",
+    "refund",
 }
 
 ALLOWED_SETTING_TYPES = {"boolean", "string", "integer", "json"}
@@ -43,7 +44,10 @@ class PointTransactionBase(BaseModel):
     )
     transaction_type: str = Field(
         ...,
-        description="Type of transaction: 'assignment', 'admin_award', 'admin_deduction', 'spending'",
+        description=(
+            "Type of transaction: 'assignment', 'admin_award', 'admin_deduction', "
+            "'journal_submission', 'spending', 'refund'"
+        ),
     )
     source_id: Optional[int] = Field(
         None, description="Source ID (e.g., assignment ID)"
@@ -125,6 +129,13 @@ class StudentPoints(StudentPointsBase):
     student_id: int
     created_at: datetime
     updated_at: datetime
+
+    # The shop item the student is saving toward (their chosen goal), if any.
+    goal_item_id: Optional[int] = None
+    # Resolved goal item display fields (attached by the router / CRUD) so
+    # balance/ledger consumers can render goal progress without loading the shop.
+    goal_item_name: Optional[str] = None
+    goal_item_cost: Optional[int] = None
 
     # Related data
     student_name: Optional[str] = None

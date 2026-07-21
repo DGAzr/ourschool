@@ -231,6 +231,14 @@ def set_assignment_points(
     return db_transaction
 
 
+def attach_goal_item(student_points: StudentPoints) -> None:
+    """Populate goal_item_name/goal_item_cost display fields from the goal
+    relationship (None when no goal is chosen or the item was deleted)."""
+    item = student_points.goal_item
+    student_points.goal_item_name = item.name if item is not None else None
+    student_points.goal_item_cost = item.cost_points if item is not None else None
+
+
 def get_student_points(db: Session, student_id: int) -> Optional[StudentPoints]:
     """Get student points with student information."""
     return (
@@ -319,7 +327,12 @@ def get_all_students_with_points(db: Session) -> List[StudentPoints]:
 
     # Get existing points records
     existing_points = (
-        db.query(StudentPoints).options(joinedload(StudentPoints.student)).all()
+        db.query(StudentPoints)
+        .options(
+            joinedload(StudentPoints.student),
+            joinedload(StudentPoints.goal_item),
+        )
+        .all()
     )
 
     # Create a map of student_id to existing points
@@ -332,6 +345,8 @@ def get_all_students_with_points(db: Session) -> List[StudentPoints]:
             # Use existing points record
             student_points = points_map[student.id]
             student_points.student_name = f"{student.first_name} {student.last_name}"
+            # Snapshot goal item display fields (None if no/deleted item).
+            attach_goal_item(student_points)
             result.append(student_points)
         else:
             dummy_points = StudentPoints(

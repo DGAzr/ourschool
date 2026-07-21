@@ -16,6 +16,7 @@
 
 """Data import utilities for backup operations."""
 
+import base64
 import logging
 from datetime import date, datetime, timezone
 from typing import Any, Dict, Optional
@@ -27,7 +28,18 @@ from app.models.api_key import APIKey
 from app.models.assignment import AssignmentTemplate, StudentAssignment
 from app.models.attendance import AttendanceRecord
 from app.models.journal import JournalEntry, JournalReply
+from app.models.lesson import Lesson, LessonMaterial, LessonResource, LessonTemplate
+from app.models.paperless import (
+    LessonPaperlessMaterial,
+    PaperlessDoctypeMap,
+    PaperlessDocument,
+    PaperlessTagMap,
+    PaperlessThumbnail,
+    StudentAssignmentPaperlessMaterial,
+    TemplatePaperlessMaterial,
+)
 from app.models.points import PointTransaction, StudentPoints, SystemSettings
+from app.models.shop import ShopCategory, ShopImage, ShopItem, ShopRedemption
 from app.models.subject import Subject
 from app.models.term import GradeHistory, StudentTermGrade, Term, TermSubject
 from app.models.user import User
@@ -54,6 +66,13 @@ WIPE_CONFIRMATION_PHRASE = "WIPE ALL DATA"
 # integrations; their created_by FK is ON DELETE SET NULL). Users need
 # admin-preservation logic and are handled separately.
 _WIPE_ORDER = [
+    # Shop children first, and before point_transactions: shop_redemptions has
+    # ON DELETE SET NULL FKs into point_transactions, so wiping transactions
+    # first would fire those updates mid-wipe.
+    ("shop_redemptions", ShopRedemption),
+    ("shop_items", ShopItem),
+    ("shop_images", ShopImage),
+    ("shop_categories", ShopCategory),
     ("point_transactions", PointTransaction),
     ("student_points", StudentPoints),
     ("journal_replies", JournalReply),
@@ -62,6 +81,25 @@ _WIPE_ORDER = [
     ("grade_history", GradeHistory),
     ("student_term_grades", StudentTermGrade),
     ("term_subjects", TermSubject),
+    # Paperless: attachment links first (FK children of lessons/templates/
+    # student_assignments AND documents), then the thumbnail cache, then the
+    # document cache and mapping tables. paperless_connection is deliberately
+    # NOT wiped (mirrors api_keys): it holds live integration credentials that
+    # backups never carry, so wiping it would force a pointless reconnect.
+    ("student_assignment_paperless_materials", StudentAssignmentPaperlessMaterial),
+    ("template_paperless_materials", TemplatePaperlessMaterial),
+    ("lesson_paperless_materials", LessonPaperlessMaterial),
+    ("paperless_thumbnails", PaperlessThumbnail),
+    ("paperless_documents", PaperlessDocument),
+    ("paperless_tag_subject_map", PaperlessTagMap),
+    ("paperless_doctype_map", PaperlessDoctypeMap),
+    # Lesson children first, and lessons before assignment_templates/subjects
+    # so their SET NULL FKs never fire mid-wipe. lesson_students association
+    # rows are removed by the DB-level CASCADE when lessons are deleted.
+    ("lesson_materials", LessonMaterial),
+    ("lesson_resources", LessonResource),
+    ("lessons_templates", LessonTemplate),
+    ("lessons", Lesson),
     ("student_assignments", StudentAssignment),
     ("assignment_templates", AssignmentTemplate),
     ("terms", Term),
@@ -242,8 +280,39 @@ def import_system_data(
         _import_grade_history(db, backup_data.grade_history, result, dry_run)
         _import_attendance_records(db, backup_data.attendance_records, result, dry_run)
         _import_journal_entries(db, backup_data.journal_entries, result, dry_run)
+        # Shop catalog before student_points: goal_item_external_id resolves
+        # through the shop-items id map. (Items only depend on categories;
+        # redemptions stay later since they also need nothing beyond users.)
+        _import_shop_categories(db, backup_data.shop_categories, result, dry_run)
+        _import_shop_images(db, backup_data.shop_images, result, dry_run)
+        _import_shop_items(db, backup_data.shop_items, result, dry_run)
         _import_student_points(db, backup_data.student_points, result, dry_run)
         _import_point_transactions(db, backup_data.point_transactions, result, dry_run)
+        _import_shop_redemptions(db, backup_data.shop_redemptions, result, dry_run)
+        # Lessons last among data sections: they remap through the users,
+        # subjects, and assignment-template maps built above.
+        _import_lessons(db, backup_data.lessons, result, dry_run)
+        # Paperless after lessons: attachment links resolve through the
+        # lessons/templates/users maps plus the document map built here.
+        _import_paperless_maps(
+            db,
+            backup_data.paperless_tag_maps,
+            backup_data.paperless_doctype_maps,
+            result,
+            dry_run,
+        )
+        _import_paperless_documents(
+            db, backup_data.paperless_documents, result, dry_run
+        )
+        _import_lesson_paperless_materials(
+            db, backup_data.lesson_paperless_materials, result, dry_run
+        )
+        _import_template_paperless_materials(
+            db, backup_data.template_paperless_materials, result, dry_run
+        )
+        _import_student_assignment_paperless_materials(
+            db, backup_data.student_assignment_paperless_materials, result, dry_run
+        )
         _import_system_settings(db, backup_data.system_settings, result, dry_run)
 
         if not dry_run:
@@ -1025,9 +1094,15 @@ def _import_system_settings(db: Session, system_settings_data, result, dry_run):
 
 
 def _import_student_points(db: Session, student_points_data, result, dry_run):
-    """Import student point balances. One record per student — skips if already exists."""
+    """Import student point balances. One record per student — skips if already exists.
+
+    Runs after _import_shop_items so the saving-toward goal can be remapped
+    through the shop-items id map; an unresolvable goal item leaves the goal
+    NULL with a warning.
+    """
     users_by_uuid = result.id_mappings.get("users_by_uuid", {})
     users_by_email = result.id_mappings.get("users_by_email", {})
+    items_by_uuid = result.id_mappings.get("shop_items_by_uuid", {})
     imported = skipped = 0
 
     for sp_data in student_points_data:
@@ -1042,6 +1117,24 @@ def _import_student_points(db: Session, student_points_data, result, dry_run):
                 f"Skipped student_points: {sp_data.student_email} (unresolved)"
             )
             continue
+
+        goal_item_id = None
+        goal_external_id = getattr(sp_data, "goal_item_external_id", None)
+        if goal_external_id:
+            goal_item_id = items_by_uuid.get(goal_external_id)
+            if goal_item_id is None:
+                # Fall back to a live lookup (item may have pre-existed the wipe).
+                item = (
+                    db.query(ShopItem)
+                    .filter(ShopItem.external_id == goal_external_id)
+                    .first()
+                )
+                goal_item_id = item.id if item else None
+            if goal_item_id is None:
+                result.warnings.append(
+                    f"Student points for {sp_data.student_email}: goal shop "
+                    "item not found — goal left unset"
+                )
 
         if not dry_run:
             from app.models.points import StudentPoints
@@ -1062,6 +1155,7 @@ def _import_student_points(db: Session, student_points_data, result, dry_run):
                 current_balance=sp_data.current_balance,
                 total_earned=sp_data.total_earned,
                 total_spent=sp_data.total_spent,
+                goal_item_id=goal_item_id,
             )
             db.add(new_sp)
             db.flush()
@@ -1126,3 +1220,654 @@ def _import_point_transactions(db: Session, point_transactions_data, result, dry
 
     result.imported_counts["point_transactions"] = imported
     result.skipped_counts["point_transactions"] = skipped
+
+
+def _import_shop_categories(db: Session, categories_data, result, dry_run):
+    """Import shop categories. Dedup on external_id; records id mapping."""
+    by_uuid: Dict[str, int] = {}
+    imported = skipped = 0
+
+    for cat_data in categories_data:
+        existing = (
+            db.query(ShopCategory)
+            .filter(ShopCategory.external_id == cat_data.external_id)
+            .first()
+        )
+        if existing:
+            by_uuid[cat_data.external_id] = existing.id
+            skipped += 1
+            continue
+        if not dry_run:
+            new_cat = ShopCategory(
+                external_id=cat_data.external_id,
+                name=cat_data.name,
+                color=cat_data.color,
+                icon=cat_data.icon,
+                sort_order=cat_data.sort_order,
+                created_at=cat_data.created_at,
+            )
+            db.add(new_cat)
+            db.flush()
+            by_uuid[cat_data.external_id] = new_cat.id
+        imported += 1
+
+    result.id_mappings["shop_categories_by_uuid"] = by_uuid
+    result.imported_counts["shop_categories"] = imported
+    result.skipped_counts["shop_categories"] = skipped
+
+
+def _import_shop_images(db: Session, images_data, result, dry_run):
+    """Import shop images (base64 -> bytes). Dedup on external_id."""
+    imported = skipped = 0
+
+    for img_data in images_data:
+        existing = (
+            db.query(ShopImage)
+            .filter(ShopImage.external_id == img_data.external_id)
+            .first()
+        )
+        if existing:
+            skipped += 1
+            continue
+        if not dry_run:
+            new_img = ShopImage(
+                external_id=img_data.external_id,
+                mime_type=img_data.mime_type,
+                size_bytes=img_data.size_bytes,
+                data=base64.b64decode(img_data.data_b64),
+                created_at=img_data.created_at,
+            )
+            db.add(new_img)
+            db.flush()
+        imported += 1
+
+    result.imported_counts["shop_images"] = imported
+    result.skipped_counts["shop_images"] = skipped
+
+
+def _import_shop_items(db: Session, items_data, result, dry_run):
+    """Import shop items. Resolves category by external_id; dedup on external_id."""
+    categories_by_uuid = result.id_mappings.get("shop_categories_by_uuid", {})
+    by_uuid: Dict[str, int] = {}
+    imported = skipped = 0
+
+    for item_data in items_data:
+        existing = (
+            db.query(ShopItem)
+            .filter(ShopItem.external_id == item_data.external_id)
+            .first()
+        )
+        if existing:
+            by_uuid[item_data.external_id] = existing.id
+            skipped += 1
+            continue
+
+        category_id = categories_by_uuid.get(item_data.category_external_id)
+        if category_id is None:
+            # Fall back to a live lookup (category may have pre-existed the wipe).
+            category = (
+                db.query(ShopCategory)
+                .filter(ShopCategory.external_id == item_data.category_external_id)
+                .first()
+            )
+            category_id = category.id if category else None
+        if category_id is None:
+            result.import_log.append(
+                f"Skipped shop_item {item_data.name}: category unresolved"
+            )
+            continue
+
+        if not dry_run:
+            new_item = ShopItem(
+                external_id=item_data.external_id,
+                name=item_data.name,
+                category_id=category_id,
+                description=item_data.description,
+                cost_points=item_data.cost_points,
+                quantity_available=item_data.quantity_available,
+                fulfillment_type=item_data.fulfillment_type,
+                is_active=item_data.is_active,
+                display_order=item_data.display_order,
+                image_ids=list(item_data.image_ids or []),
+                total_redeemed=item_data.total_redeemed,
+                created_at=item_data.created_at,
+                updated_at=item_data.updated_at,
+            )
+            db.add(new_item)
+            db.flush()
+            by_uuid[item_data.external_id] = new_item.id
+        imported += 1
+
+    result.id_mappings["shop_items_by_uuid"] = by_uuid
+    result.imported_counts["shop_items"] = imported
+    result.skipped_counts["shop_items"] = skipped
+
+
+def _import_shop_redemptions(db: Session, redemptions_data, result, dry_run):
+    """Import shop redemptions.
+
+    Resolves student like _import_student_points and item by external_id (a
+    missing item just leaves item_id NULL — the snapshot preserves display).
+    Transaction-link FKs and decided_by are not restored (no stable txn
+    external id); ledger totals still restore via student_points +
+    point_transactions.
+    """
+    users_by_uuid = result.id_mappings.get("users_by_uuid", {})
+    users_by_email = result.id_mappings.get("users_by_email", {})
+    items_by_uuid = result.id_mappings.get("shop_items_by_uuid", {})
+    imported = skipped = 0
+
+    for r_data in redemptions_data:
+        existing = (
+            db.query(ShopRedemption)
+            .filter(ShopRedemption.external_id == r_data.external_id)
+            .first()
+        )
+        if existing:
+            skipped += 1
+            continue
+
+        student_id = _resolve(
+            getattr(r_data, "student_external_id", None),
+            r_data.student_email,
+            users_by_uuid,
+            users_by_email,
+        )
+        if not student_id:
+            result.import_log.append(
+                f"Skipped shop_redemption: {r_data.student_email} (unresolved)"
+            )
+            continue
+
+        item_id = None
+        if r_data.item_external_id:
+            item_id = items_by_uuid.get(r_data.item_external_id)
+            if item_id is None:
+                item = (
+                    db.query(ShopItem)
+                    .filter(ShopItem.external_id == r_data.item_external_id)
+                    .first()
+                )
+                item_id = item.id if item else None
+
+        if not dry_run:
+            new_r = ShopRedemption(
+                external_id=r_data.external_id,
+                student_id=student_id,
+                item_id=item_id,
+                item_name=r_data.item_name,
+                cost_points=r_data.cost_points,
+                fulfillment_type=r_data.fulfillment_type,
+                status=r_data.status,
+                created_at=r_data.created_at,
+                decided_at=r_data.decided_at,
+                fulfilled_at=r_data.fulfilled_at,
+            )
+            db.add(new_r)
+            db.flush()
+        imported += 1
+
+    result.imported_counts["shop_redemptions"] = imported
+    result.skipped_counts["shop_redemptions"] = skipped
+
+
+def _import_lessons(db: Session, lessons_data, result, dry_run):
+    """Import lessons with nested students/templates/materials/resources.
+
+    Dedup on external_id. Subject and creator resolve through the maps built
+    by _import_subjects/_import_users; both are SET NULL FKs on the model, so
+    an unresolvable reference degrades to an un-linked lesson (with a log
+    entry) rather than a skip. Unresolvable students are dropped with a
+    warning; unresolvable template links are kept with template_id NULL,
+    matching what deleting the template would have produced.
+    """
+    users_by_uuid = result.id_mappings.get("users_by_uuid", {})
+    users_by_email = result.id_mappings.get("users_by_email", {})
+    subjects_by_uuid = result.id_mappings.get("subjects_by_uuid", {})
+    subjects_by_name = result.id_mappings.get("subjects_by_name", {})
+    templates_by_uuid = result.id_mappings.get("templates_by_uuid", {})
+    templates_by_name = result.id_mappings.get("templates_by_name", {})
+    by_uuid: Dict[str, int] = {}
+    imported = skipped = 0
+
+    for l_data in lessons_data:
+        existing = (
+            db.query(Lesson).filter(Lesson.external_id == l_data.external_id).first()
+        )
+        if existing:
+            by_uuid[l_data.external_id] = existing.id
+            skipped += 1
+            result.import_log.append(f"Skipped existing lesson: {l_data.title}")
+            continue
+
+        subject_id = None
+        if l_data.subject_external_id or l_data.subject_name:
+            subject_id = _resolve(
+                l_data.subject_external_id,
+                l_data.subject_name,
+                subjects_by_uuid,
+                subjects_by_name,
+            )
+            if subject_id is None:
+                result.import_log.append(
+                    f"Lesson '{l_data.title}': subject "
+                    f"'{l_data.subject_name}' unresolved — left unlinked"
+                )
+
+        created_by = None
+        if l_data.created_by_external_id or l_data.created_by_email:
+            created_by = _resolve(
+                l_data.created_by_external_id,
+                l_data.created_by_email,
+                users_by_uuid,
+                users_by_email,
+            )
+            if created_by is None:
+                result.import_log.append(
+                    f"Lesson '{l_data.title}': creator "
+                    f"{l_data.created_by_email} unresolved — left unlinked"
+                )
+
+        student_ids = []
+        for ref in l_data.students:
+            student_id = _resolve(
+                ref.student_external_id,
+                ref.student_email,
+                users_by_uuid,
+                users_by_email,
+            )
+            if student_id is None:
+                result.warnings.append(
+                    f"Lesson '{l_data.title}': student {ref.student_email} "
+                    "not found — dropped from lesson"
+                )
+                continue
+            student_ids.append(student_id)
+
+        if not dry_run:
+            from app.enums import LessonStatus
+
+            new_lesson = Lesson(
+                external_id=l_data.external_id,
+                date=l_data.date,
+                title=l_data.title,
+                objective=l_data.objective,
+                duration_minutes=l_data.duration_minutes,
+                notes=l_data.notes,
+                position=l_data.position,
+                status=LessonStatus(l_data.status),
+                subject_id=subject_id,
+                created_by=created_by,
+                created_at=l_data.created_at,
+                updated_at=l_data.updated_at,
+            )
+            if student_ids:
+                new_lesson.students = (
+                    db.query(User).filter(User.id.in_(student_ids)).all()
+                )
+
+            links = []
+            for link_data in l_data.templates:
+                template_id = _resolve(
+                    link_data.template_external_id,
+                    link_data.template_name,
+                    templates_by_uuid,
+                    templates_by_name,
+                )
+                if template_id is None:
+                    result.import_log.append(
+                        f"Lesson '{l_data.title}': template "
+                        f"'{link_data.template_name}' unresolved — link kept "
+                        "with no template"
+                    )
+                links.append(
+                    LessonTemplate(
+                        template_id=template_id,
+                        custom_due_date=link_data.custom_due_date,
+                        custom_max_points=link_data.custom_max_points,
+                        custom_instructions=link_data.custom_instructions,
+                    )
+                )
+            new_lesson.templates = links
+            new_lesson.materials = [
+                LessonMaterial(
+                    label=m.label, is_gathered=m.is_gathered, position=m.position
+                )
+                for m in l_data.materials
+            ]
+            new_lesson.resources = [
+                LessonResource(label=r.label, url=r.url, position=r.position)
+                for r in l_data.resources
+            ]
+
+            db.add(new_lesson)
+            db.flush()
+            by_uuid[l_data.external_id] = new_lesson.id
+            result.import_log.append(f"Created lesson: {l_data.title}")
+        imported += 1
+
+    result.id_mappings["lessons_by_uuid"] = by_uuid
+    result.imported_counts["lessons"] = imported
+
+
+def _import_paperless_maps(
+    db: Session, tag_maps_data, doctype_maps_data, result, dry_run
+):
+    """Import Paperless tag→subject and doctype→kind mappings.
+
+    Upserts by paperless tag/doctype id so a merge refreshes mappings without
+    duplicating rows; a wipe-and-restore recreates them outright. Unresolvable
+    subjects degrade to an unmapped tag (SET NULL contract).
+    """
+    subjects_by_uuid = result.id_mappings.get("subjects_by_uuid", {})
+    subjects_by_name = result.id_mappings.get("subjects_by_name", {})
+    imported = 0
+
+    existing_tags = {m.paperless_tag_id: m for m in db.query(PaperlessTagMap).all()}
+    for m_data in tag_maps_data:
+        subject_id = None
+        if m_data.subject_external_id or m_data.subject_name:
+            subject_id = _resolve(
+                m_data.subject_external_id,
+                m_data.subject_name or "",
+                subjects_by_uuid,
+                subjects_by_name,
+            )
+            if subject_id is None:
+                result.import_log.append(
+                    f"Paperless tag '{m_data.paperless_tag_name}': subject "
+                    f"'{m_data.subject_name}' unresolved — left unmapped"
+                )
+        if not dry_run:
+            row = existing_tags.get(m_data.paperless_tag_id)
+            if row is None:
+                db.add(
+                    PaperlessTagMap(
+                        paperless_tag_id=m_data.paperless_tag_id,
+                        paperless_tag_name=m_data.paperless_tag_name,
+                        subject_id=subject_id,
+                        auto_matched=m_data.auto_matched,
+                    )
+                )
+            else:
+                row.paperless_tag_name = m_data.paperless_tag_name
+                row.subject_id = subject_id
+                row.auto_matched = m_data.auto_matched
+        imported += 1
+
+    existing_doctypes = {
+        m.paperless_doctype_id: m for m in db.query(PaperlessDoctypeMap).all()
+    }
+    for m_data in doctype_maps_data:
+        if not dry_run:
+            row = existing_doctypes.get(m_data.paperless_doctype_id)
+            if row is None:
+                db.add(
+                    PaperlessDoctypeMap(
+                        paperless_doctype_id=m_data.paperless_doctype_id,
+                        paperless_doctype_name=m_data.paperless_doctype_name,
+                        material_kind=m_data.material_kind,
+                    )
+                )
+            else:
+                row.paperless_doctype_name = m_data.paperless_doctype_name
+                row.material_kind = m_data.material_kind
+        imported += 1
+
+    if not dry_run:
+        db.flush()
+    result.imported_counts["paperless_maps"] = imported
+
+
+def _import_paperless_documents(db: Session, documents_data, result, dry_run):
+    """Import cached Paperless document metadata.
+
+    Dedup on paperless_id (the stable per-server identity). Existing rows are
+    kept as-is (merge semantics); either way the row's DB id is recorded in
+    id_mappings["paperless_docs_by_pid"] for the attachment importers.
+    """
+    subjects_by_uuid = result.id_mappings.get("subjects_by_uuid", {})
+    subjects_by_name = result.id_mappings.get("subjects_by_name", {})
+    # str keys: id_mappings serializes as Dict[str, Dict[str, int]].
+    by_pid: Dict[str, int] = {}
+    imported = skipped = 0
+
+    existing = {d.paperless_id: d for d in db.query(PaperlessDocument).all()}
+    for d_data in documents_data:
+        row = existing.get(d_data.paperless_id)
+        if row is not None:
+            by_pid[str(d_data.paperless_id)] = row.id
+            skipped += 1
+            result.import_log.append(f"Skipped existing Paperless doc: {d_data.title}")
+            continue
+
+        subject_id = None
+        if d_data.subject_external_id or d_data.subject_name:
+            subject_id = _resolve(
+                d_data.subject_external_id,
+                d_data.subject_name or "",
+                subjects_by_uuid,
+                subjects_by_name,
+            )
+
+        if not dry_run:
+            new_doc = PaperlessDocument(
+                external_id=d_data.external_id,
+                paperless_id=d_data.paperless_id,
+                asn=d_data.asn,
+                title=d_data.title,
+                correspondent=d_data.correspondent,
+                paperless_doctype_id=d_data.paperless_doctype_id,
+                material_kind=d_data.material_kind,
+                subject_id=subject_id,
+                tag_ids=list(d_data.tag_ids or []),
+                page_count=d_data.page_count,
+                paperless_created=d_data.paperless_created,
+                paperless_added=d_data.paperless_added,
+                paperless_modified=d_data.paperless_modified,
+                keywords=d_data.keywords,
+                present=d_data.present,
+                synced_at=d_data.synced_at,
+            )
+            db.add(new_doc)
+            db.flush()
+            by_pid[str(d_data.paperless_id)] = new_doc.id
+        else:
+            # Placeholder id so dry-run attachment resolution mirrors a real
+            # import (no DB access happens with it under dry_run).
+            by_pid[str(d_data.paperless_id)] = -1
+        imported += 1
+
+    result.id_mappings["paperless_docs_by_pid"] = by_pid
+    result.imported_counts["paperless_documents"] = imported
+
+
+def _snapshot_kwargs(link_data, subjects_by_uuid, subjects_by_name):
+    """Snapshot column values shared by the three attachment importers."""
+    subject_id = None
+    if link_data.subject_external_id or link_data.subject_name:
+        subject_id = _resolve(
+            link_data.subject_external_id,
+            link_data.subject_name or "",
+            subjects_by_uuid,
+            subjects_by_name,
+        )
+    return {
+        "title": link_data.title,
+        "asn": link_data.asn,
+        "material_kind": link_data.material_kind,
+        "subject_id": subject_id,
+        "page_count": link_data.page_count,
+        "correspondent": link_data.correspondent,
+        "created_at": link_data.created_at,
+    }
+
+
+def _import_lesson_paperless_materials(db: Session, links_data, result, dry_run):
+    """Re-link Paperless documents to lessons (both resolved from earlier maps)."""
+    subjects_by_uuid = result.id_mappings.get("subjects_by_uuid", {})
+    subjects_by_name = result.id_mappings.get("subjects_by_name", {})
+    lessons_by_uuid = result.id_mappings.get("lessons_by_uuid", {})
+    docs_by_pid = result.id_mappings.get("paperless_docs_by_pid", {})
+    imported = skipped = 0
+
+    for link_data in links_data:
+        lesson_id = lessons_by_uuid.get(link_data.lesson_external_id)
+        document_id = docs_by_pid.get(str(link_data.document_paperless_id))
+        if lesson_id is None or document_id is None:
+            result.import_log.append(
+                f"Skipped lesson attachment '{link_data.title}' (unresolved "
+                f"{'lesson' if lesson_id is None else 'document'})"
+            )
+            continue
+        if not dry_run:
+            existing = (
+                db.query(LessonPaperlessMaterial)
+                .filter(
+                    LessonPaperlessMaterial.lesson_id == lesson_id,
+                    LessonPaperlessMaterial.document_id == document_id,
+                )
+                .first()
+            )
+            if existing:
+                skipped += 1
+                continue
+            db.add(
+                LessonPaperlessMaterial(
+                    lesson_id=lesson_id,
+                    document_id=document_id,
+                    **_snapshot_kwargs(link_data, subjects_by_uuid, subjects_by_name),
+                )
+            )
+        imported += 1
+
+    result.imported_counts["lesson_paperless_materials"] = imported
+
+
+def _import_template_paperless_materials(db: Session, links_data, result, dry_run):
+    """Re-link Paperless documents to assignment templates."""
+    subjects_by_uuid = result.id_mappings.get("subjects_by_uuid", {})
+    subjects_by_name = result.id_mappings.get("subjects_by_name", {})
+    templates_by_uuid = result.id_mappings.get("templates_by_uuid", {})
+    templates_by_name = result.id_mappings.get("templates_by_name", {})
+    docs_by_pid = result.id_mappings.get("paperless_docs_by_pid", {})
+    imported = skipped = 0
+
+    for link_data in links_data:
+        template_id = _resolve(
+            link_data.template_external_id,
+            link_data.template_name,
+            templates_by_uuid,
+            templates_by_name,
+        )
+        document_id = docs_by_pid.get(str(link_data.document_paperless_id))
+        if template_id is None or document_id is None:
+            result.import_log.append(
+                f"Skipped template attachment '{link_data.title}' (unresolved "
+                f"{'template' if template_id is None else 'document'})"
+            )
+            continue
+        if not dry_run:
+            existing = (
+                db.query(TemplatePaperlessMaterial)
+                .filter(
+                    TemplatePaperlessMaterial.template_id == template_id,
+                    TemplatePaperlessMaterial.document_id == document_id,
+                )
+                .first()
+            )
+            if existing:
+                skipped += 1
+                continue
+            db.add(
+                TemplatePaperlessMaterial(
+                    template_id=template_id,
+                    document_id=document_id,
+                    **_snapshot_kwargs(link_data, subjects_by_uuid, subjects_by_name),
+                )
+            )
+        imported += 1
+
+    result.imported_counts["template_paperless_materials"] = imported
+
+
+def _import_student_assignment_paperless_materials(
+    db: Session, links_data, result, dry_run
+):
+    """Re-link one-off Paperless documents to assignment instances.
+
+    The owning StudentAssignment is found by the same (student, template,
+    due_date) triple the assignment importer dedupes on; ambiguity resolves to
+    the first match, mirroring that importer's semantics.
+    """
+    subjects_by_uuid = result.id_mappings.get("subjects_by_uuid", {})
+    subjects_by_name = result.id_mappings.get("subjects_by_name", {})
+    users_by_uuid = result.id_mappings.get("users_by_uuid", {})
+    users_by_email = result.id_mappings.get("users_by_email", {})
+    templates_by_uuid = result.id_mappings.get("templates_by_uuid", {})
+    templates_by_name = result.id_mappings.get("templates_by_name", {})
+    docs_by_pid = result.id_mappings.get("paperless_docs_by_pid", {})
+    imported = skipped = 0
+
+    for link_data in links_data:
+        student_id = _resolve(
+            link_data.student_external_id,
+            link_data.student_email,
+            users_by_uuid,
+            users_by_email,
+        )
+        template_id = _resolve(
+            link_data.template_external_id,
+            link_data.assignment_template_name,
+            templates_by_uuid,
+            templates_by_name,
+        )
+        document_id = docs_by_pid.get(str(link_data.document_paperless_id))
+        if student_id is None or template_id is None or document_id is None:
+            result.import_log.append(
+                f"Skipped assignment attachment '{link_data.title}' "
+                "(unresolved student/template/document)"
+            )
+            continue
+
+        assignment = (
+            db.query(StudentAssignment)
+            .filter(
+                StudentAssignment.student_id == student_id,
+                StudentAssignment.template_id == template_id,
+                StudentAssignment.due_date == link_data.due_date,
+            )
+            .first()
+        )
+        if assignment is None:
+            result.import_log.append(
+                f"Skipped assignment attachment '{link_data.title}' "
+                f"({link_data.student_email}/{link_data.assignment_template_name}: "
+                "no matching assignment)"
+            )
+            continue
+
+        if not dry_run:
+            existing = (
+                db.query(StudentAssignmentPaperlessMaterial)
+                .filter(
+                    StudentAssignmentPaperlessMaterial.student_assignment_id
+                    == assignment.id,
+                    StudentAssignmentPaperlessMaterial.document_id == document_id,
+                )
+                .first()
+            )
+            if existing:
+                skipped += 1
+                continue
+            db.add(
+                StudentAssignmentPaperlessMaterial(
+                    student_assignment_id=assignment.id,
+                    document_id=document_id,
+                    **_snapshot_kwargs(link_data, subjects_by_uuid, subjects_by_name),
+                )
+            )
+        imported += 1
+
+    result.imported_counts["student_assignment_paperless_materials"] = imported
+    result.skipped_counts["lessons"] = skipped

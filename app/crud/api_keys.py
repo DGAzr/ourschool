@@ -228,6 +228,16 @@ AVAILABLE_PERMISSIONS = [
     # Subjects
     "subjects:read",  # GET /api/subjects
     "subjects:write",  # POST/PUT/DELETE /api/subjects
+    # Shop
+    "shop:read",  # GET /api/shop/categories, /items, /redemptions, /admin/overview
+    "shop:write",  # POST/PUT/PATCH/DELETE /api/shop/categories, /items;
+    #     POST /api/shop/redemptions/{id}/approve|decline|fulfill; POST /api/shop/images
+    # Lessons
+    "lessons:read",  # GET /api/lessons (list, single)
+    "lessons:write",  # POST/PUT/PATCH/DELETE /api/lessons; reorder, status, materials
+    # Paperless-NGX integration
+    "paperless:read",  # GET /api/integrations/paperless/status, /documents (list, single)
+    "paperless:write",  # POST connect/test/sync; PATCH settings; attach/detach materials
     # Reports
     "reports:read",  # GET /api/reports/* (all report endpoints)
     # Journal

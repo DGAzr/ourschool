@@ -19,19 +19,29 @@
 import React, { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
+import { usePointsStatus } from '../contexts/PointsStatusContext'
 import { reportsApi } from '../services/reports'
 import { subjectsApi } from '../services/subjects'
+import { assignmentsApi } from '../services/assignments'
 import { pointsApi, type StudentPoints, type AwardPreset } from '../services/points'
+import { shopApi } from '../services/shop'
+import { lessonsApi } from '../services/lessons'
 import { activityApi, type ActivityItem } from '../services/activity'
 import { termsApi } from '../services/terms'
+import { todayISO } from '../utils/lessonPlanning'
 import { AdminReport, StudentReport, Term } from '../types'
+import { Lesson } from '../types/lesson'
 import { Subject } from '../types/subject'
+import { User } from '../types/user'
 import { usePageLayout } from '../components/layouts'
-import { StatTile } from '../components/ui'
+import { StatTile, Spinner } from '../components/ui'
 import Modal from '../components/ui/Modal'
 import Button from '../components/ui/Button'
 import BulkAttendanceModal from '../components/BulkAttendanceModal'
 import AssignmentDetailModal from '../components/assignments/AssignmentDetailModal'
+import AssignmentComposer from '../components/assignments/composer/AssignmentComposer'
+import UpNextPanel from '../components/dashboard/UpNextPanel'
+import ComingUpWidget from '../components/dashboard/ComingUpWidget'
 import { getErrorMessage } from '../services/api'
 
 // Quick Award Points Modal Component
@@ -213,8 +223,27 @@ const Dashboard: React.FC = () => {
   const [showBulkAttendanceModal, setShowBulkAttendanceModal] = useState(false)
   const [showAssignmentDetailModal, setShowAssignmentDetailModal] = useState(false)
   const [selectedAssignmentId, setSelectedAssignmentId] = useState<number | null>(null)
-  
+
+  // Cross-module surfacing: today's lessons + pending shop redemptions
+  // (admin), balance + goal progress (student).
+  const [todayLessons, setTodayLessons] = useState<Lesson[]>([])
+  const [pendingRedemptions, setPendingRedemptions] = useState(0)
+  const [myPoints, setMyPoints] = useState<StudentPoints | null>(null)
+  const [showComposer, setShowComposer] = useState(false)
+  const [composerStudents, setComposerStudents] = useState<User[] | null>(null)
+
+  const composerLoading = showComposer && !composerStudents
+
   const isAdmin = user?.role === 'admin'
+  const { enabled: pointsEnabled, ready: pointsReady } = usePointsStatus()
+  const showPoints = pointsReady && pointsEnabled
+
+  useEffect(() => {
+    if (!showComposer || composerStudents) return
+    assignmentsApi.getStudents()
+      .then((students) => setComposerStudents(students))
+      .catch(() => setComposerStudents([]))
+  }, [showComposer, composerStudents])
 
   const handleAwardSuccess = () => {
     // Could show a success message here if needed
@@ -322,6 +351,32 @@ const Dashboard: React.FC = () => {
       loadActivityData()
     }
   }, [user?.id])
+
+  // Today's lessons for the admin "Needs you today" card.
+  useEffect(() => {
+    if (!isAdmin) return
+    const today = todayISO()
+    lessonsApi
+      .list({ start_date: today, end_date: today })
+      .then(setTodayLessons)
+      .catch(() => setTodayLessons([]))
+  }, [isAdmin])
+
+  // Points-gated extras: pending redemptions (admin), balance + goal (student).
+  useEffect(() => {
+    if (!showPoints) return
+    if (isAdmin) {
+      shopApi
+        .getAdminOverview()
+        .then((overview) => setPendingRedemptions(overview.pending_redemptions))
+        .catch(() => setPendingRedemptions(0))
+    } else {
+      pointsApi
+        .getMyBalance()
+        .then(setMyPoints)
+        .catch(() => setMyPoints(null))
+    }
+  }, [isAdmin, showPoints])
   
   const hour = new Date().getHours()
   const greeting = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening'
@@ -341,12 +396,31 @@ const Dashboard: React.FC = () => {
   const daysRemaining = calculateDaysRemaining(activeTerm)
   const daysLabel = daysRemaining === null ? 'No term' : daysRemaining < 0 ? 'Term ended' : daysRemaining === 0 ? 'Last day' : String(daysRemaining)
 
+  // "Needs you today" inputs across the modules.
+  const pendingGrades = adminReport?.pending_grades ?? 0
+  const materialsToGather = todayLessons.reduce(
+    (sum, lesson) => sum + lesson.materials.filter((m) => !m.is_gathered).length,
+    0
+  )
+  const lessonsToday = todayLessons.filter((l) => l.status !== 'taught').length
+  const needsYou =
+    isAdmin && (pendingGrades > 0 || pendingRedemptions > 0 || materialsToGather > 0)
+
+  // Student goal progress from the enriched balance payload.
+  const goalCost = myPoints?.goal_item_cost ?? null
+  const goalPct =
+    myPoints && goalCost
+      ? Math.min(100, Math.round((myPoints.current_balance / goalCost) * 100))
+      : null
+  const goalRemaining =
+    myPoints && goalCost ? Math.max(0, goalCost - myPoints.current_balance) : null
+
   return (
     <div>
       {/* ── Page header ── */}
       <div className="flex items-start justify-between gap-4 mb-6">
         <div>
-          <h1 className="font-serif text-[30px] font-medium tracking-[-0.01em] text-ink leading-tight">
+          <h1 className="text-[27px] font-bold tracking-[-0.02em] text-ink leading-tight">
             {greeting}{user?.first_name ? `, ${user.first_name}` : ''}.
           </h1>
           <p className="mt-1.5 text-muted text-[14px]">
@@ -378,7 +452,16 @@ const Dashboard: React.FC = () => {
 
       {/* ── Two-column body ── */}
       <div className="grid grid-cols-1 lg:grid-cols-[1.55fr_1fr] gap-4">
-        {/* LEFT — Activity feed */}
+        {/* LEFT — Up next (student) + activity feed */}
+        <div className="flex flex-col gap-4">
+        {!isAdmin && (
+          <UpNextPanel
+            onViewAssignment={id => {
+              setSelectedAssignmentId(id)
+              setShowAssignmentDetailModal(true)
+            }}
+          />
+        )}
         <div className="bg-panel border border-line rounded-card overflow-hidden">
           <div className="flex items-center justify-between px-5 py-3.5 border-b border-line-2">
             <h3 className="text-[15px] font-semibold text-ink">Recent activity</h3>
@@ -429,6 +512,7 @@ const Dashboard: React.FC = () => {
             })}
           </div>
         </div>
+        </div>
 
         {/* RIGHT — Quick actions + needs you */}
         <div className="flex flex-col gap-4">
@@ -440,10 +524,32 @@ const Dashboard: React.FC = () => {
             <div className="p-3 space-y-1.5">
               {isAdmin ? (
                 <>
-                  <button onClick={() => setShowAwardModal(true)} className="w-full flex items-center gap-3 px-3 py-2.5 rounded-[9px] text-[13.5px] font-semibold text-ink hover:bg-track transition-colors text-left">
-                    <span className="w-7 h-7 rounded-[7px] bg-acc-soft flex items-center justify-center text-[14px]">⭐</span>
-                    Award points
+                  <Link to="/lessons" className="flex items-center gap-3 px-3 py-2.5 rounded-[9px] text-[13.5px] font-semibold text-ink hover:bg-track transition-colors">
+                    <span className="w-7 h-7 rounded-[7px] bg-accent-soft flex items-center justify-center text-[14px]">📅</span>
+                    Plan a lesson
+                  </Link>
+                  <button
+                    onClick={() => setShowComposer(true)}
+                    disabled={composerLoading}
+                    className="w-full flex items-center gap-3 px-3 py-2.5 rounded-[9px] text-[13.5px] font-semibold text-ink hover:bg-track transition-colors text-left disabled:opacity-60 disabled:cursor-wait"
+                  >
+                    <span className="w-7 h-7 rounded-[7px] bg-accent-soft flex items-center justify-center text-[14px]">
+                      {composerLoading ? <Spinner size="sm" /> : '📝'}
+                    </span>
+                    New assignment
                   </button>
+                  {pendingGrades > 0 && (
+                    <Link to="/grading" className="flex items-center gap-3 px-3 py-2.5 rounded-[9px] text-[13.5px] font-semibold text-ink hover:bg-track transition-colors">
+                      <span className="w-7 h-7 rounded-[7px] bg-accent-soft flex items-center justify-center text-[14px]">✅</span>
+                      Grade now ({pendingGrades})
+                    </Link>
+                  )}
+                  {showPoints && (
+                    <button onClick={() => setShowAwardModal(true)} className="w-full flex items-center gap-3 px-3 py-2.5 rounded-[9px] text-[13.5px] font-semibold text-ink hover:bg-track transition-colors text-left">
+                      <span className="w-7 h-7 rounded-[7px] bg-acc-soft flex items-center justify-center text-[14px]">⭐</span>
+                      Award points
+                    </button>
+                  )}
                   <button onClick={() => setShowBulkAttendanceModal(true)} className="w-full flex items-center gap-3 px-3 py-2.5 rounded-[9px] text-[13.5px] font-semibold text-ink hover:bg-track transition-colors text-left">
                     <span className="w-7 h-7 rounded-[7px] bg-accent-soft flex items-center justify-center text-[14px]">📋</span>
                     Mark attendance
@@ -455,6 +561,12 @@ const Dashboard: React.FC = () => {
                     <span className="w-7 h-7 rounded-[7px] bg-accent-soft flex items-center justify-center text-[14px]">📚</span>
                     My assignments
                   </Link>
+                  {showPoints && (
+                    <Link to="/shop" className="flex items-center gap-3 px-3 py-2.5 rounded-[9px] text-[13.5px] font-semibold text-ink hover:bg-track transition-colors">
+                      <span className="w-7 h-7 rounded-[7px] bg-accent-soft flex items-center justify-center text-[14px]">🛍️</span>
+                      Points Shop
+                    </Link>
+                  )}
                   <Link to="/reports" className="flex items-center gap-3 px-3 py-2.5 rounded-[9px] text-[13.5px] font-semibold text-ink hover:bg-track transition-colors">
                     <span className="w-7 h-7 rounded-[7px] bg-accent-soft flex items-center justify-center text-[14px]">📊</span>
                     View progress
@@ -468,25 +580,108 @@ const Dashboard: React.FC = () => {
             </div>
           </div>
 
-          {/* Needs you (admin: pending grades + flagged) */}
-          {isAdmin && adminReport && (adminReport.pending_grades ?? 0) > 0 && (
+          {/* Needs you (admin: pending grades, redemption requests, lesson prep) */}
+          {needsYou && (
             <div className="bg-panel border border-accent-line rounded-card overflow-hidden">
               <div className="px-5 py-3.5 border-b border-line-2">
                 <h3 className="text-[15px] font-semibold text-ink">Needs you today</h3>
               </div>
-              <Link
-                to="/assignments?view=grading"
-                className="flex items-center justify-between gap-3 px-5 py-3.5 hover:bg-accent-soft transition-colors"
-              >
-                <div className="flex items-center gap-3">
-                  <span className="w-8 h-8 rounded-[8px] bg-neg-bg flex items-center justify-center text-[14px]">📝</span>
-                  <div>
-                    <p className="text-[13.5px] font-semibold text-ink">{adminReport.pending_grades} assignment{adminReport.pending_grades !== 1 ? 's' : ''} to grade</p>
-                    <p className="text-[12px] text-faint">Submitted and waiting for feedback</p>
-                  </div>
+              <div className="divide-y divide-line-2">
+                {pendingGrades > 0 && (
+                  <Link
+                    to="/assignments?view=grading"
+                    className="flex items-center justify-between gap-3 px-5 py-3.5 hover:bg-accent-soft transition-colors"
+                  >
+                    <div className="flex items-center gap-3">
+                      <span className="w-8 h-8 rounded-[8px] bg-neg-bg flex items-center justify-center text-[14px]">📝</span>
+                      <div>
+                        <p className="text-[13.5px] font-semibold text-ink">{pendingGrades} assignment{pendingGrades !== 1 ? 's' : ''} to grade</p>
+                        <p className="text-[12px] text-faint">Submitted and waiting for feedback</p>
+                      </div>
+                    </div>
+                    <span className="text-[12px] font-semibold text-accent flex-none">Grade →</span>
+                  </Link>
+                )}
+                {pendingRedemptions > 0 && (
+                  <Link
+                    to="/admin/shop?tab=redemptions"
+                    className="flex items-center justify-between gap-3 px-5 py-3.5 hover:bg-accent-soft transition-colors"
+                  >
+                    <div className="flex items-center gap-3">
+                      <span className="w-8 h-8 rounded-[8px] bg-acc-soft flex items-center justify-center text-[14px]">🛍️</span>
+                      <div>
+                        <p className="text-[13.5px] font-semibold text-ink">{pendingRedemptions} shop request{pendingRedemptions !== 1 ? 's' : ''} to review</p>
+                        <p className="text-[12px] text-faint">Students are waiting on an approval</p>
+                      </div>
+                    </div>
+                    <span className="text-[12px] font-semibold text-accent flex-none">Review →</span>
+                  </Link>
+                )}
+                {materialsToGather > 0 && (
+                  <Link
+                    to="/lessons?view=teach"
+                    className="flex items-center justify-between gap-3 px-5 py-3.5 hover:bg-accent-soft transition-colors"
+                  >
+                    <div className="flex items-center gap-3">
+                      <span className="w-8 h-8 rounded-[8px] bg-accent-soft flex items-center justify-center text-[14px]">🧺</span>
+                      <div>
+                        <p className="text-[13.5px] font-semibold text-ink">{materialsToGather} material{materialsToGather !== 1 ? 's' : ''} to gather</p>
+                        <p className="text-[12px] text-faint">{lessonsToday} lesson{lessonsToday !== 1 ? 's' : ''} on today's run-sheet</p>
+                      </div>
+                    </div>
+                    <span className="text-[12px] font-semibold text-accent flex-none">Teach →</span>
+                  </Link>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Student: upcoming planned lessons */}
+          {!isAdmin && <ComingUpWidget />}
+
+          {/* Student: points balance + goal progress */}
+          {!isAdmin && showPoints && myPoints && (
+            <div className="bg-panel border border-line rounded-card overflow-hidden">
+              <div className="flex items-center justify-between px-5 py-3.5 border-b border-line-2">
+                <h3 className="text-[15px] font-semibold text-ink">My points</h3>
+                <Link to="/my-points" className="text-[12.5px] font-semibold text-accent hover:text-ink transition-colors">
+                  View ledger
+                </Link>
+              </div>
+              <div className="px-5 py-4">
+                <div className="flex items-baseline gap-2">
+                  <span className="text-[28px] font-bold text-ink font-mono leading-none">
+                    {myPoints.current_balance.toLocaleString()}
+                  </span>
+                  <span className="text-[13px] text-muted font-medium">pts</span>
                 </div>
-                <span className="text-[12px] font-semibold text-accent flex-none">Grade →</span>
-              </Link>
+                {myPoints.goal_item_name && goalCost != null && goalPct != null && (
+                  <div className="mt-3.5">
+                    <div className="h-2.5 rounded-pill overflow-hidden" style={{ background: 'var(--track)' }}>
+                      <div
+                        className="h-full"
+                        style={{
+                          width: `${goalPct}%`,
+                          background: 'linear-gradient(90deg, var(--accent), var(--gold))',
+                        }}
+                      />
+                    </div>
+                    <p className="mt-1.5 text-[12px] text-muted">
+                      Saving toward <span className="font-semibold text-ink">{myPoints.goal_item_name}</span>
+                      {' · '}
+                      {goalRemaining === 0
+                        ? 'Unlocked! 🎉'
+                        : `${goalRemaining?.toLocaleString()} pts to go`}
+                    </p>
+                  </div>
+                )}
+                <Link
+                  to="/shop"
+                  className="inline-block mt-3 text-[12.5px] font-semibold text-accent hover:text-ink transition-colors"
+                >
+                  Visit the Points Shop →
+                </Link>
+              </div>
             </div>
           )}
         </div>
@@ -512,6 +707,15 @@ const Dashboard: React.FC = () => {
             setShowAssignmentDetailModal(false)
             setSelectedAssignmentId(null)
           }}
+        />
+      )}
+      {showComposer && composerStudents && (
+        <AssignmentComposer
+          mode={{ kind: 'create', showAssign: true, libraryDefault: false }}
+          subjects={subjects}
+          students={composerStudents}
+          onClose={() => setShowComposer(false)}
+          onSuccess={() => setShowComposer(false)}
         />
       )}
     </div>

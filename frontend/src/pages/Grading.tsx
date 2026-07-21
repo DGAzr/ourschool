@@ -24,12 +24,16 @@ import { assignmentsApi } from '../services/assignments'
 import { useAssignments } from '../hooks/useAssignments'
 import { useAssignmentFilters } from '../hooks/useAssignmentFilters'
 import { useIsMobile } from '../hooks/useMediaQuery'
-import { SegmentedControl, StatTile, Pill, SubjectDot, statusToPillVariant, useToast, EmptyState } from '../components/ui'
-import GradeAssignmentModal from '../components/assignments/GradeAssignmentModal'
+import { SegmentedControl, StatTile, Pill, SubjectDot, statusToPillVariant, useToast, EmptyState, ActionMenu } from '../components/ui'
+import type { ActionMenuEntry } from '../components/ui'
+import ConfirmDialog from '../components/ui/ConfirmDialog'
+import GradeForm from '../components/assignments/GradeForm'
+import { AssignmentInfo, SubmissionCard } from '../components/assignments/AssignmentInfo'
 import { StudentAssignment, Term } from '../types'
-import { isPastDateOnly, formatDateOnly } from '../utils/formatters'
-import { letterGrade, gradeColor } from '../utils/grading'
+import { formatDateOnly } from '../utils/formatters'
+import { isOverdue } from '../utils/assignmentStatus'
 import { termsApi } from '../services/terms'
+import { getErrorMessage } from '../services/api'
 
 
 type Subject = { id: number; name: string; color?: string }
@@ -154,21 +158,16 @@ const QueuePanel: React.FC<QueuePanelProps> = ({
   </div>
 )
 
-// letterGrade and gradeColor imported from src/utils/grading.ts
-
 interface DetailPanelProps {
   selectedAssignment: StudentAssignment | undefined
   students: Student[]
   getSubjectById: (id: number) => Subject | undefined
   queueIds: number[]
-  gradeInput: string
-  setGradeInput: (v: string) => void
-  feedbackInput: string
-  setFeedbackInput: (v: string) => void
-  onSaveGrade: (advance: boolean) => void
-  onEditGrade: (a: StudentAssignment) => void
+  onSaveGrade: (points: number, feedback: string, advance: boolean) => void
+  saving: boolean
   isMobile: boolean
   onBack: () => void
+  actions?: React.ReactNode
 }
 
 const DetailPanel: React.FC<DetailPanelProps> = ({
@@ -176,16 +175,20 @@ const DetailPanel: React.FC<DetailPanelProps> = ({
   students,
   getSubjectById,
   queueIds,
-  gradeInput,
-  setGradeInput,
-  feedbackInput,
-  setFeedbackInput,
   onSaveGrade,
-  onEditGrade,
+  saving,
   isMobile,
   onBack,
+  actions,
 }) => {
-  const [assignmentInfoOpen, setAssignmentInfoOpen] = useState(false)
+  const [editing, setEditing] = useState(false)
+  // Reset edit mode whenever the selected assignment changes (derive during render
+  // rather than in an effect, so no stale editing carries across assignments).
+  const [editingFor, setEditingFor] = useState<number | undefined>(selectedAssignment?.id)
+  if (editingFor !== selectedAssignment?.id) {
+    setEditingFor(selectedAssignment?.id)
+    setEditing(false)
+  }
 
   return (
   <div className="bg-panel border border-line rounded-card flex flex-col min-h-0 overflow-y-auto">
@@ -207,10 +210,7 @@ const DetailPanel: React.FC<DetailPanelProps> = ({
       const maxPts = selectedAssignment.custom_max_points ?? selectedAssignment.template?.max_points ?? 100
       const curIdx = queueIds.indexOf(selectedAssignment.id)
       const hasNext = curIdx >= 0 && curIdx < queueIds.length - 1
-      const ptsNum = parseFloat(gradeInput)
-      const hasPts = !isNaN(ptsNum) && gradeInput !== ''
-      const pct = hasPts ? Math.round((Math.max(0, Math.min(maxPts, ptsNum)) / maxPts) * 100) : null
-      const currentGradeColor = pct != null ? gradeColor(pct) : 'var(--check-border)'
+      const queuePosition = curIdx >= 0 ? { index: curIdx, total: queueIds.length } : undefined
 
       return (
         <div className="p-6 space-y-5">
@@ -243,69 +243,24 @@ const DetailPanel: React.FC<DetailPanelProps> = ({
                 )}
               </div>
             </div>
-            <Pill variant={statusToPillVariant(selectedAssignment.status)}>
-              {selectedAssignment.status.replace('_', ' ')}
-            </Pill>
+            <div className="flex items-center gap-1.5 flex-none">
+              <Pill variant={statusToPillVariant(selectedAssignment.status)}>
+                {selectedAssignment.status.replace('_', ' ')}
+              </Pill>
+              {actions}
+            </div>
           </div>
 
-          {selectedAssignment.submission_notes && (
-            <div className="bg-panel-2 border border-line-3 rounded-[11px] p-4">
-              <p className="text-[11px] font-semibold text-faint uppercase tracking-[.06em] mb-2">Student submission</p>
-              <p className="text-[13.5px] text-ink-2 leading-relaxed">{selectedAssignment.submission_notes}</p>
-              {selectedAssignment.submission_artifacts && selectedAssignment.submission_artifacts.length > 0 && (
-                <div className="flex gap-2 mt-3 flex-wrap">
-                  {selectedAssignment.submission_artifacts.map((af, i) => (
-                    <a key={i} href={af} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1.5 px-2.5 py-1.5 bg-panel border border-line rounded-[8px] text-[12.5px] text-accent hover:underline">
-                      <svg width="10" height="10" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2"><path strokeLinecap="round" strokeLinejoin="round" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" /></svg>
-                      {af}
-                    </a>
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
+          <SubmissionCard notes={selectedAssignment.submission_notes} artifacts={selectedAssignment.submission_artifacts} />
 
-          {(selectedAssignment.template?.description || selectedAssignment.template?.instructions || selectedAssignment.custom_instructions) && (
-            <div className="bg-panel-2 border border-line rounded-[11px] overflow-hidden">
-              <button
-                type="button"
-                onClick={() => setAssignmentInfoOpen(o => !o)}
-                className="w-full flex items-center justify-between px-4 py-3 text-left hover:bg-panel transition-colors"
-              >
-                <p className="text-[11px] font-semibold text-muted uppercase tracking-wide">Assignment Info</p>
-                <svg
-                  className={`w-4 h-4 text-muted transition-transform ${assignmentInfoOpen ? 'rotate-180' : ''}`}
-                  fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}
-                >
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
-                </svg>
-              </button>
-              {assignmentInfoOpen && (
-                <div className="px-4 pb-4 space-y-3 border-t border-line pt-3">
-                  {selectedAssignment.template?.description && (
-                    <div>
-                      <p className="text-[11px] font-semibold text-muted uppercase tracking-wide mb-1">Description</p>
-                      <p className="text-[13px] text-ink whitespace-pre-wrap">{selectedAssignment.template.description}</p>
-                    </div>
-                  )}
-                  {selectedAssignment.template?.instructions && (
-                    <div>
-                      <p className="text-[11px] font-semibold text-muted uppercase tracking-wide mb-1">Instructions</p>
-                      <p className="text-[13px] text-ink whitespace-pre-wrap">{selectedAssignment.template.instructions}</p>
-                    </div>
-                  )}
-                  {selectedAssignment.custom_instructions && (
-                    <div>
-                      <p className="text-[11px] font-semibold text-muted uppercase tracking-wide mb-1">Custom Instructions</p>
-                      <p className="text-[13px] text-ink whitespace-pre-wrap">{selectedAssignment.custom_instructions}</p>
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-          )}
+          <AssignmentInfo
+            collapsible
+            description={selectedAssignment.template?.description}
+            instructions={selectedAssignment.template?.instructions}
+            customInstructions={selectedAssignment.custom_instructions}
+          />
 
-          {selectedAssignment.is_graded ? (
+          {selectedAssignment.is_graded && !editing ? (
             <div className="bg-pos-bg border border-pos-fg/20 rounded-card p-4">
               <p className="text-[11px] font-semibold text-faint uppercase tracking-[.05em] mb-1">Grade recorded</p>
               <p className="font-mono text-[22px] font-semibold text-pos-fg">
@@ -318,91 +273,26 @@ const DetailPanel: React.FC<DetailPanelProps> = ({
                 <p className="text-[13px] text-ink-2 mt-2 leading-relaxed">{selectedAssignment.teacher_feedback}</p>
               )}
               <button
-                onClick={() => onEditGrade(selectedAssignment)}
+                onClick={() => setEditing(true)}
                 className="mt-3 h-[30px] px-3 border border-btn-border bg-panel rounded-[7px] text-[12.5px] font-semibold text-ink hover:bg-track transition-colors"
               >
                 Edit grade
               </button>
             </div>
           ) : (
-            <>
-              <div className="flex gap-5 flex-wrap items-end">
-                <div>
-                  <label htmlFor="grading-points-earned" className="block text-[11px] font-semibold text-faint uppercase tracking-[.06em] mb-1.5">Points earned</label>
-                  <div className="flex items-center gap-2">
-                    <input
-                      id="grading-points-earned"
-                      type="number"
-                      inputMode="decimal"
-                      min={0}
-                      max={maxPts}
-                      value={gradeInput}
-                      onChange={e => setGradeInput(e.target.value)}
-                      placeholder="0"
-                      className="w-[88px] h-[46px] bg-field-bg border border-field-border rounded-[10px] font-mono text-[20px] font-semibold text-center text-ink focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
-                    />
-                    <span className="font-mono text-[18px] text-faint">/ {maxPts}</span>
-                  </div>
-                </div>
-                {pct != null && (
-                  <div className="flex flex-col items-center gap-1.5">
-                    <span className="text-[11px] font-semibold text-faint uppercase tracking-[.06em]">Grade</span>
-                    <div className="flex items-baseline gap-2">
-                      <span className="font-mono text-[30px] font-semibold tracking-[-0.02em]" style={{ color: currentGradeColor }}>
-                        {pct != null ? letterGrade(ptsNum, maxPts) : ''}
-                      </span>
-                      <span className="font-mono text-[16px] text-faint">{pct}%</span>
-                    </div>
-                  </div>
-                )}
-                <div className="flex gap-1.5 flex-1 justify-end flex-wrap">
-                  {[maxPts, Math.round(maxPts * 0.9), Math.round(maxPts * 0.8), Math.round(maxPts * 0.7)].map((v, i) => (
-                    <button
-                      key={i}
-                      onClick={() => setGradeInput(String(v))}
-                      className="h-[32px] px-3 border border-field-border bg-panel rounded-[7px] font-mono text-[12.5px] font-semibold text-muted hover:bg-track transition-colors"
-                    >
-                      {v}
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              <div>
-                <label htmlFor="grading-feedback" className="block text-[11px] font-semibold text-faint uppercase tracking-[.06em] mb-1.5">Feedback to student</label>
-                <textarea
-                  id="grading-feedback"
-                  value={feedbackInput}
-                  onChange={e => setFeedbackInput(e.target.value)}
-                  rows={3}
-                  placeholder="Optional — what went well, what to work on…"
-                  className="w-full bg-field-bg border border-field-border rounded-[10px] px-3 py-2.5 text-[13.5px] text-ink leading-relaxed resize-none focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent placeholder:text-faintest"
-                />
-              </div>
-
-              <div className="flex items-center gap-2.5 pt-1.5 border-t border-line-2">
-                <button
-                  onClick={() => onSaveGrade(true)}
-                  disabled={!gradeInput}
-                  className="h-[42px] px-5 border-none bg-btn-primary-bg text-btn-primary-fg rounded-[10px] text-[14px] font-semibold disabled:opacity-40 hover:opacity-90 transition-opacity cursor-pointer disabled:cursor-not-allowed"
-                >
-                  {hasNext ? 'Save & next' : 'Save & finish'}
-                </button>
-                <button
-                  onClick={() => onSaveGrade(false)}
-                  disabled={!gradeInput}
-                  className="h-[42px] px-4 border border-btn-border bg-panel text-ink-2 rounded-[10px] text-[14px] font-semibold disabled:opacity-40 hover:bg-track transition-colors cursor-pointer disabled:cursor-not-allowed"
-                >
-                  Save
-                </button>
-                <div className="flex-1" />
-                {curIdx >= 0 && (
-                  <span className="text-[12.5px] text-faint">
-                    {curIdx + 1} of {queueIds.length} in queue
-                  </span>
-                )}
-              </div>
-            </>
+            <GradeForm
+              key={editing ? `${selectedAssignment.id}-edit` : selectedAssignment.id}
+              maxPoints={maxPts}
+              initialPoints={editing ? selectedAssignment.points_earned : undefined}
+              initialFeedback={editing ? (selectedAssignment.teacher_feedback ?? '') : ''}
+              hasNext={hasNext}
+              queuePosition={queuePosition}
+              saving={saving}
+              onSave={(points, feedback, advance) => {
+                onSaveGrade(points, feedback, advance)
+                setEditing(false)
+              }}
+            />
           )}
         </div>
       )
@@ -424,11 +314,9 @@ const Grading: React.FC = () => {
   )
   const [selectedQueueId, setSelectedQueueId] = useState<number | null>(incomingId ?? null)
   const [mobileView, setMobileView] = useState<'queue' | 'detail'>(incomingId ? 'detail' : 'queue')
-  const [gradeInput, setGradeInput] = useState('')
-  const [feedbackInput, setFeedbackInput] = useState('')
-  const [showGradeModal, setShowGradeModal] = useState(false)
-  const [gradingAssignment, setGradingAssignment] = useState<StudentAssignment | null>(null)
+  const [saving, setSaving] = useState(false)
   const [activeTerm, setActiveTerm] = useState<Term | null>(null)
+  const [unassigning, setUnassigning] = useState<StudentAssignment | null>(null)
 
   useEffect(() => {
     termsApi.getActive().then(setActiveTerm).catch(() => {})
@@ -459,7 +347,7 @@ const Grading: React.FC = () => {
   const getSubjectById = (id: number) => subjects.find(s => s.id === id)
 
   const needsGrading = allAssignments.filter(a => a.status === 'submitted' && !a.is_graded)
-  const overdueAssignments = allAssignments.filter(a => a.status !== 'graded' && a.status !== 'excused' && isPastDateOnly(a.due_date))
+  const overdueAssignments = allAssignments.filter(isOverdue)
   const awaitingAssignments = allAssignments.filter(a =>
     (a.status === 'not_started' || a.status === 'in_progress' || a.status === 'overdue') && !a.is_graded
   )
@@ -469,13 +357,11 @@ const Grading: React.FC = () => {
     ? `${formatDateOnly(activeTerm.start_date, { month: 'short', day: 'numeric' })} – ${formatDateOnly(activeTerm.end_date, { month: 'short', day: 'numeric', year: 'numeric' })}`
     : null
 
-  // "All" shows every assignment without status filtering (search/subject/student still apply)
+  // "All" shows every assignment; subject/student filters still apply.
   const filteredAllAssignments = allAssignments.filter(a => {
-    const template = a.template
-    const matchesSearch = !template || template.name.toLowerCase().includes('')
-    const matchesSubject = !selectedSubject || template?.subject_id === selectedSubject
+    const matchesSubject = !selectedSubject || a.template?.subject_id === selectedSubject
     const matchesStudent = !selectedStudent || a.student_id === selectedStudent
-    return matchesSearch && matchesSubject && matchesStudent
+    return matchesSubject && matchesStudent
   })
 
   const queueItems = queueFilter === 'needs' ? needsGrading
@@ -489,32 +375,66 @@ const Grading: React.FC = () => {
 
   const queueIds = queueItems.map(q => q.id)
 
-  const handleSaveGrade = async (advance: boolean) => {
+  const handleSaveGrade = async (points: number, feedback: string, advance: boolean) => {
     if (!selectedAssignment) return
-    const pts = parseFloat(gradeInput)
-    if (isNaN(pts)) return
     // Capture the next id now, before the queue shifts on refetch
     const curIdx = queueIds.indexOf(selectedAssignment.id)
     const nextId = advance && curIdx >= 0 ? (queueIds[curIdx + 1] ?? null) : null
     try {
+      setSaving(true)
       await assignmentsApi.gradeStudentAssignment(selectedAssignment.id, {
-        points_earned: pts,
-        teacher_feedback: feedbackInput,
+        points_earned: points,
+        teacher_feedback: feedback,
       })
       toast('Grade saved')
-      setGradeInput('')
-      setFeedbackInput('')
       if (advance) setSelectedQueueId(nextId)
       refetch()
-    } catch {
-      toast('Failed to save grade', 'danger')
+    } catch (err) {
+      toast(getErrorMessage(err, 'Failed to save grade'), 'danger')
+    } finally {
+      setSaving(false)
     }
   }
 
+  const advanceAfter = (id: number) => {
+    const idx = queueIds.indexOf(id)
+    return queueIds[idx + 1] ?? null
+  }
+
+  const runAssignmentAction = async (
+    action: 'excuse' | 'archive' | 'unassign',
+    assignment: StudentAssignment,
+  ) => {
+    // Capture the next id now, before the queue shifts on refetch
+    const nextId = advanceAfter(assignment.id)
+    try {
+      if (action === 'excuse') await assignmentsApi.updateStudentAssignment(assignment.id, { status: 'excused' })
+      if (action === 'archive') await assignmentsApi.archiveStudentAssignment(assignment.id)
+      if (action === 'unassign') await assignmentsApi.deleteStudentAssignment(assignment.id)
+      toast(action === 'excuse' ? 'Assignment excused' : action === 'archive' ? 'Assignment archived' : 'Assignment removed')
+      setSelectedQueueId(nextId)
+      refetch()
+    } catch (err) {
+      toast(getErrorMessage(err, `Failed to ${action} assignment`), 'danger')
+    }
+  }
+
+  const assignmentActions: React.ReactNode = selectedAssignment ? (
+    <ActionMenu
+      ariaLabel="Assignment actions"
+      items={[
+        ...(selectedAssignment.status !== 'excused'
+          ? [{ label: 'Excuse', onSelect: () => runAssignmentAction('excuse', selectedAssignment) }]
+          : []),
+        { label: 'Archive', onSelect: () => runAssignmentAction('archive', selectedAssignment) },
+        'separator',
+        { label: 'Unassign', onSelect: () => setUnassigning(selectedAssignment), danger: true },
+      ] as ActionMenuEntry[]}
+    />
+  ) : undefined
+
   const handleSelect = (id: number) => {
     setSelectedQueueId(id)
-    setGradeInput('')
-    setFeedbackInput('')
     if (isMobile) setMobileView('detail')
   }
 
@@ -596,14 +516,11 @@ const Grading: React.FC = () => {
                 students={students}
                 getSubjectById={getSubjectById}
                 queueIds={queueIds}
-                gradeInput={gradeInput}
-                setGradeInput={setGradeInput}
-                feedbackInput={feedbackInput}
-                setFeedbackInput={setFeedbackInput}
                 onSaveGrade={handleSaveGrade}
-                onEditGrade={a => { setGradingAssignment(a); setShowGradeModal(true) }}
+                saving={saving}
                 isMobile={false}
                 onBack={() => setMobileView('queue')}
+                actions={assignmentActions}
               />
             </div>
           </div>
@@ -634,28 +551,26 @@ const Grading: React.FC = () => {
                 students={students}
                 getSubjectById={getSubjectById}
                 queueIds={queueIds}
-                gradeInput={gradeInput}
-                setGradeInput={setGradeInput}
-                feedbackInput={feedbackInput}
-                setFeedbackInput={setFeedbackInput}
                 onSaveGrade={handleSaveGrade}
-                onEditGrade={a => { setGradingAssignment(a); setShowGradeModal(true) }}
+                saving={saving}
                 isMobile={true}
                 onBack={() => setMobileView('queue')}
+                actions={assignmentActions}
               />
             )}
           </div>
         </>
       )}
 
-      {showGradeModal && gradingAssignment && (
-        <GradeAssignmentModal
-          assignment={gradingAssignment}
-          student={students.find(s => s.id === gradingAssignment.student_id)}
-          onClose={() => { setShowGradeModal(false); setGradingAssignment(null) }}
-          onSuccess={() => { setShowGradeModal(false); setGradingAssignment(null); refetch() }}
-        />
-      )}
+      <ConfirmDialog
+        isOpen={!!unassigning}
+        onClose={() => setUnassigning(null)}
+        onConfirm={() => { if (unassigning) { runAssignmentAction('unassign', unassigning); setUnassigning(null) } }}
+        tone="danger"
+        title="Remove assignment"
+        message={<>Remove <strong className="text-ink">"{unassigning?.template?.name ?? 'this assignment'}"</strong> from the student?</>}
+        confirmLabel="Remove"
+      />
     </div>
   )
 }

@@ -47,32 +47,49 @@ def test_regrade_updates_points_as_delta(
     assert sp.current_balance == 70  # not 90 + 70
 
 
-def test_grade_cannot_exceed_max_points(
+def test_grade_can_exceed_max_points_for_extra_credit(
     client, admin_headers, classroom, student_factory, assign
 ):
     student, _ = student_factory()
     sa = assign(classroom["template"]["id"], student["id"])
 
-    r = _grade(client, admin_headers, sa["id"], 150)
-    assert r.status_code == 400, r.text
+    r = _grade(client, admin_headers, sa["id"], 105)
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["points_earned"] == 105
+    assert body["percentage_grade"] == pytest.approx(105.0)
+    assert body["letter_grade"] == "A+"  # top band, unclamped by the >100% grade
+
+
+def test_grade_rejects_negative_points(
+    client, admin_headers, classroom, student_factory, assign
+):
+    student, _ = student_factory()
+    sa = assign(classroom["template"]["id"], student["id"])
+
+    r = _grade(client, admin_headers, sa["id"], -1)
+    assert r.status_code == 422, r.text
 
 
 def test_bulk_grade(client, admin_headers, classroom, student_factory, assign):
     student, _ = student_factory()
     sa1 = assign(classroom["template"]["id"], student["id"])
     sa2 = assign(classroom["template"]["id"], student["id"])
+    sa3 = assign(classroom["template"]["id"], student["id"])
 
     r = client.post(
         "/api/assignments/bulk-grade",
         json=[
             {"assignment_id": sa1["id"], "points_earned": 80},
             {"assignment_id": sa2["id"], "points_earned": 90},
+            # Extra credit — over max_points, still succeeds.
+            {"assignment_id": sa3["id"], "points_earned": 110},
         ],
         headers=admin_headers,
     )
     assert r.status_code == 200, r.text
     results = r.json()
-    assert len(results) == 2
+    assert len(results) == 3
     assert all(item["success"] for item in results), results
 
 
@@ -100,3 +117,39 @@ def test_term_grade_is_points_weighted(
     assert grade.current_points_earned == pytest.approx(170.0)
     assert grade.current_points_possible == pytest.approx(200.0)
     assert grade.current_percentage == pytest.approx(85.0)
+
+
+def test_term_grade_can_exceed_100_percent_with_extra_credit(
+    client, admin_headers, classroom, student_factory, assign, db_session
+):
+    """One assignment graded 110/100 → term grade 110/100 = 110%, no clamping."""
+    student, _ = student_factory()
+    sa = assign(classroom["template"]["id"], student["id"], due_date="2026-03-01")
+
+    assert _grade(client, admin_headers, sa["id"], 110).status_code == 200
+
+    db_session.expire_all()
+    grade = (
+        db_session.query(StudentTermGrade)
+        .filter(StudentTermGrade.student_id == student["id"])
+        .one()
+    )
+    assert grade.current_points_earned == pytest.approx(110.0)
+    assert grade.current_points_possible == pytest.approx(100.0)
+    assert grade.current_percentage == pytest.approx(110.0)
+
+
+def test_cannot_lower_custom_max_below_recorded_grade(
+    client, admin_headers, classroom, student_factory, assign
+):
+    student, _ = student_factory()
+    sa = assign(classroom["template"]["id"], student["id"])
+    assert _grade(client, admin_headers, sa["id"], 80).status_code == 200
+
+    r = client.put(
+        f"/api/assignments/student-assignments/{sa['id']}",
+        json={"custom_max_points": 50},
+        headers=admin_headers,
+    )
+    assert r.status_code == 400, r.text
+    assert "recorded grade" in r.json()["detail"]

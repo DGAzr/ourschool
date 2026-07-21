@@ -23,7 +23,13 @@ export interface PointTransaction {
   id: number
   student_id: number
   amount: number
-  transaction_type: 'assignment' | 'admin_award' | 'admin_deduction' | 'spending'
+  transaction_type:
+    | 'assignment'
+    | 'journal_submission'
+    | 'admin_award'
+    | 'admin_deduction'
+    | 'spending'
+    | 'refund'
   source_id?: number
   source_description?: string
   notes?: string
@@ -43,6 +49,11 @@ export interface StudentPoints {
   created_at: string
   updated_at: string
   student_name?: string
+  /** The shop item the student is saving toward, if chosen. */
+  goal_item_id?: number | null
+  /** Resolved goal item display fields (balance/ledger/admin payloads). */
+  goal_item_name?: string | null
+  goal_item_cost?: number | null
 }
 
 export interface PointsLedger {

@@ -33,7 +33,6 @@ interface AssignmentFormFieldsProps {
     estimated_duration_minutes?: number
     prerequisites?: string
     materials_needed?: string
-    is_exportable?: boolean
   }
   subjects: Subject[]
   onUpdate: (field: string, value: string | number | boolean | null | undefined) => void
@@ -193,21 +192,6 @@ const AssignmentFormFields: React.FC<AssignmentFormFieldsProps> = ({
             placeholder="List any materials, resources, or tools needed for this assignment..."
             disabled={disabled}
           />
-
-          {/* Exportable Checkbox */}
-          <div className="flex items-center">
-            <input
-              type="checkbox"
-              id="is_exportable"
-              checked={formData.is_exportable || false}
-              onChange={(e) => onUpdate('is_exportable', e.target.checked)}
-              className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
-              disabled={disabled}
-            />
-            <label htmlFor="is_exportable" className="ml-2 block text-sm text-gray-900 dark:text-gray-100">
-              Allow this template to be exported and shared with other OurSchool systems
-            </label>
-          </div>
         </>
       )}
     </div>

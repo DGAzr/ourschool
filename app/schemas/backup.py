@@ -211,6 +211,10 @@ class StudentPointsBackup(BaseModel):
     current_balance: int = 0
     total_earned: int = 0
     total_spent: int = 0
+    # Shop item the student is saving toward, by external_id (remapped on
+    # import; a missing item just clears the goal). Optional: old backups
+    # predate the field.
+    goal_item_external_id: Optional[str] = None
     created_at: datetime
     updated_at: datetime
 
@@ -225,6 +229,246 @@ class PointTransactionBackup(BaseModel):
     source_description: Optional[str] = None
     notes: Optional[str] = None
     created_at: datetime
+
+
+# Points Shop backup schemas
+
+
+class ShopCategoryBackup(BaseModel):
+    """Schema for backing up shop categories."""
+
+    external_id: str
+    name: str
+    color: Optional[str] = None
+    icon: Optional[str] = None
+    sort_order: int = 0
+    created_at: datetime
+
+
+class ShopImageBackup(BaseModel):
+    """Schema for backing up shop images.
+
+    Image bytes are base64-encoded (``data_b64``) so the backup stays JSON-safe.
+    Note: this inflates the backup by ~33% per image — fine at hundreds of
+    images; revisit if catalogs grow large.
+    """
+
+    external_id: str
+    mime_type: str
+    size_bytes: int
+    data_b64: str
+    created_at: datetime
+
+
+class ShopItemBackup(BaseModel):
+    """Schema for backing up shop items (category resolved by external_id)."""
+
+    external_id: str
+    name: str
+    category_external_id: str
+    description: Optional[str] = None
+    cost_points: int
+    quantity_available: Optional[int] = None
+    fulfillment_type: str
+    is_active: bool = True
+    display_order: int = 0  # Optional default: old backups predate the field
+    image_ids: List[str] = []
+    total_redeemed: int = 0
+    created_at: datetime
+    updated_at: datetime
+
+
+class ShopRedemptionBackup(BaseModel):
+    """Schema for backing up shop redemptions.
+
+    The item is resolved by external_id on restore (optional — a deleted item
+    just leaves item_id NULL, and the snapshot fields preserve display).
+    Transaction-link FKs (point_transaction_id, refund_transaction_id) and
+    decided_by are intentionally dropped on restore: point transactions carry
+    no stable external id, so those links can't be rebuilt. Ledger totals still
+    restore correctly via student_points + point_transactions.
+    """
+
+    external_id: str
+    student_external_id: Optional[str] = None
+    student_email: str  # Fallback resolution key
+    item_external_id: Optional[str] = None
+    item_name: str
+    cost_points: int
+    fulfillment_type: str
+    status: str
+    created_at: datetime
+    decided_at: Optional[datetime] = None
+    fulfilled_at: Optional[datetime] = None
+
+
+# Lesson Planner backup schemas
+
+
+class LessonStudentRefBackup(BaseModel):
+    """A student a lesson is planned for (resolution: external_id > email)."""
+
+    student_external_id: Optional[str] = None
+    student_email: str  # Fallback resolution key
+
+
+class LessonTemplateLinkBackup(BaseModel):
+    """Schema for backing up a lesson's linked assignment template.
+
+    The template is resolved by external_id (name fallback) on restore. An
+    unresolvable template leaves the link with template_id NULL, matching the
+    model's SET NULL contract for deleted templates.
+    """
+
+    template_external_id: Optional[str] = None
+    template_name: str  # Fallback resolution key
+    custom_due_date: Optional[date] = None
+    custom_max_points: Optional[int] = None
+    custom_instructions: Optional[str] = None
+
+
+class LessonMaterialBackup(BaseModel):
+    """Schema for backing up a lesson material (owned child, no FKs to remap)."""
+
+    label: str
+    is_gathered: bool = False
+    position: int = 0
+
+
+class LessonResourceBackup(BaseModel):
+    """Schema for backing up a lesson resource link (owned child)."""
+
+    label: str
+    url: Optional[str] = None
+    position: int = 0
+
+
+class LessonBackup(BaseModel):
+    """Schema for backing up lessons with their nested children.
+
+    Subject and creator are resolved on restore like other sections
+    (external_id, then natural key); both are SET NULL FKs on the model, so
+    unresolvable references degrade to an un-linked lesson rather than a skip.
+    """
+
+    external_id: str
+    date: date
+    title: str
+    objective: Optional[str] = None
+    duration_minutes: Optional[int] = None
+    notes: Optional[str] = None
+    position: int = 0  # 0-based rank within the lesson's date (board ordering)
+    status: str
+    subject_external_id: Optional[str] = None
+    subject_name: Optional[str] = None  # Fallback resolution key
+    created_by_external_id: Optional[str] = None
+    created_by_email: Optional[str] = None  # Fallback resolution key
+    students: List[LessonStudentRefBackup] = []
+    templates: List[LessonTemplateLinkBackup] = []
+    materials: List[LessonMaterialBackup] = []
+    resources: List[LessonResourceBackup] = []
+    created_at: datetime
+    updated_at: datetime
+
+
+# Paperless-NGX integration backup schemas
+#
+# The connection row (URL + Fernet-encrypted API token) is deliberately NOT
+# backed up: the token only decrypts under the SECRET_KEY that encrypted it,
+# so it cannot restore across installs — reconnecting is the supported path.
+# Thumbnails are a lazily re-fetched cache and are also excluded. Everything
+# else (mappings, the document metadata cache, and the three attachment link
+# tables) IS backed up so manual mapping work and lesson/template/assignment
+# attachments survive a wipe-and-restore.
+
+
+class PaperlessTagMapBackup(BaseModel):
+    """Schema for backing up a Paperless tag → subject mapping."""
+
+    paperless_tag_id: int
+    paperless_tag_name: str
+    subject_external_id: Optional[str] = None
+    subject_name: Optional[str] = None  # Fallback resolution key
+    auto_matched: bool = True
+
+
+class PaperlessDoctypeMapBackup(BaseModel):
+    """Schema for backing up a Paperless document type → material kind mapping."""
+
+    paperless_doctype_id: int
+    paperless_doctype_name: str
+    material_kind: str
+
+
+class PaperlessDocumentBackup(BaseModel):
+    """Schema for backing up one cached Paperless document's metadata.
+
+    ``paperless_id`` is the stable identity (unique per server); ``external_id``
+    is preserved so thumbnail capability URLs keep working after restore.
+    """
+
+    external_id: str
+    paperless_id: int
+    asn: Optional[str] = None
+    title: str
+    correspondent: Optional[str] = None
+    paperless_doctype_id: Optional[int] = None
+    material_kind: str
+    subject_external_id: Optional[str] = None
+    subject_name: Optional[str] = None  # Fallback resolution key
+    tag_ids: List[int] = []
+    page_count: Optional[int] = None
+    paperless_created: Optional[datetime] = None
+    paperless_added: Optional[datetime] = None
+    paperless_modified: Optional[datetime] = None
+    keywords: Optional[str] = None
+    present: bool = True
+    synced_at: Optional[datetime] = None
+
+
+class PaperlessAttachmentBackupBase(BaseModel):
+    """Snapshot fields shared by every Paperless attachment link.
+
+    Mirrors ``app.models.paperless.snapshot_fields`` so restored links render
+    identically to the originals even before the next sync.
+    """
+
+    document_paperless_id: int
+    title: str
+    asn: Optional[str] = None
+    material_kind: str
+    subject_external_id: Optional[str] = None
+    subject_name: Optional[str] = None  # Fallback resolution key
+    page_count: Optional[int] = None
+    correspondent: Optional[str] = None
+    created_at: datetime
+
+
+class LessonPaperlessMaterialBackup(PaperlessAttachmentBackupBase):
+    """A Paperless document attached to a lesson (lesson resolved by external_id)."""
+
+    lesson_external_id: str
+
+
+class TemplatePaperlessMaterialBackup(PaperlessAttachmentBackupBase):
+    """A Paperless document attached to an assignment template."""
+
+    template_external_id: Optional[str] = None
+    template_name: str  # Fallback resolution key
+
+
+class StudentAssignmentPaperlessMaterialBackup(PaperlessAttachmentBackupBase):
+    """A one-off Paperless document attached to a single assignment instance.
+
+    StudentAssignments carry no external_id; identity uses the same
+    (student, template, due_date) triple the assignment importer dedupes on.
+    """
+
+    student_external_id: Optional[str] = None
+    student_email: str  # Fallback resolution key
+    template_external_id: Optional[str] = None
+    assignment_template_name: str  # Fallback resolution key
+    due_date: Optional[date] = None
 
 
 # Complete system backup schema
@@ -254,6 +498,21 @@ class SystemBackup(BaseModel):
     journal_entries: List[JournalEntryBackup] = []
     student_points: List[StudentPointsBackup] = []
     point_transactions: List[PointTransactionBackup] = []
+    shop_categories: List[ShopCategoryBackup] = []
+    shop_images: List[ShopImageBackup] = []
+    shop_items: List[ShopItemBackup] = []
+    shop_redemptions: List[ShopRedemptionBackup] = []
+    lessons: List[LessonBackup] = []
+    # Paperless-NGX (mappings, document metadata cache, attachment links;
+    # never the connection/token — see the schema comments above).
+    paperless_tag_maps: List[PaperlessTagMapBackup] = []
+    paperless_doctype_maps: List[PaperlessDoctypeMapBackup] = []
+    paperless_documents: List[PaperlessDocumentBackup] = []
+    lesson_paperless_materials: List[LessonPaperlessMaterialBackup] = []
+    template_paperless_materials: List[TemplatePaperlessMaterialBackup] = []
+    student_assignment_paperless_materials: List[
+        StudentAssignmentPaperlessMaterialBackup
+    ] = []
     system_settings: List[SystemSettingsBackup] = []
 
     # Import statistics
