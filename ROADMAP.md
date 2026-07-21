@@ -1,12 +1,11 @@
 # Roadmap
 
-Work deliberately deferred from the 1.0 release, in rough priority order.
-None of these block tagging `v1.0.0` (see [RELEASING.md](RELEASING.md) for the
-release procedure); they're the backlog for 1.x.
+Work deliberately deferred until after the 1.0 release, in rough priority
+order. These items make up the backlog for 1.x.
 
 ## Code health
 
-The code-health backlog is clear as of 2026-07-05: module splits, `any`
+The code-health backlog is clear as of 2026-07-20: module splits, `any`
 elimination, full lint/format CI gating for both backend and frontend, knip
 clean, and the react-hooks compiler-suite warnings burned down with the
 rules enforced at `error`.

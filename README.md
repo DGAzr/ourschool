@@ -4,8 +4,9 @@
 
 OurSchool is a self-hosted homeschool management system for families who take attendance seriously, grade assignments carefully, and really don't want to maintain a pile of spreadsheets. It handles the administrative grind — attendance, subjects, assignments, grading, reports, and a shameless gamification points system — so you can spend more time on the actual teaching.
 
-> **Beta — `v1.0.0-beta.14`**  
-> Pre-stable software. The database schema may have breaking changes until the planned 2026–2027 stable release. Use the built-in system backup/restore (with dry-run preview) to safeguard your data between updates.
+> **Stable — `v1.0.0`**
+>
+> This is the first stable release. Back up your data before every upgrade and review [MIGRATIONS.md](MIGRATIONS.md) for upgrade guidance.
 
 
 ## ✨ Features
@@ -17,7 +18,7 @@ OurSchool is a self-hosted homeschool management system for families who take at
 - **Optional gamification** — As assignments are graded, students earn points redeemable for whatever your household considers a reward. The whole system is opt-in and can be toggled off in Admin Center.
 - **Journal** — Teacher and student entries with date tracking, reactions, and threaded replies.
 - **Reports** — Performance reports, attendance summaries, assignment completion rates, grade trends, and term report cards. 
-- **System backup / restore** — Full export/import with dry-run preview, cross-version compatibility (hopefully...), and stable external IDs for conflict-free entity resolution. Two restore modes: the default merge, or **wipe-and-restore** for true point-in-time recovery (guarded by a typed confirmation; your admin login always survives).
+- **System backup / restore** — Full export/import with dry-run preview, cross-version compatibility, and stable external IDs for conflict-free entity resolution. Two restore modes: the default merge, or **wipe-and-restore** for true point-in-time recovery (guarded by a typed confirmation; your admin login always survives).
 - **Light/dark/system theme** — Synced to your account, so your preference follows you across devices.
 - **Integration API** — REST API with Bearer token and API key (`os_` prefix) auth. MCP-ready: `GET /api/meta` for enum/permission discovery. Full endpoint reference below.
 
@@ -207,7 +208,7 @@ for student in r.json()["student_points"]:
 
 ### Endpoint reference
 
-The complete API surface as of `v1.0.0-beta`. Set `ENABLE_API_DOCS=true` for the interactive version (request/response schemas included) at `/docs`.
+The complete API surface as of `v1.0.0`. Set `ENABLE_API_DOCS=true` for the interactive version (request/response schemas included) at `/docs`.
 
 <details>
 <summary><strong>Expand the full endpoint list</strong></summary>
@@ -433,6 +434,15 @@ The complete API surface as of `v1.0.0-beta`. Set `ENABLE_API_DOCS=true` for the
 
 > At this point most of the code in this app has been built with the help of AI (Claude, DeepSeek, and Qwen models have all been used). This is the same type of workflow I use at my job as well and while I think it is great for velocity I understand that some persons have reservations about interacting with projects which use this technology in their development, so I wanted to be clear about it. I'm sharing this project because it has been immensely useful to my family as we navigate our own homeschool journey and I sincerely hope that it may be useful for another family in a similar position. 
 
+### Project documentation
+
+- [Docker setup and operations](README.Docker.md)
+- [Database upgrades and migrations](MIGRATIONS.md)
+- [Security policy and vulnerability reporting](SECURITY.md)
+- [Post-1.0 roadmap](ROADMAP.md)
+- [Maintainer release checklist](RELEASING.md)
+- [Release history](CHANGELOG.md)
+
 ### Database migrations
 
 ```bash
@@ -507,7 +517,7 @@ docker compose -f docker-compose.yml up --build -d
 - Change the default admin password immediately after first login.
 - Set strong DB credentials; the default `postgres`/`postgres` is for local dev only.
 - Restrict `ALLOWED_ORIGINS` to your actual domain.
-- Put a TLS-terminating reverse proxy (nginx, Caddy, Traefik) in front; the bundled frontend doesn't do TLS or rate limiting.
+- Put a TLS-terminating reverse proxy (nginx, Caddy, Traefik) in front; the bundled frontend doesn't do TLS or rate limiting beyond nginx's static-file defaults.
 - Set `BACKEND_BIND=0.0.0.0` only when behind such a proxy (default is loopback).
 - Disable API docs in production if desired: `ENABLE_API_DOCS=false`.
 

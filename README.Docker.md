@@ -229,14 +229,25 @@ docker compose -f docker-compose.ghcr.yml --profile local-db up -d
 - **Change the default admin password** immediately after first login (`admin` / `admin123`).
 - **Set a strong database password.** The default `postgres`/`postgres` is for local dev only; it is not safe to expose publicly.
 - **Restrict `ALLOWED_ORIGINS`** to your actual domains in production — a `*` wildcard is rejected at startup because credentials are enabled.
-- **Terminate TLS at a reverse proxy.** The bundled frontend is served by nginx, which provides no TLS, gzip compression, or rate limiting by default. Put nginx/Caddy/Traefik (or a managed load balancer) in front. The backend (8000) and database (5432) bind to loopback by default; set `BACKEND_BIND`/`POSTGRES_BIND` to `0.0.0.0` only when they're behind such a proxy.
+- **Terminate TLS at a reverse proxy.** The bundled nginx serves static files
+  with gzip compression, but it provides no TLS or rate limiting. Put
+  nginx/Caddy/Traefik (or a managed load balancer) in front. The backend
+  (8000) and database (5432) bind to loopback by default; set
+  `BACKEND_BIND`/`POSTGRES_BIND` to `0.0.0.0` only when they are behind such a
+  proxy.
 - **Disable interactive API docs** in production if desired: `ENABLE_API_DOCS=false`.
 - **Don't expose the database port** publicly (stays on loopback by default).
 
 
 ## Backup and Restore
 
-OurSchool has a built-in backup/restore system (Admin → Backup) with dry-run preview, cross-version compatibility, and stable external IDs. That's the recommended way to back up application data. Restores are **merges**: existing records are matched and skipped/updated, deleted records are recreated — nothing is wiped first.
+OurSchool has a built-in backup/restore system (Admin → Backup) with dry-run
+preview, cross-version compatibility, and stable external IDs. That is the
+recommended way to back up application data. The default restore mode merges
+records by external ID. The optional **wipe-and-restore** mode deletes
+backup-scoped data before import for point-in-time recovery; it requires typed
+confirmation and preserves the importing administrator's account and
+credentials.
 
 For a raw PostgreSQL dump:
 

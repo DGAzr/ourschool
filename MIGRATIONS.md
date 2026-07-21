@@ -7,6 +7,10 @@ for the database and runs `alembic upgrade head` before starting the API — a
 normal upgrade (new `IMAGE_TAG`, `docker compose pull`, `up -d`) migrates the
 database without any manual steps.
 
+The `v1.0.0` release retains the full migration chain from the alpha and beta
+releases. A beta installation can upgrade directly to 1.0 through the normal
+container startup process; no intermediate release is required.
+
 > ⚠️ **Back up before upgrading.** A failed migration can leave the database
 > in an intermediate state. Take a backup before pulling a new release:
 >

@@ -23,6 +23,7 @@ from datetime import datetime, timezone
 from typing import Any, Dict
 
 from app.core.config import settings
+from app.version import __version__
 
 
 class JSONFormatter(logging.Formatter):
@@ -197,7 +198,7 @@ def setup_logging() -> None:
             "structured": use_json,
             "log_file": settings.log_file,
             "application": "ourschool",
-            "version": "1.0.0-alpha",
+            "version": __version__,
         },
     )
 

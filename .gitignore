@@ -55,6 +55,8 @@ frontend/.env.local
 frontend/.env.development.local
 frontend/.env.test.local
 frontend/.env.production.local
+# Legacy no-dot frontend environment file; never commit local credentials.
+frontend/env
 
 # Logs
 npm-debug.log*

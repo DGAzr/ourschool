@@ -4,6 +4,33 @@ All notable changes to OurSchool are documented here.
 
 ---
 
+## [Unreleased]
+
+No changes yet.
+
+## [1.0.0] — 2026-07-20
+
+### First stable release
+
+OurSchool 1.0 completes the beta cycle and establishes the current database,
+backup, API, and deployment behavior as the stable baseline. Existing beta
+installations upgrade through the normal container startup migration; no
+manual schema step is required. Back up the database before upgrading.
+
+**Highlights since beta.10**
+
+- Completed API-key coverage for the supported admin-automation surface,
+  including active-admin lookup, stricter on-behalf-of attribution, and
+  complete permission schemas.
+- Corrected assignment, term-grade, attendance, and report calculations and
+  expanded regression coverage for MCP/API workflows.
+- Improved API response schemas and authorization consistency across users,
+  assignments, journal, reports, settings, backup, and performance endpoints.
+- Fixed login, attendance settings, assignment, template, grading, and report
+  UI issues found during the final beta rounds.
+- Reconciled release metadata and deployment defaults on `v1.0.0` and updated
+  all user, operator, contributor, security, migration, and release docs.
+
 ## [v1.0.0-beta.10]
 
 ### Post-1.0-hardening backlog burn-down (2026-07-05)

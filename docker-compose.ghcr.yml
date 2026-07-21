@@ -15,7 +15,7 @@
 # Use docker-compose.yml (which builds from local Dockerfiles) instead.
 #
 # Image tag:
-#   IMAGE_TAG controls which release to pull (default: v1.0.0-beta.9).
+#   IMAGE_TAG controls which release to pull (default: v1.0.0).
 #   Set it in .env or override inline:
 #     IMAGE_TAG=v1.1.0 docker compose -f docker-compose.ghcr.yml up -d
 #   All published tags: https://github.com/DGAzr/ourschool/pkgs/container/ourschool-backend
@@ -51,7 +51,7 @@ services:
         max-file: "3"
 
   backend:
-    image: ghcr.io/dgazr/ourschool-backend:${IMAGE_TAG:-v1.0.0-beta.9}
+    image: ghcr.io/dgazr/ourschool-backend:${IMAGE_TAG:-v1.0.0}
     restart: unless-stopped
     environment:
       # Database configuration
@@ -67,7 +67,7 @@ services:
       # Security configuration
       # No default: deployment fails fast if SECRET_KEY is unset.
       # Generate one with: openssl rand -hex 32
-      SECRET_KEY: ${SECRET_KEY:?SECRET_KEY must be set in .env — generate with: openssl rand -hex 32}
+      SECRET_KEY: "${SECRET_KEY:?SECRET_KEY must be set in .env — generate with: openssl rand -hex 32}"
       ALGORITHM: ${ALGORITHM:-HS256}
       ACCESS_TOKEN_EXPIRE_MINUTES: ${ACCESS_TOKEN_EXPIRE_MINUTES:-30}
 
@@ -103,7 +103,7 @@ services:
         max-file: "3"
 
   frontend:
-    image: ghcr.io/dgazr/ourschool-frontend:${IMAGE_TAG:-v1.0.0-beta.9}
+    image: ghcr.io/dgazr/ourschool-frontend:${IMAGE_TAG:-v1.0.0}
     restart: unless-stopped
     ports:
       # Host port 4173 → container port 80 (nginx). Change FRONTEND_PORT to

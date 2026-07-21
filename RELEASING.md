@@ -1,8 +1,8 @@
 # Release Checklist
 
-How to cut an OurSchool release. The version has a single source of truth —
-the repo-root `VERSION` file — but a few artifacts reference it and must be
-bumped together (step 1 lists all of them).
+How to cut an OurSchool release. The runtime version has a single source of
+truth — the repo-root `VERSION` file — but package and deployment metadata
+must be bumped with it.
 
 ## 1. Bump the version
 
@@ -10,17 +10,22 @@ For a release `X.Y.Z` (git tag `vX.Y.Z`):
 
 - [ ] `VERSION` → `X.Y.Z` (read by the backend at runtime: `app/version.py`)
 - [ ] `frontend/package.json` → `"version": "X.Y.Z"`
+- [ ] `frontend/package-lock.json` → both root package versions set to `X.Y.Z`
 - [ ] `docker-compose.ghcr.yml` → both `${IMAGE_TAG:-vX.Y.Z}` defaults and
       the "Image tag" comment at the top
 - [ ] `env.EXAMPLE` → `IMAGE_TAG=vX.Y.Z` and the example line above it
-- [ ] `README.md` → version badge at the top
+- [ ] `README.md` → release status and version at the top
 
 Sanity check nothing was missed:
 
 ```bash
-grep -rn "$(cat VERSION | sed 's/\./\\./g')" --include="*.yml" --include="*.json" \
-  --include="*.md" --include="env.EXAMPLE" . | grep -v node_modules | grep -v CHANGELOG
+rg -n 'v?[0-9]+\.[0-9]+\.[0-9]+(-(alpha|beta|rc)\.?[0-9]*)?' \
+  VERSION frontend/package.json frontend/package-lock.json \
+  docker-compose.ghcr.yml env.EXAMPLE README.md
 ```
+
+Review every result. Historical versions in `CHANGELOG.md` are intentionally
+excluded; release-facing metadata must agree on the new version.
 
 ## 2. Update the changelog
 
@@ -32,18 +37,20 @@ grep -rn "$(cat VERSION | sed 's/\./\\./g')" --include="*.yml" --include="*.json
 ## 3. Verify before tagging
 
 - [ ] CI is green on the release branch (tests, migration chain, builds).
+- [ ] The worktree is clean and the release commit is on `main`.
+- [ ] `python3 -c 'from app.version import __version__; print(__version__)'`
+      prints `X.Y.Z`.
 - [ ] Fresh-install smoke test from a clean directory:
       `cp env.EXAMPLE .env`, set `SECRET_KEY`, `docker compose -f
-      docker-compose.ghcr.yml --profile local-db up -d` (previous release),
-      then bump `IMAGE_TAG` to the new tag once published (step 5) and
-      confirm the upgrade path migrates cleanly.
+      docker-compose.ghcr.yml --profile local-db up -d` using the previous
+      release, then complete the published-image upgrade test in step 5.
 - [ ] Login as the seeded admin forces a password change; app works after.
 
 ## 4. Tag
 
 ```bash
-git checkout main && git pull
-git tag vX.Y.Z
+git checkout main && git pull --ff-only
+git tag -a vX.Y.Z -m "OurSchool X.Y.Z"
 git push origin vX.Y.Z
 ```
 
@@ -56,8 +63,11 @@ tagged `vX.Y.Z`, `X.Y`, and `latest`.
 - [ ] Both images exist and are pullable:
       `docker pull ghcr.io/dgazr/ourschool-backend:vX.Y.Z` and
       `.../ourschool-frontend:vX.Y.Z`
-- [ ] `curl http://localhost:8000/` (or the `/api/health` endpoint through
-      the frontend) reports version `X.Y.Z`.
+- [ ] `curl http://localhost:8000/health` (or `/api/health` through the
+      frontend) reports a healthy service.
+- [ ] `docker compose -f docker-compose.ghcr.yml exec backend python -c
+      'from app.version import __version__; print(__version__)'` prints
+      `X.Y.Z`.
 - [ ] Complete the upgrade smoke test from step 3.
 
 ## 6. Announce

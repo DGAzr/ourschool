@@ -2,12 +2,12 @@
 
 ## Supported versions
 
-OurSchool is pre-stable (beta) software. Only the latest release receives security fixes.
+Only the latest OurSchool release receives security fixes.
 
 | Version | Supported |
 |---------|-----------|
-| Latest 1.0.0-beta.x release | ✅ |
-| Older betas / 0.0.1-alpha | ❌ |
+| Latest stable release | ✅ |
+| Earlier stable, beta, and alpha releases | ❌ |
 
 ## Reporting a vulnerability
 
