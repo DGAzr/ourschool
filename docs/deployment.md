@@ -249,6 +249,10 @@ backup-scoped data before import for point-in-time recovery; it requires typed
 confirmation and preserves the importing administrator's account and
 credentials.
 
+The bundled deployment accepts restore requests up to 256 MiB. If you override
+`MAX_REQUEST_BODY_BYTES`, keep it aligned with `client_max_body_size` in
+`nginx.conf` and with any request-size limit on an external reverse proxy.
+
 For a raw PostgreSQL dump:
 
 ```bash

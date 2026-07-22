@@ -16,7 +16,11 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
+
+const MENU_GAP = 4
+const VIEWPORT_PADDING = 8
 
 interface ActionMenuItem {
   label: string
@@ -37,11 +41,56 @@ interface ActionMenuProps {
 const ActionMenu: React.FC<ActionMenuProps> = ({ items, ariaLabel, revealOnHover = false }) => {
   const [open, setOpen] = useState(false)
   const rootRef = useRef<HTMLDivElement>(null)
+  const menuRef = useRef<HTMLDivElement>(null)
+
+  useLayoutEffect(() => {
+    if (!open) return
+
+    const positionMenu = () => {
+      const trigger = rootRef.current
+      const menu = menuRef.current
+      if (!trigger || !menu) return
+
+      const triggerRect = trigger.getBoundingClientRect()
+      const menuWidth = menu.offsetWidth
+      const menuHeight = menu.offsetHeight
+      const spaceBelow = window.innerHeight - triggerRect.bottom - VIEWPORT_PADDING
+      const spaceAbove = triggerRect.top - VIEWPORT_PADDING
+      const openAbove = menuHeight > spaceBelow && spaceAbove > spaceBelow
+
+      const left = Math.min(
+        Math.max(VIEWPORT_PADDING, triggerRect.right - menuWidth),
+        window.innerWidth - menuWidth - VIEWPORT_PADDING,
+      )
+      const preferredTop = openAbove
+        ? triggerRect.top - menuHeight - MENU_GAP
+        : triggerRect.bottom + MENU_GAP
+      const top = Math.min(
+        Math.max(VIEWPORT_PADDING, preferredTop),
+        window.innerHeight - menuHeight - VIEWPORT_PADDING,
+      )
+
+      menu.style.left = `${left}px`
+      menu.style.top = `${top}px`
+      menu.style.visibility = 'visible'
+      menu.style.transformOrigin = openAbove ? 'bottom right' : 'top right'
+    }
+
+    positionMenu()
+    window.addEventListener('resize', positionMenu)
+    document.addEventListener('scroll', positionMenu, true)
+    return () => {
+      window.removeEventListener('resize', positionMenu)
+      document.removeEventListener('scroll', positionMenu, true)
+    }
+  }, [open, items.length])
 
   useEffect(() => {
     if (!open) return
     const onDown = (e: MouseEvent) => {
-      if (rootRef.current && !rootRef.current.contains(e.target as Node)) setOpen(false)
+      const target = e.target as Node
+      if (rootRef.current?.contains(target) || menuRef.current?.contains(target)) return
+      setOpen(false)
     }
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') setOpen(false)
@@ -66,14 +115,19 @@ const ActionMenu: React.FC<ActionMenuProps> = ({ items, ariaLabel, revealOnHover
       >
         ⋯
       </button>
-      {open && (
-        <div className="absolute right-0 top-[34px] z-20 bg-panel border border-field-border rounded-[10px] shadow-menu p-1 w-40 animate-pop">
+      {open && createPortal(
+        <div
+          ref={menuRef}
+          role="menu"
+          className="fixed z-[100] invisible bg-panel border border-field-border rounded-[10px] shadow-menu p-1 w-40 max-h-[calc(100vh-1rem)] overflow-y-auto animate-pop"
+        >
           {items.map((item, i) =>
             item === 'separator' ? (
-              <div key={i} className="h-px bg-line-2 my-1 mx-1.5" />
+              <div key={i} role="separator" className="h-px bg-line-2 my-1 mx-1.5" />
             ) : (
               <button
                 key={i}
+                role="menuitem"
                 onClick={() => { setOpen(false); item.onSelect() }}
                 className={`w-full text-left px-2.5 py-2 text-[13px] hover:bg-track rounded-[6px] ${
                   item.danger ? 'text-danger' : 'text-ink-2'
@@ -83,7 +137,8 @@ const ActionMenu: React.FC<ActionMenuProps> = ({ items, ariaLabel, revealOnHover
               </button>
             )
           )}
-        </div>
+        </div>,
+        document.body,
       )}
     </div>
   )

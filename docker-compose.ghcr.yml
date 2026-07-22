@@ -70,6 +70,7 @@ services:
       SECRET_KEY: "${SECRET_KEY:?SECRET_KEY must be set in .env — generate with: openssl rand -hex 32}"
       ALGORITHM: ${ALGORITHM:-HS256}
       ACCESS_TOKEN_EXPIRE_MINUTES: ${ACCESS_TOKEN_EXPIRE_MINUTES:-30}
+      MAX_REQUEST_BODY_BYTES: ${MAX_REQUEST_BODY_BYTES:-268435456}
 
       # Backend server configuration
       BACKEND_HOST: ${BACKEND_HOST:-0.0.0.0}

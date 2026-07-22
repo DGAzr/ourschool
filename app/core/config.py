@@ -44,10 +44,10 @@ class Settings(BaseSettings):
     max_session_age_minutes: int = Field(default=720, env="MAX_SESSION_AGE_MINUTES")
 
     # Request hardening
-    # Maximum accepted request body size in bytes (default 10 MiB). Protects
+    # Maximum accepted request body size in bytes (default 256 MiB). Protects
     # memory-heavy endpoints such as backup import from oversized payloads.
     max_request_body_bytes: int = Field(
-        default=10 * 1024 * 1024, env="MAX_REQUEST_BODY_BYTES"
+        default=256 * 1024 * 1024, env="MAX_REQUEST_BODY_BYTES"
     )
     # Expose interactive API docs (/docs, /redoc, /openapi.json).
     # Off by default so a fresh deploy doesn't publish the API schema;
