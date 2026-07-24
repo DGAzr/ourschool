@@ -5,6 +5,8 @@ external_id, then natural keys) and skipped/updated; deleted records are
 recreated from the backup. That restore path is what these tests exercise.
 """
 
+from datetime import datetime, timezone
+
 
 def _export(client, admin_headers):
     r = client.get("/api/backup/export", headers=admin_headers)
@@ -241,6 +243,54 @@ def test_wipe_and_restore_replaces_data_and_preserves_admin(
         .first()
         is not None
     )
+
+
+def test_wipe_restore_preserves_point_transaction_dates(
+    client, admin_headers, student_factory, db_session
+):
+    from app.models.points import PointTransaction
+
+    student, _ = student_factory()
+    r = client.post(
+        "/api/points/adjust",
+        json={"student_id": student["id"], "amount": 25, "notes": "Reading goal"},
+        headers=admin_headers,
+    )
+    assert r.status_code == 200, r.text
+
+    original_created_at = datetime(2025, 1, 15, 16, 30, tzinfo=timezone.utc)
+    transaction = db_session.query(PointTransaction).filter_by(id=r.json()["id"]).one()
+    transaction.created_at = original_created_at
+    db_session.commit()
+
+    backup = _export(client, admin_headers)
+    r = client.post(
+        "/api/backup/import",
+        json={
+            "backup_data": backup,
+            "import_options": {"wipe_before_import": True},
+            "wipe_confirmation": "WIPE ALL DATA",
+        },
+        headers=admin_headers,
+    )
+    assert r.status_code == 200, r.text
+    assert r.json()["success"] is True, r.json()
+
+    r = client.get("/api/users/students", headers=admin_headers)
+    assert r.status_code == 200, r.text
+    restored_student = next(
+        candidate for candidate in r.json() if candidate["email"] == student["email"]
+    )
+
+    r = client.get(
+        f"/api/points/student/{restored_student['id']}/ledger",
+        headers=admin_headers,
+    )
+    assert r.status_code == 200, r.text
+    restored_created_at = datetime.fromisoformat(
+        r.json()["transactions"][0]["created_at"].replace("Z", "+00:00")
+    )
+    assert restored_created_at == original_created_at
 
 
 def test_wipe_rolls_back_fully_on_import_failure(
