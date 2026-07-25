@@ -63,18 +63,30 @@ def get_student_report(db: Session, student_id: int):
         .options(joinedload(StudentAssignment.template))
         .all()
     )
+    active_term = db.query(Term).filter(Term.is_active).first()
+    term_assignments = (
+        [
+            assignment
+            for assignment in assignments
+            if active_term.start_date
+            <= effective_due_date(assignment)
+            <= active_term.end_date
+        ]
+        if active_term
+        else []
+    )
 
     type_weights = crud_settings.get_assignment_type_weights(db)
 
-    total_assignments = len(assignments)
+    total_assignments = len(term_assignments)
     completed_assignments = sum(
-        1 for a in assignments if a.status == AssignmentStatus.GRADED
+        1 for a in term_assignments if a.status == AssignmentStatus.GRADED
     )
     in_progress_assignments = sum(
-        1 for a in assignments if a.status == AssignmentStatus.IN_PROGRESS
+        1 for a in term_assignments if a.status == AssignmentStatus.IN_PROGRESS
     )
     pending_grades = sum(
-        1 for a in assignments if a.status == AssignmentStatus.SUBMITTED
+        1 for a in term_assignments if a.status == AssignmentStatus.SUBMITTED
     )
 
     graded_assignments = [a for a in assignments if _is_graded(a)]
@@ -83,16 +95,11 @@ def get_student_report(db: Session, student_id: int):
     )
 
     # Current term grade (assignments whose effective due date falls in the term)
-    active_term = db.query(Term).filter(Term.is_active).first()
     current_term_grade = 0.0
     if active_term:
-        term_assignments = [
-            a
-            for a in graded_assignments
-            if active_term.start_date <= effective_due_date(a) <= active_term.end_date
-        ]
+        graded_term_assignments = [a for a in term_assignments if _is_graded(a)]
         _, _, current_term_grade = compute_weighted_grade(
-            (_grade_item(a) for a in term_assignments), type_weights
+            (_grade_item(a) for a in graded_term_assignments), type_weights
         )
 
     grade_series = _build_weekly_series(graded_assignments, type_weights, active_term)
