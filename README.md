@@ -4,9 +4,10 @@
 
 OurSchool is a self-hosted homeschool management system for families who take attendance seriously, grade assignments carefully, and really don't want to maintain a pile of spreadsheets. It handles the administrative grind — attendance, subjects, assignments, grading, reports, and a shameless gamification points system — so you can spend more time on the actual teaching.
 
-> **Stable — `v1.0.0`**
+> **Public beta — `v1.1-beta`**
 >
-> This is the first stable release. Back up your data before every upgrade and review the [migration guide](docs/migrations.md) for upgrade guidance.
+> This beta adds lesson planning, the Points Shop, and Paperless-ngx integration.
+> Back up your data before every upgrade and review the [migration guide](docs/migrations.md) for upgrade guidance.
 
 
 ## ✨ Features
@@ -15,7 +16,9 @@ OurSchool is a self-hosted homeschool management system for families who take at
 - **Attendance tracking** — Daily records with status and notes. Flexible academic terms (`semester`, `quarter`, `trimester`, or `custom`) that map to your jurisdiction's reporting requirements.
 - **Subjects** — Configure subject areas with names, descriptions, and colors. They persist across terms so you're not re-entering them every year.
 - **Assignment templates → student assignments** — Create a template once, assign it to one or more students. Inline row grading and bulk-grade support mean less clicking.
-- **Optional gamification** — As assignments are graded, students earn points redeemable for whatever your household considers a reward. The whole system is opt-in and can be toggled off in Admin Center.
+- **Lesson planning** — Plan instruction by date, track objectives and preparation, link reusable assignment templates, and give students a My Lessons view of their schedule.
+- **Points Shop** — Turn earned points into an optional reward catalog with student goals, redemption history, inventory controls, and an admin fulfillment queue.
+- **Paperless-ngx integration** — Connect a self-hosted Paperless-ngx server, sync and search teaching materials, and attach documents to lessons, templates, or individual assignments.
 - **Journal** — Teacher and student entries with date tracking, reactions, and threaded replies.
 - **Reports** — Performance reports, attendance summaries, assignment completion rates, grade trends, and term report cards. 
 - **System backup / restore** — Full export/import with dry-run preview, cross-version compatibility, and stable external IDs for conflict-free entity resolution. Two restore modes: the default merge, or **wipe-and-restore** for true point-in-time recovery (guarded by a typed confirmation; your admin login always survives).
@@ -50,7 +53,7 @@ That's it. The backend runs migrations and seeds an admin account automatically 
 
 > 📌 **External database?** Skip `--profile local-db` and set `DATABASE_URL` in `.env` instead.
 
-> 🏷️ **Image tag:** The compose file defaults to the release it shipped with. Change `IMAGE_TAG` in `.env` to pin a different release. All published tags: [ghcr.io/dgazr/ourschool-backend](https://github.com/DGAzr/ourschool/pkgs/container/ourschool-backend).
+> 🏷️ **Image tag:** The compose file defaults to `v1.1-beta`. Change `IMAGE_TAG` in `.env` to pin a different release. All published tags: [ghcr.io/dgazr/ourschool-backend](https://github.com/DGAzr/ourschool/pkgs/container/ourschool-backend).
 
 
 ## 📸 Screenshots

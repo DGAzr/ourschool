@@ -6,7 +6,8 @@ must be bumped with it.
 
 ## 1. Bump the version
 
-For a release `X.Y.Z` (git tag `vX.Y.Z`):
+For a release `X.Y.Z` (git tag `vX.Y.Z`). Prereleases may use a shorter
+marketing version such as `1.1-beta` (git tag `v1.1-beta`):
 
 - [ ] `VERSION` → `X.Y.Z` (read by the backend at runtime: `app/version.py`)
 - [ ] `frontend/package.json` → `"version": "X.Y.Z"`
@@ -19,7 +20,7 @@ For a release `X.Y.Z` (git tag `vX.Y.Z`):
 Sanity check nothing was missed:
 
 ```bash
-rg -n 'v?[0-9]+\.[0-9]+\.[0-9]+(-(alpha|beta|rc)\.?[0-9]*)?' \
+rg -n 'v?[0-9]+\.[0-9]+(\.[0-9]+)?(-(alpha|beta|rc)(\.[0-9]+)?)?' \
   VERSION frontend/package.json frontend/package-lock.json \
   docker-compose.ghcr.yml env.EXAMPLE README.md
 ```
@@ -54,9 +55,11 @@ git tag -a vX.Y.Z -m "OurSchool X.Y.Z"
 git push origin vX.Y.Z
 ```
 
-The tag push triggers `.github/workflows/publish.yml`, which runs the full CI
-suite and — only if it passes — builds and pushes multi-arch images to GHCR
-tagged `vX.Y.Z`, `X.Y`, and `latest`.
+Tags beginning with `v1.1` (including `v1.1-beta`) trigger
+`.github/workflows/publish.yml`, which runs the full CI suite and — only if it
+passes — builds and pushes multi-arch images to GHCR. Every release gets its
+exact git tag; valid semantic-version tags also get the configured version
+aliases.
 
 ## 5. Verify the published images
 

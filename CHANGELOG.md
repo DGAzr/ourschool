@@ -6,6 +6,8 @@ All notable changes to OurSchool are documented here.
 
 ## [Unreleased]
 
+## [v1.1-beta] — 2026-07-28
+
 ### Teacher workflow unification
 
 One coherent flow for creating, assigning, and grading work — the scattered

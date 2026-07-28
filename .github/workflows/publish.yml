@@ -3,7 +3,7 @@ name: Publish
 on:
   push:
     branches: [main, dev]
-    tags: ["v*"]
+    tags: ["v1.1*"]
 
 env:
   REGISTRY: ghcr.io
@@ -43,6 +43,7 @@ jobs:
         with:
           images: ${{ env.REGISTRY }}/${{ env.OWNER }}/ourschool-backend
           tags: |
+            type=ref,event=tag
             type=semver,pattern=v{{version}}
             type=semver,pattern={{major}}.{{minor}}
             type=ref,event=branch
@@ -55,6 +56,7 @@ jobs:
         with:
           images: ${{ env.REGISTRY }}/${{ env.OWNER }}/ourschool-frontend
           tags: |
+            type=ref,event=tag
             type=semver,pattern=v{{version}}
             type=semver,pattern={{major}}.{{minor}}
             type=ref,event=branch
