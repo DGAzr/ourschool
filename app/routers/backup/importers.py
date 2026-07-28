@@ -1115,6 +1115,7 @@ def _import_point_transactions(db: Session, point_transactions_data, result, dry
                 transaction_type=tx_data.transaction_type,
                 source_description=tx_data.source_description,
                 notes=tx_data.notes,
+                created_at=tx_data.created_at,
             )
             db.add(new_tx)
             db.flush()
