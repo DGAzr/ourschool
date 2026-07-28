@@ -78,6 +78,18 @@ That's it. The backend runs migrations and seeds an admin account automatically 
 
 ![OurSchool Grading Desk](/utils/OS_Grading.png?raw=true "Grading Desk")
 
+### Plan Lessons
+
+![OurSchool Lesson Planner](utils/OS_LessonPlanner.png?raw=true "Lesson Planner")
+
+### Teach Lessons
+
+![OurSchool Lesson Planner Teach View](utils/OS_LessonPlannerTeach.png?raw=true "Lesson Planner Teach View")
+
+### Points Shop / Gamification
+
+![OurSchool Lesson Planner](utils/OS_PointsShop.png?raw=true "Points Shop")
+
 
 ## ☕ Buy me a coffee
 
