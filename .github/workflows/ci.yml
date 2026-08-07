@@ -2,7 +2,7 @@ name: CI
 
 on:
   push:
-    branches: [main, dev]
+    branches: [main, dev, v1.1-beta]
   # All PRs, regardless of target branch (release branches vary per cycle).
   pull_request:
   # Allows publish.yml to run CI as a gating prerequisite.
