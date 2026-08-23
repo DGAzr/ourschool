@@ -16,16 +16,18 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-import { Plus } from 'lucide-react'
+import { Calendar, Plus } from 'lucide-react'
 
 import { Button } from '../ui'
 import { MAX_DAYS, MIN_DAYS } from '../../utils/lessonPlanning'
 
 interface PlannerHeaderProps {
   rangeLabel: string
+  selectedDate: string
   daysShown: number
   skipWeekends: boolean
   onStepRange: (dir: 1 | -1) => void
+  onSelectDate: (date: string) => void
   onStepDays: (delta: 1 | -1) => void
   onPlanLesson: () => void
   /** The Week planner / Teach mode view switch, shown top-right of the header. */
@@ -38,9 +40,11 @@ const stepperBtn =
 /** The Week Planner header: title, range/day steppers, and the primary action. */
 const PlannerHeader: React.FC<PlannerHeaderProps> = ({
   rangeLabel,
+  selectedDate,
   daysShown,
   skipWeekends,
   onStepRange,
+  onSelectDate,
   onStepDays,
   onPlanLesson,
   toggle,
@@ -72,9 +76,22 @@ const PlannerHeader: React.FC<PlannerHeaderProps> = ({
             >
               ‹
             </button>
-            <span className="font-mono text-[12.5px] text-ink-2 px-1 min-w-[92px] text-center">
-              {rangeLabel}
-            </span>
+            <label className="relative min-w-[140px] flex items-center justify-center gap-2 px-1 text-center">
+              <span className="font-mono text-[12.5px] text-ink-2">
+                {rangeLabel}
+              </span>
+              <Calendar
+                aria-hidden="true"
+                className="h-3.5 w-3.5 shrink-0 text-faint"
+              />
+              <input
+                type="date"
+                aria-label="Choose first planner date"
+                value={selectedDate}
+                onChange={(event) => event.target.value && onSelectDate(event.target.value)}
+                className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+              />
+            </label>
             <button
               type="button"
               aria-label="Next range"

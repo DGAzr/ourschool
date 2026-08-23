@@ -27,6 +27,8 @@ import { settingsApi } from '../services/settings'
 import { Subject, User } from '../types'
 import { Lesson } from '../types/lesson'
 import { useLessons } from '../hooks/useLessons'
+import { lessonsApi } from '../services/lessons'
+import { getErrorMessage } from '../services/api'
 import {
   DEFAULT_DAYS,
   clampDaysShown,
@@ -47,7 +49,7 @@ type PlannerView = 'planner' | 'teach'
 const DAYS_STORAGE_KEY = 'lessonPlanning.daysShown'
 
 type DrawerState =
-  | { mode: 'create'; date: string }
+  | { mode: 'create'; date: string | null }
   | { mode: 'edit'; lesson: Lesson }
   | null
 
@@ -74,6 +76,7 @@ const LessonPlanning: React.FC = () => {
   const [subjects, setSubjects] = useState<Subject[]>([])
   const [students, setStudents] = useState<User[]>([])
   const [drawer, setDrawer] = useState<DrawerState>(null)
+  const [drawerLessons, setDrawerLessons] = useState<Lesson[]>([])
 
   // Persist the chosen day count.
   useEffect(() => {
@@ -99,10 +102,29 @@ const LessonPlanning: React.FC = () => {
   const startDate = days[0]?.iso ?? rangeStart
   const endDate = days[days.length - 1]?.iso ?? rangeStart
 
-  const { lessons, loading, error, refetch, reorder } = useLessons({
+  const { lessons, loading, error, refetch } = useLessons({
     startDate,
     endDate,
   })
+
+  const refreshDrawer = useCallback(async () => {
+    const data = await lessonsApi.drawer()
+    setDrawerLessons(data || [])
+  }, [])
+
+  // Reconcile overdue lessons using the browser's school date, then load the
+  // canonical drawer. The operation is idempotent, including StrictMode runs.
+  useEffect(() => {
+    if (!isAdmin) return
+    lessonsApi
+      .rollover(todayISO())
+      .then((result) => {
+        setDrawerLessons(result.lessons || [])
+        result.warnings.forEach((warning) => toast(warning, 'danger'))
+        if (result.moved_count > 0) void refetch()
+      })
+      .catch(() => refreshDrawer().catch(() => setDrawerLessons([])))
+  }, [isAdmin, refetch, refreshDrawer, toast])
 
   const readiness = useMemo(() => computeReadiness(lessons), [lessons])
   const rangeLabel = useMemo(() => formatRangeLabel(days), [days])
@@ -131,17 +153,39 @@ const LessonPlanning: React.FC = () => {
       setDrawer(null)
       warnings.forEach((w) => toast(w, 'danger'))
       refetch()
+      void refreshDrawer()
     },
-    [refetch, toast]
+    [refetch, refreshDrawer, toast]
   )
 
   const handleReorder = useCallback(
-    (dateISO: string, orderedIds: number[]) => {
-      reorder(dateISO, orderedIds).then((warnings) =>
-        warnings.forEach((w) => toast(w, 'danger'))
-      )
+    async (dateISO: string | null, orderedIds: number[]): Promise<boolean> => {
+      try {
+        const result = await lessonsApi.reorder(dateISO, orderedIds)
+        result.warnings.forEach((warning) => toast(warning, 'danger'))
+        await Promise.all([refetch(), refreshDrawer()])
+        return true
+      } catch (err) {
+        toast(getErrorMessage(err, 'Move failed — the change was undone.'), 'danger')
+        return false
+      }
     },
-    [reorder, toast]
+    [refetch, refreshDrawer, toast]
+  )
+
+  const handleSchedule = useCallback(
+    async (lesson: Lesson, dateISO: string): Promise<boolean> => {
+      try {
+        const result = await lessonsApi.update(lesson.id, { date: dateISO })
+        result.warnings.forEach((warning) => toast(warning, 'danger'))
+        await Promise.all([refetch(), refreshDrawer()])
+        return true
+      } catch (err) {
+        toast(getErrorMessage(err, 'Scheduling failed — the lesson stayed in the drawer.'), 'danger')
+        return false
+      }
+    },
+    [refetch, refreshDrawer, toast]
   )
 
   if (!isAdmin) {
@@ -169,11 +213,13 @@ const LessonPlanning: React.FC = () => {
         <>
           <PlannerHeader
             rangeLabel={rangeLabel}
+            selectedDate={rangeStart}
             daysShown={daysShown}
             skipWeekends={skipWeekends}
             onStepRange={handleStepRange}
+            onSelectDate={setRangeStart}
             onStepDays={handleStepDays}
-            onPlanLesson={() => handleAdd(todayISO())}
+            onPlanLesson={() => handleAdd(rangeStart)}
             toggle={viewToggle}
           />
           <ReadinessStrip readiness={readiness} />
@@ -189,9 +235,12 @@ const LessonPlanning: React.FC = () => {
             <LessonBoard
               days={days}
               lessons={lessons}
+              drawerLessons={drawerLessons}
               onAdd={handleAdd}
               onLessonClick={handleLessonClick}
               onReorder={handleReorder}
+              onSchedule={handleSchedule}
+              onAddToDrawer={() => setDrawer({ mode: 'create', date: null })}
             />
           )}
         </>

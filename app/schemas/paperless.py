@@ -224,7 +224,7 @@ class DocumentLessonUsage(BaseModel):
     lesson_id: int
     lesson_title: str
     subject_id: Optional[int] = None
-    date: date_type
+    date: Optional[date_type] = None
 
 
 class DocumentTemplateUsage(BaseModel):

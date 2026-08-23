@@ -49,7 +49,7 @@ def validate_backup_data(backup_data: Dict[str, Any]) -> List[str]:
             errors.append(f"Missing required field: {field}")
 
     # Validate format version
-    SUPPORTED_VERSIONS = {"1.0", "2.0"}
+    SUPPORTED_VERSIONS = {"1.0", "2.0", "2.1"}
     if "format_version" in backup_data:
         version = backup_data["format_version"]
         if version not in SUPPORTED_VERSIONS:

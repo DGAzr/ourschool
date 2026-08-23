@@ -34,6 +34,7 @@ interface DayColumnProps {
   lessons: Lesson[]
   onAdd: (dateISO: string) => void
   onLessonClick: (lesson: Lesson) => void
+  onStash: (lesson: Lesson) => void
 }
 
 /** One board column: a day header, its lesson stack, and an "+ Add" affordance. */
@@ -43,6 +44,7 @@ const DayColumn: React.FC<DayColumnProps> = ({
   lessons,
   onAdd,
   onLessonClick,
+  onStash,
 }) => {
   // The whole column is a drop target so a card can land on an empty day.
   const { setNodeRef } = useDroppable({ id: columnId })
@@ -92,6 +94,7 @@ const DayColumn: React.FC<DayColumnProps> = ({
               key={lesson.id}
               lesson={lesson}
               onClick={onLessonClick}
+              onStash={onStash}
             />
           ))}
         </SortableContext>

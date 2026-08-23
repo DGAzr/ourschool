@@ -34,37 +34,51 @@ import { DayInfo } from '../../utils/lessonPlanning'
 import { Lesson } from '../../types/lesson'
 import DayColumn from './DayColumn'
 import LessonCard from './LessonCard'
+import LessonDrawer from './LessonDrawer'
 
 interface LessonBoardProps {
   days: DayInfo[]
   lessons: Lesson[]
+  drawerLessons: Lesson[]
   onAdd: (dateISO: string) => void
   onLessonClick: (lesson: Lesson) => void
   /**
    * Persist a drag: `dateISO` is the destination day and `orderedIds` is its
    * full top-to-bottom order (moved card included). Returns once persisted.
    */
-  onReorder: (dateISO: string, orderedIds: number[]) => void
+  onReorder: (dateISO: string | null, orderedIds: number[]) => Promise<boolean>
+  onSchedule: (lesson: Lesson, dateISO: string) => Promise<boolean>
+  onAddToDrawer: () => void
 }
 
 /** Prefix marking a droppable that is a day column (vs. a lesson card). */
 const COLUMN_PREFIX = 'col:'
+const DRAWER_COLUMN_ID = 'lesson-drawer'
 
 /** The horizontally-scrollable week board: one DayColumn per visible day. */
 const LessonBoard: React.FC<LessonBoardProps> = ({
   days,
   lessons,
+  drawerLessons,
   onAdd,
   onLessonClick,
   onReorder,
+  onSchedule,
+  onAddToDrawer,
 }) => {
   const [activeLesson, setActiveLesson] = useState<Lesson | null>(null)
+  const [optimisticLessons, setOptimisticLessons] = useState<Lesson[] | null>(null)
+  const displayLessons = useMemo(
+    () => optimisticLessons ?? [...lessons, ...drawerLessons],
+    [optimisticLessons, lessons, drawerLessons],
+  )
 
   // Bucket lessons by ISO date, each column ordered by position (then id as a
   // stable tiebreaker) so optimistic reorders render in the new order.
   const byDate = useMemo(() => {
     const map = new Map<string, Lesson[]>()
-    for (const lesson of lessons) {
+    for (const lesson of displayLessons) {
+      if (lesson.date === null) continue
       const list = map.get(lesson.date)
       if (list) list.push(lesson)
       else map.set(lesson.date, [lesson])
@@ -73,13 +87,21 @@ const LessonBoard: React.FC<LessonBoardProps> = ({
       list.sort((a, b) => a.position - b.position || a.id - b.id)
     }
     return map
-  }, [lessons])
+  }, [displayLessons])
+
+  const drawer = useMemo(
+    () =>
+      displayLessons
+        .filter((lesson) => lesson.date === null)
+        .sort((a, b) => a.position - b.position || a.id - b.id),
+    [displayLessons]
+  )
 
   const lessonById = useMemo(() => {
     const map = new Map<number, Lesson>()
-    for (const lesson of lessons) map.set(lesson.id, lesson)
+    for (const lesson of displayLessons) map.set(lesson.id, lesson)
     return map
-  }, [lessons])
+  }, [displayLessons])
 
   // A small activation distance lets a plain click still open the editor while
   // a deliberate drag starts a sort.
@@ -95,6 +117,45 @@ const LessonBoard: React.FC<LessonBoardProps> = ({
     setActiveLesson(lesson ?? null)
   }
 
+  const moveLesson = async (
+    moved: Lesson,
+    destDate: string | null,
+    overLessonId: number | null = null
+  ) => {
+    const destList = (destDate === null ? drawer : byDate.get(destDate) ?? []).filter(
+      (lesson) => lesson.id !== moved.id
+    )
+    let insertAt = destList.length
+    if (overLessonId !== null) {
+      const idx = destList.findIndex((lesson) => lesson.id === overLessonId)
+      if (idx !== -1) insertAt = idx
+    }
+    const orderedIds = [
+      ...destList.slice(0, insertAt).map((lesson) => lesson.id),
+      moved.id,
+      ...destList.slice(insertAt).map((lesson) => lesson.id),
+    ]
+    const current = (destDate === null ? drawer : byDate.get(destDate) ?? []).map(
+      (lesson) => lesson.id
+    )
+    const unchanged =
+      moved.date === destDate &&
+      current.length === orderedIds.length &&
+      current.every((id, index) => id === orderedIds[index])
+    if (unchanged) return
+
+    const rank = new Map(orderedIds.map((id, index) => [id, index]))
+    setOptimisticLessons(
+      displayLessons.map((lesson) =>
+        rank.has(lesson.id)
+          ? { ...lesson, date: destDate, position: rank.get(lesson.id)! }
+          : lesson
+      )
+    )
+    await onReorder(destDate, orderedIds)
+    setOptimisticLessons(null)
+  }
+
   const handleDragEnd = (event: DragEndEvent) => {
     setActiveLesson(null)
     const { active, over } = event
@@ -106,9 +167,11 @@ const LessonBoard: React.FC<LessonBoardProps> = ({
 
     // Resolve the destination day + the card we dropped onto (if any).
     const overId = String(over.id)
-    let destDate: string
+    let destDate: string | null
     let overLessonId: number | null = null
-    if (overId.startsWith(COLUMN_PREFIX)) {
+    if (overId === DRAWER_COLUMN_ID) {
+      destDate = null
+    } else if (overId.startsWith(COLUMN_PREFIX)) {
       destDate = overId.slice(COLUMN_PREFIX.length)
     } else {
       overLessonId = Number(over.id)
@@ -117,34 +180,18 @@ const LessonBoard: React.FC<LessonBoardProps> = ({
       destDate = overLesson.date
     }
 
-    // Build the destination day's current order, minus the moved card.
-    const destList = (byDate.get(destDate) ?? []).filter(
-      (l) => l.id !== activeId
+    void moveLesson(moved, destDate, overLessonId)
+  }
+
+  const scheduleLesson = async (lesson: Lesson, date: string) => {
+    const position = (byDate.get(date) ?? []).length
+    setOptimisticLessons(
+      displayLessons.map((item) =>
+        item.id === lesson.id ? { ...item, date, position } : item
+      )
     )
-
-    // Find the insertion index. Dropping on a card inserts before it; dropping
-    // on the column (or an empty day) appends.
-    let insertAt = destList.length
-    if (overLessonId !== null) {
-      const idx = destList.findIndex((l) => l.id === overLessonId)
-      if (idx !== -1) insertAt = idx
-    }
-
-    const orderedIds = [
-      ...destList.slice(0, insertAt).map((l) => l.id),
-      activeId,
-      ...destList.slice(insertAt).map((l) => l.id),
-    ]
-
-    // No-op if nothing actually changed (same day, same order).
-    const current = (byDate.get(destDate) ?? []).map((l) => l.id)
-    const unchanged =
-      moved.date === destDate &&
-      current.length === orderedIds.length &&
-      current.every((id, i) => id === orderedIds[i])
-    if (unchanged) return
-
-    onReorder(destDate, orderedIds)
+    await onSchedule(lesson, date)
+    setOptimisticLessons(null)
   }
 
   return (
@@ -154,24 +201,35 @@ const LessonBoard: React.FC<LessonBoardProps> = ({
       onDragStart={handleDragStart}
       onDragEnd={handleDragEnd}
     >
-      <div className="overflow-x-auto -mx-1 px-1 pb-2">
-        <div
-          className="grid gap-3 items-start"
-          style={{
-            gridTemplateColumns: `repeat(${days.length}, minmax(168px, 1fr))`,
-          }}
-        >
-          {days.map((day) => (
-            <DayColumn
-              key={day.iso}
-              day={day}
-              columnId={`${COLUMN_PREFIX}${day.iso}`}
-              lessons={byDate.get(day.iso) ?? []}
-              onAdd={onAdd}
-              onLessonClick={onLessonClick}
-            />
-          ))}
+      <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_260px] gap-3 items-start">
+        <div className="overflow-x-auto -mx-1 px-1 pb-2">
+          <div
+            className="grid gap-3 items-start"
+            style={{
+              gridTemplateColumns: `repeat(${days.length}, minmax(168px, 1fr))`,
+            }}
+          >
+            {days.map((day) => (
+              <DayColumn
+                key={day.iso}
+                day={day}
+                columnId={`${COLUMN_PREFIX}${day.iso}`}
+                lessons={byDate.get(day.iso) ?? []}
+                onAdd={onAdd}
+                onLessonClick={onLessonClick}
+                onStash={(lesson) => void moveLesson(lesson, null)}
+              />
+            ))}
+          </div>
         </div>
+        <LessonDrawer
+          columnId={DRAWER_COLUMN_ID}
+          lessons={drawer}
+          defaultDate={days[0]?.iso ?? ''}
+          onAdd={onAddToDrawer}
+          onLessonClick={onLessonClick}
+          onSchedule={(lesson, date) => void scheduleLesson(lesson, date)}
+        />
       </div>
 
       <DragOverlay>

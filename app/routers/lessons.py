@@ -48,6 +48,8 @@ from app.schemas.lesson import (
     LessonReorderInput,
     LessonReorderResponse,
     LessonResponse,
+    LessonRolloverInput,
+    LessonRolloverResponse,
     LessonStatusUpdate,
     LessonTemplateLinkInput,
     LessonUpdate,
@@ -59,6 +61,37 @@ from app.services.lesson_assignments import sync_lesson_assignments
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
+
+
+def _same_container_filter(value):
+    """SQL predicate for a scheduled day or the NULL-date drawer."""
+    return Lesson.date.is_(None) if value is None else Lesson.date == value
+
+
+def _next_position(db: Session, destination) -> int:
+    """Append position for a scheduled day or the drawer."""
+    return (
+        db.query(func.coalesce(func.max(Lesson.position), -1))
+        .filter(_same_container_filter(destination))
+        .scalar()
+        + 1
+    )
+
+
+def _move_lesson(lesson: Lesson, destination, position: int) -> bool:
+    """Move a lesson between schedule containers; return whether it moved."""
+    if lesson.date == destination:
+        lesson.position = position
+        return False
+    if lesson.status == LessonStatus.TAUGHT:
+        raise HTTPException(status_code=400, detail="Taught lessons cannot be moved")
+    if destination is None:
+        lesson.last_scheduled_date = lesson.date
+    else:
+        lesson.last_scheduled_date = None
+    lesson.date = destination
+    lesson.position = position
+    return True
 
 
 def _validate_subject(db: Session, subject_id: Optional[int]) -> None:
@@ -144,7 +177,9 @@ def list_lessons(
     end_date: Optional[date] = Query(None),
 ):
     """List lessons, optionally bounded by an inclusive date range."""
-    query = db.query(Lesson)
+    # The calendar API is deliberately scheduled-only; drawer contents have a
+    # dedicated endpoint so open-ended callers never expose unscheduled work.
+    query = db.query(Lesson).filter(Lesson.date.is_not(None))
     if start_date:
         query = query.filter(Lesson.date >= start_date)
     if end_date:
@@ -168,12 +203,9 @@ def create_lesson(
     students = validate_students(db, payload.student_ids)
 
     # Append to the day: new lessons land after any existing (reordered) cards.
-    next_position = (
-        db.query(func.coalesce(func.max(Lesson.position), -1))
-        .filter(Lesson.date == payload.date)
-        .scalar()
-        + 1
-    )
+    if payload.date is None and payload.status == LessonStatus.TAUGHT:
+        raise HTTPException(status_code=400, detail="Drawer lessons cannot be taught")
+    next_position = _next_position(db, payload.date)
 
     lesson = Lesson(
         title=payload.title.strip(),
@@ -202,6 +234,69 @@ def create_lesson(
 
     logger.info("Created lesson %s (%s students)", lesson.id, len(students))
     return LessonWriteResponse(lesson=lesson, warnings=warnings)
+
+
+@router.get("/drawer", response_model=List[LessonResponse])
+def list_drawer_lessons(
+    db: Annotated[Session, Depends(get_db)],
+    _auth: Annotated[AuthUser, Depends(require_admin_or_permission("lessons:read"))],
+):
+    """List unscheduled lessons in drawer order."""
+    return (
+        db.query(Lesson)
+        .filter(Lesson.date.is_(None))
+        .order_by(Lesson.position, Lesson.id)
+        .all()
+    )
+
+
+@router.post("/rollover", response_model=LessonRolloverResponse)
+def rollover_lessons(
+    payload: LessonRolloverInput,
+    db: Annotated[Session, Depends(get_db)],
+    auth_user: Annotated[
+        AuthUser, Depends(require_admin_or_permission("lessons:write"))
+    ],
+):
+    """Move overdue untaught lessons into the drawer.
+
+    ``current_date`` is supplied by the browser so a school's calendar day is
+    not accidentally derived from the container's UTC timezone.
+    """
+    overdue = (
+        db.query(Lesson)
+        .filter(
+            Lesson.date.is_not(None),
+            Lesson.date < payload.current_date,
+            Lesson.status != LessonStatus.TAUGHT,
+        )
+        .order_by(Lesson.date, Lesson.position, Lesson.id)
+        .with_for_update()
+        .all()
+    )
+
+    next_position = _next_position(db, None)
+    warnings: list[str] = []
+    for lesson in overdue:
+        _move_lesson(lesson, None, next_position)
+        next_position += 1
+        db.flush()
+        warnings.extend(
+            sync_lesson_assignments(
+                db, lesson, assigned_by=get_user_id_from_auth(auth_user)
+            )
+        )
+
+    db.commit()
+    drawer = (
+        db.query(Lesson)
+        .filter(Lesson.date.is_(None))
+        .order_by(Lesson.position, Lesson.id)
+        .all()
+    )
+    return LessonRolloverResponse(
+        moved_count=len(overdue), lessons=drawer, warnings=warnings
+    )
 
 
 # NOTE: must be registered before GET /{lesson_id} or "my-lessons" would be
@@ -264,7 +359,12 @@ def update_lesson(
     if "subject_id" in data:
         _validate_subject(db, data["subject_id"])
         lesson.subject_id = data["subject_id"]
-    for field in ("date", "objective", "duration_minutes", "notes", "status"):
+    effective_date = data.get("date", lesson.date)
+    if data.get("status") == LessonStatus.TAUGHT and effective_date is None:
+        raise HTTPException(status_code=400, detail="Drawer lessons cannot be taught")
+    if "date" in data and data["date"] != lesson.date:
+        _move_lesson(lesson, data["date"], _next_position(db, data["date"]))
+    for field in ("objective", "duration_minutes", "notes", "status"):
         if field in data:
             setattr(lesson, field, data[field])
 
@@ -394,7 +494,7 @@ def reorder_lessons(
             )
         lesson.position = index
         if changes_date:
-            lesson.date = payload.date
+            _move_lesson(lesson, payload.date, index)
             moved.append(lesson)
 
     warnings: list[str] = []
@@ -411,7 +511,7 @@ def reorder_lessons(
 
     result = (
         db.query(Lesson)
-        .filter(Lesson.date == payload.date)
+        .filter(_same_container_filter(payload.date))
         .order_by(Lesson.position, Lesson.id)
         .all()
     )
@@ -429,6 +529,8 @@ def set_status(
     lesson = db.query(Lesson).filter(Lesson.id == lesson_id).first()
     if not lesson:
         raise HTTPException(status_code=404, detail="Lesson not found")
+    if payload.status == LessonStatus.TAUGHT and lesson.date is None:
+        raise HTTPException(status_code=400, detail="Drawer lessons cannot be taught")
     lesson.status = payload.status
     db.commit()
     db.refresh(lesson)

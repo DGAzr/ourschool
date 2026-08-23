@@ -112,7 +112,9 @@ export const groupLessonsByDate = (
   lessons: Lesson[],
   today: string = new Date().toISOString().slice(0, 10)
 ): LessonDateGroup[] => {
-  const sorted = [...lessons].sort(
+  const sorted = lessons.filter(
+    (lesson): lesson is Lesson & { date: string } => lesson.date !== null
+  ).sort(
     (a, b) => a.date.localeCompare(b.date) || a.position - b.position
   )
   const groups: LessonDateGroup[] = []

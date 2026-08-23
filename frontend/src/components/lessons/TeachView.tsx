@@ -23,6 +23,7 @@ import { Subject } from '../../types'
 import { Lesson } from '../../types/lesson'
 import { useLessons } from '../../hooks/useLessons'
 import { subjectTint, todayISO } from '../../utils/lessonPlanning'
+import { parseISO } from '../../utils/dates'
 import StudentAvatars from './StudentAvatars'
 import TeachCard from './TeachCard'
 
@@ -39,11 +40,11 @@ const TeachView: React.FC<TeachViewProps> = ({
   onLessonClick,
   toggle,
 }) => {
-  const today = todayISO()
+  const [selectedDate, setSelectedDate] = useState(() => todayISO())
   const { toast } = useToast()
   const { lessons, loading, markTaught, toggleMaterial } = useLessons({
-    startDate: today,
-    endDate: today,
+    startDate: selectedDate,
+    endDate: selectedDate,
   })
 
   const [studentFilter, setStudentFilter] = useState<number | null>(null)
@@ -110,11 +111,13 @@ const TeachView: React.FC<TeachViewProps> = ({
     if (!ok) toast('Could not update the material.', 'danger')
   }
 
-  const dateLabel = new Date().toLocaleDateString(undefined, {
+  const dateLabel = parseISO(selectedDate).toLocaleDateString(undefined, {
     weekday: 'long',
     month: 'long',
     day: 'numeric',
   })
+  const isToday = selectedDate === todayISO()
+  const dayReference = isToday ? 'today' : dateLabel
 
   const chipBase =
     'inline-flex items-center gap-1.5 px-[11px] py-1.5 rounded-full text-[12.5px] font-semibold border transition-colors'
@@ -122,21 +125,37 @@ const TeachView: React.FC<TeachViewProps> = ({
   return (
     <div className="mx-auto max-w-[760px]">
       {/* Header */}
-      <div className="mb-5 flex items-start justify-between gap-4">
+      <div className="mb-5 flex items-start justify-between gap-4 flex-wrap">
         <div>
           <div className="uppercase text-[11px] font-bold tracking-wide text-accent">
             Teach mode · {dateLabel}
           </div>
           <h1 className="text-[27px] font-bold tracking-[-0.02em] text-ink mt-1">
-            {allGathered ? 'Everything is gathered. Be present.' : 'Almost ready for today.'}
+            {allGathered
+              ? `Everything is gathered for ${dayReference}.`
+              : `Almost ready for ${dayReference}.`}
           </h1>
           <p className="text-[14px] text-muted mt-1">
             {allGathered
-              ? "Today's materials are all set — focus on the teaching."
+              ? `Materials for ${dayReference} are all set — focus on the teaching.`
               : `${materialsRemaining} material${materialsRemaining === 1 ? '' : 's'} still to gather before you're set.`}
           </p>
         </div>
-        {toggle}
+        <div className="flex flex-col items-end gap-2">
+          {toggle}
+          <input
+            type="date"
+            aria-label="Choose teaching date"
+            value={selectedDate}
+            onChange={(event) => {
+              if (!event.target.value) return
+              setSelectedDate(event.target.value)
+              setStudentFilter(null)
+              setSubjectFilter(null)
+            }}
+            className="bg-field-bg border border-field-border text-ink text-[12.5px] rounded-[8px] px-2.5 py-1.5"
+          />
+        </div>
       </div>
 
       {loading ? (
@@ -144,7 +163,7 @@ const TeachView: React.FC<TeachViewProps> = ({
           <Spinner />
         </div>
       ) : lessons.length === 0 ? (
-        <EmptyState title="No lessons scheduled for today" subtext="Plan one from the Week planner." />
+        <EmptyState title={`No lessons scheduled for ${dateLabel}`} subtext="Plan one from the Week planner." />
       ) : (
         <>
           {/* Filter bar */}
@@ -252,7 +271,7 @@ const TeachView: React.FC<TeachViewProps> = ({
           {filtered.length === 0 ? (
             <div className="rounded-[14px] border border-dashed border-btn-border px-5 py-[46px] text-center">
               <p className="text-[13.5px] text-muted mb-3">
-                No lessons match this filter today
+                No lessons match this filter on {dateLabel}
               </p>
               <Button variant="outline" size="sm" onClick={clearFilters}>
                 Clear filters

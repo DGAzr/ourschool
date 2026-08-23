@@ -111,7 +111,7 @@ def export_system_backup(
 
         # Create system backup
         backup = SystemBackup(
-            format_version="2.0",
+            format_version="2.1",
             backup_timestamp=datetime.now(timezone.utc),
             created_by=actor,
             system_info={

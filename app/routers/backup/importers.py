@@ -50,7 +50,7 @@ from .shared import log_backup_operation, sanitize_import_data, validate_backup_
 logger = logging.getLogger(__name__)
 
 # Backup format versions supported by this importer
-SUPPORTED_VERSIONS = {"1.0", "2.0"}
+SUPPORTED_VERSIONS = {"1.0", "2.0", "2.1"}
 LEGACY_VERSIONS = {"1.0"}  # Versions that lack external_id — name-only fallback
 
 # Typed phrase required in the request body to arm wipe_before_import.
@@ -1490,6 +1490,7 @@ def _import_lessons(db: Session, lessons_data, result, dry_run):
             new_lesson = Lesson(
                 external_id=l_data.external_id,
                 date=l_data.date,
+                last_scheduled_date=l_data.last_scheduled_date,
                 title=l_data.title,
                 objective=l_data.objective,
                 duration_minutes=l_data.duration_minutes,

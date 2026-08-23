@@ -101,7 +101,10 @@ def test_crud_round_trip_with_nested_lists(
     # DELETE
     r = client.delete(f"/api/lessons/{lesson_id}", headers=admin_headers)
     assert r.status_code == 200, r.text
-    assert client.get(f"/api/lessons/{lesson_id}", headers=admin_headers).status_code == 404
+    assert (
+        client.get(f"/api/lessons/{lesson_id}", headers=admin_headers).status_code
+        == 404
+    )
 
 
 # --- 2. Date-range filter -----------------------------------------------------
@@ -196,7 +199,9 @@ def test_reschedule_moves_ungraded_but_not_graded(
     assert any("graded work" in w for w in r.json()["warnings"])
 
     db_session.expunge_all()
-    assert db_session.get(StudentAssignment, ungraded_sa.id).due_date == date(2026, 3, 9)
+    assert db_session.get(StudentAssignment, ungraded_sa.id).due_date == date(
+        2026, 3, 9
+    )
     # Graded SA's due date stays put (moving it would shift term buckets).
     assert db_session.get(StudentAssignment, graded_sa.id).due_date == date(2026, 3, 2)
 
@@ -475,9 +480,16 @@ def test_student_session_forbidden(client, admin_headers, student_factory):
         client.get(f"/api/lessons/{lesson_id}", headers=student_headers).status_code
         == 403
     )
+    assert client.get("/api/lessons/drawer", headers=student_headers).status_code == 403
     assert (
-        _create_lesson(client, student_headers, title="Nope").status_code == 403
+        client.post(
+            "/api/lessons/rollover",
+            json={"current_date": "2026-08-15"},
+            headers=student_headers,
+        ).status_code
+        == 403
     )
+    assert _create_lesson(client, student_headers, title="Nope").status_code == 403
     assert (
         client.put(
             f"/api/lessons/{lesson_id}", json={"title": "Hax"}, headers=student_headers
@@ -485,9 +497,7 @@ def test_student_session_forbidden(client, admin_headers, student_factory):
         == 403
     )
     assert (
-        client.delete(
-            f"/api/lessons/{lesson_id}", headers=student_headers
-        ).status_code
+        client.delete(f"/api/lessons/{lesson_id}", headers=student_headers).status_code
         == 403
     )
     assert (
@@ -513,9 +523,7 @@ def _day_lessons(client, headers, date_iso):
 def test_reorder_within_day(client, admin_headers):
     day = "2026-04-06"
     ids = [
-        _create_lesson(client, admin_headers, title=t, date=day).json()["lesson"][
-            "id"
-        ]
+        _create_lesson(client, admin_headers, title=t, date=day).json()["lesson"]["id"]
         for t in ("A", "B", "C")
     ]
     # New order: C, A, B.
@@ -539,9 +547,9 @@ def test_reorder_across_days_moves_and_reschedules(
     s1, _ = student_factory()
     src, dst = "2026-04-13", "2026-04-14"
     # A lesson on dst so the moved card slots into a populated column.
-    existing = _create_lesson(
-        client, admin_headers, title="Existing", date=dst
-    ).json()["lesson"]["id"]
+    existing = _create_lesson(client, admin_headers, title="Existing", date=dst).json()[
+        "lesson"
+    ]["id"]
     r = _create_lesson(
         client,
         admin_headers,
@@ -748,3 +756,187 @@ def test_create_appends_to_bottom_of_day(client, admin_headers):
         "id"
     ]
     assert [l["id"] for l in _day_lessons(client, admin_headers, day)] == [b, a, c]
+
+
+# --- 11. Lesson Drawer and overdue rollover ---------------------------------
+def test_drawer_create_is_unscheduled_and_hidden_from_calendar(
+    client, admin_headers, classroom, student_factory, db_session
+):
+    student, _ = student_factory()
+    r = client.post(
+        "/api/lessons/",
+        json={
+            "title": "Drawer draft",
+            "date": None,
+            "student_ids": [student["id"]],
+            "templates": [_link(classroom["template"]["id"])],
+        },
+        headers=admin_headers,
+    )
+    assert r.status_code == 200, r.text
+    lesson = r.json()["lesson"]
+    assert lesson["date"] is None
+    assert lesson["last_scheduled_date"] is None
+    assert _linked_sas(db_session, lesson["id"]) == []
+
+    listed = client.get("/api/lessons/", headers=admin_headers)
+    assert listed.status_code == 200
+    assert lesson["id"] not in {item["id"] for item in listed.json()}
+
+    drawer = client.get("/api/lessons/drawer", headers=admin_headers)
+    assert drawer.status_code == 200
+    assert [item["id"] for item in drawer.json()] == [lesson["id"]]
+
+
+def test_stash_withdraws_assignment_and_reschedule_recreates_it(
+    client, admin_headers, classroom, student_factory, db_session
+):
+    student, _ = student_factory()
+    r = _create_lesson(
+        client,
+        admin_headers,
+        date="2026-08-10",
+        student_ids=[student["id"]],
+        templates=[_link(classroom["template"]["id"])],
+    )
+    lesson_id = r.json()["lesson"]["id"]
+    original_assignment = _linked_sas(db_session, lesson_id)[0]
+
+    r = client.put(
+        f"/api/lessons/{lesson_id}", json={"date": None}, headers=admin_headers
+    )
+    assert r.status_code == 200, r.text
+    assert r.json()["lesson"]["last_scheduled_date"] == "2026-08-10"
+    assert _sa_by_id(db_session, original_assignment.id) is None
+
+    r = client.put(
+        f"/api/lessons/{lesson_id}",
+        json={"date": "2026-08-18"},
+        headers=admin_headers,
+    )
+    assert r.status_code == 200, r.text
+    assert r.json()["lesson"]["last_scheduled_date"] is None
+    recreated = _linked_sas(db_session, lesson_id)
+    assert len(recreated) == 1
+    assert recreated[0].due_date == date(2026, 8, 18)
+
+
+def test_stash_orphans_protected_assignment_with_warning(
+    client, admin_headers, classroom, student_factory, db_session
+):
+    student, _ = student_factory()
+    r = _create_lesson(
+        client,
+        admin_headers,
+        date="2026-08-11",
+        student_ids=[student["id"]],
+        templates=[_link(classroom["template"]["id"])],
+    )
+    lesson_id = r.json()["lesson"]["id"]
+    assignment = _linked_sas(db_session, lesson_id)[0]
+    assert _grade(client, admin_headers, assignment.id, 90).status_code == 200
+
+    r = client.put(
+        f"/api/lessons/{lesson_id}", json={"date": None}, headers=admin_headers
+    )
+    assert r.status_code == 200, r.text
+    assert r.json()["warnings"]
+    survivor = _sa_by_id(db_session, assignment.id)
+    assert survivor is not None
+    assert survivor.lesson_id is None
+
+
+def test_rollover_moves_only_past_untaught_lessons_and_is_idempotent(
+    client, admin_headers
+):
+    planned = _create_lesson(
+        client, admin_headers, title="Past planned", date="2001-01-10"
+    ).json()["lesson"]["id"]
+    ready = _create_lesson(
+        client,
+        admin_headers,
+        title="Past ready",
+        date="2001-01-11",
+        status="ready",
+    ).json()["lesson"]["id"]
+    taught = _create_lesson(
+        client, admin_headers, title="Past taught", date="2001-01-12"
+    ).json()["lesson"]["id"]
+    assert (
+        client.patch(
+            f"/api/lessons/{taught}/status",
+            json={"status": "taught"},
+            headers=admin_headers,
+        ).status_code
+        == 200
+    )
+    today = _create_lesson(
+        client, admin_headers, title="Today", date="2001-01-15"
+    ).json()["lesson"]["id"]
+
+    r = client.post(
+        "/api/lessons/rollover",
+        json={"current_date": "2001-01-15"},
+        headers=admin_headers,
+    )
+    assert r.status_code == 200, r.text
+    assert r.json()["moved_count"] == 2
+    moved = [item for item in r.json()["lessons"] if item["id"] in (planned, ready)]
+    assert [item["id"] for item in moved] == [planned, ready]
+    assert [item["last_scheduled_date"] for item in moved] == [
+        "2001-01-10",
+        "2001-01-11",
+    ]
+    scheduled_ids = {
+        item["id"] for item in client.get("/api/lessons/", headers=admin_headers).json()
+    }
+    assert taught in scheduled_ids
+    assert today in scheduled_ids
+
+    again = client.post(
+        "/api/lessons/rollover",
+        json={"current_date": "2001-01-15"},
+        headers=admin_headers,
+    )
+    assert again.status_code == 200
+    assert again.json()["moved_count"] == 0
+
+
+def test_drawer_reorder_and_taught_stash_rejected(client, admin_headers):
+    existing_ids = [
+        lesson["id"]
+        for lesson in client.get("/api/lessons/drawer", headers=admin_headers).json()
+    ]
+    first = _create_lesson(client, admin_headers, title="First", date=None).json()[
+        "lesson"
+    ]["id"]
+    second = _create_lesson(client, admin_headers, title="Second", date=None).json()[
+        "lesson"
+    ]["id"]
+    r = client.patch(
+        "/api/lessons/reorder",
+        json={"date": None, "lesson_ids": [*existing_ids, second, first]},
+        headers=admin_headers,
+    )
+    assert r.status_code == 200, r.text
+    assert [item["id"] for item in r.json()["lessons"]] == [
+        *existing_ids,
+        second,
+        first,
+    ]
+
+    taught = _create_lesson(
+        client, admin_headers, title="Locked", date="2026-08-15"
+    ).json()["lesson"]["id"]
+    assert (
+        client.patch(
+            f"/api/lessons/{taught}/status",
+            json={"status": "taught"},
+            headers=admin_headers,
+        ).status_code
+        == 200
+    )
+    rejected = client.put(
+        f"/api/lessons/{taught}", json={"date": None}, headers=admin_headers
+    )
+    assert rejected.status_code == 400

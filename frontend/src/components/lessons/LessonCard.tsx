@@ -17,7 +17,7 @@
  */
 
 import { CSSProperties } from 'react'
-import { Paperclip } from 'lucide-react'
+import { Archive, Paperclip } from 'lucide-react'
 import { useSortable } from '@dnd-kit/sortable'
 import { CSS } from '@dnd-kit/utilities'
 
@@ -30,6 +30,7 @@ interface LessonCardProps {
   onClick: (lesson: Lesson) => void
   /** True when rendered inside the DragOverlay (a static, non-sortable clone). */
   overlay?: boolean
+  onStash?: (lesson: Lesson) => void
 }
 
 const STATUS_PILL: Record<
@@ -42,7 +43,12 @@ const STATUS_PILL: Record<
 }
 
 /** A single planned lesson tile within a day column. */
-const LessonCard: React.FC<LessonCardProps> = ({ lesson, onClick, overlay }) => {
+const LessonCard: React.FC<LessonCardProps> = ({
+  lesson,
+  onClick,
+  overlay,
+  onStash,
+}) => {
   const subject: LessonSubjectSummary | null | undefined = lesson.subject
   // Only links whose template still exists (SET NULL leaves dangling links).
   const templateLinks = lesson.templates.filter((l) => l.template)
@@ -78,10 +84,17 @@ const LessonCard: React.FC<LessonCardProps> = ({ lesson, onClick, overlay }) => 
       }
 
   return (
-    <button
+    <div
       ref={overlay ? undefined : setNodeRef}
-      type="button"
+      role="button"
+      tabIndex={overlay ? -1 : 0}
       onClick={() => onClick(lesson)}
+      onKeyDown={(event) => {
+        if (event.key === 'Enter' || event.key === ' ') {
+          event.preventDefault()
+          onClick(lesson)
+        }
+      }}
       {...(overlay ? {} : attributes)}
       {...(overlay ? {} : listeners)}
       style={{
@@ -168,14 +181,27 @@ const LessonCard: React.FC<LessonCardProps> = ({ lesson, onClick, overlay }) => 
         </div>
       )}
 
-      <div>
+      <div className="flex items-center justify-between gap-2">
         <span
           className={`inline-block text-[10px] font-bold uppercase tracking-wide px-2 py-0.5 rounded-full ${status.className}`}
         >
           {status.label}
         </span>
+        {onStash && !taught && !overlay ? (
+          <button
+            type="button"
+            onClick={(event) => {
+              event.stopPropagation()
+              onStash(lesson)
+            }}
+            onPointerDown={(event) => event.stopPropagation()}
+            className="inline-flex items-center gap-1 text-[10.5px] font-semibold text-faint hover:text-ink"
+          >
+            <Archive size={11} /> Stash
+          </button>
+        ) : null}
       </div>
-    </button>
+    </div>
   )
 }
 

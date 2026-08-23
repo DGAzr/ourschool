@@ -267,18 +267,20 @@ All shop operations except the image capability URL require the points system to
 
 ### Lesson planning
 
-Lesson writes synchronize assignments generated from the lesson's linked templates. Deleting a lesson removes ungraded generated work and preserves graded work as orphaned assignments.
+Lesson writes synchronize assignments generated from the lesson's linked templates. A nullable lesson `date` places the lesson in the Lesson Drawer; `last_scheduled_date` retains its former placement. Stashing or deleting a lesson removes ungraded generated work and preserves graded/submitted work as orphaned assignments.
 
 | Endpoint | Description |
 |----------|-------------|
-| `GET /api/lessons/` | List lessons, optionally filtered by an inclusive date range (`lessons:read`) |
-| `POST /api/lessons/` | Create a lesson with students, templates, materials, and resources (`lessons:write`) |
+| `GET /api/lessons/` | List scheduled lessons, optionally filtered by an inclusive date range (`lessons:read`) |
+| `GET /api/lessons/drawer` | List unscheduled lessons in drawer order (`lessons:read`) |
+| `POST /api/lessons/rollover` | Move lessons before the supplied browser-local date into the drawer unless taught (`lessons:write`) |
+| `POST /api/lessons/` | Create a scheduled or drawer lesson with students, templates, materials, and resources (`lessons:write`) |
 | `GET /api/lessons/my-lessons` | Current student's upcoming lessons; supports date filters (student session only) |
 | `GET /api/lessons/{lesson_id}` | Get one lesson (`lessons:read`) |
 | `PUT /api/lessons/{lesson_id}` | Update a lesson and synchronize generated assignments (`lessons:write`) |
 | `DELETE /api/lessons/{lesson_id}` | Delete a lesson while preserving graded work (`lessons:write`) |
 | `PATCH /api/lessons/{lesson_id}/materials/{material_id}` | Toggle a prep material's gathered state (`lessons:write`) |
-| `PATCH /api/lessons/reorder` | Reorder lessons or move them between dates; taught lessons are locked (`lessons:write`) |
+| `PATCH /api/lessons/reorder` | Reorder lessons or move them between dates/the drawer using a nullable destination date; taught lessons are locked (`lessons:write`) |
 | `PATCH /api/lessons/{lesson_id}/status` | Set a lesson's planning/taught status (`lessons:write`) |
 
 ### Reports

@@ -50,6 +50,18 @@ describe('generateDays', () => {
     expect(weekend.map((d) => d.weekdayLabel)).toEqual(['Sat', 'Sun'])
   })
 
+  it('honors an explicitly selected weekend while skipping later weekends', () => {
+    const days = generateDays('2026-06-20', 5, true)
+    expect(days.map((day) => day.iso)).toEqual([
+      '2026-06-20',
+      '2026-06-22',
+      '2026-06-23',
+      '2026-06-24',
+      '2026-06-25',
+    ])
+    expect(days[0].isWeekend).toBe(true)
+  })
+
   it('marks today when the range includes it and not otherwise', () => {
     const now = new Date()
     const y = now.getFullYear()

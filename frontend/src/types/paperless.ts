@@ -140,7 +140,7 @@ interface DocumentLessonUsage {
   lesson_id: number
   lesson_title: string
   subject_id?: number | null
-  date: string
+  date: string | null
 }
 
 interface DocumentTemplateUsage {

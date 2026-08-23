@@ -76,7 +76,9 @@ export const generateDays = (
     const iso = addDays(rangeStartISO, i)
     const date = parseISO(iso)
     const weekend = isWeekendDay(date)
-    if (!(skipWeekends && weekend)) {
+    // An explicitly selected weekend remains visible as the anchor column;
+    // later weekends in the range still honor the school-days setting.
+    if (!(skipWeekends && weekend && i !== 0)) {
       days.push({
         iso,
         weekdayLabel: WEEKDAY_LABELS[date.getDay()],

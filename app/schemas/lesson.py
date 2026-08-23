@@ -143,7 +143,7 @@ class LessonBase(BaseModel):
     """Fields shared by create/update."""
 
     title: str = Field(..., min_length=1, max_length=200)
-    date: date_type
+    date: Optional[date_type] = None
     subject_id: Optional[int] = None
     objective: Optional[str] = None
     duration_minutes: Optional[int] = Field(default=None, ge=1)
@@ -196,8 +196,14 @@ class LessonReorderInput(BaseModel):
     different date is moved to ``date`` (a cross-day drag).
     """
 
-    date: date_type
+    date: Optional[date_type] = None
     lesson_ids: List[int]
+
+
+class LessonRolloverInput(BaseModel):
+    """Browser-local school date used as the overdue cutoff."""
+
+    current_date: date_type
 
 
 # --- Lesson response ---
@@ -233,6 +239,7 @@ class LessonResponse(LessonBase):
     id: int
     external_id: str
     position: int
+    last_scheduled_date: Optional[date_type] = None
     created_by: Optional[int] = None
     created_at: datetime
     updated_at: datetime
@@ -262,6 +269,14 @@ class LessonWriteResponse(BaseModel):
 class LessonReorderResponse(BaseModel):
     """Reorder result: the affected day's lessons (new order) plus warnings."""
 
+    lessons: List[LessonResponse] = []
+    warnings: List[str] = []
+
+
+class LessonRolloverResponse(BaseModel):
+    """Overdue reconciliation result and canonical drawer contents."""
+
+    moved_count: int = 0
     lessons: List[LessonResponse] = []
     warnings: List[str] = []
 

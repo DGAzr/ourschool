@@ -483,6 +483,7 @@ def export_lessons(db: Session) -> List[LessonBackup]:
             LessonBackup(
                 external_id=lesson.external_id,
                 date=lesson.date,
+                last_scheduled_date=lesson.last_scheduled_date,
                 title=lesson.title,
                 objective=lesson.objective,
                 duration_minutes=lesson.duration_minutes,

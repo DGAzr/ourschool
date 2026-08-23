@@ -6,6 +6,18 @@ All notable changes to OurSchool are documented here.
 
 ## [Unreleased]
 
+### Lesson planning flexibility
+
+- Added a persistent Lesson Drawer for unscheduled lesson blocks, with drag and
+  keyboard-accessible actions for stashing, ordering, and scheduling lessons.
+- Untaught past lessons now return to the drawer on the next teacher lesson
+  load. Generated unstarted assignments are withdrawn; protected student work
+  remains available as an independent assignment.
+- Added exact-date navigation to both the multi-day planner and Teach mode,
+  including explicit weekend selection when weekends are normally skipped.
+- Backup format 2.1 preserves drawer placement and former scheduled dates while
+  remaining able to import format 2.0 backups.
+
 ## [v1.1-beta] — 2026-07-28
 
 ### Teacher workflow unification

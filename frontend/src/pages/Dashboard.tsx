@@ -357,7 +357,9 @@ const Dashboard: React.FC = () => {
     if (!isAdmin) return
     const today = todayISO()
     lessonsApi
-      .list({ start_date: today, end_date: today })
+      .rollover(today)
+      .catch(() => undefined)
+      .then(() => lessonsApi.list({ start_date: today, end_date: today }))
       .then(setTodayLessons)
       .catch(() => setTodayLessons([]))
   }, [isAdmin])

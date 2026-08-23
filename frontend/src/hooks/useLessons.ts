@@ -126,7 +126,7 @@ export const useLessons = ({ startDate, endDate }: UseLessonsRange) => {
    * caller's toast explains why the card snapped back.
    */
   const reorder = useCallback(
-    async (date: string, orderedIds: number[]): Promise<string[]> => {
+    async (date: string | null, orderedIds: number[]): Promise<string[]> => {
       let snapshot: Lesson[] = []
       setLessons((prev) => {
         snapshot = prev
@@ -142,8 +142,10 @@ export const useLessons = ({ startDate, endDate }: UseLessonsRange) => {
         // Replace the affected day's lessons with the server's canonical rows.
         const updated = new Map(res.lessons.map((l) => [l.id, l]))
         setLessons((prev) => {
-          const others = prev.filter((l) => !updated.has(l.id))
-          return [...others, ...res.lessons]
+          const others = prev.filter(
+            (l) => !updated.has(l.id) && !orderedIds.includes(l.id)
+          )
+          return date === null ? others : [...others, ...res.lessons]
         })
         return res.warnings
       } catch (err) {

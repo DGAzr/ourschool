@@ -78,7 +78,10 @@ def sync_lesson_assignments(db: Session, lesson: Lesson, *, assigned_by) -> list
         .all()
     )
 
-    student_ids = [s.id for s in lesson.students]
+    # Drawer lessons are intentionally not assigned. Moving a lesson into the
+    # drawer therefore runs the normal removal/orphaning pass; scheduling it
+    # again recreates the desired assignment rows.
+    student_ids = [s.id for s in lesson.students] if lesson.date is not None else []
 
     # Desired state: one SA per (link, selected student). Later links to the
     # same template would collide on the (template_id, student_id) key, so the

@@ -80,7 +80,11 @@ class Lesson(Base):
         String(36), unique=True, nullable=False, default=lambda: str(uuid.uuid4())
     )
 
-    date = Column(Date, nullable=False)
+    # ``NULL`` means the lesson is parked in the Lesson Drawer.  The most
+    # recent scheduled date is retained separately so the drawer can explain
+    # where an automatically rolled-over lesson came from.
+    date = Column(Date, nullable=True)
+    last_scheduled_date = Column(Date, nullable=True)
     title = Column(String, nullable=False)
     objective = Column(Text)
     duration_minutes = Column(Integer)

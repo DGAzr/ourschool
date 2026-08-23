@@ -34,7 +34,7 @@ import { lessonsApi } from '../../services/lessons'
 import { paperlessApi } from '../../services/paperless'
 import { getErrorMessage } from '../../services/api'
 import { PaperlessMaterial } from '../../types/paperless'
-import { subjectTint } from '../../utils/lessonPlanning'
+import { subjectTint, todayISO } from '../../utils/lessonPlanning'
 import StudentAvatars from './StudentAvatars'
 import AssignmentComposer from '../assignments/composer/AssignmentComposer'
 import TemplateLibraryModal from './TemplateLibraryModal'
@@ -51,7 +51,7 @@ interface ResourceDraft {
 }
 
 interface LessonEditorProps {
-  initialDate: string
+  initialDate: string | null
   lesson: Lesson | null
   subjects: Subject[]
   students: User[]
@@ -83,7 +83,7 @@ const LessonEditor: React.FC<LessonEditorProps> = ({
   const { toast } = useToast()
   const isEdit = lesson !== null
 
-  const [date, setDate] = useState(initialDate)
+  const [date, setDate] = useState(initialDate ?? '')
   const [title, setTitle] = useState(lesson?.title ?? '')
   const [subjectId, setSubjectId] = useState<number | null>(
     lesson?.subject_id ?? null
@@ -206,14 +206,10 @@ const LessonEditor: React.FC<LessonEditorProps> = ({
       toast('Give the lesson a title first.', 'danger')
       return
     }
-    if (!date) {
-      toast('Pick a date for the lesson.', 'danger')
-      return
-    }
     setSaving(true)
     const payload: LessonCreate = {
       title: title.trim(),
-      date,
+      date: date || null,
       subject_id: subjectId,
       objective: objective.trim() || null,
       duration_minutes: durationMinutes ? Number(durationMinutes) : null,
@@ -258,7 +254,10 @@ const LessonEditor: React.FC<LessonEditorProps> = ({
           warnings.push(`Could not attach "${material.title}" from Paperless.`)
         }
       }
-      toast(isEdit ? 'Lesson updated.' : 'Lesson planned.', 'default')
+      toast(
+        isEdit ? 'Lesson updated.' : date ? 'Lesson planned.' : 'Lesson saved to the drawer.',
+        'default'
+      )
       onSaved(warnings)
     } catch (err) {
       toast(getErrorMessage(err, 'Could not save the lesson.'), 'danger')
@@ -287,7 +286,7 @@ const LessonEditor: React.FC<LessonEditorProps> = ({
       isOpen
       wide
       onClose={onClose}
-      title={isEdit ? 'Edit lesson' : 'Plan a lesson'}
+      title={isEdit ? 'Edit lesson' : date ? 'Plan a lesson' : 'Add to Lesson Drawer'}
       footer={
         <>
           {isEdit && (
@@ -314,13 +313,17 @@ const LessonEditor: React.FC<LessonEditorProps> = ({
       <div className="flex flex-col gap-5">
         <div className="grid grid-cols-2 gap-3 items-end">
           <Input
-            label="Date"
+            label="Date (optional)"
             type="date"
             value={date}
-            onChange={(e) => setDate(e.target.value)}
+            onChange={(e) => {
+              setDate(e.target.value)
+              if (!e.target.value && status === 'taught') setStatus('ready')
+            }}
+            helperText="Leave blank to keep this lesson in the Lesson Drawer."
           />
           <p className="text-[12.5px] text-muted pb-2.5 truncate">
-            {date ? formatScheduled(date) : 'Pick a date'}
+            {date ? formatScheduled(date) : 'Unscheduled · Lesson Drawer'}
             {isEdit && date !== lesson?.date ? (
               <span className="text-accent"> · rescheduling</span>
             ) : null}
@@ -393,9 +396,9 @@ const LessonEditor: React.FC<LessonEditorProps> = ({
             </label>
             <SegmentedControl<LessonStatus>
               segments={[
-                { value: 'planned', label: 'Planning' },
-                { value: 'ready', label: 'Ready' },
-                { value: 'taught', label: 'Taught' },
+                { value: 'planned' as const, label: 'Planning' },
+                { value: 'ready' as const, label: 'Ready' },
+                ...(date ? [{ value: 'taught' as const, label: 'Taught' }] : []),
               ]}
               value={status}
               onChange={setStatus}
@@ -668,7 +671,10 @@ const LessonEditor: React.FC<LessonEditorProps> = ({
             kind: 'create',
             showAssign: false,
             libraryDefault: false,
-            prefill: { subject_id: subjectId, assigned_date: date || initialDate },
+            prefill: {
+              subject_id: subjectId,
+              assigned_date: date || initialDate || todayISO(),
+            },
           }}
           subjects={subjects}
           students={students}
@@ -683,7 +689,7 @@ const LessonEditor: React.FC<LessonEditorProps> = ({
       {customizingIndex !== null && links[customizingIndex] && (
         <LessonLinkCustomizeModal
           link={links[customizingIndex]}
-          lessonDate={date || initialDate}
+          lessonDate={date || initialDate || todayISO()}
           onClose={() => setCustomizingIndex(null)}
           onSave={(patch) => applyCustomize(customizingIndex, patch)}
         />

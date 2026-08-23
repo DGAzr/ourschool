@@ -20,6 +20,8 @@ from datetime import date, datetime
 from typing import Dict, List, Optional, Any
 from pydantic import BaseModel, Field
 
+DateType = date
+
 # Individual model backup schemas
 
 
@@ -352,7 +354,8 @@ class LessonBackup(BaseModel):
     """
 
     external_id: str
-    date: date
+    date: Optional[DateType] = None
+    last_scheduled_date: Optional[DateType] = None
     title: str
     objective: Optional[str] = None
     duration_minutes: Optional[int] = None
@@ -478,7 +481,7 @@ class SystemBackup(BaseModel):
     """Complete system backup schema containing all data."""
 
     # Metadata
-    format_version: str = "2.0"
+    format_version: str = "2.1"
     backup_timestamp: datetime
     created_by: str
     system_info: Dict[str, Any] = {}

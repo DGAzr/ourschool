@@ -16,7 +16,7 @@ OurSchool is a self-hosted homeschool management system for families who take at
 - **Attendance tracking** — Daily records with status and notes. Flexible academic terms (`semester`, `quarter`, `trimester`, or `custom`) that map to your jurisdiction's reporting requirements.
 - **Subjects** — Configure subject areas with names, descriptions, and colors. They persist across terms so you're not re-entering them every year.
 - **Assignment templates → student assignments** — Create a template once, assign it to one or more students. Inline row grading and bulk-grade support mean less clicking.
-- **Lesson planning** — Plan instruction by date, track objectives and preparation, link reusable assignment templates, and give students a My Lessons view of their schedule.
+- **Lesson planning** — Plan instruction by exact date, park unfinished ideas in a persistent Lesson Drawer, automatically recover overdue untaught lessons, track preparation, link reusable assignment templates, and give students a My Lessons view of their schedule.
 - **Points Shop** — Turn earned points into an optional reward catalog with student goals, redemption history, inventory controls, and an admin fulfillment queue.
 - **Paperless-ngx integration** — Connect a self-hosted Paperless-ngx server, sync and search teaching materials, and attach documents to lessons, templates, or individual assignments.
 - **Journal** — Teacher and student entries with date tracking, reactions, and threaded replies.

@@ -22,6 +22,7 @@ import {
   LessonCreate,
   LessonDeleteResponse,
   LessonReorderResponse,
+  LessonRolloverResponse,
   LessonStatus,
   LessonUpdate,
   LessonWriteResponse,
@@ -45,6 +46,11 @@ const rangeQuery = (range?: DateRange): string => {
 export const lessonsApi = {
   list: (range?: DateRange): Promise<Lesson[]> =>
     api.get(`/lessons/${rangeQuery(range)}`),
+
+  drawer: (): Promise<Lesson[]> => api.get('/lessons/drawer'),
+
+  rollover: (currentDate: string): Promise<LessonRolloverResponse> =>
+    api.post('/lessons/rollover', { current_date: currentDate }),
 
   get: (id: number): Promise<Lesson> => api.get(`/lessons/${id}`),
 
@@ -74,7 +80,7 @@ export const lessonsApi = {
     api.patch(`/lessons/${id}/status`, { status }),
 
   reorder: (
-    date: string,
+    date: string | null,
     lessonIds: number[]
   ): Promise<LessonReorderResponse> =>
     api.patch('/lessons/reorder', { date, lesson_ids: lessonIds }),

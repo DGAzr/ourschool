@@ -73,7 +73,8 @@ export interface Lesson {
   external_id: string
   position: number
   title: string
-  date: string
+  date: string | null
+  last_scheduled_date?: string | null
   subject_id?: number | null
   objective?: string | null
   duration_minutes?: number | null
@@ -128,7 +129,7 @@ export interface LessonTemplateLinkInput {
 
 export interface LessonCreate {
   title: string
-  date: string
+  date?: string | null
   subject_id?: number | null
   objective?: string | null
   duration_minutes?: number | null
@@ -149,6 +150,12 @@ export interface LessonWriteResponse {
 }
 
 export interface LessonReorderResponse {
+  lessons: Lesson[]
+  warnings: string[]
+}
+
+export interface LessonRolloverResponse {
+  moved_count: number
   lessons: Lesson[]
   warnings: string[]
 }
