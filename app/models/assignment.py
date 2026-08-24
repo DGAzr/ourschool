@@ -332,7 +332,11 @@ class StudentAssignment(Base):
             target_term = (
                 session.query(Term)
                 .filter(Term.start_date <= eff, Term.end_date >= eff)
-                .order_by(Term.start_date.desc())
+                .order_by(
+                    Term.start_date.desc(),
+                    Term.is_active.desc(),
+                    Term.id.desc(),
+                )
                 .first()
             )
         if target_term is None:

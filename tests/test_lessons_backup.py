@@ -82,7 +82,7 @@ def test_lessons_backup_round_trip(client, admin_headers, classroom, student_fac
     r = client.get("/api/backup/export", headers=admin_headers)
     assert r.status_code == 200, r.text
     backup = r.json()
-    assert backup["format_version"] == "2.1"
+    assert backup["format_version"] == "2.2"
     drawer_export = next(l for l in backup["lessons"] if l["title"] == "Drawer Lesson")
     assert drawer_export["date"] is None
     assert drawer_export["last_scheduled_date"] == "2026-03-08"

@@ -177,6 +177,22 @@ def test_moving_graded_assignment_rebuilds_old_and_new_terms(
     client, admin_headers, classroom, student_factory, assign, db_session
 ):
     student, _ = student_factory()
+
+    # An inactive term with identical dates must not win the tie over the
+    # classroom's active term. Real installations may contain overlapping
+    # grading periods, and the session-scoped test database does as well.
+    response = client.post(
+        "/api/terms/",
+        json={
+            "name": "Overlapping inactive term",
+            "start_date": classroom["term"]["start_date"],
+            "end_date": classroom["term"]["end_date"],
+            "academic_year": classroom["term"]["academic_year"],
+        },
+        headers=admin_headers,
+    )
+    assert response.status_code == 200, response.text
+
     sa = assign(classroom["template"]["id"], student["id"], due_date="2026-03-01")
     assert _grade(client, admin_headers, sa["id"], 80).status_code == 200
 

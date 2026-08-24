@@ -320,7 +320,11 @@ def _term_for_assignment(db: Session, assignment: StudentAssignment) -> Optional
         term = (
             db.query(Term)
             .filter(Term.start_date <= effective_date, Term.end_date >= effective_date)
-            .order_by(Term.start_date.desc())
+            .order_by(
+                Term.start_date.desc(),
+                Term.is_active.desc(),
+                Term.id.desc(),
+            )
             .first()
         )
         if term:
