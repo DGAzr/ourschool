@@ -43,6 +43,8 @@ interface JournalEntry {
   entry_date: string
   created_at: string
   updated_at: string
+  edited_at?: string
+  edited_by?: number
   mood?: string
   icon?: string
   tags?: string[]
@@ -59,6 +61,7 @@ export interface JournalEntryWithAuthor extends JournalEntry {
   is_own_entry: boolean
   replies: JournalReply[]
   streak: number
+  edited_by_name?: string
 }
 
 export interface JournalEntryCreate {
@@ -77,10 +80,10 @@ export interface JournalEntryUpdate {
   title?: string
   content?: string
   entry_date?: string
-  mood?: string
-  icon?: string
+  mood?: string | null
+  icon?: string | null
   tags?: string[]
-  win?: string
+  win?: string | null
   goals?: JournalGoal[]
 }
 

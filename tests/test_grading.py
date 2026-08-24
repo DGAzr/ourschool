@@ -1,4 +1,5 @@
 """End-to-end grading tests: grade flow, points sync, term-grade math."""
+
 import pytest
 
 from app.crud import points as points_crud
@@ -139,11 +140,13 @@ def test_term_grade_can_exceed_100_percent_with_extra_credit(
     assert grade.current_percentage == pytest.approx(110.0)
 
 
-def test_cannot_lower_custom_max_below_recorded_grade(
-    client, admin_headers, classroom, student_factory, assign
+def test_lowering_custom_max_recalculates_extra_credit_grade(
+    client, admin_headers, classroom, student_factory, assign, db_session
 ):
+    from app.models.term import GradeHistory, StudentTermGrade
+
     student, _ = student_factory()
-    sa = assign(classroom["template"]["id"], student["id"])
+    sa = assign(classroom["template"]["id"], student["id"], due_date="2026-03-01")
     assert _grade(client, admin_headers, sa["id"], 80).status_code == 200
 
     r = client.put(
@@ -151,5 +154,72 @@ def test_cannot_lower_custom_max_below_recorded_grade(
         json={"custom_max_points": 50},
         headers=admin_headers,
     )
-    assert r.status_code == 400, r.text
-    assert "recorded grade" in r.json()["detail"]
+    assert r.status_code == 200, r.text
+    assert r.json()["percentage_grade"] == pytest.approx(160.0)
+    assert r.json()["letter_grade"] == "A+"
+
+    db_session.expire_all()
+    grade = (
+        db_session.query(StudentTermGrade)
+        .filter(StudentTermGrade.student_id == student["id"])
+        .one()
+    )
+    assert grade.current_percentage == pytest.approx(160.0)
+    assert (
+        db_session.query(GradeHistory)
+        .filter(GradeHistory.assignment_id == sa["id"])
+        .count()
+        > 0
+    )
+
+
+def test_moving_graded_assignment_rebuilds_old_and_new_terms(
+    client, admin_headers, classroom, student_factory, assign, db_session
+):
+    student, _ = student_factory()
+    sa = assign(classroom["template"]["id"], student["id"], due_date="2026-03-01")
+    assert _grade(client, admin_headers, sa["id"], 80).status_code == 200
+
+    response = client.post(
+        "/api/terms/",
+        json={
+            "name": "Later term",
+            "start_date": "2026-07-01",
+            "end_date": "2026-12-18",
+            "academic_year": "2026-2027",
+        },
+        headers=admin_headers,
+    )
+    assert response.status_code == 200, response.text
+    later_term = response.json()
+    response = client.post(
+        f"/api/terms/{later_term['id']}/auto-link-subjects", headers=admin_headers
+    )
+    assert response.status_code == 200, response.text
+
+    response = client.put(
+        f"/api/assignments/student-assignments/{sa['id']}",
+        json={"due_date": "2026-08-01"},
+        headers=admin_headers,
+    )
+    assert response.status_code == 200, response.text
+
+    db_session.expire_all()
+    grades = {
+        grade.term_subject.term_id: grade
+        for grade in db_session.query(StudentTermGrade)
+        .filter(StudentTermGrade.student_id == student["id"])
+        .all()
+    }
+    old_grade = grades[classroom["term"]["id"]]
+    assert old_grade.current_points_earned == 0
+    assert old_grade.current_points_possible == 0
+    assert old_grade.current_percentage is None
+    assert old_grade.current_letter_grade is None
+    assert old_grade.assignments_completed == 0
+    assert old_grade.assignments_total == 0
+
+    new_grade = grades[later_term["id"]]
+    assert new_grade.current_points_earned == pytest.approx(80)
+    assert new_grade.current_points_possible == pytest.approx(100)
+    assert new_grade.current_percentage == pytest.approx(80)

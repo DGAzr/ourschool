@@ -39,6 +39,7 @@ from app.schemas.backup import (
 
 from .exporters import (
     export_assignment_templates,
+    export_assignment_time_entries,
     export_attendance_records,
     export_grade_history,
     export_journal_entries,
@@ -90,6 +91,7 @@ def export_system_backup(
         templates_data = export_assignment_templates(db)
         term_subjects_data = export_term_subjects(db)
         student_assignments_data = export_student_assignments(db)
+        assignment_time_entries_data = export_assignment_time_entries(db)
         term_grades_data = export_student_term_grades(db)
         grade_history_data = export_grade_history(db)
         attendance_data = export_attendance_records(db)
@@ -111,7 +113,7 @@ def export_system_backup(
 
         # Create system backup
         backup = SystemBackup(
-            format_version="2.1",
+            format_version="2.2",
             backup_timestamp=datetime.now(timezone.utc),
             created_by=actor,
             system_info={
@@ -119,6 +121,7 @@ def export_system_backup(
                 "total_subjects": len(subjects_data),
                 "total_assignment_templates": len(templates_data),
                 "total_student_assignments": len(student_assignments_data),
+                "total_assignment_time_entries": len(assignment_time_entries_data),
                 "total_terms": len(terms_data),
                 "total_attendance_records": len(attendance_data),
                 "total_journal_entries": len(journal_data),
@@ -143,6 +146,7 @@ def export_system_backup(
             assignment_templates=templates_data,
             term_subjects=term_subjects_data,
             student_assignments=student_assignments_data,
+            assignment_time_entries=assignment_time_entries_data,
             student_term_grades=term_grades_data,
             grade_history=grade_history_data,
             attendance_records=attendance_data,

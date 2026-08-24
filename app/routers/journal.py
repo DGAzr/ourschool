@@ -74,6 +74,11 @@ def _entry_to_response(
 ) -> JournalEntryWithAuthor:
     author = db.query(User).filter(User.id == entry.author_id).first()
     student = db.query(User).filter(User.id == entry.student_id).first()
+    editor = (
+        db.query(User).filter(User.id == entry.edited_by).first()
+        if entry.edited_by is not None
+        else None
+    )
 
     replies = []
     for r in entry.replies:
@@ -105,6 +110,8 @@ def _entry_to_response(
         entry_date=entry.entry_date,
         created_at=entry.created_at,
         updated_at=entry.updated_at,
+        edited_at=entry.edited_at,
+        edited_by=entry.edited_by,
         mood=entry.mood,
         icon=entry.icon,
         tags=entry.tags or [],
@@ -120,6 +127,7 @@ def _entry_to_response(
         is_own_entry=is_own,
         replies=replies,
         streak=streak,
+        edited_by_name=(f"{editor.first_name} {editor.last_name}" if editor else None),
     )
 
 
@@ -326,7 +334,14 @@ async def update_journal_entry(
             detail="You can only edit your own journal entries",
         )
 
-    for field in [
+    editor_id = get_user_id_from_auth(auth_user)
+    if editor_id is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="X-On-Behalf-Of header required for API key access to this endpoint",
+        )
+
+    visible_fields = [
         "title",
         "content",
         "entry_date",
@@ -335,10 +350,25 @@ async def update_journal_entry(
         "tags",
         "win",
         "goals",
-    ]:
-        val = getattr(entry_data, field)
-        if val is not None:
-            setattr(entry, field, val)
+    ]
+    update_data = entry_data.dict(exclude_unset=True)
+    if update_data.get("title", entry.title) is None:
+        raise HTTPException(status_code=422, detail="title cannot be null")
+    if update_data.get("content", entry.content) is None:
+        raise HTTPException(status_code=422, detail="content cannot be null")
+
+    changed = False
+    for field in visible_fields:
+        if field not in update_data:
+            continue
+        value = update_data[field]
+        if getattr(entry, field) != value:
+            setattr(entry, field, value)
+            changed = True
+
+    if changed:
+        entry.edited_at = datetime.now(timezone.utc)
+        entry.edited_by = editor_id
 
     db.commit()
     db.refresh(entry)

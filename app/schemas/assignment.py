@@ -190,6 +190,61 @@ class StudentAssignmentUpdate(BaseModel):
         return _validate_artifact_urls(v)
 
 
+class StudentCreatedAssignmentCreate(BaseModel):
+    """Student-owned one-off assignment definition and schedule."""
+
+    name: str = Field(..., min_length=1, max_length=200)
+    subject_id: int
+    assignment_type: str = Field(default=AssignmentType.HOMEWORK.value, max_length=50)
+    description: Optional[str] = None
+    instructions: Optional[str] = None
+    max_points: int = Field(default=100, ge=1, le=1000)
+    estimated_duration_minutes: Optional[int] = Field(None, ge=1)
+    assigned_date: Optional[date] = None
+    due_date: Optional[date] = None
+
+
+class StudentCreatedAssignmentUpdate(BaseModel):
+    """Fields a student may revise on their own one-off assignment."""
+
+    name: Optional[str] = Field(None, min_length=1, max_length=200)
+    subject_id: Optional[int] = None
+    assignment_type: Optional[str] = Field(None, max_length=50)
+    description: Optional[str] = None
+    instructions: Optional[str] = None
+    max_points: Optional[int] = Field(None, ge=1, le=1000)
+    estimated_duration_minutes: Optional[int] = Field(None, ge=1)
+    assigned_date: Optional[date] = None
+    due_date: Optional[date] = None
+
+
+class AssignmentTimeEntryCreate(BaseModel):
+    work_date: date
+    minutes: int = Field(..., ge=1, le=1440)
+    note: Optional[str] = Field(None, max_length=500)
+
+
+class AssignmentTimeEntryUpdate(BaseModel):
+    work_date: Optional[date] = None
+    minutes: Optional[int] = Field(None, ge=1, le=1440)
+    note: Optional[str] = Field(None, max_length=500)
+
+
+class AssignmentTimeEntryResponse(BaseModel):
+    id: int
+    assignment_id: int
+    logged_by: Optional[int] = None
+    logged_by_name: str
+    work_date: date
+    minutes: int
+    note: Optional[str] = None
+    created_at: datetime
+    updated_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
 class StudentAssignmentCompleteRequest(BaseModel):
     """Request body for marking a student assignment completed/submitted."""
 
@@ -249,6 +304,7 @@ class StudentAssignmentResponse(StudentAssignmentBase):
     submission_notes: Optional[str] = None
     submission_artifacts: Optional[List[str]] = None
     time_spent_minutes: int = 0
+    is_student_created: bool = False
     assigned_by: Optional[int] = None  # Null when assigned via API key (no user)
     created_at: datetime
     updated_at: datetime

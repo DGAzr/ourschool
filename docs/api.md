@@ -181,10 +181,16 @@ The complete API surface as of `v1.1-beta`. Set `ENABLE_API_DOCS=true` for the i
 | `POST /api/assignments/bulk-grade` | Grade many assignments in one call |
 | `GET /api/assignments/dashboard/overview` | Admin dashboard rollup |
 | `GET /api/assignments/my-assignments` | Current student's assignments |
+| `POST /api/assignments/my-assignments` | Create a private one-off assignment (student session only) |
+| `PUT /api/assignments/my-assignments/{id}` | Edit the student's own one-off before work starts or is submitted |
 | `GET /api/assignments/my-term-grades` | Current student's term grades |
 | `GET /api/assignments/student-assignments/{id}` | Get one student assignment |
-| `PUT /api/assignments/student-assignments/{id}` | Update (students: submission fields only) |
+| `PUT /api/assignments/student-assignments/{id}` | Update an assignment instance (students: submission fields only; admins: individualized terms) |
 | `DELETE /api/assignments/student-assignments/{id}` | Delete a student assignment (admin) |
+| `GET /api/assignments/student-assignments/{id}/time-entries` | List manual work sessions |
+| `POST /api/assignments/student-assignments/{id}/time-entries` | Log a dated work session |
+| `PUT /api/assignments/time-entries/{entry_id}` | Correct a work session |
+| `DELETE /api/assignments/time-entries/{entry_id}` | Delete a work session |
 | `POST /api/assignments/student-assignments/{id}/start` | Mark in-progress (student) |
 | `POST /api/assignments/student-assignments/{id}/complete` | Submit for grading (student) |
 | `POST /api/assignments/student-assignments/{id}/grade` | Grade it (admin) |
@@ -211,7 +217,7 @@ The complete API surface as of `v1.1-beta`. Set `ENABLE_API_DOCS=true` for the i
 | `GET /api/journal/entries` | List journal entries (admins see all; students see their own) |
 | `POST /api/journal/entries` | Create an entry (API keys must attribute via `X-On-Behalf-Of` admin) |
 | `GET /api/journal/entries/{entry_id}` | Get an entry |
-| `PUT /api/journal/entries/{entry_id}` | Update an entry |
+| `PUT /api/journal/entries/{entry_id}` | Update visible entry fields and set edit attribution (API keys require `X-On-Behalf-Of`) |
 | `DELETE /api/journal/entries/{entry_id}` | Delete an entry |
 | `POST /api/journal/entries/{entry_id}/mark-read` | Mark an entry read |
 | `POST /api/journal/entries/{entry_id}/reactions` | Set reactions on an entry |

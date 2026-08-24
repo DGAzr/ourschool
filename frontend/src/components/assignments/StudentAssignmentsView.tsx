@@ -32,6 +32,8 @@ import { useAssignmentFilters } from '../../hooks/useAssignmentFilters'
 import StudentAssignmentCard from './StudentAssignmentCard'
 import SubmissionDialog from './SubmissionDialog'
 import AssignmentDetailModal from './AssignmentDetailModal'
+import StudentCreatedAssignmentEditor from './StudentCreatedAssignmentEditor'
+import { useAssignmentTypes } from '../../contexts/AssignmentTypesContext'
 import { StudentAssignment, Term } from '../../types'
 import {
   StudentTab,
@@ -57,6 +59,7 @@ const EMPTY_COPY: Record<StudentTab, { title: string; hint: string }> = {
 
 const StudentAssignmentsView: React.FC = () => {
   const { user } = useAuth()
+  const { types: assignmentTypes } = useAssignmentTypes()
 
   const [activeTab, setActiveTab] = useState<StudentTab>('todo')
   // undefined = defaulting to the active term once terms load; null = "All terms"
@@ -74,6 +77,7 @@ const StudentAssignmentsView: React.FC = () => {
 
   const [submittingAssignment, setSubmittingAssignment] = useState<StudentAssignment | null>(null)
   const [detailAssignmentId, setDetailAssignmentId] = useState<number | null>(null)
+  const [editingOwn, setEditingOwn] = useState<StudentAssignment | 'new' | null>(null)
 
   useEffect(() => {
     termsApi
@@ -159,6 +163,7 @@ const StudentAssignmentsView: React.FC = () => {
           onStart={handleStart}
           onComplete={handleComplete}
           onView={a => setDetailAssignmentId(a.id)}
+          onEditSelf={setEditingOwn}
         />
       ))}
     </div>
@@ -181,6 +186,16 @@ const StudentAssignmentsView: React.FC = () => {
           {error}
         </div>
       )}
+
+      <div className="flex justify-end mb-3">
+        <button
+          type="button"
+          onClick={() => setEditingOwn('new')}
+          className="h-[34px] px-3.5 rounded-field bg-btn-primary-bg text-btn-primary-fg text-[13px] font-semibold hover:opacity-90"
+        >
+          + Add your own assignment
+        </button>
+      </div>
 
       {/* Tabs */}
       <div className="flex items-center gap-1.5 mb-4 flex-wrap">
@@ -289,6 +304,16 @@ const StudentAssignmentsView: React.FC = () => {
           studentId={user?.id}
           isOpen={detailAssignmentId !== null}
           onClose={() => setDetailAssignmentId(null)}
+        />
+      )}
+
+      {editingOwn && (
+        <StudentCreatedAssignmentEditor
+          assignment={editingOwn === 'new' ? null : editingOwn}
+          subjects={subjects}
+          assignmentTypes={assignmentTypes}
+          onClose={() => setEditingOwn(null)}
+          onSaved={() => { setEditingOwn(null); refetch() }}
         />
       )}
     </>

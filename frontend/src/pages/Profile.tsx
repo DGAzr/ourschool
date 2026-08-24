@@ -21,6 +21,7 @@ import { Lock, Eye, EyeOff, Save } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 import { usersApi } from '../services/users'
 import { getErrorMessage } from '../services/api'
+import { formatGradeLevel } from '../utils/formatters'
 
 const FIELD = 'w-full bg-field-bg border border-field-border rounded-field px-3 py-2 text-[13.5px] text-ink focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent placeholder:text-faintest'
 const FIELD_DISABLED = 'w-full bg-panel-2 border border-field-border rounded-field px-3 py-2 text-[13.5px] text-ink cursor-not-allowed'
@@ -166,10 +167,10 @@ const Profile: React.FC = () => {
               {user.role === 'admin' ? 'Administrator' : 'Student'}
             </div>
           </div>
-          {user.role === 'student' && user.grade_level && (
+          {user.role === 'student' && user.grade_level !== null && user.grade_level !== undefined && (
             <div>
               <label className={LABEL}>Grade Level</label>
-              <div className={FIELD_DISABLED}>{user.grade_level}</div>
+              <div className={FIELD_DISABLED}>{formatGradeLevel(user.grade_level)}</div>
             </div>
           )}
         </div>

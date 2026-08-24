@@ -41,6 +41,8 @@ export const usersApi = {
     first_name?: string
     last_name?: string
     is_active?: boolean
+    date_of_birth?: string
+    grade_level?: number
   }) => api.put(`/users/${id}`, data),
   
   delete: (id: number) => api.delete(`/users/${id}`),

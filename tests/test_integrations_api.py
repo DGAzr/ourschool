@@ -8,6 +8,7 @@ succeeds with the right permission, (b) it is rejected (403) without it, and
 
 Requires a reachable PostgreSQL instance (see tests/conftest.py).
 """
+
 import json
 import uuid
 from datetime import date
@@ -66,7 +67,10 @@ def seeded(db_session):
 
     def mint(*perms):
         _, full_key = create_api_key(
-            db_session, name=f"key-{tok}-{'-'.join(perms) or 'none'}", permissions=list(perms), creator_id=admin.id
+            db_session,
+            name=f"key-{tok}-{'-'.join(perms) or 'none'}",
+            permissions=list(perms),
+            creator_id=admin.id,
         )
         return full_key
 
@@ -95,14 +99,26 @@ def _hdr(key: str) -> dict:
 
 
 def test_create_template_requires_write_permission(client, seeded):
-    body = {"name": "Algebra HW", "subject_id": seeded["subject"].id, "assignment_type": seeded["type_key"]}
+    body = {
+        "name": "Algebra HW",
+        "subject_id": seeded["subject"].id,
+        "assignment_type": seeded["type_key"],
+    }
 
     # Without the permission → 403
-    r = client.post("/api/assignments/templates", json=body, headers=_hdr(seeded["mint"]("assignments:read")))
+    r = client.post(
+        "/api/assignments/templates",
+        json=body,
+        headers=_hdr(seeded["mint"]("assignments:read")),
+    )
     assert r.status_code == 403, r.text
 
     # With the permission → created, and created_by is null (no backing user).
-    r = client.post("/api/assignments/templates", json=body, headers=_hdr(seeded["mint"]("assignments:write")))
+    r = client.post(
+        "/api/assignments/templates",
+        json=body,
+        headers=_hdr(seeded["mint"]("assignments:write")),
+    )
     assert r.status_code == 200, r.text
     data = r.json()
     assert data["created_by"] is None
@@ -117,7 +133,11 @@ def test_assign_and_discover_assignment_via_api_key(client, seeded):
     # Author a template.
     r = client.post(
         "/api/assignments/templates",
-        json={"name": "Reading", "subject_id": seeded["subject"].id, "assignment_type": seeded["type_key"]},
+        json={
+            "name": "Reading",
+            "subject_id": seeded["subject"].id,
+            "assignment_type": seeded["type_key"],
+        },
         headers=_hdr(write),
     )
     template_id = r.json()["id"]
@@ -137,12 +157,16 @@ def test_assign_and_discover_assignment_via_api_key(client, seeded):
     assert created[0]["assigned_by"] is None
 
     # Discover it via the grading/discovery endpoint (read).
-    r = client.get(f"/api/assignments/all-assignments?student_id={student_id}", headers=_hdr(read))
+    r = client.get(
+        f"/api/assignments/all-assignments?student_id={student_id}", headers=_hdr(read)
+    )
     assert r.status_code == 200, r.text
     assert any(a["template_id"] == template_id for a in r.json())
 
     # The same discovery endpoint is rejected without the read permission.
-    r = client.get(f"/api/assignments/all-assignments?student_id={student_id}", headers=_hdr(write))
+    r = client.get(
+        f"/api/assignments/all-assignments?student_id={student_id}", headers=_hdr(write)
+    )
     assert r.status_code == 403, r.text
 
 
@@ -151,7 +175,11 @@ def test_list_templates_via_api_key(client, seeded):
     read = seeded["mint"]("assignments:read")
     client.post(
         "/api/assignments/templates",
-        json={"name": "Listed", "subject_id": seeded["subject"].id, "assignment_type": seeded["type_key"]},
+        json={
+            "name": "Listed",
+            "subject_id": seeded["subject"].id,
+            "assignment_type": seeded["type_key"],
+        },
         headers=_hdr(write),
     )
     r = client.get("/api/assignments/templates", headers=_hdr(read))
@@ -167,7 +195,12 @@ def test_complete_assignment_via_api_key(client, seeded):
     # Author + assign so there is something to complete.
     r = client.post(
         "/api/assignments/templates",
-        json={"name": "Essay", "subject_id": seeded["subject"].id, "assignment_type": seeded["type_key"], "max_points": 10},
+        json={
+            "name": "Essay",
+            "subject_id": seeded["subject"].id,
+            "assignment_type": seeded["type_key"],
+            "max_points": 10,
+        },
         headers=_hdr(write),
     )
     template_id = r.json()["id"]
@@ -190,7 +223,10 @@ def test_complete_assignment_via_api_key(client, seeded):
     # Notes and artifacts arrive via the object body.
     r = client.post(
         f"/api/assignments/student-assignments/{assignment_id}/complete",
-        json={"submission_notes": "Done via MCP", "submission_artifacts": ["https://example.com/essay.pdf"]},
+        json={
+            "submission_notes": "Done via MCP",
+            "submission_artifacts": ["https://example.com/essay.pdf"],
+        },
         headers=_hdr(write),
     )
     assert r.status_code == 200, r.text
@@ -235,7 +271,10 @@ def test_attendance_bulk_write_and_read_via_api_key(client, seeded):
     assert len(r.json()) == 1
 
     # A key that lacks attendance:read is forbidden.
-    r2 = client.get(f"/api/attendance/?student_id={student_id}", headers=_hdr(seeded["mint"]("students:read")))
+    r2 = client.get(
+        f"/api/attendance/?student_id={student_id}",
+        headers=_hdr(seeded["mint"]("students:read")),
+    )
     assert r2.status_code == 403, r2.text
 
 
@@ -246,7 +285,9 @@ def test_attendance_bulk_write_and_read_via_api_key(client, seeded):
 
 def test_list_students_via_api_key(client, seeded):
     # Rejected without students:read.
-    r = client.get("/api/users/students", headers=_hdr(seeded["mint"]("attendance:read")))
+    r = client.get(
+        "/api/users/students", headers=_hdr(seeded["mint"]("attendance:read"))
+    )
     assert r.status_code == 403, r.text
 
     # The canonical roster endpoint works with students:read.
@@ -267,19 +308,31 @@ def test_meta_advertises_new_permissions(client):
     assert {
         # existing
         "students:read",
-        "assignments:read", "assignments:write", "assignments:grade",
-        "assignment_types:read", "assignment_types:write",
-        "attendance:read", "attendance:write",
-        "points:read", "points:write",
+        "assignments:read",
+        "assignments:write",
+        "assignments:grade",
+        "assignment_types:read",
+        "assignment_types:write",
+        "attendance:read",
+        "attendance:write",
+        "points:read",
+        "points:write",
         # new
-        "terms:read", "terms:write",
-        "subjects:read", "subjects:write",
+        "terms:read",
+        "terms:write",
+        "subjects:read",
+        "subjects:write",
         "reports:read",
-        "journal:read", "journal:write", "journal:moderate",
+        "journal:read",
+        "journal:write",
+        "journal:moderate",
         "activity:read",
-        "settings:read", "settings:write",
-        "performance:read", "performance:write",
-        "backup:export", "backup:import",
+        "settings:read",
+        "settings:write",
+        "performance:read",
+        "performance:write",
+        "backup:export",
+        "backup:import",
         "api_keys:read",
     } <= perms
     assert r.json()["on_behalf_of_header"] == "X-On-Behalf-Of"
@@ -297,16 +350,24 @@ def _obo(key: str, who) -> dict:
 def test_on_behalf_of_attributes_template_create_by_id_and_username(client, seeded):
     write = seeded["mint"]("assignments:write")
     admin = seeded["admin"]
-    body = {"name": "Owned", "subject_id": seeded["subject"].id, "assignment_type": seeded["type_key"]}
+    body = {
+        "name": "Owned",
+        "subject_id": seeded["subject"].id,
+        "assignment_type": seeded["type_key"],
+    }
 
     # By numeric ID.
-    r = client.post("/api/assignments/templates", json=body, headers=_obo(write, admin.id))
+    r = client.post(
+        "/api/assignments/templates", json=body, headers=_obo(write, admin.id)
+    )
     assert r.status_code == 200, r.text
     assert r.json()["created_by"] == admin.id
 
     # By username.
     body2 = {**body, "name": "Owned2"}
-    r = client.post("/api/assignments/templates", json=body2, headers=_obo(write, admin.username))
+    r = client.post(
+        "/api/assignments/templates", json=body2, headers=_obo(write, admin.username)
+    )
     assert r.status_code == 200, r.text
     assert r.json()["created_by"] == admin.id
 
@@ -316,7 +377,9 @@ def test_on_behalf_of_attributes_points_adjust(client, seeded):
     admin = seeded["admin"]
     body = {"student_id": seeded["student"].id, "amount": 5, "notes": "Great work"}
 
-    r = client.post("/api/points/adjust", json=body, headers=_obo(write, admin.username))
+    r = client.post(
+        "/api/points/adjust", json=body, headers=_obo(write, admin.username)
+    )
     assert r.status_code == 200, r.text
     data = r.json()
     assert data["admin_id"] == admin.id
@@ -331,7 +394,12 @@ def test_on_behalf_of_attributes_grade(client, seeded, db_session):
     # Author + assign so there is something to grade.
     r = client.post(
         "/api/assignments/templates",
-        json={"name": "Quiz", "subject_id": seeded["subject"].id, "assignment_type": seeded["type_key"], "max_points": 10},
+        json={
+            "name": "Quiz",
+            "subject_id": seeded["subject"].id,
+            "assignment_type": seeded["type_key"],
+            "max_points": 10,
+        },
         headers=_hdr(write),
     )
     template_id = r.json()["id"]
@@ -354,20 +422,34 @@ def test_on_behalf_of_attributes_grade(client, seeded, db_session):
     from app.models.assignment import StudentAssignment
 
     db_session.expire_all()
-    row = db_session.query(StudentAssignment).filter(StudentAssignment.id == assignment_id).first()
+    row = (
+        db_session.query(StudentAssignment)
+        .filter(StudentAssignment.id == assignment_id)
+        .first()
+    )
     assert row.graded_by == admin.id
 
 
 def test_on_behalf_of_rejects_non_admin_and_unknown(client, seeded):
     write = seeded["mint"]("assignments:write")
-    body = {"name": "Nope", "subject_id": seeded["subject"].id, "assignment_type": seeded["type_key"]}
+    body = {
+        "name": "Nope",
+        "subject_id": seeded["subject"].id,
+        "assignment_type": seeded["type_key"],
+    }
 
     # A student is not an admin → 400, nothing written.
-    r = client.post("/api/assignments/templates", json=body, headers=_obo(write, seeded["student"].username))
+    r = client.post(
+        "/api/assignments/templates",
+        json=body,
+        headers=_obo(write, seeded["student"].username),
+    )
     assert r.status_code == 400, r.text
 
     # An unknown identifier → 400.
-    r = client.post("/api/assignments/templates", json=body, headers=_obo(write, "no-such-user-xyz"))
+    r = client.post(
+        "/api/assignments/templates", json=body, headers=_obo(write, "no-such-user-xyz")
+    )
     assert r.status_code == 400, r.text
 
 
@@ -385,8 +467,14 @@ def test_on_behalf_of_rejects_inactive_admin(client, seeded, db_session):
     db_session.add(inactive)
     db_session.commit()
 
-    body = {"name": "Nope2", "subject_id": seeded["subject"].id, "assignment_type": seeded["type_key"]}
-    r = client.post("/api/assignments/templates", json=body, headers=_obo(write, inactive.username))
+    body = {
+        "name": "Nope2",
+        "subject_id": seeded["subject"].id,
+        "assignment_type": seeded["type_key"],
+    }
+    r = client.post(
+        "/api/assignments/templates", json=body, headers=_obo(write, inactive.username)
+    )
     assert r.status_code == 400, r.text
 
 
@@ -436,6 +524,38 @@ def test_journal_entry_via_api_key_requires_on_behalf_of(client, seeded):
     assert r.json()["author_name"] == f"{admin.first_name} {admin.last_name}"
 
 
+def test_journal_edit_via_api_key_requires_on_behalf_of(client, seeded):
+    key = seeded["mint"]("journal:write")
+    admin = seeded["admin"]
+    r = client.post(
+        "/api/journal/entries",
+        json={
+            "title": "Editable note",
+            "content": "Original",
+            "student_id": seeded["student"].id,
+        },
+        headers=_obo(key, admin.id),
+    )
+    assert r.status_code == 200, r.text
+    entry_id = r.json()["id"]
+
+    r = client.put(
+        f"/api/journal/entries/{entry_id}",
+        json={"content": "Changed"},
+        headers=_hdr(key),
+    )
+    assert r.status_code == 400, r.text
+
+    r = client.put(
+        f"/api/journal/entries/{entry_id}",
+        json={"content": "Changed"},
+        headers=_obo(key, admin.username),
+    )
+    assert r.status_code == 200, r.text
+    assert r.json()["edited_by"] == admin.id
+    assert r.json()["edited_by_name"] == f"{admin.first_name} {admin.last_name}"
+
+
 def test_journal_reply_via_api_key_requires_on_behalf_of(client, seeded):
     write = seeded["mint"]("journal:write")
     moderate = seeded["mint"]("journal:moderate")
@@ -475,7 +595,11 @@ def test_activity_feed_attributed_api_key_sees_all_activity(client, seeded):
 
     r = client.post(
         "/api/attendance/bulk",
-        json={"date": str(date.today()), "student_ids": [student.id], "status": "present"},
+        json={
+            "date": str(date.today()),
+            "student_ids": [student.id],
+            "status": "present",
+        },
         headers=_hdr(key),
     )
     assert r.status_code == 200, r.text
@@ -519,7 +643,9 @@ def test_my_endpoints_reject_api_keys(client, seeded, db_session):
     # Regression: /my-balance used to get_or_create a StudentPoints row for the
     # on-behalf-of admin.
     assert (
-        db_session.query(StudentPoints).filter(StudentPoints.student_id == admin.id).first()
+        db_session.query(StudentPoints)
+        .filter(StudentPoints.student_id == admin.id)
+        .first()
         is None
     )
 

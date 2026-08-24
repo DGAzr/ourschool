@@ -18,6 +18,7 @@
 
 import React, { useState } from 'react'
 import { ReportCard as ReportCardType, ReportCardSubjectGrade } from '../../../types/reports'
+import { formatGradeLevel } from '../../../utils/formatters'
 
 interface ReportCardProps {
   reportCard: ReportCardType | null
@@ -316,7 +317,7 @@ const ReportCard: React.FC<ReportCardProps> = ({
                 { label: 'Student', value: rc.student_name },
                 {
                   label: 'Grade level',
-                  value: rc.student_grade_level ? `Grade ${rc.student_grade_level}` : 'N/A',
+                  value: formatGradeLevel(rc.student_grade_level, 'K'),
                 },
                 {
                   label: 'Term dates',

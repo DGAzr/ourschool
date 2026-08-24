@@ -21,6 +21,7 @@ import { StudentProgress } from '../../../types'
 import { Term } from '../../../types/term'
 import TrendChart from '../shared/TrendChart'
 import { trendInfo, gradeColor, barColor, letter } from '../shared/gradeColors'
+import { formatGradeLevel } from '../../../utils/formatters'
 
 interface StudentsReportProps {
   studentProgress: StudentProgress[]
@@ -191,7 +192,7 @@ const StudentsReport: React.FC<StudentsReportProps> = ({
                 {displayName(sel)}
               </h2>
               <div style={{ fontSize: 13, color: 'var(--muted)', marginTop: 2 }}>
-                {sel.grade_level ? `Grade ${sel.grade_level}` : 'Grade not set'}
+                {formatGradeLevel(sel.grade_level, 'K')}
                 {sel.email ? ` · ${sel.email}` : ''}
               </div>
             </div>

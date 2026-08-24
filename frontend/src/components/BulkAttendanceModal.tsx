@@ -22,6 +22,7 @@ import { AttendanceStatus, User } from '../types'
 import Modal from './ui/Modal'
 import Button from './ui/Button'
 import { getErrorMessage } from '../services/api'
+import { formatGradeLevel } from '../utils/formatters'
 
 interface BulkAttendanceModalProps {
   isOpen: boolean
@@ -218,7 +219,7 @@ const BulkAttendanceModalContent: React.FC<BulkAttendanceModalProps> = ({
                   <div className="min-w-0">
                     <p className="text-[13.5px] font-medium text-ink">{student.first_name} {student.last_name}</p>
                     <p className="text-[11.5px] text-faint truncate">
-                      {student.grade_level ? `${student.grade_level} · ` : ''}{student.email}
+                      {student.grade_level !== null && student.grade_level !== undefined ? `${formatGradeLevel(student.grade_level, 'K')} · ` : ''}{student.email}
                     </p>
                   </div>
                 </label>

@@ -48,6 +48,7 @@ import { kindBadge } from '../materials/materialsLogic'
 import { PaperlessMaterial } from '../../types/paperless'
 import { attachedIds, combinedMaterials } from './assignmentMaterialsLogic'
 import { AssignmentInfo, SubmissionCard } from './AssignmentInfo'
+import AssignmentTimeLog from './AssignmentTimeLog'
 
 interface AssignmentDetailModalProps {
   assignmentId: number
@@ -179,7 +180,10 @@ const AssignmentDetailModalContent: React.FC<AssignmentDetailModalProps> = ({
               <div className="flex items-start justify-between mb-4">
                 <div>
                   <h2 className="text-[18px] font-bold text-ink mb-1">{assignment.template?.name}</h2>
-                  <p className="text-[12.5px] text-muted">Assignment #{assignment.id}</p>
+                  <div className="flex items-center gap-2">
+                    <p className="text-[12.5px] text-muted">Assignment #{assignment.id}</p>
+                    {assignment.is_student_created && <span className="px-2 py-0.5 rounded-pill bg-accent-soft text-accent text-[10px] font-semibold uppercase tracking-wide">Student created</span>}
+                  </div>
                 </div>
                 <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-semibold uppercase tracking-wide ${statusBadge(assignment.status)}`}>
                   {assignment.status.replace('_', ' ')}
@@ -296,6 +300,15 @@ const AssignmentDetailModalContent: React.FC<AssignmentDetailModalProps> = ({
                 </div>
               </div>
             )}
+
+            {/* Timeline */}
+            <div className={SECTION}>
+              <h3 className={SECTION_TITLE}><Clock className="w-4 h-4 text-muted" /> Work sessions</h3>
+              <AssignmentTimeLog
+                assignment={assignment}
+                onTotalChanged={minutes => setAssignment(current => current ? { ...current, time_spent_minutes: minutes } : current)}
+              />
+            </div>
 
             {/* Timeline */}
             <div className={SECTION}>

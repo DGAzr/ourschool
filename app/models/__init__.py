@@ -19,6 +19,7 @@
 # Import all models to ensure they are registered with SQLAlchemy
 from .api_key import APIKey
 from .assignment import (
+    AssignmentTimeEntry,
     AssignmentStatus,
     AssignmentTemplate,
     AssignmentType,
@@ -53,6 +54,7 @@ from .points import StudentPoints, PointTransaction, SystemSettings
 __all__ = [
     "APIKey",
     "AssignmentStatus",
+    "AssignmentTimeEntry",
     "AssignmentTemplate",
     "AssignmentType",
     "AssignmentTypeConfig",

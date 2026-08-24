@@ -17,7 +17,7 @@
  */
 
 import React from 'react'
-import { Archive, Trash2 } from 'lucide-react'
+import { Archive, Edit2, Trash2 } from 'lucide-react'
 import { StudentAssignment, Subject } from '../../types'
 import { assignmentUtils } from '../../services/assignments'
 import { formatDateOnly } from '../../utils/formatters'
@@ -35,6 +35,7 @@ interface StudentAssignmentCardProps {
   onDelete?: (assignment: StudentAssignment) => void
   /** When set, the card body is clickable and opens the detail view. */
   onView?: (assignment: StudentAssignment) => void
+  onEditSelf?: (assignment: StudentAssignment) => void
 }
 
 const statusBadge = (status: string) => {
@@ -62,7 +63,8 @@ const StudentAssignmentCard: React.FC<StudentAssignmentCardProps> = ({
   onComplete,
   onArchive,
   onDelete,
-  onView
+  onView,
+  onEditSelf,
 }) => {
   const template = assignment.template
 
@@ -136,6 +138,9 @@ const StudentAssignmentCard: React.FC<StudentAssignmentCardProps> = ({
               <h3 className="text-[15px] font-semibold text-ink truncate">
                 {template?.name}
               </h3>
+              {assignment.is_student_created && (
+                <span className="px-2 py-0.5 rounded-pill bg-accent-soft text-accent text-[10px] font-semibold uppercase tracking-wide">Student created</span>
+              )}
             </div>
             <div className="flex items-center gap-2 text-[12.5px] text-muted">
               <span>{subject?.name}</span>
@@ -168,6 +173,9 @@ const StudentAssignmentCard: React.FC<StudentAssignmentCardProps> = ({
             <span>📋 {maxPts} pts</span>
             {template?.estimated_duration_minutes && (
               <span>⏱ {assignmentUtils.formatDuration(template.estimated_duration_minutes)}</span>
+            )}
+            {assignment.time_spent_minutes > 0 && (
+              <span>Worked {assignmentUtils.formatDuration(assignment.time_spent_minutes)}</span>
             )}
           </div>
           {assignment.percentage_grade !== null && assignment.percentage_grade !== undefined && (
@@ -221,6 +229,16 @@ const StudentAssignmentCard: React.FC<StudentAssignmentCardProps> = ({
         {/* Actions */}
         <div className="flex gap-2">
           {renderActionButton()}
+          {assignment.is_student_created && onEditSelf && !assignment.is_graded && !['submitted', 'graded', 'excused'].includes(assignment.status) && (
+            <button
+              onClick={() => onEditSelf(assignment)}
+              className="w-[34px] h-[34px] flex items-center justify-center rounded-field text-faint hover:text-accent hover:bg-accent-soft transition-colors"
+              title="Edit your assignment"
+              aria-label="Edit your assignment"
+            >
+              <Edit2 className="w-4 h-4" />
+            </button>
+          )}
           {isAdmin && onArchive && (
             <button
               onClick={() => onArchive(assignment)}

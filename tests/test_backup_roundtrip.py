@@ -52,6 +52,12 @@ def test_deleted_records_are_restored_by_import(
     )
     assert r.status_code == 200, r.text
     r = client.post(
+        f"/api/assignments/student-assignments/{sa['id']}/time-entries",
+        json={"work_date": "2026-03-09", "minutes": 55, "note": "Backup session"},
+        headers=admin_headers,
+    )
+    assert r.status_code == 200, r.text
+    r = client.post(
         "/api/attendance/",
         json={"student_id": student["id"], "date": "2026-03-10", "status": "present"},
         headers=admin_headers,
@@ -83,7 +89,11 @@ def test_deleted_records_are_restored_by_import(
     # Attendance record is back with the same content.
     r = client.get(
         "/api/attendance/",
-        params={"student_id": student["id"], "start_date": "2026-03-10", "end_date": "2026-03-10"},
+        params={
+            "student_id": student["id"],
+            "start_date": "2026-03-10",
+            "end_date": "2026-03-10",
+        },
         headers=admin_headers,
     )
     assert r.status_code == 200, r.text
@@ -102,6 +112,15 @@ def test_deleted_records_are_restored_by_import(
     restored = [a for a in assignments if a["is_graded"]]
     assert restored, assignments
     assert restored[0]["points_earned"] == 95
+    assert restored[0]["time_spent_minutes"] == 55
+    r = client.get(
+        f"/api/assignments/student-assignments/{restored[0]['id']}/time-entries",
+        headers=admin_headers,
+    )
+    assert r.status_code == 200, r.text
+    assert [(item["minutes"], item["note"]) for item in r.json()] == [
+        (55, "Backup session")
+    ]
 
 
 def _add_attendance(client, admin_headers, student_id, day):

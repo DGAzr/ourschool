@@ -60,6 +60,10 @@ class JournalEntry(Base):
         default=lambda: datetime.now(timezone.utc),
         onupdate=lambda: datetime.now(timezone.utc),
     )
+    edited_at = Column(DateTime(timezone=True), nullable=True)
+    edited_by = Column(
+        Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
 
     # Rich fields
     mood = Column(String(20), nullable=True)
@@ -81,6 +85,7 @@ class JournalEntry(Base):
         "User",
         foreign_keys=[author_id],
     )
+    editor = relationship("User", foreign_keys=[edited_by])
     replies = relationship(
         "JournalReply",
         back_populates="entry",

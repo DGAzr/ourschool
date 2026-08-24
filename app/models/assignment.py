@@ -31,6 +31,7 @@ from sqlalchemy import (
     Integer,
     String,
     Text,
+    CheckConstraint,
 )
 from sqlalchemy.orm import relationship
 
@@ -192,7 +193,12 @@ class StudentAssignment(Base):
     submission_artifacts = Column(Text)  # JSON array of artifact links
 
     # Time tracking
-    time_spent_minutes = Column(Integer, default=0)
+    time_spent_minutes = Column(Integer, nullable=False, default=0)
+
+    # True only for work a student added from their own assignment view. The
+    # backing template is a private one-off, but this durable marker drives
+    # authorization and makes provenance visible even after backup/restore.
+    is_student_created = Column(Boolean, nullable=False, default=False)
 
     # Assignment metadata (can override template defaults)
     custom_instructions = Column(Text)  # Custom instructions for this student
@@ -231,6 +237,12 @@ class StudentAssignment(Base):
         cascade="all, delete-orphan",
         order_by="StudentAssignmentPaperlessMaterial.id",
         lazy="selectin",
+    )
+    time_entries = relationship(
+        "AssignmentTimeEntry",
+        back_populates="assignment",
+        cascade="all, delete-orphan",
+        order_by="AssignmentTimeEntry.work_date.desc(), AssignmentTimeEntry.id.desc()",
     )
 
     @property
@@ -410,3 +422,40 @@ class StudentAssignment(Base):
         # NOTE: No session.commit() here — the caller (grading router)
         # manages the transaction boundary and calls db.commit() after
         # the full operation completes.
+
+
+class AssignmentTimeEntry(Base):
+    """A manually logged work session for a student assignment."""
+
+    __tablename__ = "assignment_time_entries"
+    __table_args__ = (
+        CheckConstraint(
+            "minutes > 0 AND minutes <= 1440", name="ck_time_entry_minutes"
+        ),
+        Index("idx_assignment_time_entries_assignment_id", "assignment_id"),
+        Index("idx_assignment_time_entries_logged_by", "logged_by"),
+    )
+
+    id = Column(Integer, primary_key=True, index=True)
+    assignment_id = Column(
+        Integer,
+        ForeignKey("student_assignments.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    logged_by = Column(
+        Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True
+    )
+    work_date = Column(Date, nullable=False)
+    minutes = Column(Integer, nullable=False)
+    note = Column(String(500), nullable=True)
+    created_at = Column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )
+    updated_at = Column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        onupdate=lambda: datetime.now(timezone.utc),
+    )
+
+    assignment = relationship("StudentAssignment", back_populates="time_entries")
+    logger = relationship("User", foreign_keys=[logged_by])

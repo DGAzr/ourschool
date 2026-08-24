@@ -30,6 +30,7 @@ import StudentAssignmentsView from '../components/assignments/StudentAssignments
 import AssignmentComposer from '../components/assignments/composer/AssignmentComposer'
 import { ComposerMode } from '../components/assignments/composer/composerLogic'
 import { AssignmentInfo, SubmissionCard } from '../components/assignments/AssignmentInfo'
+import AssignedAssignmentEditor from '../components/assignments/AssignedAssignmentEditor'
 import { StudentAssignment, Term } from '../types'
 import { formatDateOnly } from '../utils/formatters'
 import { isOverdue } from '../utils/assignmentStatus'
@@ -83,6 +84,7 @@ const Assignments: React.FC = () => {
   const [unassigningAssignment, setUnassigningAssignment] = useState<StudentAssignment | null>(null)
   const [unassignLoading, setUnassignLoading] = useState(false)
   const [showBulkUnassignConfirm, setShowBulkUnassignConfirm] = useState(false)
+  const [editingAssignment, setEditingAssignment] = useState<StudentAssignment | null>(null)
 
   useEffect(() => {
     if (!isAdmin) return
@@ -544,6 +546,7 @@ const Assignments: React.FC = () => {
                               <div className="text-[14px] font-semibold text-ink tracking-[-0.01em] truncate">
                                 {assignment.template?.name ?? '—'}
                               </div>
+                              {assignment.is_student_created && <span className="inline-flex mt-1 px-1.5 py-0.5 rounded-pill bg-accent-soft text-accent text-[9.5px] font-semibold uppercase tracking-wide">Student created</span>}
                               <div className="text-[12px] text-faint mt-0.5">
                                 {sub?.name ?? '—'}
                                 {assignment.template?.assignment_type && (
@@ -596,6 +599,8 @@ const Assignments: React.FC = () => {
                               ariaLabel={`Actions for ${assignment.template?.name ?? 'assignment'}`}
                               revealOnHover
                               items={[
+                                { label: 'Edit assigned work', onSelect: () => setEditingAssignment(assignment) },
+                                'separator' as const,
                                 ...(isActive
                                   ? [
                                       { label: 'Grade', onSelect: () => navigate('/grading', { state: { assignmentId: assignment.id } }) },
@@ -753,6 +758,14 @@ const Assignments: React.FC = () => {
           students={students}
           onClose={() => setComposer(null)}
           onSuccess={() => { setComposer(null); refetch() }}
+        />
+      )}
+
+      {editingAssignment && (
+        <AssignedAssignmentEditor
+          assignment={editingAssignment}
+          onClose={() => setEditingAssignment(null)}
+          onSaved={() => { setEditingAssignment(null); refetch() }}
         />
       )}
 

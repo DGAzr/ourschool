@@ -107,6 +107,7 @@ export interface StudentAssignment {
   submission_notes?: string
   submission_artifacts?: string[]
   time_spent_minutes: number
+  is_student_created?: boolean
   custom_instructions?: string
   custom_max_points?: number
   assigned_by: number
@@ -116,6 +117,43 @@ export interface StudentAssignment {
   // One-off Paperless materials on this instance (template materials ride
   // inside template.paperless_materials).
   paperless_materials?: PaperlessMaterial[]
+}
+
+export interface StudentCreatedAssignmentInput {
+  name: string
+  subject_id: number
+  assignment_type: string
+  description?: string
+  instructions?: string
+  max_points: number
+  estimated_duration_minutes?: number
+  assigned_date?: string
+  due_date?: string
+}
+
+export type StudentCreatedAssignmentUpdate = Partial<Omit<StudentCreatedAssignmentInput, 'description' | 'instructions' | 'estimated_duration_minutes' | 'due_date'>> & {
+  description?: string | null
+  instructions?: string | null
+  estimated_duration_minutes?: number | null
+  due_date?: string | null
+}
+
+export interface AssignmentTimeEntry {
+  id: number
+  assignment_id: number
+  logged_by?: number
+  logged_by_name: string
+  work_date: string
+  minutes: number
+  note?: string
+  created_at: string
+  updated_at: string
+}
+
+export interface AssignmentTimeEntryInput {
+  work_date: string
+  minutes: number
+  note?: string
 }
 
 export interface AssignmentTemplateCreate {

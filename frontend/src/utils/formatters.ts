@@ -74,3 +74,12 @@ export const isPastDateOnly = (dateString?: string): boolean => {
   today.setHours(0, 0, 0, 0);
   return date.getTime() < today.getTime();
 };
+
+/** Format the API's integer grade convention without treating Kindergarten (0) as absent. */
+export const formatGradeLevel = (
+  gradeLevel?: number | null,
+  kindergartenLabel: 'K' | 'Kindergarten' = 'Kindergarten'
+): string => {
+  if (gradeLevel === null || gradeLevel === undefined) return 'Not set'
+  return gradeLevel === 0 ? kindergartenLabel : `Grade ${gradeLevel}`
+}

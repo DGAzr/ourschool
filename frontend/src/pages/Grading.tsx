@@ -28,6 +28,8 @@ import { SegmentedControl, StatTile, Pill, SubjectDot, statusToPillVariant, useT
 import type { ActionMenuEntry } from '../components/ui'
 import ConfirmDialog from '../components/ui/ConfirmDialog'
 import GradeForm from '../components/assignments/GradeForm'
+import AssignedAssignmentEditor from '../components/assignments/AssignedAssignmentEditor'
+import AssignmentTimeLog from '../components/assignments/AssignmentTimeLog'
 import { AssignmentInfo, SubmissionCard } from '../components/assignments/AssignmentInfo'
 import { StudentAssignment, Term } from '../types'
 import { formatDateOnly } from '../utils/formatters'
@@ -236,6 +238,7 @@ const DetailPanel: React.FC<DetailPanelProps> = ({
               <h2 className="text-[20px] font-bold text-ink tracking-[-0.01em] leading-snug">
                 {selectedAssignment.template?.name ?? 'Assignment'}
               </h2>
+              {selectedAssignment.is_student_created && <span className="inline-flex mt-1 px-2 py-0.5 rounded-pill bg-accent-soft text-accent text-[10px] font-semibold uppercase tracking-wide">Student created</span>}
               <div className="mt-1.5 text-[13.5px] text-muted">
                 {stu ? `${stu.first_name} ${stu.last_name}` : ''}
                 {selectedAssignment.submitted_date && (
@@ -259,6 +262,11 @@ const DetailPanel: React.FC<DetailPanelProps> = ({
             instructions={selectedAssignment.template?.instructions}
             customInstructions={selectedAssignment.custom_instructions}
           />
+
+          <div className="bg-panel-2 border border-line rounded-card p-4">
+            <p className="text-[12px] font-semibold text-ink mb-3">Work sessions</p>
+            <AssignmentTimeLog assignment={selectedAssignment} onTotalChanged={() => {}} />
+          </div>
 
           {selectedAssignment.is_graded && !editing ? (
             <div className="bg-pos-bg border border-pos-fg/20 rounded-card p-4">
@@ -317,6 +325,7 @@ const Grading: React.FC = () => {
   const [saving, setSaving] = useState(false)
   const [activeTerm, setActiveTerm] = useState<Term | null>(null)
   const [unassigning, setUnassigning] = useState<StudentAssignment | null>(null)
+  const [editingAssignment, setEditingAssignment] = useState<StudentAssignment | null>(null)
 
   useEffect(() => {
     termsApi.getActive().then(setActiveTerm).catch(() => {})
@@ -423,6 +432,8 @@ const Grading: React.FC = () => {
     <ActionMenu
       ariaLabel="Assignment actions"
       items={[
+        { label: 'Edit assigned work', onSelect: () => setEditingAssignment(selectedAssignment) },
+        'separator',
         ...(selectedAssignment.status !== 'excused'
           ? [{ label: 'Excuse', onSelect: () => runAssignmentAction('excuse', selectedAssignment) }]
           : []),
@@ -571,6 +582,13 @@ const Grading: React.FC = () => {
         message={<>Remove <strong className="text-ink">"{unassigning?.template?.name ?? 'this assignment'}"</strong> from the student?</>}
         confirmLabel="Remove"
       />
+      {editingAssignment && (
+        <AssignedAssignmentEditor
+          assignment={editingAssignment}
+          onClose={() => setEditingAssignment(null)}
+          onSaved={() => { setEditingAssignment(null); refetch() }}
+        />
+      )}
     </div>
   )
 }

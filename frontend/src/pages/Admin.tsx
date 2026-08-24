@@ -45,6 +45,7 @@ import { type Subject } from '../types/subject'
 import { type Term } from '../types/term'
 import { type SystemBackupFile, type SystemBackupImportResult, type User, WIPE_CONFIRMATION_PHRASE } from '../types'
 import { format, parseISO } from 'date-fns'
+import { formatGradeLevel } from '../utils/formatters'
 import { type TermCreate } from '../types'
 import {
   LayoutDashboard, Calendar, BookOpen, Coins, BookMarked, Tag, Users,
@@ -66,6 +67,14 @@ const CATS = [
 ] as const
 
 type SectionKey = typeof CATS[number]['key']
+
+const GRADE_LEVEL_OPTIONS = [
+  { value: '0', label: 'Kindergarten' },
+  ...Array.from({ length: 12 }, (_, index) => ({
+    value: String(index + 1),
+    label: `Grade ${index + 1}`,
+  })),
+]
 
 // Pending destructive action awaiting confirmation via ConfirmDialog
 type PendingAction =
@@ -714,7 +723,7 @@ const Admin: React.FC = () => {
   const openEditUser = (u: User) => {
     setEditingUser(u)
     setEditUserErrors({})
-    setEditUser({ first_name: u.first_name, last_name: u.last_name, email: u.email, username: u.username, is_active: u.is_active, date_of_birth: u.date_of_birth || '', grade_level: u.grade_level || 1 })
+    setEditUser({ first_name: u.first_name, last_name: u.last_name, email: u.email, username: u.username, is_active: u.is_active, date_of_birth: u.date_of_birth || '', grade_level: u.grade_level ?? 1 })
     setShowEditUser(true)
   }
 
@@ -1661,7 +1670,7 @@ const Admin: React.FC = () => {
                         <td className="px-5 py-3.5 text-[13.5px] text-ink-2 whitespace-nowrap">{u.email}</td>
                         <td className="px-5 py-3.5 text-[13.5px] text-ink-2 whitespace-nowrap font-mono">{u.username}</td>
                         <td className="px-5 py-3.5 whitespace-nowrap"><Pill variant={u.role === 'admin' ? 'sub' : 'info'}>{u.role === 'admin' ? 'Admin' : 'Student'}</Pill></td>
-                        <td className="px-5 py-3.5 text-[13.5px] text-ink-2 whitespace-nowrap">{u.role === 'student' && u.grade_level ? `Grade ${u.grade_level}` : '—'}</td>
+                        <td className="px-5 py-3.5 text-[13.5px] text-ink-2 whitespace-nowrap">{u.role === 'student' ? formatGradeLevel(u.grade_level) : '—'}</td>
                         <td className="px-5 py-3.5 whitespace-nowrap"><Pill variant={u.is_active ? 'pos' : 'neg'}>{u.is_active ? 'Active' : 'Inactive'}</Pill></td>
                         <td className="px-5 py-3.5 whitespace-nowrap">
                           <div className="flex items-center gap-2">
@@ -1699,7 +1708,7 @@ const Admin: React.FC = () => {
                     {newUser.role === 'student' && (
                       <>
                         <Input label="Date of Birth" type="date" value={newUser.date_of_birth} onChange={e => setNewUser(p => ({ ...p, date_of_birth: e.target.value }))} />
-                        <Input label="Grade Level" type="number" value={String(newUser.grade_level)} onChange={e => setNewUser(p => ({ ...p, grade_level: parseInt(e.target.value) || 1 }))} />
+                        <Select label="Grade Level" value={String(newUser.grade_level)} options={GRADE_LEVEL_OPTIONS} onChange={e => setNewUser(p => ({ ...p, grade_level: Number(e.target.value) }))} />
                       </>
                     )}
                   </div>
@@ -1732,7 +1741,7 @@ const Admin: React.FC = () => {
                     {editingUser.role === 'student' && (
                       <>
                         <Input label="Date of Birth" type="date" value={editUser.date_of_birth} onChange={e => setEditUser(p => ({ ...p, date_of_birth: e.target.value }))} />
-                        <Input label="Grade Level" type="number" value={String(editUser.grade_level)} onChange={e => setEditUser(p => ({ ...p, grade_level: parseInt(e.target.value) || 1 }))} />
+                        <Select label="Grade Level" value={String(editUser.grade_level)} options={GRADE_LEVEL_OPTIONS} onChange={e => setEditUser(p => ({ ...p, grade_level: Number(e.target.value) }))} />
                       </>
                     )}
                   </div>

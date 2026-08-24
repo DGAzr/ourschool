@@ -39,7 +39,7 @@ class UserBackup(BaseModel):
     is_active: bool = True
     parent_id: Optional[int] = None
     date_of_birth: Optional[date] = None
-    grade_level: Optional[int] = None
+    grade_level: Optional[int] = Field(None, ge=0, le=12)
     theme_preference: Optional[str] = None
     created_at: datetime
     updated_at: datetime
@@ -75,6 +75,7 @@ class AssignmentTemplateBackup(BaseModel):
     prerequisites: Optional[str] = None
     materials_needed: Optional[str] = None
     is_exportable: bool = True
+    is_library: bool = True
     created_by_email: str  # User email for resolution
     created_at: datetime
     updated_at: datetime
@@ -87,6 +88,7 @@ class StudentAssignmentBackup(BaseModel):
     student_email: str  # Fallback resolution key
     template_external_id: Optional[str] = None  # Preferred resolution key (format 2.0)
     assignment_template_name: str  # Fallback resolution key
+    assigned_date: Optional[date] = None
     due_date: Optional[date] = None
     extended_due_date: Optional[date] = None
     status: str = "not_started"
@@ -98,9 +100,28 @@ class StudentAssignmentBackup(BaseModel):
     submission_notes: Optional[str] = None
     custom_instructions: Optional[str] = None
     custom_max_points: Optional[int] = None
+    time_spent_minutes: int = 0
+    is_student_created: bool = False
     started_at: Optional[datetime] = None
     completed_at: Optional[datetime] = None
     submitted_at: Optional[datetime] = None
+    created_at: datetime
+    updated_at: datetime
+
+
+class AssignmentTimeEntryBackup(BaseModel):
+    """Schema for preserving assignment work-session history."""
+
+    student_external_id: Optional[str] = None
+    student_email: str
+    template_external_id: Optional[str] = None
+    assignment_template_name: str
+    assignment_due_date: Optional[date] = None
+    logged_by_external_id: Optional[str] = None
+    logged_by_email: Optional[str] = None
+    work_date: date
+    minutes: int
+    note: Optional[str] = None
     created_at: datetime
     updated_at: datetime
 
@@ -197,10 +218,23 @@ class JournalEntryBackup(BaseModel):
 
     user_external_id: Optional[str] = None
     user_email: str  # Fallback resolution key
+    student_external_id: Optional[str] = None
+    student_email: Optional[str] = None
     title: str
     content: str
     date: date
     is_private: bool = False
+    mood: Optional[str] = None
+    icon: Optional[str] = None
+    tags: Optional[List[str]] = None
+    win: Optional[str] = None
+    goals: Optional[List[Dict[str, Any]]] = None
+    reactions: Optional[List[str]] = None
+    needs_response: bool = True
+    points_awarded: Optional[int] = None
+    edited_at: Optional[datetime] = None
+    edited_by_external_id: Optional[str] = None
+    edited_by_email: Optional[str] = None
     created_at: datetime
     updated_at: datetime
 
@@ -481,7 +515,7 @@ class SystemBackup(BaseModel):
     """Complete system backup schema containing all data."""
 
     # Metadata
-    format_version: str = "2.1"
+    format_version: str = "2.2"
     backup_timestamp: datetime
     created_by: str
     system_info: Dict[str, Any] = {}
@@ -495,6 +529,7 @@ class SystemBackup(BaseModel):
 
     # Dependent data
     student_assignments: List[StudentAssignmentBackup] = []
+    assignment_time_entries: List[AssignmentTimeEntryBackup] = []
     student_term_grades: List[StudentTermGradeBackup] = []
     grade_history: List[GradeHistoryBackup] = []
     attendance_records: List[AttendanceRecordBackup] = []

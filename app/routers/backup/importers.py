@@ -21,11 +21,16 @@ import logging
 from datetime import date, datetime, timezone
 from typing import Any, Dict, Optional
 
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.enums import UserRole as UserRoleEnum
 from app.models.api_key import APIKey
-from app.models.assignment import AssignmentTemplate, StudentAssignment
+from app.models.assignment import (
+    AssignmentTemplate,
+    AssignmentTimeEntry,
+    StudentAssignment,
+)
 from app.models.attendance import AttendanceRecord
 from app.models.journal import JournalEntry, JournalReply
 from app.models.lesson import Lesson, LessonMaterial, LessonResource, LessonTemplate
@@ -50,7 +55,7 @@ from .shared import log_backup_operation, sanitize_import_data, validate_backup_
 logger = logging.getLogger(__name__)
 
 # Backup format versions supported by this importer
-SUPPORTED_VERSIONS = {"1.0", "2.0", "2.1"}
+SUPPORTED_VERSIONS = {"1.0", "2.0", "2.1", "2.2"}
 LEGACY_VERSIONS = {"1.0"}  # Versions that lack external_id — name-only fallback
 
 # Typed phrase required in the request body to arm wipe_before_import.
@@ -100,6 +105,7 @@ _WIPE_ORDER = [
     ("lesson_resources", LessonResource),
     ("lessons_templates", LessonTemplate),
     ("lessons", Lesson),
+    ("assignment_time_entries", AssignmentTimeEntry),
     ("student_assignments", StudentAssignment),
     ("assignment_templates", AssignmentTemplate),
     ("terms", Term),
@@ -273,6 +279,9 @@ def import_system_data(
         _import_term_subjects(db, backup_data.term_subjects, result, dry_run)
         _import_student_assignments(
             db, backup_data.student_assignments, result, dry_run, current_user.id
+        )
+        _import_assignment_time_entries(
+            db, backup_data.assignment_time_entries, result, dry_run
         )
         _import_student_term_grades(
             db, backup_data.student_term_grades, result, dry_run
@@ -653,6 +662,7 @@ def _import_assignment_templates(
                 prerequisites=template_data.prerequisites,
                 materials_needed=template_data.materials_needed,
                 is_exportable=template_data.is_exportable,
+                is_library=getattr(template_data, "is_library", True),
                 created_by=admin_user_id,
             )
             db.add(new_template)
@@ -787,7 +797,7 @@ def _import_student_assignments(
             new_sa = StudentAssignment(
                 template_id=template_id,
                 student_id=student_id,
-                assigned_date=sa_data.due_date or date.today(),
+                assigned_date=sa_data.assigned_date or sa_data.due_date or date.today(),
                 due_date=sa_data.due_date,
                 extended_due_date=sa_data.extended_due_date,
                 status=(
@@ -802,6 +812,8 @@ def _import_student_assignments(
                 submission_notes=sa_data.submission_notes,
                 custom_instructions=sa_data.custom_instructions,
                 custom_max_points=sa_data.custom_max_points,
+                time_spent_minutes=getattr(sa_data, "time_spent_minutes", 0) or 0,
+                is_student_created=getattr(sa_data, "is_student_created", False),
                 assigned_by=admin_user_id,
             )
             db.add(new_sa)
@@ -828,6 +840,98 @@ def _import_student_assignments(
 
     result.imported_counts["student_assignments"] = imported
     result.skipped_counts["student_assignments"] = skipped
+
+
+def _import_assignment_time_entries(db: Session, entries, result, dry_run):
+    users_by_uuid = result.id_mappings.get("users_by_uuid", {})
+    users_by_email = result.id_mappings.get("users_by_email", {})
+    templates_by_uuid = result.id_mappings.get("templates_by_uuid", {})
+    templates_by_name = result.id_mappings.get("templates_by_name", {})
+    imported = skipped = 0
+    touched_assignment_ids = set()
+
+    for item in entries:
+        student_id = _resolve(
+            item.student_external_id,
+            item.student_email,
+            users_by_uuid,
+            users_by_email,
+        )
+        template_id = _resolve(
+            item.template_external_id,
+            item.assignment_template_name,
+            templates_by_uuid,
+            templates_by_name,
+        )
+        if not student_id or not template_id:
+            skipped += 1
+            result.import_log.append(
+                "Skipped assignment time entry (unresolved assignment)"
+            )
+            continue
+        assignment = (
+            db.query(StudentAssignment)
+            .filter(
+                StudentAssignment.student_id == student_id,
+                StudentAssignment.template_id == template_id,
+                StudentAssignment.due_date == item.assignment_due_date,
+            )
+            .first()
+        )
+        if assignment is None:
+            skipped += 1
+            result.import_log.append(
+                "Skipped assignment time entry (assignment missing)"
+            )
+            continue
+        logger_id = _resolve(
+            item.logged_by_external_id,
+            item.logged_by_email,
+            users_by_uuid,
+            users_by_email,
+        )
+        existing = (
+            db.query(AssignmentTimeEntry)
+            .filter(
+                AssignmentTimeEntry.assignment_id == assignment.id,
+                AssignmentTimeEntry.work_date == item.work_date,
+                AssignmentTimeEntry.minutes == item.minutes,
+                AssignmentTimeEntry.note == item.note,
+            )
+            .first()
+        )
+        if existing:
+            skipped += 1
+            touched_assignment_ids.add(assignment.id)
+            continue
+        if not dry_run:
+            db.add(
+                AssignmentTimeEntry(
+                    assignment_id=assignment.id,
+                    logged_by=logger_id,
+                    work_date=item.work_date,
+                    minutes=item.minutes,
+                    note=item.note,
+                    created_at=item.created_at,
+                    updated_at=item.updated_at,
+                )
+            )
+            db.flush()
+            touched_assignment_ids.add(assignment.id)
+        imported += 1
+
+    if not dry_run:
+        for assignment_id in touched_assignment_ids:
+            total = (
+                db.query(func.coalesce(func.sum(AssignmentTimeEntry.minutes), 0))
+                .filter(AssignmentTimeEntry.assignment_id == assignment_id)
+                .scalar()
+            )
+            db.query(StudentAssignment).filter(
+                StudentAssignment.id == assignment_id
+            ).update({StudentAssignment.time_spent_minutes: int(total or 0)})
+    result.imported_counts["assignment_time_entries"] = imported
+    result.skipped_counts["assignment_time_entries"] = skipped
 
 
 def _import_student_term_grades(db: Session, term_grades_data, result, dry_run):
@@ -1018,6 +1122,22 @@ def _import_journal_entries(db: Session, journal_data, result, dry_run):
             )
             continue
 
+        student_id = (
+            _resolve(
+                getattr(je_data, "student_external_id", None),
+                getattr(je_data, "student_email", None),
+                users_by_uuid,
+                users_by_email,
+            )
+            or author_id
+        )
+        edited_by_id = _resolve(
+            getattr(je_data, "edited_by_external_id", None),
+            getattr(je_data, "edited_by_email", None),
+            users_by_uuid,
+            users_by_email,
+        )
+
         entry_date = (
             datetime.combine(je_data.date, datetime.min.time())
             if isinstance(je_data.date, date)
@@ -1045,11 +1165,23 @@ def _import_journal_entries(db: Session, journal_data, result, dry_run):
                 continue
 
             new_je = JournalEntry(
-                student_id=author_id,
+                student_id=student_id,
                 author_id=author_id,
                 title=je_data.title,
                 content=je_data.content,
                 entry_date=entry_date,
+                mood=getattr(je_data, "mood", None),
+                icon=getattr(je_data, "icon", None),
+                tags=getattr(je_data, "tags", None) or [],
+                win=getattr(je_data, "win", None),
+                goals=getattr(je_data, "goals", None) or [],
+                reactions=getattr(je_data, "reactions", None) or [],
+                needs_response=getattr(je_data, "needs_response", True),
+                points_awarded=getattr(je_data, "points_awarded", None),
+                edited_at=getattr(je_data, "edited_at", None),
+                edited_by=edited_by_id,
+                created_at=je_data.created_at,
+                updated_at=je_data.updated_at,
             )
             db.add(new_je)
             db.flush()

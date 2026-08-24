@@ -31,7 +31,11 @@ import {
   AssignmentTemplateImportRequest,
   AssignmentTemplateImportResult,
   AssignmentTemplateBulkExport,
-  User
+  User,
+  StudentCreatedAssignmentInput,
+  StudentCreatedAssignmentUpdate,
+  AssignmentTimeEntry,
+  AssignmentTimeEntryInput,
 } from '../types'
 
 /**
@@ -118,12 +122,12 @@ export const assignmentsApi = {
   },
 
   async updateStudentAssignment(assignmentId: number, update: {
-    due_date?: string
-    extended_due_date?: string
+    due_date?: string | null
+    extended_due_date?: string | null
     assigned_date?: string
     status?: string
     custom_instructions?: string
-    custom_max_points?: number
+    custom_max_points?: number | null
     student_notes?: string
     submission_notes?: string
     submission_artifacts?: string[]
@@ -175,6 +179,39 @@ export const assignmentsApi = {
     
     const response = await api.get(url)
     return response
+  },
+
+  async createMyAssignment(data: StudentCreatedAssignmentInput): Promise<StudentAssignment> {
+    return await api.post('/assignments/my-assignments', data)
+  },
+
+  async updateMyAssignment(
+    assignmentId: number,
+    data: StudentCreatedAssignmentUpdate,
+  ): Promise<StudentAssignment> {
+    return await api.put(`/assignments/my-assignments/${assignmentId}`, data)
+  },
+
+  async getTimeEntries(assignmentId: number): Promise<AssignmentTimeEntry[]> {
+    return await api.get(`/assignments/student-assignments/${assignmentId}/time-entries`)
+  },
+
+  async createTimeEntry(
+    assignmentId: number,
+    data: AssignmentTimeEntryInput,
+  ): Promise<AssignmentTimeEntry> {
+    return await api.post(`/assignments/student-assignments/${assignmentId}/time-entries`, data)
+  },
+
+  async updateTimeEntry(
+    entryId: number,
+    data: Partial<AssignmentTimeEntryInput>,
+  ): Promise<AssignmentTimeEntry> {
+    return await api.put(`/assignments/time-entries/${entryId}`, data)
+  },
+
+  async deleteTimeEntry(entryId: number): Promise<void> {
+    await api.delete(`/assignments/time-entries/${entryId}`)
   },
 
   async startAssignment(assignmentId: number): Promise<StudentAssignment> {

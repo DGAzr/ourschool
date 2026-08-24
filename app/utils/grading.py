@@ -110,22 +110,27 @@ def compute_weighted_grade(
 
 
 def effective_due_date(assignment):
-    """Date used to place an assignment in a term: due_date or assigned_date."""
-    return assignment.due_date or assignment.assigned_date
+    """Date used to place an assignment in a term."""
+    return (
+        assignment.extended_due_date or assignment.due_date or assignment.assigned_date
+    )
 
 
 def term_membership_filter(term):
     """SQLAlchemy predicate selecting assignments that belong to ``term``.
 
-    Membership is by effective due date — ``due_date`` when present, otherwise
-    ``assigned_date`` — between the term's start and end dates (inclusive).
+    Membership is by effective due date — ``extended_due_date`` when present,
+    then ``due_date``, then ``assigned_date`` — between the term's start and
+    end dates (inclusive).
     """
     from sqlalchemy import func
 
     from app.models.assignment import StudentAssignment
 
     effective = func.coalesce(
-        StudentAssignment.due_date, StudentAssignment.assigned_date
+        StudentAssignment.extended_due_date,
+        StudentAssignment.due_date,
+        StudentAssignment.assigned_date,
     )
     return (effective >= term.start_date) & (effective <= term.end_date)
 

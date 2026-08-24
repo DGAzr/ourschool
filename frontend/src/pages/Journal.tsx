@@ -30,6 +30,7 @@ import MarkdownRenderer from '../components/common/MarkdownRenderer'
 import { IconPickerButton, Icon } from '../components/ui'
 import ConfirmDialog from '../components/ui/ConfirmDialog'
 import { getErrorMessage } from '../services/api'
+import JournalEditDialog from '../components/journal/JournalEditDialog'
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
@@ -370,9 +371,10 @@ interface EntryCardProps {
   index: number
   total: number
   onDelete: (id: number) => void
+  onEdit: (entry: JournalEntryWithAuthor) => void
 }
 
-const StudentEntryCard: React.FC<EntryCardProps> = ({ entry, index, total, onDelete }) => {
+const StudentEntryCard: React.FC<EntryCardProps> = ({ entry, index, total, onDelete, onEdit }) => {
   const mood = MOODS.find(m => m.key === entry.mood)
 
   return (
@@ -399,7 +401,14 @@ const StudentEntryCard: React.FC<EntryCardProps> = ({ entry, index, total, onDel
               )}
               <h3 className="text-[17px] font-semibold text-ink">{entry.title}</h3>
             </div>
-            <span className="font-mono text-[11.5px] text-faint flex-none">{formatDate(entry.entry_date)}</span>
+            <span className="font-mono text-[11.5px] text-faint flex-none">
+              {formatDate(entry.entry_date)}
+              {entry.edited_at && (
+                <span title={`${entry.edited_by_name ?? 'Unknown'} · ${formatDate(entry.edited_at)}`}>
+                  {' · Edited'}
+                </span>
+              )}
+            </span>
           </div>
 
           {/* Mood + tags */}
@@ -473,6 +482,7 @@ const StudentEntryCard: React.FC<EntryCardProps> = ({ entry, index, total, onDel
         {/* Actions */}
         {entry.is_own_entry && (
           <div className="flex justify-end gap-1.5 px-4 py-2.5 border-t border-line-2 bg-panel-2">
+            <button onClick={() => onEdit(entry)} className="h-[28px] px-2.5 text-[12px] font-semibold text-accent border border-line bg-panel rounded-[7px] hover:bg-accent-soft transition-colors">Edit</button>
             <button onClick={() => onDelete(entry.id)} className="h-[28px] px-2.5 text-[12px] font-semibold text-danger border border-line bg-panel rounded-[7px] hover:bg-neg-bg transition-colors">Delete</button>
           </div>
         )}
@@ -490,9 +500,10 @@ interface AdminEntryPanelProps {
   onReplied: (updated: JournalEntryWithAuthor) => void
   onDelete: (id: number) => void
   onMarkReviewed: (id: number) => void
+  onEdit: (entry: JournalEntryWithAuthor) => void
 }
 
-const AdminEntryPanel: React.FC<AdminEntryPanelProps> = ({ entry, onReacted, onReplied, onDelete, onMarkReviewed }) => {
+const AdminEntryPanel: React.FC<AdminEntryPanelProps> = ({ entry, onReacted, onReplied, onDelete, onMarkReviewed, onEdit }) => {
   const [replyDraft, setReplyDraft] = useState('')
   const [sending, setSending] = useState(false)
   const mood = MOODS.find(m => m.key === entry.mood)
@@ -557,9 +568,11 @@ const AdminEntryPanel: React.FC<AdminEntryPanelProps> = ({ entry, onReacted, onR
               <span>{entry.student_name}</span>
               <span>·</span>
               <span className="font-mono">{formatDate(entry.entry_date)}</span>
+              {entry.edited_at && <span title={`${entry.edited_by_name ?? 'Unknown'} · ${formatDate(entry.edited_at)}`}>· Edited</span>}
             </div>
           </div>
           <div className="flex items-center gap-2 flex-none">
+            <button onClick={() => onEdit(entry)} className="h-[28px] px-2.5 text-[12px] font-semibold text-accent border border-line bg-panel rounded-[7px] hover:bg-accent-soft transition-colors">Edit</button>
             {entry.needs_response ? (
               <button
                 onClick={() => onMarkReviewed(entry.id)}
@@ -676,6 +689,7 @@ const Journal: React.FC = () => {
   const [error, setError] = useState<string | null>(null)
   const [deletingEntryId, setDeletingEntryId] = useState<number | null>(null)
   const [deleteLoading, setDeleteLoading] = useState(false)
+  const [editingEntry, setEditingEntry] = useState<JournalEntryWithAuthor | null>(null)
 
   const isAdmin = user?.role === 'admin'
 
@@ -839,6 +853,7 @@ const Journal: React.FC = () => {
                   index={i}
                   total={entries.length}
                   onDelete={handleDelete}
+                  onEdit={setEditingEntry}
                 />
               ))}
             </div>
@@ -1004,6 +1019,7 @@ const Journal: React.FC = () => {
                   onReplied={updateEntry}
                   onDelete={handleDelete}
                   onMarkReviewed={markReviewed}
+                  onEdit={setEditingEntry}
                 />
               ))}
             </div>
@@ -1022,6 +1038,13 @@ const Journal: React.FC = () => {
         confirmLabel="Delete entry"
         loading={deleteLoading}
       />
+      {editingEntry && (
+        <JournalEditDialog
+          entry={editingEntry}
+          onClose={() => setEditingEntry(null)}
+          onSaved={updated => { updateEntry(updated); setEditingEntry(null) }}
+        />
+      )}
     </div>
   )
 }

@@ -76,6 +76,8 @@ class JournalEntryResponse(JournalEntryBase):
     points_awarded: Optional[int] = None
     created_at: datetime
     updated_at: datetime
+    edited_at: Optional[datetime] = None
+    edited_by: Optional[int] = None
 
     class Config:
         from_attributes = True
@@ -89,6 +91,7 @@ class JournalEntryWithAuthor(JournalEntryResponse):
     is_own_entry: bool
     replies: List[JournalReplyResponse] = []
     streak: int = 0
+    edited_by_name: Optional[str] = None
 
 
 class ReactionsUpdate(BaseModel):

@@ -21,7 +21,11 @@ from typing import List
 
 from sqlalchemy.orm import Session, joinedload
 
-from app.models.assignment import AssignmentTemplate, StudentAssignment
+from app.models.assignment import (
+    AssignmentTemplate,
+    AssignmentTimeEntry,
+    StudentAssignment,
+)
 from app.models.attendance import AttendanceRecord
 from app.models.journal import JournalEntry
 from app.models.lesson import Lesson
@@ -40,6 +44,7 @@ from app.models.term import GradeHistory, StudentTermGrade, Term, TermSubject
 from app.models.user import User
 from app.schemas.backup import (
     AssignmentTemplateBackup,
+    AssignmentTimeEntryBackup,
     AttendanceRecordBackup,
     GradeHistoryBackup,
     JournalEntryBackup,
@@ -161,6 +166,7 @@ def export_assignment_templates(db: Session) -> List[AssignmentTemplateBackup]:
                 prerequisites=template.prerequisites,
                 materials_needed=template.materials_needed,
                 is_exportable=template.is_exportable,
+                is_library=template.is_library,
                 created_by_email=creator_email,
                 created_at=template.created_at,
                 updated_at=template.updated_at,
@@ -197,6 +203,7 @@ def export_student_assignments(db: Session) -> List[StudentAssignmentBackup]:
                 student_email=sa.student.email if sa.student else "Unknown",
                 template_external_id=sa.template.external_id if sa.template else None,
                 assignment_template_name=sa.template.name if sa.template else "Unknown",
+                assigned_date=sa.assigned_date,
                 due_date=sa.due_date,
                 extended_due_date=sa.extended_due_date,
                 status=sa.status.value,
@@ -207,6 +214,8 @@ def export_student_assignments(db: Session) -> List[StudentAssignmentBackup]:
                 submission_notes=sa.submission_notes,
                 custom_instructions=sa.custom_instructions,
                 custom_max_points=sa.custom_max_points,
+                time_spent_minutes=sa.time_spent_minutes or 0,
+                is_student_created=sa.is_student_created,
                 started_at=getattr(sa, "started_date", None),
                 completed_at=getattr(sa, "completed_date", None),
                 submitted_at=getattr(sa, "submitted_date", None),
@@ -215,6 +224,47 @@ def export_student_assignments(db: Session) -> List[StudentAssignmentBackup]:
             )
         )
     return student_assignments_data
+
+
+def export_assignment_time_entries(db: Session) -> List[AssignmentTimeEntryBackup]:
+    """Export every manual assignment work session."""
+    result = []
+    entries = (
+        db.query(AssignmentTimeEntry)
+        .options(
+            joinedload(AssignmentTimeEntry.assignment).joinedload(
+                StudentAssignment.student
+            ),
+            joinedload(AssignmentTimeEntry.assignment).joinedload(
+                StudentAssignment.template
+            ),
+            joinedload(AssignmentTimeEntry.logger),
+        )
+        .all()
+    )
+    for entry in entries:
+        assignment = entry.assignment
+        student = assignment.student if assignment else None
+        template = assignment.template if assignment else None
+        result.append(
+            AssignmentTimeEntryBackup(
+                student_external_id=student.external_id if student else None,
+                student_email=student.email if student else "Unknown",
+                template_external_id=template.external_id if template else None,
+                assignment_template_name=template.name if template else "Unknown",
+                assignment_due_date=assignment.due_date if assignment else None,
+                logged_by_external_id=(
+                    entry.logger.external_id if entry.logger else None
+                ),
+                logged_by_email=entry.logger.email if entry.logger else None,
+                work_date=entry.work_date,
+                minutes=entry.minutes,
+                note=entry.note,
+                created_at=entry.created_at,
+                updated_at=entry.updated_at,
+            )
+        )
+    return result
 
 
 def export_student_term_grades(db: Session) -> List[StudentTermGradeBackup]:
@@ -309,10 +359,27 @@ def export_journal_entries(db: Session) -> List[JournalEntryBackup]:
             JournalEntryBackup(
                 user_external_id=entry.author.external_id if entry.author else None,
                 user_email=entry.author.email if entry.author else "Unknown",
+                student_external_id=(
+                    entry.student.external_id if entry.student else None
+                ),
+                student_email=entry.student.email if entry.student else None,
                 title=entry.title,
                 content=entry.content,
                 date=entry.entry_date.date(),
                 is_private=False,  # Default value since field doesn't exist in model
+                mood=entry.mood,
+                icon=entry.icon,
+                tags=entry.tags or [],
+                win=entry.win,
+                goals=entry.goals or [],
+                reactions=entry.reactions or [],
+                needs_response=entry.needs_response,
+                points_awarded=entry.points_awarded,
+                edited_at=entry.edited_at,
+                edited_by_external_id=(
+                    entry.editor.external_id if entry.editor else None
+                ),
+                edited_by_email=entry.editor.email if entry.editor else None,
                 created_at=entry.created_at,
                 updated_at=entry.updated_at,
             )
