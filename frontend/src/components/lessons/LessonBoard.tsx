@@ -68,6 +68,7 @@ const LessonBoard: React.FC<LessonBoardProps> = ({
 }) => {
   const [activeLesson, setActiveLesson] = useState<Lesson | null>(null)
   const [optimisticLessons, setOptimisticLessons] = useState<Lesson[] | null>(null)
+  const [drawerCollapsed, setDrawerCollapsed] = useState(false)
   const displayLessons = useMemo(
     () => optimisticLessons ?? [...lessons, ...drawerLessons],
     [optimisticLessons, lessons, drawerLessons],
@@ -201,7 +202,13 @@ const LessonBoard: React.FC<LessonBoardProps> = ({
       onDragStart={handleDragStart}
       onDragEnd={handleDragEnd}
     >
-      <div className="grid grid-cols-1 xl:grid-cols-[minmax(0,1fr)_260px] gap-3 items-start">
+      <div
+        className={`grid grid-cols-1 gap-3 items-start transition-[grid-template-columns] duration-200 ${
+          drawerCollapsed
+            ? 'xl:grid-cols-[minmax(0,1fr)_44px]'
+            : 'xl:grid-cols-[minmax(0,1fr)_260px]'
+        }`}
+      >
         <div className="overflow-x-auto -mx-1 px-1 pb-2">
           <div
             className="grid gap-3 items-start"
@@ -225,7 +232,10 @@ const LessonBoard: React.FC<LessonBoardProps> = ({
         <LessonDrawer
           columnId={DRAWER_COLUMN_ID}
           lessons={drawer}
+          visibleLessons={lessons}
           defaultDate={days[0]?.iso ?? ''}
+          collapsed={drawerCollapsed}
+          onCollapsedChange={setDrawerCollapsed}
           onAdd={onAddToDrawer}
           onLessonClick={onLessonClick}
           onSchedule={(lesson, date) => void scheduleLesson(lesson, date)}

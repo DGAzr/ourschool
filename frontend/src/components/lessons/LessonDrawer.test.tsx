@@ -22,13 +22,28 @@ const lesson: Lesson = {
   updated_at: '2026-08-01T00:00:00Z',
 }
 
-const renderDrawer = (onSchedule = vi.fn()) =>
+const visibleLesson: Lesson = {
+  ...lesson,
+  id: 8,
+  external_id: 'visible-8',
+  title: 'Fractions today',
+  date: '2026-08-15',
+  materials: [
+    { id: 1, label: 'Fraction tiles', is_gathered: true, position: 0 },
+    { id: 2, label: 'Dry erase board', is_gathered: false, position: 1 },
+  ],
+}
+
+const renderDrawer = (onSchedule = vi.fn(), onCollapsedChange = vi.fn()) =>
   render(
     <DndContext>
       <LessonDrawer
         columnId="drawer"
         lessons={[lesson]}
+        visibleLessons={[visibleLesson]}
         defaultDate="2026-08-15"
+        collapsed={false}
+        onCollapsedChange={onCollapsedChange}
         onAdd={() => {}}
         onLessonClick={() => {}}
         onSchedule={onSchedule}
@@ -37,13 +52,13 @@ const renderDrawer = (onSchedule = vi.fn()) =>
   )
 
 describe('LessonDrawer', () => {
-  it('shows count, former date, and collapses without losing the count', () => {
-    renderDrawer()
+  it('shows count and former date, then requests a responsive collapse', () => {
+    const onCollapsedChange = vi.fn()
+    renderDrawer(vi.fn(), onCollapsedChange)
     expect(screen.getByText('Fractions later')).toBeTruthy()
     expect(screen.getByText(/Was scheduled/)).toBeTruthy()
-    fireEvent.click(screen.getByRole('button', { name: /Lesson Drawer/ }))
-    expect(screen.queryByText('Fractions later')).toBeNull()
-    expect(screen.getByLabelText('Lesson Drawer, 1 lessons')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Collapse Lesson Drawer' }))
+    expect(onCollapsedChange).toHaveBeenCalledWith(true)
   })
 
   it('schedules a drawer lesson for the selected date', () => {
@@ -54,5 +69,16 @@ describe('LessonDrawer', () => {
     })
     fireEvent.click(screen.getByRole('button', { name: 'Schedule' }))
     expect(onSchedule).toHaveBeenCalledWith(lesson, '2026-08-19')
+  })
+
+  it('summarizes material state for only the lessons in view', () => {
+    renderDrawer()
+    fireEvent.click(screen.getByRole('tab', { name: /Materials/ }))
+
+    expect(screen.getByText('Fractions today')).toBeTruthy()
+    expect(screen.getByText('Fraction tiles')).toBeTruthy()
+    expect(screen.getByText('Dry erase board')).toBeTruthy()
+    expect(screen.getByText('1 / 2 ready')).toBeTruthy()
+    expect(screen.queryByText('Fractions later')).toBeNull()
   })
 })
