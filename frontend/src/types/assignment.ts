@@ -89,6 +89,7 @@ export interface StudentAssignment {
   id: number
   template_id: number
   student_id: number
+  lesson_id?: number | null
   assigned_date: string
   due_date?: string
   extended_due_date?: string

@@ -17,17 +17,25 @@
  */
 
 import { useEffect, useState } from 'react'
-import { ClipboardList } from 'lucide-react'
+import { ClipboardList, GraduationCap } from 'lucide-react'
+import { useNavigate } from 'react-router-dom'
 
 import Modal from '../ui/Modal'
+import Button from '../ui/Button'
 import { AssignmentInfo } from '../assignments/AssignmentInfo'
 import { assignmentsApi } from '../../services/assignments'
-import { AssignmentTemplate } from '../../types/assignment'
-import { LessonTemplateLink, LessonTemplateSummary } from '../../types/lesson'
+import { AssignmentTemplate, StudentAssignment } from '../../types/assignment'
+import {
+  LessonStudentSummary,
+  LessonTemplateLink,
+  LessonTemplateSummary,
+} from '../../types/lesson'
 
 interface LessonTemplateDetailModalProps {
   /** The lesson's template link to show, or null when closed. */
   link: LessonTemplateLink | null
+  lessonId: number
+  students: LessonStudentSummary[]
   onClose: () => void
 }
 
@@ -60,8 +68,17 @@ interface DetailContentProps extends LessonTemplateDetailModalProps {
   link: LessonTemplateLink
 }
 
-const DetailContent: React.FC<DetailContentProps> = ({ link, onClose }) => {
+const DetailContent: React.FC<DetailContentProps> = ({
+  link,
+  lessonId,
+  students,
+  onClose,
+}) => {
+  const navigate = useNavigate()
   const [template, setTemplate] = useState<AssignmentTemplate | null>(null)
+  const [gradingAssignments, setGradingAssignments] = useState<
+    StudentAssignment[]
+  >([])
   const [error, setError] = useState(false)
   const templateId = link.template_id ?? null
 
@@ -72,8 +89,18 @@ const DetailContent: React.FC<DetailContentProps> = ({ link, onClose }) => {
       .getById(templateId)
       .then((t) => { if (!cancelled) setTemplate(t) })
       .catch(() => { if (!cancelled) setError(true) })
+    assignmentsApi
+      .getTemplateAssignments(templateId)
+      .then((assignments) => {
+        if (!cancelled) {
+          setGradingAssignments(
+            assignments.filter((assignment) => assignment.lesson_id === lessonId)
+          )
+        }
+      })
+      .catch(() => {})
     return () => { cancelled = true }
-  }, [templateId])
+  }, [lessonId, templateId])
 
   const summary = link.template as LessonTemplateSummary
 
@@ -81,6 +108,19 @@ const DetailContent: React.FC<DetailContentProps> = ({ link, onClose }) => {
     link.custom_max_points != null
       ? `${link.custom_max_points} pts (lesson override, normally ${summary.max_points})`
       : `${summary.max_points} pts`
+
+  const studentLabel = (studentId: number) => {
+    const student = students.find((candidate) => candidate.id === studentId)
+    if (!student) return `Student ${studentId}`
+    return (
+      `${student.first_name} ${student.last_name}`.trim() || student.username
+    )
+  }
+
+  const openGrading = (assignmentId: number) => {
+    onClose()
+    navigate('/grading', { state: { assignmentId } })
+  }
 
   return (
     <Modal
@@ -115,6 +155,29 @@ const DetailContent: React.FC<DetailContentProps> = ({ link, onClose }) => {
           />
         ) : (
           <p className="text-[13px] text-faint">Loading details…</p>
+        )}
+
+        {gradingAssignments.length > 0 && (
+          <div className="border-t border-line pt-4">
+            <p className="text-[11px] font-semibold text-faint uppercase tracking-[.06em] mb-2">
+              Grading
+            </p>
+            <div className="flex flex-wrap gap-2">
+              {gradingAssignments.map((assignment) => (
+                <Button
+                  key={assignment.id}
+                  variant="outline"
+                  size="sm"
+                  icon={<GraduationCap size={14} />}
+                  onClick={() => openGrading(assignment.id)}
+                >
+                  {gradingAssignments.length === 1
+                    ? 'Open in grading'
+                    : `Open ${studentLabel(assignment.student_id)} in grading`}
+                </Button>
+              ))}
+            </div>
+          </div>
         )}
       </div>
     </Modal>

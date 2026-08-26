@@ -266,6 +266,8 @@ const TeachCard: React.FC<TeachCardProps> = ({
       />
       <LessonTemplateDetailModal
         link={viewingTemplateLink}
+        lessonId={lesson.id}
+        students={lesson.students}
         onClose={() => setViewingTemplateLink(null)}
       />
     </div>

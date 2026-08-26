@@ -288,6 +288,7 @@ class StudentAssignmentResponse(StudentAssignmentBase):
     id: int
     template_id: int
     student_id: int
+    lesson_id: Optional[int] = None
     assigned_date: date
     status: AssignmentStatus
     started_date: Optional[date] = None

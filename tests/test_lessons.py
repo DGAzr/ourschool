@@ -150,6 +150,20 @@ def test_create_with_template_creates_assignments(
         assert sa.template_id == classroom["template"]["id"]
         assert sa.lesson_id == lesson_id
 
+    r = client.get(
+        f"/api/assignments/templates/{classroom['template']['id']}/assignments",
+        headers=admin_headers,
+    )
+    assert r.status_code == 200, r.text
+    lesson_assignments = [
+        assignment
+        for assignment in r.json()
+        if assignment["lesson_id"] == lesson_id
+    ]
+    assert {assignment["id"] for assignment in lesson_assignments} == {
+        sa.id for sa in sas
+    }
+
 
 def test_create_with_template_works_without_active_term(
     client, admin_headers, classroom, student_factory, db_session

@@ -16,17 +16,25 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-import { afterEach, describe, expect, it, vi } from 'vitest'
-import { render, screen, waitFor } from '@testing-library/react'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { MemoryRouter, useLocation } from 'react-router-dom'
 
 import LessonTemplateDetailModal from './LessonTemplateDetailModal'
-import type { LessonTemplateLink } from '../../types/lesson'
-import type { AssignmentTemplate } from '../../types/assignment'
+import type {
+  LessonStudentSummary,
+  LessonTemplateLink,
+} from '../../types/lesson'
+import type {
+  AssignmentTemplate,
+  StudentAssignment,
+} from '../../types/assignment'
 import { assignmentsApi } from '../../services/assignments'
 
 vi.mock('../../services/assignments', () => ({
   assignmentsApi: {
     getById: vi.fn(),
+    getTemplateAssignments: vi.fn(),
   },
 }))
 
@@ -60,22 +68,81 @@ const link: LessonTemplateLink = {
   },
 }
 
+const students: LessonStudentSummary[] = [
+  {
+    id: 8,
+    first_name: 'Maya',
+    last_name: 'Rivera',
+    username: 'maya.rivera',
+  },
+  {
+    id: 9,
+    first_name: 'Miles',
+    last_name: 'Rivera',
+    username: 'miles.rivera',
+  },
+]
+
+const studentAssignment = (
+  overrides: Partial<StudentAssignment>
+): StudentAssignment => ({
+  id: 91,
+  template_id: 42,
+  student_id: 8,
+  lesson_id: 12,
+  assigned_date: '2026-07-01',
+  status: 'not_started',
+  is_graded: false,
+  time_spent_minutes: 0,
+  assigned_by: 1,
+  created_at: '2026-07-01T00:00:00Z',
+  updated_at: '2026-07-01T00:00:00Z',
+  ...overrides,
+})
+
+const LocationProbe = () => {
+  const location = useLocation()
+  return (
+    <output data-testid="location">
+      {JSON.stringify({ pathname: location.pathname, state: location.state })}
+    </output>
+  )
+}
+
+const renderModal = (
+  modalLink: LessonTemplateLink | null,
+  onClose = () => {}
+) =>
+  render(
+    <MemoryRouter initialEntries={['/lesson-planning']}>
+      <LessonTemplateDetailModal
+        link={modalLink}
+        lessonId={12}
+        students={students}
+        onClose={onClose}
+      />
+      <LocationProbe />
+    </MemoryRouter>
+  )
+
+beforeEach(() => {
+  vi.mocked(assignmentsApi.getTemplateAssignments).mockResolvedValue([])
+})
+
 afterEach(() => {
   vi.clearAllMocks()
 })
 
 describe('LessonTemplateDetailModal', () => {
   it('renders nothing when link is null', () => {
-    const { container } = render(
-      <LessonTemplateDetailModal link={null} onClose={() => {}} />
-    )
-    expect(container.firstChild).toBeNull()
+    renderModal(null)
+    expect(screen.queryByRole('dialog')).toBeNull()
     expect(assignmentsApi.getById).not.toHaveBeenCalled()
   })
 
   it('fetches the template and shows its details', async () => {
     vi.mocked(assignmentsApi.getById).mockResolvedValue(template)
-    render(<LessonTemplateDetailModal link={link} onClose={() => {}} />)
+    renderModal(link)
 
     expect(assignmentsApi.getById).toHaveBeenCalledWith(42)
     expect(screen.getByText('Fractions worksheet')).toBeTruthy()
@@ -89,16 +156,13 @@ describe('LessonTemplateDetailModal', () => {
 
   it('labels per-lesson overrides', async () => {
     vi.mocked(assignmentsApi.getById).mockResolvedValue(template)
-    render(
-      <LessonTemplateDetailModal
-        link={{
-          ...link,
-          custom_max_points: 10,
-          custom_due_date: '2026-07-20',
-          custom_instructions: 'Only the odd-numbered problems.',
-        }}
-        onClose={() => {}}
-      />
+    renderModal(
+      {
+        ...link,
+        custom_max_points: 10,
+        custom_due_date: '2026-07-20',
+        custom_instructions: 'Only the odd-numbered problems.',
+      }
     )
 
     await waitFor(() => {
@@ -110,12 +174,41 @@ describe('LessonTemplateDetailModal', () => {
 
   it('shows an error state when the fetch fails', async () => {
     vi.mocked(assignmentsApi.getById).mockRejectedValue(new Error('boom'))
-    render(<LessonTemplateDetailModal link={link} onClose={() => {}} />)
+    renderModal(link)
 
     await waitFor(() => {
       expect(
         screen.getByText('Could not load assignment details. Close and try again.')
       ).toBeTruthy()
+    })
+  })
+
+  it('links each lesson assignment to its grading record', async () => {
+    vi.mocked(assignmentsApi.getById).mockResolvedValue(template)
+    vi.mocked(assignmentsApi.getTemplateAssignments).mockResolvedValue([
+      studentAssignment({}),
+      studentAssignment({ id: 92, student_id: 9 }),
+      studentAssignment({ id: 93, lesson_id: 99 }),
+    ])
+    const onClose = vi.fn()
+    renderModal(link, onClose)
+
+    const milesLink = await screen.findByRole('button', {
+      name: 'Open Miles Rivera in grading',
+    })
+    expect(
+      screen.getByRole('button', { name: 'Open Maya Rivera in grading' })
+    ).toBeTruthy()
+    expect(
+      screen.getAllByRole('button', { name: /in grading$/ })
+    ).toHaveLength(2)
+
+    fireEvent.click(milesLink)
+
+    expect(onClose).toHaveBeenCalledOnce()
+    expect(JSON.parse(screen.getByTestId('location').textContent ?? '')).toEqual({
+      pathname: '/grading',
+      state: { assignmentId: 92 },
     })
   })
 })

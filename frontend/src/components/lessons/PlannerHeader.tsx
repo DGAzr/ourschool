@@ -89,6 +89,7 @@ const PlannerHeader: React.FC<PlannerHeaderProps> = ({
                 aria-label="Choose first planner date"
                 value={selectedDate}
                 onChange={(event) => event.target.value && onSelectDate(event.target.value)}
+                onClick={(event) => event.currentTarget.showPicker?.()}
                 className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
               />
             </label>
