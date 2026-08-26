@@ -34,7 +34,11 @@ const visibleLesson: Lesson = {
   ],
 }
 
-const renderDrawer = (onSchedule = vi.fn(), onCollapsedChange = vi.fn()) =>
+const renderDrawer = (
+  onSchedule = vi.fn(),
+  onCollapsedChange = vi.fn(),
+  onToggleMaterial = vi.fn()
+) =>
   render(
     <DndContext>
       <LessonDrawer
@@ -47,6 +51,7 @@ const renderDrawer = (onSchedule = vi.fn(), onCollapsedChange = vi.fn()) =>
         onAdd={() => {}}
         onLessonClick={() => {}}
         onSchedule={onSchedule}
+        onToggleMaterial={onToggleMaterial}
       />
     </DndContext>
   )
@@ -80,5 +85,19 @@ describe('LessonDrawer', () => {
     expect(screen.getByText('Dry erase board')).toBeTruthy()
     expect(screen.getByText('1 / 2 ready')).toBeTruthy()
     expect(screen.queryByText('Fractions later')).toBeNull()
+  })
+
+  it('checks off materials from the gather list', () => {
+    const onToggleMaterial = vi.fn()
+    renderDrawer(vi.fn(), vi.fn(), onToggleMaterial)
+    fireEvent.click(screen.getByRole('tab', { name: /Materials/ }))
+
+    fireEvent.click(
+      screen.getByRole('checkbox', { name: 'Dry erase board' })
+    )
+    expect(onToggleMaterial).toHaveBeenCalledWith(8, 2, true)
+
+    fireEvent.click(screen.getByRole('checkbox', { name: 'Fraction tiles' }))
+    expect(onToggleMaterial).toHaveBeenCalledWith(8, 1, false)
   })
 })

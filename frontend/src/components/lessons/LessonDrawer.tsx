@@ -37,6 +37,11 @@ interface LessonDrawerProps {
   onAdd: () => void
   onLessonClick: (lesson: Lesson) => void
   onSchedule: (lesson: Lesson, date: string) => void
+  onToggleMaterial: (
+    lessonId: number,
+    materialId: number,
+    isGathered: boolean
+  ) => void
 }
 
 type DrawerTab = 'lessons' | 'materials'
@@ -57,10 +62,15 @@ const materialSummary = (lessons: Lesson[]): MaterialSummary => {
 interface MaterialsPanelProps {
   lessons: Lesson[]
   onLessonClick: (lesson: Lesson) => void
+  onToggleMaterial: LessonDrawerProps['onToggleMaterial']
 }
 
 /** Compact prep checklist for the lessons in the active planner range. */
-const MaterialsPanel: React.FC<MaterialsPanelProps> = ({ lessons, onLessonClick }) => {
+const MaterialsPanel: React.FC<MaterialsPanelProps> = ({
+  lessons,
+  onLessonClick,
+  onToggleMaterial,
+}) => {
   const lessonsWithMaterials = useMemo(
     () =>
       [...lessons]
@@ -132,31 +142,41 @@ const MaterialsPanel: React.FC<MaterialsPanelProps> = ({ lessons, onLessonClick 
             </button>
             <ul className="mt-2 flex flex-col gap-1.5">
               {lesson.materials.map((material) => (
-                <li
-                  key={material.id}
-                  className={`flex items-start gap-2 text-[11.5px] leading-snug ${
-                    material.is_gathered ? 'text-faint' : 'text-ink'
-                  }`}
-                >
-                  {material.is_gathered ? (
-                    <Check
-                      size={13}
-                      aria-hidden="true"
-                      className="mt-px shrink-0 text-pos-fg"
+                <li key={material.id}>
+                  <label
+                    className={`flex cursor-pointer items-start gap-2 text-[11.5px] leading-snug ${
+                      material.is_gathered ? 'text-faint' : 'text-ink'
+                    }`}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={material.is_gathered}
+                      onChange={(event) =>
+                        onToggleMaterial(
+                          lesson.id,
+                          material.id,
+                          event.target.checked
+                        )
+                      }
+                      className="peer sr-only"
                     />
-                  ) : (
-                    <Circle
-                      size={12}
-                      aria-hidden="true"
-                      className="mt-px shrink-0 text-accent"
-                    />
-                  )}
-                  <span className={material.is_gathered ? 'line-through' : ''}>
-                    {material.label}
-                  </span>
-                  <span className="sr-only">
-                    {material.is_gathered ? 'Gathered' : 'Still needed'}
-                  </span>
+                    {material.is_gathered ? (
+                      <Check
+                        size={13}
+                        aria-hidden="true"
+                        className="mt-px shrink-0 rounded-full text-pos-fg peer-focus-visible:ring-2 peer-focus-visible:ring-accent peer-focus-visible:ring-offset-1"
+                      />
+                    ) : (
+                      <Circle
+                        size={12}
+                        aria-hidden="true"
+                        className="mt-px shrink-0 rounded-full text-accent peer-focus-visible:ring-2 peer-focus-visible:ring-accent peer-focus-visible:ring-offset-1"
+                      />
+                    )}
+                    <span className={material.is_gathered ? 'line-through' : ''}>
+                      {material.label}
+                    </span>
+                  </label>
                 </li>
               ))}
             </ul>
@@ -178,6 +198,7 @@ const LessonDrawer: React.FC<LessonDrawerProps> = ({
   onAdd,
   onLessonClick,
   onSchedule,
+  onToggleMaterial,
 }) => {
   const [activeTab, setActiveTab] = useState<DrawerTab>('lessons')
   const [dates, setDates] = useState<Record<number, string>>({})
@@ -344,7 +365,11 @@ const LessonDrawer: React.FC<LessonDrawerProps> = ({
           ) : null}
         </div>
       ) : (
-        <MaterialsPanel lessons={visibleLessons} onLessonClick={onLessonClick} />
+        <MaterialsPanel
+          lessons={visibleLessons}
+          onLessonClick={onLessonClick}
+          onToggleMaterial={onToggleMaterial}
+        />
       )}
     </aside>
   )

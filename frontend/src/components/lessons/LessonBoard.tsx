@@ -48,6 +48,11 @@ interface LessonBoardProps {
    */
   onReorder: (dateISO: string | null, orderedIds: number[]) => Promise<boolean>
   onSchedule: (lesson: Lesson, dateISO: string) => Promise<boolean>
+  onToggleMaterial: (
+    lessonId: number,
+    materialId: number,
+    isGathered: boolean
+  ) => void
   onAddToDrawer: () => void
 }
 
@@ -64,6 +69,7 @@ const LessonBoard: React.FC<LessonBoardProps> = ({
   onLessonClick,
   onReorder,
   onSchedule,
+  onToggleMaterial,
   onAddToDrawer,
 }) => {
   const [activeLesson, setActiveLesson] = useState<Lesson | null>(null)
@@ -239,6 +245,7 @@ const LessonBoard: React.FC<LessonBoardProps> = ({
           onAdd={onAddToDrawer}
           onLessonClick={onLessonClick}
           onSchedule={(lesson, date) => void scheduleLesson(lesson, date)}
+          onToggleMaterial={onToggleMaterial}
         />
       </div>
 

@@ -102,7 +102,7 @@ const LessonPlanning: React.FC = () => {
   const startDate = days[0]?.iso ?? rangeStart
   const endDate = days[days.length - 1]?.iso ?? rangeStart
 
-  const { lessons, loading, error, refetch } = useLessons({
+  const { lessons, loading, error, refetch, toggleMaterial } = useLessons({
     startDate,
     endDate,
   })
@@ -188,6 +188,14 @@ const LessonPlanning: React.FC = () => {
     [refetch, refreshDrawer, toast]
   )
 
+  const handleToggleMaterial = useCallback(
+    async (lessonId: number, materialId: number, isGathered: boolean) => {
+      const ok = await toggleMaterial(lessonId, materialId, isGathered)
+      if (!ok) toast('Could not update the material.', 'danger')
+    },
+    [toast, toggleMaterial]
+  )
+
   if (!isAdmin) {
     return (
       <div className="p-8 text-center text-muted">
@@ -240,6 +248,7 @@ const LessonPlanning: React.FC = () => {
               onLessonClick={handleLessonClick}
               onReorder={handleReorder}
               onSchedule={handleSchedule}
+              onToggleMaterial={handleToggleMaterial}
               onAddToDrawer={() => setDrawer({ mode: 'create', date: null })}
             />
           )}
