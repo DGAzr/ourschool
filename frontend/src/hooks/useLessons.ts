@@ -16,7 +16,7 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 
 import { lessonsApi } from '../services/lessons'
 import { getErrorMessage } from '../services/api'
@@ -47,7 +47,7 @@ const setMaterialGathered = (
 
 /**
  * Fetch lessons within a date range and expose optimistic mutators for the
- * two Teach-mode interactions (mark taught, toggle a material). Both apply
+ * two Teach interactions (mark taught, toggle a material). Both apply
  * locally, fire the PATCH, and roll back + surface an error on failure —
  * following the services + useState convention (no react-query in this app).
  */
@@ -55,28 +55,42 @@ export const useLessons = ({ startDate, endDate }: UseLessonsRange) => {
   const [lessons, setLessons] = useState<Lesson[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const requestId = useRef(0)
 
-  const fetchData = useCallback(() => {
-    return lessonsApi
-      .list({ start_date: startDate, end_date: endDate })
-      .then((data) => {
+  const fetchData = useCallback(async () => {
+    const currentRequest = ++requestId.current
+    await Promise.resolve()
+    if (requestId.current !== currentRequest) return
+    setLoading(true)
+    try {
+      const data = await lessonsApi.list({ start_date: startDate, end_date: endDate })
+      if (requestId.current === currentRequest) {
         setLessons(data || [])
         setError(null)
-      })
-      .catch((err) => {
+      }
+    } catch (err) {
+      if (requestId.current === currentRequest) {
         setError(getErrorMessage(err, 'Failed to load lessons.'))
         setLessons([])
-      })
-      .finally(() => setLoading(false))
+      }
+    } finally {
+      if (requestId.current === currentRequest) setLoading(false)
+    }
   }, [startDate, endDate])
 
   const refetch = useCallback(async () => {
-    setLoading(true)
     await fetchData()
   }, [fetchData])
 
   useEffect(() => {
-    fetchData()
+    let active = true
+    queueMicrotask(() => {
+      if (active) void fetchData()
+    })
+    return () => {
+      active = false
+      requestId.current += 1
+    }
   }, [fetchData])
 
   /** Optimistically set a lesson's status; rolls back on failure. */

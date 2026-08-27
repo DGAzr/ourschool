@@ -18,10 +18,9 @@
 
 import { CSSProperties, useMemo, useState } from 'react'
 
-import { Button, EmptyState, Spinner, useToast } from '../ui'
+import { Button, EmptyState, Spinner } from '../ui'
 import { Subject } from '../../types'
 import { Lesson } from '../../types/lesson'
-import { useLessons } from '../../hooks/useLessons'
 import { subjectTint, todayISO } from '../../utils/lessonPlanning'
 import { parseISO } from '../../utils/dates'
 import StudentAvatars from './StudentAvatars'
@@ -29,28 +28,52 @@ import TeachCard from './TeachCard'
 
 interface TeachViewProps {
   subjects: Subject[]
-  onLessonClick: (lesson: Lesson) => void
-  /** The Week planner / Teach mode view switch, shown top-right of the header. */
-  toggle?: React.ReactNode
+  selectedDate: string
+  lessons: Lesson[]
+  loading: boolean
+  error: string | null
+  onSelectDate: (date: string) => void
+  onEditLesson: (lesson: Lesson) => void
+  onMarkTaught: (lesson: Lesson) => void
+  onToggleMaterial: (
+    lessonId: number,
+    materialId: number,
+    isGathered: boolean
+  ) => void
+  onOpenPlanner: () => void
 }
 
-/** The Teach-mode run-sheet for today, with student + subject filters. */
+/** The Teach run-sheet for one day, with student and subject filters. */
 const TeachView: React.FC<TeachViewProps> = ({
   subjects,
-  onLessonClick,
-  toggle,
+  selectedDate,
+  lessons,
+  loading,
+  error,
+  onSelectDate,
+  onEditLesson,
+  onMarkTaught,
+  onToggleMaterial,
+  onOpenPlanner,
 }) => {
-  const [selectedDate, setSelectedDate] = useState(() => todayISO())
-  const { toast } = useToast()
-  const { lessons, loading, markTaught, toggleMaterial } = useLessons({
-    startDate: selectedDate,
-    endDate: selectedDate,
-  })
+  const [studentFilterState, setStudentFilterState] = useState<{
+    date: string
+    value: number | null
+  }>({ date: selectedDate, value: null })
+  const [subjectFilterState, setSubjectFilterState] = useState<{
+    date: string
+    value: number | null
+  }>({ date: selectedDate, value: null })
+  const studentFilter =
+    studentFilterState.date === selectedDate ? studentFilterState.value : null
+  const subjectFilter =
+    subjectFilterState.date === selectedDate ? subjectFilterState.value : null
+  const setStudentFilter = (value: number | null) =>
+    setStudentFilterState({ date: selectedDate, value })
+  const setSubjectFilter = (value: number | null) =>
+    setSubjectFilterState({ date: selectedDate, value })
 
-  const [studentFilter, setStudentFilter] = useState<number | null>(null)
-  const [subjectFilter, setSubjectFilter] = useState<number | null>(null)
-
-  // Filter options derived from today's lessons.
+  // Filter options derived from the selected day's lessons.
   const studentOptions = useMemo(() => {
     const map = new Map<number, Lesson['students'][number]>()
     for (const lesson of lessons) {
@@ -79,7 +102,7 @@ const TeachView: React.FC<TeachViewProps> = ({
     [lessons, studentFilter, subjectFilter]
   )
 
-  // Overall readiness computed over ALL today's lessons, not the filtered set.
+  // Overall readiness is computed over every lesson that day, not the filtered set.
   const materialsRemaining = useMemo(
     () =>
       lessons.reduce(
@@ -95,20 +118,6 @@ const TeachView: React.FC<TeachViewProps> = ({
   const clearFilters = () => {
     setStudentFilter(null)
     setSubjectFilter(null)
-  }
-
-  const handleMarkTaught = async (lesson: Lesson) => {
-    const ok = await markTaught(lesson)
-    if (!ok) toast('Could not update the lesson.', 'danger')
-  }
-
-  const handleToggleMaterial = async (
-    lessonId: number,
-    materialId: number,
-    isGathered: boolean
-  ) => {
-    const ok = await toggleMaterial(lessonId, materialId, isGathered)
-    if (!ok) toast('Could not update the material.', 'danger')
   }
 
   const dateLabel = parseISO(selectedDate).toLocaleDateString(undefined, {
@@ -128,7 +137,7 @@ const TeachView: React.FC<TeachViewProps> = ({
       <div className="mb-5 flex items-start justify-between gap-4 flex-wrap">
         <div>
           <div className="uppercase text-[11px] font-bold tracking-wide text-accent">
-            Teach mode · {dateLabel}
+            Teach · {dateLabel}
           </div>
           <h1 className="text-[27px] font-bold tracking-[-0.02em] text-ink mt-1">
             {allGathered
@@ -142,16 +151,16 @@ const TeachView: React.FC<TeachViewProps> = ({
           </p>
         </div>
         <div className="flex flex-col items-end gap-2">
-          {toggle}
+          <Button variant="outline" size="sm" onClick={onOpenPlanner}>
+            Plan lessons
+          </Button>
           <input
             type="date"
             aria-label="Choose teaching date"
             value={selectedDate}
             onChange={(event) => {
               if (!event.target.value) return
-              setSelectedDate(event.target.value)
-              setStudentFilter(null)
-              setSubjectFilter(null)
+              onSelectDate(event.target.value)
             }}
             className="bg-field-bg border border-field-border text-ink text-[12.5px] rounded-[8px] px-2.5 py-1.5"
           />
@@ -162,8 +171,20 @@ const TeachView: React.FC<TeachViewProps> = ({
         <div className="flex justify-center py-16">
           <Spinner />
         </div>
+      ) : error ? (
+        <div role="alert" className="rounded-[10px] border border-danger-line bg-danger-soft px-4 py-3 text-sm text-ink-2">
+          {error}
+        </div>
       ) : lessons.length === 0 ? (
-        <EmptyState title={`No lessons scheduled for ${dateLabel}`} subtext="Plan one from the Week planner." />
+        <EmptyState
+          title={`No lessons scheduled for ${dateLabel}`}
+          subtext="Choose another day or plan lessons for this date."
+          action={
+            <Button variant="primary" size="sm" onClick={onOpenPlanner}>
+              Plan lessons
+            </Button>
+          }
+        />
       ) : (
         <>
           {/* Filter bar */}
@@ -280,13 +301,13 @@ const TeachView: React.FC<TeachViewProps> = ({
           ) : (
             <div className="flex flex-col gap-3.5">
               {filtered.map((lesson) => (
-                <div key={lesson.id} onDoubleClick={() => onLessonClick(lesson)}>
-                  <TeachCard
-                    lesson={lesson}
-                    onMarkTaught={handleMarkTaught}
-                    onToggleMaterial={handleToggleMaterial}
-                  />
-                </div>
+                <TeachCard
+                  key={lesson.id}
+                  lesson={lesson}
+                  onEdit={onEditLesson}
+                  onMarkTaught={onMarkTaught}
+                  onToggleMaterial={onToggleMaterial}
+                />
               ))}
             </div>
           )}

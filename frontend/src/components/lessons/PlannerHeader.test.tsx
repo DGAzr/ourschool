@@ -4,7 +4,7 @@ import { describe, expect, it, vi } from 'vitest'
 import PlannerHeader from './PlannerHeader'
 
 describe('PlannerHeader', () => {
-  const renderHeader = (onSelectDate = vi.fn()) =>
+  const renderHeader = (onSelectDate = vi.fn(), onOpenTeach = vi.fn()) =>
     render(
       <PlannerHeader
         rangeLabel="Aug 15–21"
@@ -15,6 +15,7 @@ describe('PlannerHeader', () => {
         onSelectDate={onSelectDate}
         onStepDays={() => {}}
         onPlanLesson={() => {}}
+        onOpenTeach={onOpenTeach}
       />
     )
 
@@ -39,5 +40,12 @@ describe('PlannerHeader', () => {
     fireEvent.click(dateInput)
 
     expect(showPicker).toHaveBeenCalledOnce()
+  })
+
+  it('opens Teach for the active planner day', () => {
+    const onOpenTeach = vi.fn()
+    renderHeader(vi.fn(), onOpenTeach)
+    fireEvent.click(screen.getByRole('button', { name: 'Teach this day' }))
+    expect(onOpenTeach).toHaveBeenCalledOnce()
   })
 })

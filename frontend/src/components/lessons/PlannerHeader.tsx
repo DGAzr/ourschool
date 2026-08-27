@@ -16,7 +16,7 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-import { Calendar, Plus } from 'lucide-react'
+import { Calendar, Lectern, Plus } from 'lucide-react'
 
 import { Button } from '../ui'
 import { MAX_DAYS, MIN_DAYS } from '../../utils/lessonPlanning'
@@ -30,8 +30,7 @@ interface PlannerHeaderProps {
   onSelectDate: (date: string) => void
   onStepDays: (delta: 1 | -1) => void
   onPlanLesson: () => void
-  /** The Week planner / Teach mode view switch, shown top-right of the header. */
-  toggle?: React.ReactNode
+  onOpenTeach: () => void
 }
 
 const stepperBtn =
@@ -47,7 +46,7 @@ const PlannerHeader: React.FC<PlannerHeaderProps> = ({
   onSelectDate,
   onStepDays,
   onPlanLesson,
-  toggle,
+  onOpenTeach,
 }) => {
   const dayLabel = `${daysShown} ${skipWeekends ? 'school days' : 'days'}`
 
@@ -64,7 +63,6 @@ const PlannerHeader: React.FC<PlannerHeaderProps> = ({
       </div>
 
       <div className="flex flex-col items-end gap-3">
-        {toggle}
         <div className="flex flex-wrap items-center justify-end gap-[9px]">
           {/* Date-range stepper */}
           <div className="flex items-center gap-1 bg-panel border border-btn-border rounded-[9px] p-[3px]">
@@ -128,6 +126,9 @@ const PlannerHeader: React.FC<PlannerHeaderProps> = ({
             </button>
           </div>
 
+          <Button variant="outline" size="md" icon={<Lectern size={15} />} onClick={onOpenTeach}>
+            Teach this day
+          </Button>
           <Button variant="primary" size="md" icon={<Plus size={15} />} onClick={onPlanLesson}>
             Plan a lesson
           </Button>

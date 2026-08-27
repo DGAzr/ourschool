@@ -17,7 +17,7 @@
  */
 
 import { CSSProperties, useState } from 'react'
-import { ArrowUpRight, FileText } from 'lucide-react'
+import { ArrowUpRight, FileText, Pencil } from 'lucide-react'
 
 import { Button } from '../ui'
 import MarkdownRenderer from '../common/MarkdownRenderer'
@@ -36,6 +36,7 @@ import StudentAvatars from './StudentAvatars'
 
 interface TeachCardProps {
   lesson: Lesson
+  onEdit: (lesson: Lesson) => void
   onMarkTaught: (lesson: Lesson) => void
   onToggleMaterial: (
     lessonId: number,
@@ -44,9 +45,10 @@ interface TeachCardProps {
   ) => void
 }
 
-/** A single run-sheet card for Teach mode. */
+/** A single card in the Teach run-sheet. */
 const TeachCard: React.FC<TeachCardProps> = ({
   lesson,
+  onEdit,
   onMarkTaught,
   onToggleMaterial,
 }) => {
@@ -69,7 +71,7 @@ const TeachCard: React.FC<TeachCardProps> = ({
       }`}
     >
       {/* Header */}
-      <div className="flex items-start gap-3">
+      <div className="flex flex-wrap items-start gap-3">
         <div
           className="w-[38px] h-[38px] rounded-[10px] flex items-center justify-center font-mono text-[12px] flex-shrink-0"
           style={{
@@ -92,13 +94,23 @@ const TeachCard: React.FC<TeachCardProps> = ({
             {lesson.title}
           </h3>
         </div>
-        <Button
-          variant={taught ? 'outline' : 'primary'}
-          size="sm"
-          onClick={() => onMarkTaught(lesson)}
-        >
-          {taught ? 'Taught ✓' : 'Mark taught'}
-        </Button>
+        <div className="flex w-full items-center gap-2 pl-[50px] sm:w-auto sm:pl-0">
+          <Button
+            variant="outline"
+            size="sm"
+            icon={<Pencil size={13} />}
+            onClick={() => onEdit(lesson)}
+          >
+            Edit
+          </Button>
+          <Button
+            variant={taught ? 'outline' : 'primary'}
+            size="sm"
+            onClick={() => onMarkTaught(lesson)}
+          >
+            {taught ? 'Taught ✓' : 'Mark taught'}
+          </Button>
+        </div>
       </div>
 
       {lesson.objective && (

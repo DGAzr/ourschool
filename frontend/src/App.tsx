@@ -36,6 +36,7 @@ const Attendance = lazy(() => import('./pages/Attendance'))
 const Assignments = lazy(() => import('./pages/Assignments'))
 const Templates = lazy(() => import('./pages/Templates'))
 const LessonPlanning = lazy(() => import('./pages/LessonPlanning'))
+const Teach = lazy(() => import('./pages/Teach'))
 const MyLessons = lazy(() => import('./pages/MyLessons'))
 const Materials = lazy(() => import('./pages/Materials'))
 const PaperlessSettings = lazy(() => import('./pages/PaperlessSettings'))
@@ -107,6 +108,7 @@ function AppContent() {
             <Route path="assignments" element={<Assignments />} />
             <Route path="templates" element={<Templates />} />
             <Route path="lessons" element={<LessonPlanning />} />
+            <Route path="teach" element={<Teach />} />
             <Route path="my-lessons" element={<MyLessons />} />
             <Route path="materials" element={<Materials />} />
             <Route path="grading" element={<Grading />} />

@@ -42,6 +42,7 @@ import { type LucideIcon,
   BookOpen,
   FolderOpen,
   NotebookPen,
+  Lectern,
   ShoppingBag,
   Store,
 } from 'lucide-react'
@@ -216,6 +217,7 @@ const Layout: React.FC = () => {
     { name: 'Dashboard', href: '/', icon: Home },
     ...(isAdmin
       ? [
+          { name: 'Teach', href: '/teach', icon: Lectern },
           { name: 'Attendance', href: '/attendance', icon: Calendar },
           { name: 'Lesson Planning', href: '/lessons', icon: NotebookPen },
           // Materials appears only when Paperless-NGX is connected.

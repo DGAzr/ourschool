@@ -647,7 +647,7 @@ const LessonEditor: React.FC<LessonEditorProps> = ({
           value={notes}
           onChange={(e) => setNotes(e.target.value)}
           placeholder="Anything to remember while teaching…"
-          helperText="Markdown supported — formatting renders in Teach mode."
+          helperText="Markdown supported — formatting renders in Teach."
           rows={2}
         />
       </div>

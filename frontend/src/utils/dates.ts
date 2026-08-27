@@ -29,6 +29,16 @@ export const parseISO = (iso: string): Date => {
   return new Date(y, m - 1, d)
 }
 
+/** Return whether a value is a real calendar date in strict YYYY-MM-DD form. */
+export const isValidISODate = (value: string | null | undefined): value is string => {
+  if (!value || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return false
+  const [year, month, day] = value.split('-').map(Number)
+  if (year < 1 || month < 1 || month > 12 || day < 1) return false
+  const leapYear = year % 4 === 0 && (year % 100 !== 0 || year % 400 === 0)
+  const daysInMonth = [31, leapYear ? 29 : 28, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]
+  return day <= daysInMonth[month - 1]
+}
+
 /** Format a local Date as an ISO ``YYYY-MM-DD`` string. */
 const toISO = (date: Date): string => {
   const y = date.getFullYear()

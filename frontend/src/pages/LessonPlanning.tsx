@@ -17,10 +17,10 @@
  */
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { useSearchParams } from 'react-router-dom'
+import { Navigate, useNavigate, useSearchParams } from 'react-router-dom'
 
 import { useAuth } from '../contexts/AuthContext'
-import { SegmentedControl, Spinner, useToast } from '../components/ui'
+import { Spinner, useToast } from '../components/ui'
 import { subjectsApi } from '../services/subjects'
 import { assignmentsApi } from '../services/assignments'
 import { settingsApi } from '../services/settings'
@@ -42,9 +42,11 @@ import PlannerHeader from '../components/lessons/PlannerHeader'
 import ReadinessStrip from '../components/lessons/ReadinessStrip'
 import LessonBoard from '../components/lessons/LessonBoard'
 import LessonEditor from '../components/lessons/LessonEditor'
-import TeachView from '../components/lessons/TeachView'
-
-type PlannerView = 'planner' | 'teach'
+import {
+  calendarDateHref,
+  useCalendarDateParam,
+} from '../hooks/useCalendarDateParam'
+import { isValidISODate } from '../utils/dates'
 
 const DAYS_STORAGE_KEY = 'lessonPlanning.daysShown'
 
@@ -59,17 +61,13 @@ const readStoredDays = (): number => {
   return clampDaysShown(Number(raw))
 }
 
-const LessonPlanning: React.FC = () => {
+const LessonPlanningContent: React.FC = () => {
   const { user } = useAuth()
   const isAdmin = user?.role === 'admin'
   const { toast } = useToast()
+  const navigate = useNavigate()
 
-  // ?view=teach deep-links straight to the run-sheet (Dashboard "Needs you").
-  const [searchParams] = useSearchParams()
-  const [view, setView] = useState<PlannerView>(
-    searchParams.get('view') === 'teach' ? 'teach' : 'planner'
-  )
-  const [rangeStart, setRangeStart] = useState<string>(() => todayISO())
+  const [rangeStart, setRangeStart] = useCalendarDateParam()
   const [daysShown, setDaysShown] = useState<number>(() => readStoredDays())
   const [skipWeekends, setSkipWeekends] = useState<boolean>(true)
 
@@ -131,9 +129,9 @@ const LessonPlanning: React.FC = () => {
 
   const handleStepRange = useCallback(
     (dir: 1 | -1) => {
-      setRangeStart((prev) => stepRange(prev, daysShown, skipWeekends, dir))
+      setRangeStart(stepRange(rangeStart, daysShown, skipWeekends, dir))
     },
-    [daysShown, skipWeekends]
+    [daysShown, rangeStart, setRangeStart, skipWeekends]
   )
 
   const handleStepDays = useCallback((delta: 1 | -1) => {
@@ -204,60 +202,39 @@ const LessonPlanning: React.FC = () => {
     )
   }
 
-  const viewToggle = (
-    <SegmentedControl<PlannerView>
-      segments={[
-        { value: 'planner', label: 'Week planner' },
-        { value: 'teach', label: 'Teach mode' },
-      ]}
-      value={view}
-      onChange={setView}
-    />
-  )
-
   return (
     <div>
-      {view === 'planner' ? (
-        <>
-          <PlannerHeader
-            rangeLabel={rangeLabel}
-            selectedDate={rangeStart}
-            daysShown={daysShown}
-            skipWeekends={skipWeekends}
-            onStepRange={handleStepRange}
-            onSelectDate={setRangeStart}
-            onStepDays={handleStepDays}
-            onPlanLesson={() => handleAdd(rangeStart)}
-            toggle={viewToggle}
-          />
-          <ReadinessStrip readiness={readiness} />
+      <PlannerHeader
+        rangeLabel={rangeLabel}
+        selectedDate={rangeStart}
+        daysShown={daysShown}
+        skipWeekends={skipWeekends}
+        onStepRange={handleStepRange}
+        onSelectDate={setRangeStart}
+        onStepDays={handleStepDays}
+        onPlanLesson={() => handleAdd(rangeStart)}
+        onOpenTeach={() => navigate(calendarDateHref('/teach', rangeStart))}
+      />
+      <ReadinessStrip readiness={readiness} />
 
-          {error && (
-            <div className="text-danger text-sm mb-4">{error}</div>
-          )}
-          {loading ? (
-            <div className="flex justify-center py-16">
-              <Spinner />
-            </div>
-          ) : (
-            <LessonBoard
-              days={days}
-              lessons={lessons}
-              drawerLessons={drawerLessons}
-              onAdd={handleAdd}
-              onLessonClick={handleLessonClick}
-              onReorder={handleReorder}
-              onSchedule={handleSchedule}
-              onToggleMaterial={handleToggleMaterial}
-              onAddToDrawer={() => setDrawer({ mode: 'create', date: null })}
-            />
-          )}
-        </>
+      {error && (
+        <div className="text-danger text-sm mb-4">{error}</div>
+      )}
+      {loading ? (
+        <div className="flex justify-center py-16">
+          <Spinner />
+        </div>
       ) : (
-        <TeachView
-          subjects={subjects}
+        <LessonBoard
+          days={days}
+          lessons={lessons}
+          drawerLessons={drawerLessons}
+          onAdd={handleAdd}
           onLessonClick={handleLessonClick}
-          toggle={viewToggle}
+          onReorder={handleReorder}
+          onSchedule={handleSchedule}
+          onToggleMaterial={handleToggleMaterial}
+          onAddToDrawer={() => setDrawer({ mode: 'create', date: null })}
         />
       )}
 
@@ -275,6 +252,16 @@ const LessonPlanning: React.FC = () => {
       )}
     </div>
   )
+}
+
+const LessonPlanning: React.FC = () => {
+  const [searchParams] = useSearchParams()
+  if (searchParams.get('view') === 'teach') {
+    const rawDate = searchParams.get('date')
+    const date = isValidISODate(rawDate) ? rawDate : todayISO()
+    return <Navigate to={calendarDateHref('/teach', date)} replace />
+  }
+  return <LessonPlanningContent />
 }
 
 export default LessonPlanning

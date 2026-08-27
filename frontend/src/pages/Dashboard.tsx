@@ -621,7 +621,7 @@ const Dashboard: React.FC = () => {
                 )}
                 {materialsToGather > 0 && (
                   <Link
-                    to="/lessons?view=teach"
+                    to="/teach"
                     className="flex items-center justify-between gap-3 px-5 py-3.5 hover:bg-accent-soft transition-colors"
                   >
                     <div className="flex items-center gap-3">
