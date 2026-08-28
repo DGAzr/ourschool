@@ -23,6 +23,8 @@ export interface PointsStatusContextType {
   enabled: boolean
   /** True once the first status fetch has settled — gate UI on this to avoid flicker. */
   ready: boolean
+  /** A user-facing message when the latest status check failed. */
+  error: string | null
   /** Bumped whenever a redemption (or other spend) changes a balance. */
   balanceVersion: number
   /** Tell balance widgets to refetch (call after a successful redemption). */

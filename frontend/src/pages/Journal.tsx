@@ -879,6 +879,7 @@ const Journal: React.FC = () => {
                   value={searchTerm}
                   onChange={e => setSearchTerm(e.target.value)}
                   placeholder="Search entries…"
+                  aria-label="Search journal entries"
                   className="w-full pl-7 pr-2 py-1.5 bg-field-bg border border-field-border rounded-field text-[12.5px] text-ink placeholder:text-faintest focus:outline-none focus:ring-1 focus:ring-accent"
                 />
               </div>
@@ -984,6 +985,7 @@ const Journal: React.FC = () => {
                 value={searchTerm}
                 onChange={e => setSearchTerm(e.target.value)}
                 placeholder="Search entries…"
+                aria-label="Search journal entries"
                 className="w-full pl-7 pr-2 py-2 bg-field-bg border border-field-border rounded-field text-[13px] text-ink placeholder:text-faintest focus:outline-none focus:ring-1 focus:ring-accent"
               />
             </div>

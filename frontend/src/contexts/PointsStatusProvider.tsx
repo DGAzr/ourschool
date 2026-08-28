@@ -42,14 +42,17 @@ export const PointsStatusProvider: React.FC<{ children: ReactNode }> = ({
   const { user } = useAuth()
   const [enabled, setEnabled] = useState(false)
   const [ready, setReady] = useState(false)
+  const [error, setError] = useState<string | null>(null)
   const [balanceVersion, setBalanceVersion] = useState(0)
 
   const refresh = useCallback(async () => {
     try {
+      setError(null)
       const status = await pointsApi.getSystemStatus()
       setEnabled(status.enabled)
     } catch {
       // Transient failure — keep the last known enabled value.
+      setError('Points Shop availability could not be checked.')
     } finally {
       setReady(true)
     }
@@ -69,8 +72,8 @@ export const PointsStatusProvider: React.FC<{ children: ReactNode }> = ({
   }, [user, refresh])
 
   const value = useMemo<PointsStatusContextType>(
-    () => ({ enabled, ready, balanceVersion, notifyBalanceChanged, refresh }),
-    [enabled, ready, balanceVersion, notifyBalanceChanged, refresh]
+    () => ({ enabled, ready, error, balanceVersion, notifyBalanceChanged, refresh }),
+    [enabled, ready, error, balanceVersion, notifyBalanceChanged, refresh]
   )
 
   return (

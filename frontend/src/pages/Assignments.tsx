@@ -25,6 +25,7 @@ import { termsApi } from '../services/terms'
 import { useAssignments } from '../hooks/useAssignments'
 import { useAssignmentFilters } from '../hooks/useAssignmentFilters'
 import { Pill, statusToPillVariant, SubjectDot, useToast, ActionMenu } from '../components/ui'
+import type { ActionMenuEntry } from '../components/ui'
 import ConfirmDialog from '../components/ui/ConfirmDialog'
 import StudentAssignmentsView from '../components/assignments/StudentAssignmentsView'
 import AssignmentComposer from '../components/assignments/composer/AssignmentComposer'
@@ -284,6 +285,28 @@ const Assignments: React.FC = () => {
 
   const allSelected = sortedAssignments.length > 0 && sortedAssignments.every(a => selectedIds.has(a.id))
 
+  const actionItemsFor = (assignment: StudentAssignment): ActionMenuEntry[] => {
+    const isActive = !assignment.is_graded && assignment.status !== 'excused'
+    return [
+      { label: 'Edit assigned work', onSelect: () => setEditingAssignment(assignment) },
+      'separator',
+      ...(isActive
+        ? [
+            { label: 'Grade', onSelect: () => navigate('/grading', { state: { assignmentId: assignment.id } }) },
+            { label: 'Excuse', onSelect: () => handleExcuseAssignment(assignment) },
+            'separator' as const,
+          ]
+        : []),
+      ...(assignment.status === 'excused'
+        ? [{ label: 'Reopen', onSelect: () => handleReopenAssignment(assignment) }, 'separator' as const]
+        : []),
+      ...(assignment.is_graded
+        ? [{ label: 'Archive', onSelect: () => handleArchiveAssignment(assignment) }, 'separator' as const]
+        : []),
+      { label: 'Unassign', onSelect: () => handleUnassignAssignment(assignment), danger: true },
+    ]
+  }
+
   if (!user) {
     return (
       <div className="flex items-center justify-center py-16">
@@ -328,7 +351,7 @@ const Assignments: React.FC = () => {
         {isAdmin && (
           <button
             onClick={() => setComposer({ kind: 'create', showAssign: true, libraryDefault: false })}
-            className="h-[34px] px-4 text-[13px] font-semibold rounded-field bg-btn-primary-bg text-btn-primary-fg hover:opacity-90 transition-opacity flex items-center gap-1.5 mt-1"
+            className="min-h-[44px] px-4 text-[13px] font-semibold rounded-field bg-btn-primary-bg text-btn-primary-fg hover:opacity-90 transition-opacity flex items-center gap-1.5 mt-1 sm:min-h-[34px]"
           >
             <span className="text-[17px] leading-none" style={{ marginTop: -1 }}>+</span> New assignment
           </button>
@@ -363,7 +386,7 @@ const Assignments: React.FC = () => {
                 <button
                   key={tab.key}
                   onClick={() => setStatusFilter(tab.key)}
-                  className={`h-[34px] px-3.5 text-[13px] font-semibold rounded-[8px] flex items-center gap-1.5 transition-colors ${
+                  className={`h-[44px] px-3.5 text-[13px] font-semibold rounded-[8px] flex items-center gap-1.5 transition-colors sm:h-[34px] ${
                     isActive
                       ? 'bg-ink text-btn-primary-fg'
                       : 'bg-panel border border-line text-muted hover:text-ink hover:bg-track'
@@ -388,16 +411,18 @@ const Assignments: React.FC = () => {
               </svg>
               <input
                 type="text"
+                aria-label="Search assignments"
                 placeholder="Search student or assignment…"
                 value={searchTerm}
                 onChange={e => setSearchTerm(e.target.value)}
-                className="w-full pl-8 pr-3 h-[38px] bg-field-bg border border-field-border rounded-[9px] text-[13.5px] text-ink placeholder:text-faintest focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent"
+                className="w-full pl-8 pr-3 h-[44px] sm:h-[38px] bg-field-bg border border-field-border rounded-[9px] text-[13.5px] text-ink placeholder:text-faintest focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent"
               />
             </div>
             <select
+              aria-label="Filter assignments by student"
               value={selectedStudent ?? ''}
               onChange={e => setSelectedStudent(e.target.value ? parseInt(e.target.value) : null)}
-              className="h-[38px] px-3 pr-8 bg-field-bg border border-field-border rounded-[9px] text-[13.5px] text-ink-2 focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent"
+              className="h-[44px] px-3 pr-8 sm:h-[38px] bg-field-bg border border-field-border rounded-[9px] text-[13.5px] text-ink-2 focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent"
             >
               <option value="">All students</option>
               {students.map(s => (
@@ -405,18 +430,20 @@ const Assignments: React.FC = () => {
               ))}
             </select>
             <select
+              aria-label="Filter assignments by subject"
               value={selectedSubject ?? ''}
               onChange={e => setSelectedSubject(e.target.value ? parseInt(e.target.value) : null)}
-              className="h-[38px] px-3 pr-8 bg-field-bg border border-field-border rounded-[9px] text-[13.5px] text-ink-2 focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent"
+              className="h-[44px] px-3 pr-8 sm:h-[38px] bg-field-bg border border-field-border rounded-[9px] text-[13.5px] text-ink-2 focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent"
             >
               <option value="">All subjects</option>
               {subjects.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
             </select>
             {terms.length > 0 && (
               <select
+                aria-label="Filter assignments by term"
                 value={selectedTerm ?? ''}
                 onChange={e => setSelectedTerm(e.target.value ? parseInt(e.target.value) : null)}
-                className="h-[38px] px-3 pr-8 bg-field-bg border border-field-border rounded-[9px] text-[13.5px] text-ink-2 focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent"
+                className="h-[44px] px-3 pr-8 sm:h-[38px] bg-field-bg border border-field-border rounded-[9px] text-[13.5px] text-ink-2 focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent"
               >
                 <option value="">All terms</option>
                 {terms.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
@@ -448,8 +475,126 @@ const Assignments: React.FC = () => {
             )
           })()}
 
-          {/* Table */}
-          <div className="bg-panel border border-line rounded-card overflow-hidden">
+          {/* Mobile cards keep every key field and action reachable without
+              squeezing a seven-column table into a phone viewport. */}
+          {sortedAssignments.length > 0 && (
+            <div className="space-y-3 md:hidden">
+              {sortedAssignments.map((assignment) => {
+                const stu = students.find((student) => student.id === assignment.student_id)
+                const sub = assignment.template?.subject_id
+                  ? getSubjectById(assignment.template.subject_id)
+                  : undefined
+                const overdue = isOverdue(assignment)
+                const effectiveStatus = overdue ? 'overdue' : assignment.status
+                const isSelected = selectedIds.has(assignment.id)
+                const isExpanded = expandedId === assignment.id
+                const maxPts = assignment.custom_max_points ?? assignment.template?.max_points ?? 100
+                const assignmentName = assignment.template?.name ?? 'Assignment'
+
+                return (
+                  <article
+                    key={assignment.id}
+                    className={`overflow-hidden rounded-card border bg-panel ${
+                      isSelected ? 'border-accent bg-accent-soft' : 'border-line'
+                    }`}
+                  >
+                    <div className="flex items-center gap-3 border-b border-line-2 px-3 py-2.5">
+                      <button
+                        onClick={() => toggleSelect(assignment.id)}
+                        aria-label={`${isSelected ? 'Deselect' : 'Select'} ${assignmentName}`}
+                        className="flex h-[44px] w-[44px] flex-none items-center justify-center rounded-[8px]"
+                      >
+                        <span className={`flex h-[20px] w-[20px] items-center justify-center rounded-[5px] border-[1.5px] ${
+                          isSelected ? 'border-accent bg-accent text-white' : 'border-check-border bg-field-bg'
+                        }`}>
+                          {isSelected && (
+                            <svg width="10" height="8" fill="none" viewBox="0 0 9 7" aria-hidden="true">
+                              <path d="M1 3.5 3.5 6 8 1" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+                            </svg>
+                          )}
+                        </span>
+                      </button>
+                      <div className="min-w-0 flex-1">
+                        <p className="truncate text-[13.5px] font-semibold text-ink">
+                          {stu ? `${stu.first_name} ${stu.last_name}` : 'Unknown student'}
+                        </p>
+                        <p className="truncate text-[12px] text-faint">
+                          {sub?.name ?? 'No subject'}
+                          {assignment.template?.assignment_type && <> · <span className="capitalize">{assignment.template.assignment_type}</span></>}
+                        </p>
+                      </div>
+                      <ActionMenu
+                        ariaLabel={`Actions for ${assignmentName}`}
+                        items={actionItemsFor(assignment)}
+                      />
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={() => setExpandedId(isExpanded ? null : assignment.id)}
+                      aria-expanded={isExpanded}
+                      aria-controls={`assignment-mobile-details-${assignment.id}`}
+                      className="block w-full px-4 py-3.5 text-left"
+                    >
+                      <div className="flex items-start gap-2">
+                        <SubjectDot color={sub?.color ?? '#74716A'} size={9} className="mt-1 flex-none" />
+                        <p className="min-w-0 flex-1 text-[15px] font-semibold leading-snug text-ink">{assignmentName}</p>
+                        <span className="flex-none text-[12px] font-semibold text-accent">{isExpanded ? 'Hide' : 'Details'}</span>
+                      </div>
+
+                      <dl className="mt-3 grid grid-cols-3 gap-2">
+                        <div>
+                          <dt className="text-[10px] font-semibold uppercase tracking-[.05em] text-faint">Due</dt>
+                          <dd className={`mt-1 text-[12.5px] font-medium ${overdue ? 'text-neg-fg' : 'text-ink-2'}`}>
+                            {assignment.due_date
+                              ? formatDateOnly(assignment.due_date, { month: 'short', day: 'numeric' })
+                              : 'No date'}
+                          </dd>
+                        </div>
+                        <div>
+                          <dt className="text-[10px] font-semibold uppercase tracking-[.05em] text-faint">Status</dt>
+                          <dd className="mt-1"><Pill variant={statusToPillVariant(effectiveStatus)}>{effectiveStatus.replace('_', ' ')}</Pill></dd>
+                        </div>
+                        <div>
+                          <dt className="text-[10px] font-semibold uppercase tracking-[.05em] text-faint">Grade</dt>
+                          <dd className="mt-1 font-mono text-[12.5px] text-ink-2">
+                            {assignment.is_graded && assignment.points_earned != null
+                              ? `${assignment.points_earned}/${maxPts} · ${assignment.letter_grade ?? letterGrade(assignment.points_earned, maxPts)}`
+                              : assignment.status === 'excused' ? 'Excused' : '—'}
+                          </dd>
+                        </div>
+                      </dl>
+                    </button>
+
+                    {isExpanded && (
+                      <div
+                        id={`assignment-mobile-details-${assignment.id}`}
+                        className="space-y-3 border-t border-line-2 bg-panel-2 px-4 py-4"
+                      >
+                        <AssignmentInfo
+                          description={assignment.template?.description}
+                          instructions={assignment.template?.instructions}
+                          customInstructions={assignment.custom_instructions}
+                        />
+                        <SubmissionCard notes={assignment.submission_notes} artifacts={assignment.submission_artifacts} />
+                        {assignment.teacher_feedback && (
+                          <div className="rounded-[10px] border border-pos-fg/20 bg-pos-bg p-3.5">
+                            <p className="text-[11px] font-semibold uppercase tracking-[.05em] text-faint">Teacher feedback</p>
+                            <p className="mt-1 text-[13px] leading-relaxed text-ink-2">{assignment.teacher_feedback}</p>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </article>
+                )
+              })}
+            </div>
+          )}
+
+          {/* Desktop/tablet table */}
+          <div className={`bg-panel border border-line rounded-card overflow-hidden ${
+            sortedAssignments.length > 0 ? 'hidden md:block' : ''
+          }`}>
             {sortedAssignments.length === 0 ? (
               <div className="py-14 text-center">
                 <p className="text-[15px] font-semibold text-ink-2 mb-1">No assignments match your filters</p>
@@ -598,24 +743,7 @@ const Assignments: React.FC = () => {
                             <ActionMenu
                               ariaLabel={`Actions for ${assignment.template?.name ?? 'assignment'}`}
                               revealOnHover
-                              items={[
-                                { label: 'Edit assigned work', onSelect: () => setEditingAssignment(assignment) },
-                                'separator' as const,
-                                ...(isActive
-                                  ? [
-                                      { label: 'Grade', onSelect: () => navigate('/grading', { state: { assignmentId: assignment.id } }) },
-                                      { label: 'Excuse', onSelect: () => handleExcuseAssignment(assignment) },
-                                      'separator' as const,
-                                    ]
-                                  : []),
-                                ...(assignment.status === 'excused'
-                                  ? [{ label: 'Reopen', onSelect: () => handleReopenAssignment(assignment) }, 'separator' as const]
-                                  : []),
-                                ...(assignment.is_graded
-                                  ? [{ label: 'Archive', onSelect: () => handleArchiveAssignment(assignment) }, 'separator' as const]
-                                  : []),
-                                { label: 'Unassign', onSelect: () => handleUnassignAssignment(assignment), danger: true },
-                              ]}
+                              items={actionItemsFor(assignment)}
                             />
                           </div>
                         </td>

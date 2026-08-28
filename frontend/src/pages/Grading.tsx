@@ -93,17 +93,19 @@ const QueuePanel: React.FC<QueuePanelProps> = ({
 
     <div className="flex-none px-2 pt-2 pb-1 flex gap-2">
       <select
+        aria-label="Filter grading queue by subject"
         value={selectedSubject ?? ''}
         onChange={e => setSelectedSubject(e.target.value ? parseInt(e.target.value) : null)}
-        className="flex-1 h-[30px] px-2 bg-field-bg border border-field-border rounded-field text-[12px] text-ink focus:outline-none"
+        className="flex-1 h-[44px] sm:h-[30px] px-2 bg-field-bg border border-field-border rounded-field text-[12px] text-ink focus:outline-none"
       >
         <option value="">All subjects</option>
         {subjects.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
       </select>
       <select
+        aria-label="Filter grading queue by student"
         value={selectedStudent ?? ''}
         onChange={e => setSelectedStudent(e.target.value ? parseInt(e.target.value) : null)}
-        className="flex-1 h-[30px] px-2 bg-field-bg border border-field-border rounded-field text-[12px] text-ink focus:outline-none"
+        className="flex-1 h-[44px] sm:h-[30px] px-2 bg-field-bg border border-field-border rounded-field text-[12px] text-ink focus:outline-none"
       >
         <option value="">All students</option>
         {students.map(s => <option key={s.id} value={s.id}>{s.first_name} {s.last_name}</option>)}

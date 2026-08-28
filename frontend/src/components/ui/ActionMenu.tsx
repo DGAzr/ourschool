@@ -109,7 +109,7 @@ const ActionMenu: React.FC<ActionMenuProps> = ({ items, ariaLabel, revealOnHover
         onClick={() => setOpen(o => !o)}
         aria-label={ariaLabel}
         aria-expanded={open}
-        className={`w-[30px] h-[30px] border border-line bg-panel rounded-[7px] text-muted flex items-center justify-center text-[16px] leading-none hover:bg-track transition-colors ${
+        className={`w-[44px] h-[44px] sm:w-[34px] sm:h-[34px] lg:w-[30px] lg:h-[30px] border border-line bg-panel rounded-[7px] text-muted flex items-center justify-center text-[16px] leading-none hover:bg-track transition-colors ${
           revealOnHover && !open ? 'opacity-100 lg:opacity-0 lg:group-hover:opacity-100 transition-opacity' : ''
         }`}
       >

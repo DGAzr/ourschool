@@ -16,8 +16,10 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-import React, { ReactNode, useEffect, useRef } from 'react'
+import React, { ReactNode, useId, useRef } from 'react'
+import { createPortal } from 'react-dom'
 import { X } from 'lucide-react'
+import { useOverlayFocus } from '../useOverlayFocus'
 
 /**
  * The single modal size scale. sm 420 / md 520 / lg 640.
@@ -87,38 +89,8 @@ const Modal: React.FC<ModalProps> = ({
   closeOnOverlayClick = true,
 }) => {
   const panelRef = useRef<HTMLDivElement>(null)
-  const lastFocused = useRef<HTMLElement | null>(null)
-
-  // ESC to close + body scroll lock
-  useEffect(() => {
-    if (!isOpen) return
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose()
-    }
-    document.addEventListener('keydown', onKey)
-    const prevOverflow = document.body.style.overflow
-    document.body.style.overflow = 'hidden'
-    return () => {
-      document.removeEventListener('keydown', onKey)
-      document.body.style.overflow = prevOverflow
-    }
-  }, [isOpen, onClose])
-
-  // Focus management: focus first field on open, restore on close
-  useEffect(() => {
-    if (!isOpen) return
-    lastFocused.current = document.activeElement as HTMLElement
-    const t = setTimeout(() => {
-      const first = panelRef.current?.querySelector<HTMLElement>(
-        'input, select, textarea, button, [tabindex]:not([tabindex="-1"])'
-      )
-      first?.focus()
-    }, 60)
-    return () => {
-      clearTimeout(t)
-      lastFocused.current?.focus?.()
-    }
-  }, [isOpen])
+  const titleId = useId()
+  useOverlayFocus(isOpen, panelRef, onClose)
 
   if (!isOpen) return null
 
@@ -128,7 +100,7 @@ const Modal: React.FC<ModalProps> = ({
 
   const hasHeader = !!(title || icon || showCloseButton)
 
-  return (
+  return createPortal(
     <div
       className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-overlay backdrop-blur-[2px]"
       onClick={handleScrim}
@@ -137,7 +109,9 @@ const Modal: React.FC<ModalProps> = ({
         ref={panelRef}
         role="dialog"
         aria-modal="true"
-        aria-label={title}
+        aria-labelledby={title ? titleId : undefined}
+        aria-label={title ? undefined : 'Dialog'}
+        tabIndex={-1}
         className={`relative z-10 w-full ${SIZE[size]} max-h-[88vh] flex flex-col bg-panel border border-line rounded-[14px] shadow-[0_28px_70px_var(--shadow-lg)] overflow-hidden animate-modal-in motion-reduce:animate-none`}
       >
         {hasHeader && (
@@ -151,7 +125,7 @@ const Modal: React.FC<ModalProps> = ({
             )}
             <div className="flex-1 min-w-0">
               {title && (
-                <h3 className="text-[15.5px] font-semibold text-ink tracking-[-0.01em] leading-tight">
+                <h3 id={titleId} className="text-[15.5px] font-semibold text-ink tracking-[-0.01em] leading-tight">
                   {title}
                 </h3>
               )}
@@ -161,7 +135,7 @@ const Modal: React.FC<ModalProps> = ({
               <button
                 onClick={onClose}
                 aria-label="Close"
-                className="flex-shrink-0 w-[30px] h-[30px] rounded-lg flex items-center justify-center text-muted hover:bg-line-2 hover:text-ink transition-colors"
+                className="flex-shrink-0 w-[44px] h-[44px] sm:w-[30px] sm:h-[30px] rounded-lg flex items-center justify-center text-muted hover:bg-line-2 hover:text-ink transition-colors"
               >
                 <X size={15} />
               </button>
@@ -177,7 +151,8 @@ const Modal: React.FC<ModalProps> = ({
           </div>
         )}
       </div>
-    </div>
+    </div>,
+    document.body
   )
 }
 

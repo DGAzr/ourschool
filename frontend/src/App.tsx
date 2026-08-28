@@ -16,7 +16,7 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-import { Routes, Route } from 'react-router-dom'
+import { Navigate, Routes, Route } from 'react-router-dom'
 import { useAuth } from './contexts/AuthContext'
 import { AuthProvider } from './contexts/AuthProvider'
 import { PointsStatusProvider } from './contexts/PointsStatusProvider'
@@ -45,7 +45,7 @@ const Profile = lazy(() => import('./pages/Profile'))
 const Reports = lazy(() => import('./pages/Reports'))
 const Journal = lazy(() => import('./pages/Journal'))
 const Admin = lazy(() => import('./pages/Admin'))
-const AdminSettings = lazy(() => import('./pages/AdminSettings'))
+const NotFound = lazy(() => import('./pages/NotFound'))
 const MyPoints = lazy(() => import('./pages/MyPoints'))
 const Shop = lazy(() => import('./pages/Shop'))
 const AdminShop = lazy(() => import('./pages/AdminShop'))
@@ -68,6 +68,11 @@ const RequirePasswordChange = ({ children }: { children: React.ReactNode }) => {
     return <ChangePasswordRequired />
   }
   return <>{children}</>
+}
+
+const TemplatesRoute = () => {
+  const { user } = useAuth()
+  return user?.role === 'admin' ? <Templates /> : <Navigate to="/assignments" replace />
 }
 
 function AppContent() {
@@ -106,7 +111,7 @@ function AppContent() {
             <Route index element={<Dashboard />} />
             <Route path="attendance" element={<Attendance />} />
             <Route path="assignments" element={<Assignments />} />
-            <Route path="templates" element={<Templates />} />
+            <Route path="templates" element={<TemplatesRoute />} />
             <Route path="lessons" element={<LessonPlanning />} />
             <Route path="teach" element={<Teach />} />
             <Route path="my-lessons" element={<MyLessons />} />
@@ -116,11 +121,12 @@ function AppContent() {
             <Route path="journal" element={<Journal />} />
             <Route path="profile" element={<Profile />} />
             <Route path="admin" element={<Admin />} />
-            <Route path="admin/settings" element={<AdminSettings />} />
+            <Route path="admin/settings" element={<Navigate to="/admin" replace />} />
             <Route path="admin/settings/paperless" element={<PaperlessSettings />} />
             <Route path="admin/shop" element={<AdminShop />} />
             <Route path="my-points" element={<MyPoints />} />
             <Route path="shop" element={<Shop />} />
+            <Route path="*" element={<NotFound />} />
           </Route>
         </Routes>
       </Suspense>

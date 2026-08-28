@@ -410,6 +410,7 @@ const Templates: React.FC = () => {
               <input
                 type="text"
                 placeholder="Search templates…"
+                aria-label="Search assignment templates"
                 value={searchTerm}
                 onChange={e => setSearchTerm(e.target.value)}
                 className="w-full pl-8 pr-3 py-2 bg-field-bg border border-field-border rounded-field text-[13px] text-ink placeholder:text-faintest focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent"
@@ -417,17 +418,19 @@ const Templates: React.FC = () => {
             </div>
             <div className="flex items-center gap-3 flex-wrap">
               <select
+                aria-label="Filter templates by subject"
                 value={selectedSubject ?? ''}
                 onChange={e => setSelectedSubject(e.target.value ? parseInt(e.target.value) : null)}
-                className="h-[34px] px-3 bg-field-bg border border-field-border rounded-field text-[13px] text-ink focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent"
+                className="h-[44px] sm:h-[34px] px-3 bg-field-bg border border-field-border rounded-field text-[13px] text-ink focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent"
               >
                 <option value="">All Subjects</option>
                 {subjects.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
               </select>
               <select
+                aria-label="Filter templates by assignment type"
                 value={selectedType ?? ''}
                 onChange={e => setSelectedType(e.target.value || null)}
-                className="h-[34px] px-3 bg-field-bg border border-field-border rounded-field text-[13px] text-ink focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent"
+                className="h-[44px] sm:h-[34px] px-3 bg-field-bg border border-field-border rounded-field text-[13px] text-ink focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent"
               >
                 <option value="">All Types</option>
                 {types.filter(t => t.is_active).map(t => <option key={t.key} value={t.key}>{t.name}</option>)}
@@ -622,15 +625,17 @@ const Templates: React.FC = () => {
               <input
                 type="text"
                 placeholder="Search assignments…"
+                aria-label="Search assignments"
                 value={searchTerm}
                 onChange={e => setSearchTerm(e.target.value)}
                 className="w-full pl-8 pr-3 py-2 bg-field-bg border border-field-border rounded-field text-[13px] text-ink placeholder:text-faintest focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent"
               />
             </div>
             <select
+              aria-label="Filter assignments by subject"
               value={selectedSubject ?? ''}
               onChange={e => setSelectedSubject(e.target.value ? parseInt(e.target.value) : null)}
-              className="h-[34px] px-3 bg-field-bg border border-field-border rounded-field text-[13px] text-ink"
+              className="h-[44px] sm:h-[34px] px-3 bg-field-bg border border-field-border rounded-field text-[13px] text-ink"
             >
               <option value="">All Subjects</option>
               {subjects.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}

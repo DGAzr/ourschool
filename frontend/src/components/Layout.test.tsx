@@ -1,4 +1,5 @@
 import { render, screen, within } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 
@@ -42,6 +43,7 @@ const renderLayout = (user: User, entry: string) =>
         value={{
           enabled: false,
           ready: true,
+          error: null,
           balanceVersion: 0,
           notifyBalanceChanged: vi.fn(),
           refresh: vi.fn(),
@@ -99,5 +101,21 @@ describe('Layout lesson navigation', () => {
   it('does not expose Teach navigation to students', () => {
     renderLayout({ ...admin, id: 2, role: 'student' }, '/assignments')
     expect(screen.queryByRole('link', { name: 'Teach' })).toBeNull()
+  })
+
+  it('treats the open mobile navigation as a keyboard-contained dialog', async () => {
+    const user = userEvent.setup()
+    renderLayout(admin, '/assignments')
+    const opener = screen.getByRole('button', { name: 'Open sidebar' })
+
+    await user.click(opener)
+    const sidebar = screen.getByRole('dialog', { name: 'Main navigation' })
+    expect(opener).toHaveAttribute('aria-expanded', 'true')
+    expect(sidebar).toContainElement(screen.getByRole('button', { name: 'Close sidebar' }))
+
+    await user.keyboard('{Escape}')
+    expect(screen.queryByRole('dialog', { name: 'Main navigation' })).toBeNull()
+    expect(opener).toHaveFocus()
+    expect(opener).toHaveAttribute('aria-expanded', 'false')
   })
 })

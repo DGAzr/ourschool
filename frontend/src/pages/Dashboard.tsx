@@ -211,7 +211,7 @@ const QuickAwardModal: React.FC<QuickAwardModalProps> = ({ onClose, onSuccess })
 
 const Dashboard: React.FC = () => {
   const { user } = useAuth()
-  const { loading, setLoading } = usePageLayout({ initialLoading: true })
+  const { loading, error, setLoading, setError } = usePageLayout({ initialLoading: true })
   const [adminReport, setAdminReport] = useState<AdminReport | null>(null)
   const [studentReport, setStudentReport] = useState<StudentReport | null>(null)
   const [activeTerm, setActiveTerm] = useState<Term | null>(null)
@@ -219,6 +219,9 @@ const Dashboard: React.FC = () => {
   const [subjects, setSubjects] = useState<Subject[]>([])
   const [showRecentActivity, setShowRecentActivity] = useState(false)
   const [activityLoading, setActivityLoading] = useState(true)
+  const [activityError, setActivityError] = useState<string | null>(null)
+  const [reloadKey, setReloadKey] = useState(0)
+  const [activityReloadKey, setActivityReloadKey] = useState(0)
   const [showAwardModal, setShowAwardModal] = useState(false)
   const [showBulkAttendanceModal, setShowBulkAttendanceModal] = useState(false)
   const [showAssignmentDetailModal, setShowAssignmentDetailModal] = useState(false)
@@ -299,6 +302,7 @@ const Dashboard: React.FC = () => {
     const loadDashboardData = async () => {
       try {
         setLoading(true)
+        setError(null)
         
         if (isAdmin) {
           // Load admin data
@@ -323,6 +327,7 @@ const Dashboard: React.FC = () => {
           setActiveTerm(termData)
         }
       } catch (error) {
+        setError(getErrorMessage(error, 'Couldn’t load dashboard data.'))
       } finally {
         setLoading(false)
       }
@@ -330,18 +335,18 @@ const Dashboard: React.FC = () => {
     
     loadDashboardData()
     // setLoading is a stable useState setter returned by usePageLayout
-  }, [isAdmin, setLoading])
+  }, [isAdmin, reloadKey, setError, setLoading])
 
   // Load activity data separately
   useEffect(() => {
     const loadActivityData = async () => {
       try {
         setActivityLoading(true)
+        setActivityError(null)
         const activities = await activityApi.getDashboardActivity()
         setRecentActivity(activities || [])
       } catch (error) {
-        // Fallback to empty array on error
-        setRecentActivity([])
+        setActivityError(getErrorMessage(error, 'Couldn’t load recent activity.'))
       } finally {
         setActivityLoading(false)
       }
@@ -350,7 +355,7 @@ const Dashboard: React.FC = () => {
     if (user?.id) {
       loadActivityData()
     }
-  }, [user?.id])
+  }, [activityReloadKey, user?.id])
 
   // Today's lessons for the admin "Needs you today" card.
   useEffect(() => {
@@ -432,6 +437,19 @@ const Dashboard: React.FC = () => {
         </div>
       </div>
 
+      {error && (
+        <div role="alert" className="mb-6 flex flex-wrap items-center justify-between gap-3 rounded-field border border-danger-line bg-neg-bg px-4 py-3 text-[13px] text-neg-fg">
+          <span>{error}</span>
+          <button
+            type="button"
+            onClick={() => setReloadKey((key) => key + 1)}
+            className="min-h-[44px] rounded-field px-3 font-semibold hover:bg-neg-soft sm:min-h-[34px]"
+          >
+            Try again
+          </button>
+        </div>
+      )}
+
       {/* ── Health tiles ── */}
       {isAdmin && adminReport && (
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 mb-6">
@@ -479,6 +497,17 @@ const Dashboard: React.FC = () => {
           <div className="p-4 space-y-1">
             {activityLoading ? (
               <div className="py-8 text-center text-[13px] text-faint">Loading…</div>
+            ) : activityError ? (
+              <div role="alert" className="py-8 text-center">
+                <p className="text-[13px] font-semibold text-neg-fg">{activityError}</p>
+                <button
+                  type="button"
+                  onClick={() => setActivityReloadKey((key) => key + 1)}
+                  className="mt-2 min-h-[44px] rounded-field px-3 text-[12.5px] font-semibold text-accent hover:bg-accent-soft sm:min-h-[34px]"
+                >
+                  Try again
+                </button>
+              </div>
             ) : recentActivity.length === 0 ? (
               <div className="py-10 text-center">
                 <p className="text-[14px] font-semibold text-ink-2 mb-1">No activity yet</p>

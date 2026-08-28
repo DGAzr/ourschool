@@ -93,12 +93,12 @@ const SectionHeader: React.FC<{ title: string; desc: string }> = ({ title, desc 
 )
 
 const SettingRow: React.FC<{ label: string; desc?: string; children: React.ReactNode }> = ({ label, desc, children }) => (
-  <div className="flex items-start justify-between gap-6 py-4 border-b border-line-2 last:border-0">
+  <div className="flex flex-col items-stretch justify-between gap-3 py-4 border-b border-line-2 last:border-0 sm:flex-row sm:items-start sm:gap-6">
     <div className="min-w-0">
       <p className="text-[13.5px] font-medium text-ink">{label}</p>
       {desc && <p className="text-[12px] text-muted mt-0.5">{desc}</p>}
     </div>
-    <div className="flex-shrink-0">{children}</div>
+    <div className="flex-shrink-0 self-start">{children}</div>
   </div>
 )
 
@@ -2039,9 +2039,35 @@ const Admin: React.FC = () => {
   }
 
   return (
-    <div className="flex -m-7 h-screen">
+    <div className="flex min-h-full flex-col -m-4 sm:-m-7 lg:h-screen lg:flex-row">
+      <h1 className="sr-only">Settings</h1>
+
+      {/* Mobile section picker — the desktop rail would leave the content
+          impossibly narrow on a phone. */}
+      <div className="border-b border-line bg-panel-2 px-4 py-4 lg:hidden">
+        <label
+          htmlFor="settings-section"
+          className="mb-1.5 block text-[12px] font-semibold uppercase tracking-[.06em] text-faint"
+        >
+          Settings section
+        </label>
+        <select
+          id="settings-section"
+          value={section}
+          onChange={(event) => setSection(event.target.value as SectionKey)}
+          className="h-[44px] w-full rounded-field border border-field-border bg-field-bg px-3 text-[14px] font-medium text-ink focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/30"
+        >
+          {CATS.map(({ key, label }) => (
+            <option key={key} value={key}>{label}</option>
+          ))}
+        </select>
+      </div>
+
       {/* Category rail */}
-      <nav className="w-[230px] flex-none bg-panel-2 border-r border-line py-[22px] px-[14px] no-print">
+      <nav
+        aria-label="Settings sections"
+        className="hidden w-[230px] flex-none bg-panel-2 border-r border-line py-[22px] px-[14px] no-print lg:block"
+      >
         <p className="text-[12px] font-semibold text-faint uppercase tracking-[.08em] px-2 mb-3">Settings</p>
         <div className="flex flex-col gap-0.5">
           {CATS.map(({ key, label }) => {
@@ -2062,8 +2088,11 @@ const Admin: React.FC = () => {
       </nav>
 
       {/* Content panel */}
-      <main className="flex-1 overflow-y-auto min-w-0">
-        <div className="max-w-[760px] mx-auto px-9 py-[30px] pb-[90px]">
+      <section
+        aria-label={`${CATS.find((category) => category.key === section)?.label ?? 'Settings'} settings`}
+        className="min-w-0 flex-1 overflow-y-auto"
+      >
+        <div className="mx-auto max-w-[760px] px-4 py-6 pb-[90px] sm:px-7 lg:px-9 lg:py-[30px]">
           {loading && section === 'overview' ? (
             <div className="flex items-center gap-2 text-muted text-[13px] py-12">
               <div className="w-4 h-4 border-2 border-line border-t-accent rounded-full animate-spin" />
@@ -2071,7 +2100,7 @@ const Admin: React.FC = () => {
             </div>
           ) : renderSection()}
         </div>
-      </main>
+      </section>
 
       {/* Shared destructive-action confirmation */}
       {confirmDialogProps && (

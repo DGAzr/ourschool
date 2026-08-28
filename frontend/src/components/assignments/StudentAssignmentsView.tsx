@@ -191,7 +191,7 @@ const StudentAssignmentsView: React.FC = () => {
         <button
           type="button"
           onClick={() => setEditingOwn('new')}
-          className="h-[34px] px-3.5 rounded-field bg-btn-primary-bg text-btn-primary-fg text-[13px] font-semibold hover:opacity-90"
+          className="h-[44px] px-3.5 rounded-field bg-btn-primary-bg text-btn-primary-fg text-[13px] font-semibold hover:opacity-90 sm:h-[34px]"
         >
           + Add your own assignment
         </button>
@@ -206,7 +206,7 @@ const StudentAssignmentsView: React.FC = () => {
             <button
               key={tab.key}
               onClick={() => setActiveTab(tab.key)}
-              className={`h-[34px] px-3.5 text-[13px] font-semibold rounded-[8px] flex items-center gap-1.5 transition-colors ${
+              className={`h-[44px] px-3.5 text-[13px] font-semibold rounded-[8px] flex items-center gap-1.5 transition-colors sm:h-[34px] ${
                 isActive
                   ? 'bg-ink text-btn-primary-fg'
                   : 'bg-panel border border-line text-muted hover:text-ink hover:bg-track'
@@ -232,24 +232,27 @@ const StudentAssignmentsView: React.FC = () => {
           <input
             type="text"
             placeholder="Search assignments…"
+            aria-label="Search assignments"
             value={searchTerm}
             onChange={e => setSearchTerm(e.target.value)}
-            className="w-full pl-8 pr-3 h-[38px] bg-field-bg border border-field-border rounded-[9px] text-[13.5px] text-ink placeholder:text-faintest focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent"
+            className="w-full pl-8 pr-3 h-[44px] sm:h-[38px] bg-field-bg border border-field-border rounded-[9px] text-[13.5px] text-ink placeholder:text-faintest focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent"
           />
         </div>
         <select
+          aria-label="Filter assignments by subject"
           value={selectedSubject ?? ''}
           onChange={e => setSelectedSubject(e.target.value ? parseInt(e.target.value) : null)}
-          className="h-[38px] px-3 pr-8 bg-field-bg border border-field-border rounded-[9px] text-[13.5px] text-ink-2 focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent"
+          className="h-[44px] px-3 pr-8 sm:h-[38px] bg-field-bg border border-field-border rounded-[9px] text-[13.5px] text-ink-2 focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent"
         >
           <option value="">All subjects</option>
           {subjects.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
         </select>
         {activeTab === 'done' && terms.length > 0 && (
           <select
+            aria-label="Filter assignments by term"
             value={selectedTerm ?? ''}
             onChange={e => setSelectedTerm(e.target.value ? parseInt(e.target.value) : null)}
-            className="h-[38px] px-3 pr-8 bg-field-bg border border-field-border rounded-[9px] text-[13.5px] text-ink-2 focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent"
+            className="h-[44px] px-3 pr-8 sm:h-[38px] bg-field-bg border border-field-border rounded-[9px] text-[13.5px] text-ink-2 focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent"
           >
             <option value="">All terms</option>
             {terms.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}

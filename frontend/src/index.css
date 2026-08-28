@@ -97,9 +97,9 @@
   /* Text */
   --ink:       #211F1B;
   --ink-2:     #3A382F;
-  --muted:     #74716A;
-  --faint:     #9A968D;
-  --faintest:  #B6B2A8;
+  --muted:     #68645D;
+  --faint:     #6D6962;
+  --faintest:  #716D66;
 
   /* Borders */
   --line:      #E7E5DF;
@@ -115,7 +115,7 @@
   --check-border:#CFCBC1;
 
   /* Accent — coral */
-  --accent:      #C75C39;
+  --accent:      #A94A2B;
   --accent-soft: #FBF4F1;
   --accent-line: #EAD4C9;
 
@@ -130,20 +130,20 @@
   /* Semantic tokens */
   --danger-soft: #FBEEEC;
   --danger-line: #E8CBC6;
-  --warn:        #B0762F;
+  --warn:        #83571F;
   --warn-soft:   #FAF1E4;
   --warn-line:   #EBD9BD;
-  --pos:         #4E8D6E;
+  --pos:         #326F51;
   --pos-soft:    #E3EFE7;
 
   /* Points Shop semantic tokens */
-  --gold:        #C0892F;
+  --gold:        #80550E;
   --gold-soft:   #F6EFDD;
-  --neutral:     #9A8A4F;
+  --neutral:     #675B2B;
   --neutral-soft:#F2EEDD;
-  --info:        #4F7CAC;
+  --info:        #3D6098;
   --info-soft:   #E5ECF5;
-  --neg:         #B05A4E;
+  --neg:         #9B4339;
   --neg-soft:    #F6E0DE;
 
   /* Shadows */
@@ -152,12 +152,12 @@
   --overlay:   rgba(33,31,27,.34);
 
   /* Status fg/bg pairs */
-  --pos-fg:    #4E8D6E;  --pos-bg:    #E3EFE7;
+  --pos-fg:    #326F51;  --pos-bg:    #E3EFE7;
   --info-fg:   #3D6098;  --info-bg:   #E5ECF5;
-  --sub-fg:    #B0552F;  --sub-bg:    #F6E6DD;
-  --exc-fg:    #6E86A8;  --exc-bg:    #E7EDF4;
+  --sub-fg:    #93401F;  --sub-bg:    #F6E6DD;
+  --exc-fg:    #516A8E;  --exc-bg:    #E7EDF4;
   --neg-fg:    #B23B3B;  --neg-bg:    #F6E0DE;
-  --ns-fg:     #74716A;  --ns-bg:     #EDEBE6;
+  --ns-fg:     #5F5B54;  --ns-bg:     #EDEBE6;
 
   /* Reply thread tint */
   --reply:     #F5F3EF;

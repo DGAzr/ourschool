@@ -16,7 +16,7 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-import React, { useState } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
 import { Outlet, Link, useNavigate, useLocation } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { usePointsStatus } from '../contexts/PointsStatusContext'
@@ -72,7 +72,7 @@ const ThemeCycler: React.FC = () => {
       onClick={cycle}
       title={`Theme: ${theme}`}
       aria-label={`Switch theme (current: ${theme})`}
-      className="w-8 h-8 flex items-center justify-center rounded-field text-muted hover:text-ink hover:bg-track transition-colors duration-150"
+      className="w-[44px] h-[44px] lg:w-8 lg:h-8 flex items-center justify-center rounded-field text-muted hover:text-ink hover:bg-track transition-colors duration-150"
     >
       <Icon size={15} />
     </button>
@@ -135,7 +135,7 @@ const SidebarContent: React.FC<SidebarContentProps> = ({
             key={item.name}
             to={item.href}
             onClick={onNavigate}
-            className={`relative flex items-center gap-3 mx-2 px-3 py-2 rounded-[9px] text-[13.5px] font-medium transition-colors duration-150 ${
+            className={`relative flex min-h-[44px] items-center gap-3 mx-2 px-3 py-2 rounded-[9px] text-[13.5px] font-medium transition-colors duration-150 ${
               isActive
                 ? 'bg-nav-active text-ink'
                 : 'text-muted hover:text-ink hover:bg-nav-active'
@@ -165,7 +165,7 @@ const SidebarContent: React.FC<SidebarContentProps> = ({
         </div>
       )}
       <div className="flex items-center gap-2 px-2 py-1.5">
-        <Link to="/profile" onClick={onNavigate} className="flex items-center gap-2 flex-1 min-w-0 group">
+        <Link to="/profile" onClick={onNavigate} className="flex min-h-[44px] items-center gap-2 flex-1 min-w-0 group">
           <div className="w-7 h-7 rounded-full bg-track flex items-center justify-center flex-shrink-0">
             <span className="text-[11px] font-semibold text-ink-2 font-mono">{initials}</span>
           </div>
@@ -183,7 +183,7 @@ const SidebarContent: React.FC<SidebarContentProps> = ({
           onClick={onLogout}
           title="Sign out"
           aria-label="Sign out"
-          className="w-8 h-8 flex items-center justify-center rounded-field text-muted hover:text-danger hover:bg-neg-bg transition-colors duration-150"
+          className="w-[44px] h-[44px] lg:w-8 lg:h-8 flex items-center justify-center rounded-field text-muted hover:text-danger hover:bg-neg-bg transition-colors duration-150"
         >
           <LogOut size={15} />
         </button>
@@ -197,6 +197,59 @@ const Layout: React.FC = () => {
   const navigate = useNavigate()
   const location = useLocation()
   const [sidebarOpen, setSidebarOpen] = useState(false)
+  const sidebarRef = useRef<HTMLElement>(null)
+  const mainShellRef = useRef<HTMLDivElement>(null)
+  const menuButtonRef = useRef<HTMLButtonElement>(null)
+
+  useEffect(() => {
+    if (!sidebarOpen || !sidebarRef.current) return
+
+    const sidebar = sidebarRef.current
+    const mainShell = mainShellRef.current
+    const menuButton = menuButtonRef.current
+    const previousOverflow = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    if (mainShell) {
+      mainShell.inert = true
+      mainShell.setAttribute('aria-hidden', 'true')
+    }
+
+    const focusableSelector =
+      'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+    const focusable = () => Array.from(sidebar.querySelectorAll<HTMLElement>(focusableSelector))
+    const focusTimer = window.setTimeout(() => focusable()[0]?.focus(), 0)
+
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') {
+        event.preventDefault()
+        setSidebarOpen(false)
+        return
+      }
+      if (event.key !== 'Tab') return
+      const items = focusable()
+      if (items.length === 0) return
+      const first = items[0]
+      const last = items[items.length - 1]
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault()
+        last.focus()
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault()
+        first.focus()
+      }
+    }
+    document.addEventListener('keydown', handleKeyDown)
+    return () => {
+      window.clearTimeout(focusTimer)
+      document.removeEventListener('keydown', handleKeyDown)
+      document.body.style.overflow = previousOverflow
+      if (mainShell) {
+        mainShell.inert = false
+        mainShell.removeAttribute('aria-hidden')
+      }
+      menuButton?.focus()
+    }
+  }, [sidebarOpen])
 
   const handleLogout = () => {
     logout()
@@ -204,7 +257,12 @@ const Layout: React.FC = () => {
   }
 
   const isAdmin = user?.role === 'admin'
-  const { enabled: pointsEnabled, ready: pointsReady } = usePointsStatus()
+  const {
+    enabled: pointsEnabled,
+    ready: pointsReady,
+    error: pointsStatusError,
+    refresh: refreshPointsStatus,
+  } = usePointsStatus()
   const showShop = pointsReady && pointsEnabled
 
   // Materials mirrors Paperless-NGX, so its nav item only appears once the
@@ -276,16 +334,21 @@ const Layout: React.FC = () => {
 
       {/* Sidebar — desktop fixed, mobile slide-in */}
       <aside
+        ref={sidebarRef}
+        id="mobile-navigation"
+        role={sidebarOpen ? 'dialog' : undefined}
+        aria-modal={sidebarOpen ? 'true' : undefined}
+        aria-label={sidebarOpen ? 'Main navigation' : undefined}
         className={`fixed inset-y-0 left-0 z-50 w-[208px] bg-panel border-r border-line flex-col
           transform transition-transform duration-300 ease-in-out
-          lg:translate-x-0 lg:flex
-          ${sidebarOpen ? 'flex translate-x-0' : '-translate-x-full'}`}
+          lg:visible lg:translate-x-0 lg:flex
+          ${sidebarOpen ? 'visible flex translate-x-0' : 'invisible -translate-x-full'}`}
       >
         {/* Mobile close */}
         <button
           onClick={() => setSidebarOpen(false)}
           aria-label="Close sidebar"
-          className="absolute top-3 right-3 lg:hidden w-8 h-8 flex items-center justify-center rounded-field text-muted hover:text-ink"
+          className="absolute top-2 right-2 lg:hidden w-[44px] h-[44px] flex items-center justify-center rounded-field text-muted hover:text-ink"
         >
           <X size={16} />
         </button>
@@ -293,13 +356,16 @@ const Layout: React.FC = () => {
       </aside>
 
       {/* Main */}
-      <div className="flex-1 flex flex-col lg:pl-[208px] min-w-0">
+      <div ref={mainShellRef} className="flex-1 flex flex-col lg:pl-[208px] min-w-0">
         {/* Mobile top bar */}
-        <div className="lg:hidden h-12 px-4 bg-panel border-b border-line flex items-center justify-between flex-shrink-0">
+        <div className="lg:hidden h-[52px] px-4 bg-panel border-b border-line flex items-center justify-between flex-shrink-0">
           <button
+            ref={menuButtonRef}
             onClick={() => setSidebarOpen(true)}
             aria-label="Open sidebar"
-            className="w-8 h-8 flex items-center justify-center rounded-field text-muted hover:text-ink hover:bg-track"
+            aria-expanded={sidebarOpen}
+            aria-controls="mobile-navigation"
+            className="w-[44px] h-[44px] flex items-center justify-center rounded-field text-muted hover:text-ink hover:bg-track"
           >
             <Menu size={16} />
           </button>
@@ -310,7 +376,19 @@ const Layout: React.FC = () => {
           </div>
         </div>
 
-        <main className="flex-1 overflow-y-auto p-7 min-w-0">
+        <main className="flex-1 overflow-y-auto p-4 sm:p-7 min-w-0">
+          {pointsStatusError && (
+            <div role="status" className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-field border border-warn-line bg-warn-soft px-4 py-3 text-[13px] text-warn">
+              <span>{pointsStatusError} Points features may be temporarily hidden.</span>
+              <button
+                type="button"
+                onClick={() => void refreshPointsStatus()}
+                className="min-h-[44px] rounded-field px-3 font-semibold text-warn hover:bg-panel/50 sm:min-h-[34px]"
+              >
+                Try again
+              </button>
+            </div>
+          )}
           <Outlet />
         </main>
       </div>

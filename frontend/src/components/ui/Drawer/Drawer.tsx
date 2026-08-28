@@ -16,8 +16,10 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-import React, { ReactNode, useEffect, useRef } from 'react'
+import React, { ReactNode, useId, useRef } from 'react'
+import { createPortal } from 'react-dom'
 import { X } from 'lucide-react'
+import { useOverlayFocus } from '../useOverlayFocus'
 
 interface DrawerProps {
   /** Whether the drawer is open and visible */
@@ -61,38 +63,8 @@ const Drawer: React.FC<DrawerProps> = ({
   wide = false,
 }) => {
   const panelRef = useRef<HTMLDivElement>(null)
-  const lastFocused = useRef<HTMLElement | null>(null)
-
-  // ESC to close + body scroll lock
-  useEffect(() => {
-    if (!isOpen) return
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') onClose()
-    }
-    document.addEventListener('keydown', onKey)
-    const prevOverflow = document.body.style.overflow
-    document.body.style.overflow = 'hidden'
-    return () => {
-      document.removeEventListener('keydown', onKey)
-      document.body.style.overflow = prevOverflow
-    }
-  }, [isOpen, onClose])
-
-  // Focus management: focus first field on open, restore on close
-  useEffect(() => {
-    if (!isOpen) return
-    lastFocused.current = document.activeElement as HTMLElement
-    const t = setTimeout(() => {
-      const first = panelRef.current?.querySelector<HTMLElement>(
-        'input, select, textarea, button, [tabindex]:not([tabindex="-1"])'
-      )
-      first?.focus()
-    }, 60)
-    return () => {
-      clearTimeout(t)
-      lastFocused.current?.focus?.()
-    }
-  }, [isOpen])
+  const titleId = useId()
+  useOverlayFocus(isOpen, panelRef, onClose)
 
   if (!isOpen) return null
 
@@ -102,7 +74,7 @@ const Drawer: React.FC<DrawerProps> = ({
 
   const hasHeader = !!(title || showCloseButton)
 
-  return (
+  return createPortal(
     <div
       className={`fixed inset-0 z-50 flex justify-end animate-fade-in motion-reduce:animate-none ${
         wide
@@ -115,16 +87,18 @@ const Drawer: React.FC<DrawerProps> = ({
         ref={panelRef}
         role="dialog"
         aria-modal="true"
-        aria-label={title}
+        aria-labelledby={title ? titleId : undefined}
+        aria-label={title ? undefined : 'Drawer'}
+        tabIndex={-1}
         className={`relative z-10 max-w-full h-full flex flex-col bg-panel border-l border-line shadow-[-18px_0_50px_var(--shadow-lg)] animate-drawer-in motion-reduce:animate-none ${
-          wide ? 'w-[50vw] min-w-[440px]' : 'w-[440px]'
+          wide ? 'w-full sm:min-w-[440px] lg:w-[50vw]' : 'w-full sm:w-[440px]'
         }`}
       >
         {hasHeader && (
           <div className="flex items-start gap-3 px-5 py-4 border-b border-line-2 flex-shrink-0">
             <div className="flex-1 min-w-0">
               {title && (
-                <h3 className="text-[15.5px] font-semibold text-ink tracking-[-0.01em] leading-tight">
+                <h3 id={titleId} className="text-[15.5px] font-semibold text-ink tracking-[-0.01em] leading-tight">
                   {title}
                 </h3>
               )}
@@ -134,7 +108,7 @@ const Drawer: React.FC<DrawerProps> = ({
               <button
                 onClick={onClose}
                 aria-label="Close"
-                className="flex-shrink-0 w-[30px] h-[30px] rounded-lg flex items-center justify-center text-muted hover:bg-line-2 hover:text-ink transition-colors"
+                className="flex-shrink-0 w-[44px] h-[44px] sm:w-[30px] sm:h-[30px] rounded-lg flex items-center justify-center text-muted hover:bg-line-2 hover:text-ink transition-colors"
               >
                 <X size={15} />
               </button>
@@ -150,7 +124,8 @@ const Drawer: React.FC<DrawerProps> = ({
           </div>
         )}
       </div>
-    </div>
+    </div>,
+    document.body
   )
 }
 
