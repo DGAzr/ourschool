@@ -1,8 +1,4 @@
 {
   "$schema": "https://unpkg.com/knip@latest/schema.json",
-  "project": ["src/**/*.{ts,tsx}"],
-  // user-event is reserved for interaction-heavy tests; not yet imported.
-  "ignoreDependencies": [
-    "@testing-library/user-event"
-  ]
+  "project": ["src/**/*.{ts,tsx}"]
 }
