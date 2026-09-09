@@ -64,7 +64,6 @@ const LessonCard: React.FC<LessonCardProps> = ({
         ? 'text-faint'
         : 'text-accent'
 
-  // Taught lessons are locked: not draggable, and skipped as sort targets.
   const {
     attributes,
     listeners,
@@ -72,7 +71,7 @@ const LessonCard: React.FC<LessonCardProps> = ({
     transform,
     transition,
     isDragging,
-  } = useSortable({ id: lesson.id, disabled: taught || overlay })
+  } = useSortable({ id: lesson.id, disabled: overlay })
 
   const dragStyle: CSSProperties = overlay
     ? {}
@@ -106,7 +105,7 @@ const LessonCard: React.FC<LessonCardProps> = ({
         'w-full text-left bg-panel border border-line border-l-[3px] rounded-[11px]',
         'px-3 py-2.5 flex flex-col gap-[7px] transition-shadow hover:shadow-sm',
         taught ? 'opacity-[0.62]' : '',
-        taught ? '' : 'cursor-grab active:cursor-grabbing',
+        'cursor-grab active:cursor-grabbing',
         overlay ? 'shadow-lg cursor-grabbing' : '',
       ].join(' ')}
     >
@@ -187,7 +186,7 @@ const LessonCard: React.FC<LessonCardProps> = ({
         >
           {status.label}
         </span>
-        {onStash && !taught && !overlay ? (
+        {onStash && !overlay ? (
           <button
             type="button"
             onClick={(event) => {

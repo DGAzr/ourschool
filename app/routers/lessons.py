@@ -83,8 +83,6 @@ def _move_lesson(lesson: Lesson, destination, position: int) -> bool:
     if lesson.date == destination:
         lesson.position = position
         return False
-    if lesson.status == LessonStatus.TAUGHT:
-        raise HTTPException(status_code=400, detail="Taught lessons cannot be moved")
     if destination is None:
         lesson.last_scheduled_date = lesson.date
     else:
@@ -203,8 +201,6 @@ def create_lesson(
     students = validate_students(db, payload.student_ids)
 
     # Append to the day: new lessons land after any existing (reordered) cards.
-    if payload.date is None and payload.status == LessonStatus.TAUGHT:
-        raise HTTPException(status_code=400, detail="Drawer lessons cannot be taught")
     next_position = _next_position(db, payload.date)
 
     lesson = Lesson(
@@ -359,9 +355,6 @@ def update_lesson(
     if "subject_id" in data:
         _validate_subject(db, data["subject_id"])
         lesson.subject_id = data["subject_id"]
-    effective_date = data.get("date", lesson.date)
-    if data.get("status") == LessonStatus.TAUGHT and effective_date is None:
-        raise HTTPException(status_code=400, detail="Drawer lessons cannot be taught")
     if "date" in data and data["date"] != lesson.date:
         _move_lesson(lesson, data["date"], _next_position(db, data["date"]))
     for field in ("objective", "duration_minutes", "notes", "status"):
@@ -455,8 +448,8 @@ def reorder_lessons(
     ``payload.lesson_ids`` is the full top-to-bottom order of ``payload.date``
     after a drag. Each listed lesson's ``position`` becomes its index; any that
     were on a different date are moved to ``payload.date`` (cross-day drag) and
-    re-synced so linked assignments follow. Taught lessons are locked: attempting
-    to move or re-rank one is rejected.
+    re-synced so linked assignments follow. Moving or reordering a lesson
+    preserves its status, including taught lessons.
     """
     if not payload.lesson_ids:
         return LessonReorderResponse(lessons=[], warnings=[])
@@ -469,29 +462,10 @@ def reorder_lessons(
             status_code=404, detail=f"Lessons not found: {sorted(missing)}"
         )
 
-    # Taught lessons are locked by rank, not raw position: cross-day moves and
-    # deletions leave holes in the day's position sequence, so a drop that
-    # keeps a taught lesson in the same visual slot may still renumber it.
-    current_rank = {
-        lesson.id: rank
-        for rank, lesson in enumerate(
-            sorted(
-                (lesson for lesson in lessons if lesson.date == payload.date),
-                key=lambda lesson: (lesson.position, lesson.id),
-            )
-        )
-    }
-
     moved: list[Lesson] = []
     for index, lesson_id in enumerate(payload.lesson_ids):
         lesson = by_id[lesson_id]
         changes_date = lesson.date != payload.date
-        changes_rank = current_rank.get(lesson.id) != index
-        if lesson.status == LessonStatus.TAUGHT and (changes_date or changes_rank):
-            raise HTTPException(
-                status_code=400,
-                detail="Taught lessons cannot be reordered or moved",
-            )
         lesson.position = index
         if changes_date:
             _move_lesson(lesson, payload.date, index)
@@ -529,8 +503,6 @@ def set_status(
     lesson = db.query(Lesson).filter(Lesson.id == lesson_id).first()
     if not lesson:
         raise HTTPException(status_code=404, detail="Lesson not found")
-    if payload.status == LessonStatus.TAUGHT and lesson.date is None:
-        raise HTTPException(status_code=400, detail="Drawer lessons cannot be taught")
     lesson.status = payload.status
     db.commit()
     db.refresh(lesson)

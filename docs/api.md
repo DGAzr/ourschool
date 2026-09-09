@@ -286,7 +286,7 @@ Lesson writes synchronize assignments generated from the lesson's linked templat
 | `PUT /api/lessons/{lesson_id}` | Update a lesson and synchronize generated assignments (`lessons:write`) |
 | `DELETE /api/lessons/{lesson_id}` | Delete a lesson while preserving graded work (`lessons:write`) |
 | `PATCH /api/lessons/{lesson_id}/materials/{material_id}` | Toggle a prep material's gathered state (`lessons:write`) |
-| `PATCH /api/lessons/reorder` | Reorder lessons or move them between dates/the drawer using a nullable destination date; taught lessons are locked (`lessons:write`) |
+| `PATCH /api/lessons/reorder` | Reorder lessons or move them between dates/the drawer using a nullable destination date; including taught lessons without changing their status (`lessons:write`) |
 | `PATCH /api/lessons/{lesson_id}/status` | Set a lesson's planning/taught status (`lessons:write`) |
 
 ### Reports

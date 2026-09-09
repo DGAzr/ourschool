@@ -170,7 +170,7 @@ const LessonBoard: React.FC<LessonBoardProps> = ({
 
     const activeId = Number(active.id)
     const moved = lessonById.get(activeId)
-    if (!moved || moved.status === 'taught') return
+    if (!moved) return
 
     // Resolve the destination day + the card we dropped onto (if any).
     const overId = String(over.id)

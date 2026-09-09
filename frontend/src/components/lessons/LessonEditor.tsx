@@ -316,10 +316,7 @@ const LessonEditor: React.FC<LessonEditorProps> = ({
             label="Date (optional)"
             type="date"
             value={date}
-            onChange={(e) => {
-              setDate(e.target.value)
-              if (!e.target.value && status === 'taught') setStatus('ready')
-            }}
+            onChange={(e) => setDate(e.target.value)}
             helperText="Leave blank to keep this lesson in the Lesson Drawer."
           />
           <p className="text-[12.5px] text-muted pb-2.5 truncate">
@@ -398,7 +395,7 @@ const LessonEditor: React.FC<LessonEditorProps> = ({
               segments={[
                 { value: 'planned' as const, label: 'Planning' },
                 { value: 'ready' as const, label: 'Ready' },
-                ...(date ? [{ value: 'taught' as const, label: 'Taught' }] : []),
+                { value: 'taught' as const, label: 'Taught' },
               ]}
               value={status}
               onChange={setStatus}

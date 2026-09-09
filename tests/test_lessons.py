@@ -6,7 +6,9 @@ destroying graded/submitted work (it gets orphaned, ``lesson_id = None``,
 instead).
 """
 
-from datetime import date
+from datetime import date, datetime, timezone
+
+import pytest
 
 from app.models.assignment import StudentAssignment
 
@@ -628,7 +630,7 @@ def test_reorder_missing_id_404(client, admin_headers):
     assert r.status_code == 404, r.text
 
 
-def test_reorder_taught_lesson_rejected(client, admin_headers):
+def test_reorder_taught_lesson(client, admin_headers):
     day = "2026-05-04"
     a = _create_lesson(client, admin_headers, title="A", date=day).json()["lesson"][
         "id"
@@ -636,7 +638,7 @@ def test_reorder_taught_lesson_rejected(client, admin_headers):
     b = _create_lesson(client, admin_headers, title="B", date=day).json()["lesson"][
         "id"
     ]
-    # Mark A taught, then try to re-rank it below B.
+    # Mark A taught, then re-rank it below B.
     assert (
         client.patch(
             f"/api/lessons/{a}/status", json={"status": "taught"}, headers=admin_headers
@@ -648,12 +650,14 @@ def test_reorder_taught_lesson_rejected(client, admin_headers):
         json={"date": day, "lesson_ids": [b, a]},
         headers=admin_headers,
     )
-    assert r.status_code == 400, r.text
-    # Order unchanged (A still position 0).
-    assert [l["id"] for l in _day_lessons(client, admin_headers, day)] == [a, b]
+    assert r.status_code == 200, r.text
+    lessons = _day_lessons(client, admin_headers, day)
+    assert [l["id"] for l in lessons] == [b, a]
+    assert lessons[1]["status"] == "taught"
 
 
-def test_reorder_taught_lesson_move_rejected(client, admin_headers):
+@pytest.mark.parametrize("method", ["reorder", "update"])
+def test_move_taught_lesson(client, admin_headers, method):
     src, dst = "2026-05-11", "2026-05-12"
     a = _create_lesson(client, admin_headers, title="A", date=src).json()["lesson"][
         "id"
@@ -664,13 +668,18 @@ def test_reorder_taught_lesson_move_rejected(client, admin_headers):
         ).status_code
         == 200
     )
-    r = client.patch(
-        "/api/lessons/reorder",
-        json={"date": dst, "lesson_ids": [a]},
-        headers=admin_headers,
-    )
-    assert r.status_code == 400, r.text
-    assert [l["id"] for l in _day_lessons(client, admin_headers, src)] == [a]
+    if method == "reorder":
+        r = client.patch(
+            "/api/lessons/reorder",
+            json={"date": dst, "lesson_ids": [a]},
+            headers=admin_headers,
+        )
+    else:
+        r = client.put(f"/api/lessons/{a}", json={"date": dst}, headers=admin_headers)
+    assert r.status_code == 200, r.text
+    assert not _day_lessons(client, admin_headers, src)
+    moved = next(l for l in _day_lessons(client, admin_headers, dst) if l["id"] == a)
+    assert moved["status"] == "taught"
 
 
 def test_update_keeping_same_template_link(
@@ -742,13 +751,14 @@ def test_reorder_with_position_hole_keeps_taught_rank(client, admin_headers):
     assert r.status_code == 200, r.text
     assert [l["position"] for l in r.json()["lessons"]] == [0, 1]
 
-    # Actually displacing the taught lesson is still rejected.
+    # The taught lesson can also change visual slots.
     r = client.patch(
         "/api/lessons/reorder",
         json={"date": day, "lesson_ids": [c, a]},
         headers=admin_headers,
     )
-    assert r.status_code == 400, r.text
+    assert r.status_code == 200, r.text
+    assert [l["id"] for l in _day_lessons(client, admin_headers, day)] == [c, a]
 
 
 def test_create_appends_to_bottom_of_day(client, admin_headers):
@@ -916,7 +926,7 @@ def test_rollover_moves_only_past_untaught_lessons_and_is_idempotent(
     assert again.json()["moved_count"] == 0
 
 
-def test_drawer_reorder_and_taught_stash_rejected(client, admin_headers):
+def test_drawer_reorder_and_taught_stash(client, admin_headers):
     existing_ids = [
         lesson["id"]
         for lesson in client.get("/api/lessons/drawer", headers=admin_headers).json()
@@ -940,7 +950,7 @@ def test_drawer_reorder_and_taught_stash_rejected(client, admin_headers):
     ]
 
     taught = _create_lesson(
-        client, admin_headers, title="Locked", date="2026-08-15"
+        client, admin_headers, title="Taught", date="2026-08-15"
     ).json()["lesson"]["id"]
     assert (
         client.patch(
@@ -950,7 +960,91 @@ def test_drawer_reorder_and_taught_stash_rejected(client, admin_headers):
         ).status_code
         == 200
     )
-    rejected = client.put(
-        f"/api/lessons/{taught}", json={"date": None}, headers=admin_headers
+    r = client.put(
+        f"/api/lessons/{taught}",
+        json={"date": None, "status": "taught"},
+        headers=admin_headers,
     )
-    assert rejected.status_code == 400
+    assert r.status_code == 200, r.text
+    assert r.json()["lesson"]["status"] == "taught"
+    assert r.json()["lesson"]["date"] is None
+    assert r.json()["lesson"]["last_scheduled_date"] == "2026-08-15"
+
+    r = client.patch(
+        "/api/lessons/reorder",
+        json={"date": "2026-08-16", "lesson_ids": [taught]},
+        headers=admin_headers,
+    )
+    assert r.status_code == 200, r.text
+    moved = next(l for l in r.json()["lessons"] if l["id"] == taught)
+    assert moved["status"] == "taught"
+    assert moved["last_scheduled_date"] is None
+
+
+@pytest.mark.parametrize("method", ["reorder", "update"])
+@pytest.mark.parametrize("destination", ["2026-03-10", None])
+def test_move_taught_lesson_preserves_student_work(
+    client, admin_headers, classroom, student_factory, db_session, method, destination
+):
+    students = [student_factory()[0] for _ in range(3)]
+    r = _create_lesson(
+        client,
+        admin_headers,
+        date="2026-03-03",
+        status="taught",
+        student_ids=[student["id"] for student in students],
+        templates=[_link(classroom["template"]["id"])],
+    )
+    assert r.status_code == 200, r.text
+    lesson_id = r.json()["lesson"]["id"]
+    sas = {sa.student_id: sa for sa in _linked_sas(db_session, lesson_id)}
+    graded_id, submitted_id, unstarted_id = [sas[s["id"]].id for s in students]
+    assert _grade(client, admin_headers, graded_id, 90).status_code == 200
+    submitted = db_session.get(StudentAssignment, submitted_id)
+    submitted.submitted_date = datetime(2026, 3, 3, 12, tzinfo=timezone.utc)
+    db_session.commit()
+
+    if method == "reorder":
+        r = client.patch(
+            "/api/lessons/reorder",
+            json={"date": destination, "lesson_ids": [lesson_id]},
+            headers=admin_headers,
+        )
+    else:
+        r = client.put(
+            f"/api/lessons/{lesson_id}",
+            json={"date": destination, "status": "taught"},
+            headers=admin_headers,
+        )
+    assert r.status_code == 200, r.text
+    assert len(r.json()["warnings"]) == 2
+    lesson = client.get(f"/api/lessons/{lesson_id}", headers=admin_headers).json()
+    assert lesson["date"] == destination
+    assert lesson["status"] == "taught"
+    for assignment_id in [graded_id, submitted_id]:
+        survivor = _sa_by_id(db_session, assignment_id)
+        assert survivor is not None
+        assert survivor.due_date == date(2026, 3, 3)
+        assert survivor.lesson_id == (lesson_id if destination else None)
+    assert _sa_by_id(db_session, graded_id).points_earned == 90
+    assert _sa_by_id(db_session, submitted_id).submitted_date is not None
+    unstarted = _sa_by_id(db_session, unstarted_id)
+    if destination:
+        assert unstarted.due_date == date(2026, 3, 10)
+    else:
+        assert unstarted is None
+
+
+def test_drawer_lesson_can_retain_taught_status(client, admin_headers):
+    r = _create_lesson(client, admin_headers, date=None, status="taught")
+    assert r.status_code == 200, r.text
+    lesson_id = r.json()["lesson"]["id"]
+    for status in ["ready", "taught"]:
+        r = client.patch(
+            f"/api/lessons/{lesson_id}/status",
+            json={"status": status},
+            headers=admin_headers,
+        )
+        assert r.status_code == 200, r.text
+        assert r.json()["status"] == status
+        assert r.json()["date"] is None

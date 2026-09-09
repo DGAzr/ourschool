@@ -8,6 +8,10 @@ All notable changes to OurSchool are documented here.
 
 ### Lesson planning flexibility
 
+- Taught lessons can now be reordered, rescheduled, and moved to or from the
+  Lesson Drawer without changing their status. Graded and submitted work keeps
+  its existing protections.
+
 - Added a persistent Lesson Drawer for unscheduled lesson blocks, with drag and
   keyboard-accessible actions for stashing, ordering, and scheduling lessons.
 - Untaught past lessons now return to the drawer on the next teacher lesson
