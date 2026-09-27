@@ -120,7 +120,7 @@ function gradeColor(pct: number) {
 
 // ── Main component ─────────────────────────────────────────────────────────
 const Admin: React.FC = () => {
-  const { user } = useAuth()
+  const { user, extendSession } = useAuth()
   const { toast } = useToast()
   const navigate = useNavigate()
   const { refresh: refreshAssignmentTypes } = useAssignmentTypes()
@@ -134,6 +134,11 @@ const Admin: React.FC = () => {
   const [skipWeekends, setSkipWeekends] = useState(true)
   const [countExcused, setCountExcused] = useState(true)
   const [savingDays, setSavingDays] = useState(false)
+
+  // ── Session settings ──
+  const [sessionTimeout, setSessionTimeout] = useState(30)
+  const [sessionTimeoutDraft, setSessionTimeoutDraft] = useState('30')
+  const [savingSessionTimeout, setSavingSessionTimeout] = useState(false)
 
   // ── Grading ──
   const [grades, setGrades] = useState<[string, number][]>(DEFAULT_GRADES)
@@ -302,6 +307,9 @@ const Admin: React.FC = () => {
         setRequiredDaysDraft(String(days))
         setSkipWeekends(grouped.value.attendance.skip_weekends ?? true)
         setCountExcused(grouped.value.attendance.count_excused ?? true)
+        const timeout = grouped.value.security.session_timeout_minutes
+        setSessionTimeout(timeout)
+        setSessionTimeoutDraft(String(timeout))
         const scale = grouped.value.grading?.scale
         if (scale && scale.length > 0) {
           setGrades(scale.map((b: GradeBand) => [b.letter, b.min_percent] as [string, number]))
@@ -402,6 +410,26 @@ const Admin: React.FC = () => {
       toast('Required days saved')
     } catch { toast('Failed to save', 'danger') }
     finally { setSavingDays(false) }
+  }
+
+  const saveSessionTimeout = async () => {
+    const value = Number(sessionTimeoutDraft)
+    if (!Number.isInteger(value) || value < 0 || value > 5_256_000) {
+      toast('Enter a whole number from 0 to 5,256,000', 'danger')
+      return
+    }
+    setSavingSessionTimeout(true)
+    try {
+      await settingsApi.updateSessionTimeout(value)
+      setSessionTimeout(value)
+      setSessionTimeoutDraft(String(value))
+      await extendSession()
+      toast(value === 0 ? 'Session expiration disabled' : 'Session timeout saved')
+    } catch {
+      toast('Failed to save session timeout', 'danger')
+    } finally {
+      setSavingSessionTimeout(false)
+    }
   }
 
   const togglePoints = async () => {
@@ -1638,12 +1666,39 @@ const Admin: React.FC = () => {
             <div className="flex items-center justify-between mb-6">
               <div>
                 <h2 className="text-[18px] font-semibold text-ink tracking-[-0.01em]">Users & access</h2>
-                <p className="mt-0.5 text-[13px] text-muted">Manage administrators and students.</p>
+                <p className="mt-0.5 text-[13px] text-muted">Manage sessions, administrators, and students.</p>
               </div>
               <Button icon={<Plus size={14} />} onClick={() => setShowAddUser(true)}>Add User</Button>
             </div>
 
             {userError && <div className="bg-neg-bg text-neg-fg px-4 py-3 rounded-field text-[13px] mb-4">{userError}</div>}
+
+            <div className="bg-panel border border-line rounded-card px-5 mb-6">
+              <SettingRow
+                label="Session timeout"
+                desc="Sessions expire after this many minutes. Active sessions renew automatically. Enter 0 to keep sessions signed in until logout."
+              >
+                <div className="flex items-center gap-2">
+                  <input
+                    aria-label="Session timeout in minutes"
+                    type="number"
+                    min="0"
+                    max="5256000"
+                    step="1"
+                    value={sessionTimeoutDraft}
+                    onChange={event => setSessionTimeoutDraft(event.target.value)}
+                    className="w-28 bg-field-bg border border-field-border text-ink font-mono text-[14px] rounded-field px-3 py-2 focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent"
+                  />
+                  <span className="text-[13px] text-muted">minutes</span>
+                  <Button
+                    onClick={saveSessionTimeout}
+                    disabled={savingSessionTimeout || sessionTimeoutDraft === String(sessionTimeout)}
+                  >
+                    {savingSessionTimeout ? 'Saving…' : 'Save'}
+                  </Button>
+                </div>
+              </SettingRow>
+            </div>
 
             <div className="mb-4">
               <SegmentedControl segments={filterOptions} value={userFilter} onChange={v => setUserFilter(v)} />

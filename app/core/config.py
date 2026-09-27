@@ -40,9 +40,6 @@ class Settings(BaseSettings):
     access_token_expire_minutes: int = Field(
         default=30, env="ACCESS_TOKEN_EXPIRE_MINUTES"
     )
-    # Absolute maximum lifetime a session may be extended to via /extend-session.
-    max_session_age_minutes: int = Field(default=720, env="MAX_SESSION_AGE_MINUTES")
-
     # Request hardening
     # Maximum accepted request body size in bytes (default 256 MiB). Protects
     # memory-heavy endpoints such as backup import from oversized payloads.

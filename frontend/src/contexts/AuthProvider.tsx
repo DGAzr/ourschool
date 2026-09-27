@@ -24,6 +24,7 @@ import {
   isTokenNearExpiry,
   isValidTokenFormat,
   getTokenTimeRemaining,
+  getTokenLifetime,
   formatTimeRemaining
 } from '../utils/auth'
 import { config } from '../config/env'
@@ -76,7 +77,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   }, [])
 
   // Forward declare startTokenMonitoring for use in extendSession
-  const startTokenMonitoringRef = useRef<((token: string) => void) | null>(null)
+  const startTokenMonitoringRef = useRef<((token: string, recordActivity?: boolean) => void) | null>(null)
 
   // Logout function with reason tracking
   const logout = useCallback((reason?: string) => {
@@ -128,7 +129,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
       // Restart token monitoring with new token
       if (startTokenMonitoringRef.current) {
-        startTokenMonitoringRef.current(newToken)
+        startTokenMonitoringRef.current(newToken, false)
       }
 
       if (config.dev.debugMode) {
@@ -147,9 +148,10 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   }, [])
 
   // Start token monitoring
-  const startTokenMonitoring = useCallback((token: string) => {
-    // Starting (or restarting) monitoring counts as user activity.
-    lastActivity.current = Date.now()
+  const startTokenMonitoring = useCallback((token: string, recordActivity = true) => {
+    if (recordActivity) {
+      lastActivity.current = Date.now()
+    }
 
     // Clear any existing intervals
     if (tokenCheckInterval.current) {
@@ -196,9 +198,11 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
 
       const timeSinceActivity = Date.now() - lastActivity.current
       const remaining = getTokenTimeRemaining(currentToken)
+      const lifetime = getTokenLifetime(currentToken)
+      const extensionThreshold = Math.min(AUTH_TIMEOUTS.INACTIVITY_WARNING, lifetime / 2)
+      const activityWindow = Math.min(AUTH_TIMEOUTS.INACTIVITY_WARNING / 2, lifetime)
 
-      // If user has been active in the last 5 minutes and token expires in less than 10 minutes, extend it
-      if (timeSinceActivity < AUTH_TIMEOUTS.INACTIVITY_WARNING / 2 && remaining < AUTH_TIMEOUTS.INACTIVITY_WARNING && remaining > 0) {
+      if (timeSinceActivity < activityWindow && remaining <= extensionThreshold && remaining > 0) {
         try {
           await extendSession()
         } catch (error) {
@@ -214,8 +218,13 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     // Set up interval to check token every 30 seconds
     tokenCheckInterval.current = setInterval(checkToken, AUTH_TIMEOUTS.REFRESH_INTERVAL)
 
-    // Set up interval to check activity every 2 minutes
-    activityCheckInterval.current = setInterval(checkActivity, AUTH_TIMEOUTS.REFRESH_INTERVAL * 4) // Check every 2 minutes
+    // Short sessions need a proportionally faster renewal check.
+    const tokenLifetime = getTokenLifetime(token)
+    const activityCheckMs = Math.min(
+      AUTH_TIMEOUTS.REFRESH_INTERVAL * 4,
+      Math.max(5_000, tokenLifetime / 4),
+    )
+    activityCheckInterval.current = setInterval(checkActivity, activityCheckMs)
   }, [logout, extendSession])
 
   // Keep the ref pointing at the latest startTokenMonitoring (latest-ref

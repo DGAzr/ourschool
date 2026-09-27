@@ -53,7 +53,7 @@ const decodeToken = (token: string): TokenPayload | null => {
 
 /**
  * Check if a JWT token is expired
- * Uses configurable expiration time from environment variables
+ * Tokens without an exp claim represent sessions configured not to expire.
  */
 export const isTokenExpired = (token: string): boolean => {
   if (!token) {
@@ -71,10 +71,7 @@ export const isTokenExpired = (token: string): boolean => {
       return payload.exp * 1000 < Date.now()
     }
 
-    // If no exp claim, check against our configured expiry time
-    // This assumes the token was issued recently
-    const tokenAge = Date.now() - (payload.iat ? payload.iat * 1000 : 0)
-    return tokenAge > config.auth.tokenExpiryMs
+    return false
   } catch {
     return true
   }
@@ -101,10 +98,7 @@ export const isTokenNearExpiry = (token: string): boolean => {
       return Date.now() > warningTime && Date.now() < expiryTime
     }
 
-    // If no exp claim, check against our configured times
-    const tokenAge = Date.now() - (payload.iat ? payload.iat * 1000 : 0)
-    const warningThreshold = config.auth.tokenExpiryMs - config.auth.logoutWarningMs
-    return tokenAge > warningThreshold && tokenAge < config.auth.tokenExpiryMs
+    return false
   } catch {
     return false
   }
@@ -130,18 +124,40 @@ export const getTokenTimeRemaining = (token: string): number => {
       return Math.max(0, expiryTime - Date.now())
     }
 
-    // If no exp claim, calculate based on our configured expiry time
-    const tokenAge = Date.now() - (payload.iat ? payload.iat * 1000 : 0)
-    return Math.max(0, config.auth.tokenExpiryMs - tokenAge)
+    return Number.POSITIVE_INFINITY
   } catch {
     return 0
   }
 }
 
 /**
+ * Get the token's configured lifetime in milliseconds.
+ */
+export const getTokenLifetime = (token: string): number => {
+  if (!token) {
+    return 0
+  }
+
+  const payload = decodeToken(token)
+  if (!payload) {
+    return 0
+  }
+  if (!payload.exp) {
+    return Number.POSITIVE_INFINITY
+  }
+  if (!payload.iat) {
+    return config.auth.tokenExpiryMs
+  }
+  return Math.max(0, (payload.exp - payload.iat) * 1000)
+}
+
+/**
  * Format time remaining in human-readable format
  */
 export const formatTimeRemaining = (milliseconds: number): string => {
+  if (!Number.isFinite(milliseconds)) {
+    return 'No expiration'
+  }
   if (milliseconds <= 0) {
     return 'Expired'
   }

@@ -103,7 +103,7 @@ POSTGRES_PORT=5432
 ```env
 SECRET_KEY=...          # Required — app refuses to start if unset
 ALGORITHM=HS256
-ACCESS_TOKEN_EXPIRE_MINUTES=30
+ACCESS_TOKEN_EXPIRE_MINUTES=30  # Fallback; configure the active value in Users & access
 ```
 
 ### Server & ports

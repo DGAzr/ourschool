@@ -164,6 +164,19 @@ DEFAULT_GRADE_SCALE: List[Tuple[str, int]] = [
     ("F", 0),
 ]
 
+SESSION_TIMEOUT_SETTING_KEY = "security.session_timeout_minutes"
+
+
+def get_session_timeout_minutes(db: Session, default_value: int = 30) -> int:
+    """Return the rolling session timeout; zero disables expiration."""
+    timeout = get_setting_value(
+        db,
+        SESSION_TIMEOUT_SETTING_KEY,
+        default_value=default_value,
+        value_type=int,
+    )
+    return timeout if timeout >= 0 else default_value
+
 
 def get_grade_scale(db: Session) -> List[Tuple[str, int]]:
     """Return the configured grading scale as [(letter, min_percent), ...].
@@ -195,6 +208,12 @@ def initialize_default_settings(db: Session) -> None:
             "setting_value": "true",
             "setting_type": "boolean",
             "description": "Enable or disable the student points system",
+        },
+        {
+            "setting_key": SESSION_TIMEOUT_SETTING_KEY,
+            "setting_value": "30",
+            "setting_type": "integer",
+            "description": "Rolling session timeout in minutes; 0 disables expiration",
         },
     ]
 

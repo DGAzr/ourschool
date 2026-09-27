@@ -17,7 +17,7 @@
 """System settings schemas."""
 
 from typing import List, Optional
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class SystemSettingBase(BaseModel):
@@ -74,6 +74,18 @@ class GradingSettings(BaseModel):
     scale: List[GradeBand]
 
 
+class SecuritySettings(BaseModel):
+    """Authentication and session settings."""
+
+    session_timeout_minutes: int
+
+
+class SessionTimeoutUpdate(BaseModel):
+    """Payload for updating the rolling session timeout."""
+
+    session_timeout_minutes: int = Field(ge=0, le=5_256_000)
+
+
 class GradeScaleUpdate(BaseModel):
     """Payload for updating the grading scale."""
 
@@ -85,3 +97,4 @@ class SystemSettingsGroup(BaseModel):
 
     attendance: AttendanceSettings
     grading: GradingSettings
+    security: SecuritySettings

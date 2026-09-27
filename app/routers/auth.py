@@ -35,6 +35,7 @@ from app.core.security import (
     verify_password,
     verify_token,
 )
+from app.crud import settings as crud_settings
 from app.models.user import User, UserRole
 from app.schemas.user import Token
 
@@ -209,9 +210,15 @@ async def login_for_access_token(
         user.must_change_password = True
         db.commit()
 
-    access_token_expires = timedelta(minutes=settings.access_token_expire_minutes)
+    session_timeout = crud_settings.get_session_timeout_minutes(
+        db, default_value=settings.access_token_expire_minutes
+    )
     access_token = create_access_token(
-        data={"sub": user.username}, expires_delta=access_token_expires
+        data={"sub": user.username},
+        expires_delta=(
+            timedelta(minutes=session_timeout) if session_timeout > 0 else None
+        ),
+        never_expires=session_timeout == 0,
     )
 
     log_authentication_event(
@@ -225,8 +232,9 @@ async def login_for_access_token(
 async def extend_session(
     token: Annotated[str, Depends(oauth2_scheme)],
     current_user: Annotated[User, Depends(get_current_active_user)],
+    db: Annotated[Session, Depends(get_db)],
 ):
-    """Extend the current user's session, bounded by an absolute max age."""
+    """Extend the current user's session using the configured rolling timeout."""
     payload = decode_token(token)
     session_start_ts = payload.get("sst")
     session_start = (
@@ -235,18 +243,15 @@ async def extend_session(
         else datetime.now(timezone.utc)
     )
 
-    age = datetime.now(timezone.utc) - session_start
-    if age > timedelta(minutes=settings.max_session_age_minutes):
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Session has reached its maximum age. Please log in again.",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
-
-    access_token_expires = timedelta(minutes=settings.access_token_expire_minutes)
+    session_timeout = crud_settings.get_session_timeout_minutes(
+        db, default_value=settings.access_token_expire_minutes
+    )
     access_token = create_access_token(
         data={"sub": current_user.username},
-        expires_delta=access_token_expires,
+        expires_delta=(
+            timedelta(minutes=session_timeout) if session_timeout > 0 else None
+        ),
         session_start=session_start,
+        never_expires=session_timeout == 0,
     )
     return {"access_token": access_token, "token_type": "bearer"}

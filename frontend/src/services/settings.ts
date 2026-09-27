@@ -45,6 +45,9 @@ export interface GradingSettings {
 export interface SystemSettingsGroup {
   attendance: AttendanceSettings
   grading: GradingSettings
+  security: {
+    session_timeout_minutes: number
+  }
 }
 
 export const settingsApi = {
@@ -87,5 +90,11 @@ export const settingsApi = {
 
   updateCountExcused: async (value: boolean): Promise<SystemSetting> => {
     return await api.put(`/settings/attendance/count-excused?count_excused=${value}`, {})
+  },
+
+  updateSessionTimeout: async (minutes: number): Promise<SystemSetting> => {
+    return await api.put('/settings/security/session-timeout', {
+      session_timeout_minutes: minutes,
+    })
   },
 }

@@ -30,6 +30,8 @@ from app.schemas.settings import (
     GradeBand,
     GradeScaleUpdate,
     GradingSettings,
+    SecuritySettings,
+    SessionTimeoutUpdate,
     SystemSetting,
     SystemSettingCreate,
     SystemSettingUpdate,
@@ -67,6 +69,7 @@ def get_grouped_settings(
     count_excused = crud_settings.get_setting_value(
         db, "attendance.count_excused", default_value=True, value_type=bool
     )
+    session_timeout_minutes = crud_settings.get_session_timeout_minutes(db)
 
     raw_scale = crud_settings.get_grade_scale(db)
     grade_bands = [
@@ -80,6 +83,9 @@ def get_grouped_settings(
             count_excused=count_excused,
         ),
         grading=GradingSettings(scale=grade_bands),
+        security=SecuritySettings(
+            session_timeout_minutes=session_timeout_minutes,
+        ),
     )
 
 
@@ -158,6 +164,24 @@ def update_grade_scale(
         "Letter-grade threshold bands (JSON array of {letter, min_percent})",
     )
     return GradingSettings(scale=scale_update.scale)
+
+
+@router.put("/security/session-timeout", response_model=SystemSetting)
+def update_session_timeout(
+    timeout_update: SessionTimeoutUpdate,
+    db: Annotated[Session, Depends(get_db)],
+    auth_user: Annotated[
+        AuthUser, Depends(require_admin_or_permission("settings:write"))
+    ],
+):
+    """Update the rolling session timeout in minutes; zero disables expiration."""
+    return crud_settings.upsert_setting(
+        db,
+        crud_settings.SESSION_TIMEOUT_SETTING_KEY,
+        str(timeout_update.session_timeout_minutes),
+        "integer",
+        "Rolling session timeout in minutes; 0 disables expiration",
+    )
 
 
 @router.put("/attendance/required-days", response_model=SystemSetting)

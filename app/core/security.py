@@ -56,21 +56,26 @@ def create_access_token(
     data: dict,
     expires_delta: Optional[timedelta] = None,
     session_start: Optional[datetime] = None,
+    never_expires: bool = False,
 ):
     """Create an access token.
 
-    ``session_start`` records when the underlying session originally began so
-    that ``/extend-session`` can enforce an absolute maximum session lifetime
-    regardless of how many times the token is renewed.
+    ``session_start`` records when the underlying session originally began.
+    ``never_expires`` omits the optional JWT expiration claim.
     """
     to_encode = data.copy()
     now = datetime.now(timezone.utc)
-    if expires_delta:
-        expire = now + expires_delta
-    else:
-        expire = now + timedelta(minutes=settings.access_token_expire_minutes)
     started = session_start or now
-    to_encode.update({"exp": expire, "iat": now, "sst": int(started.timestamp())})
+    to_encode.update({"iat": now, "sst": int(started.timestamp())})
+    if never_expires:
+        to_encode.pop("exp", None)
+    else:
+        expire = now + (
+            expires_delta
+            if expires_delta is not None
+            else timedelta(minutes=settings.access_token_expire_minutes)
+        )
+        to_encode["exp"] = expire
     encoded_jwt = jwt.encode(
         to_encode, settings.secret_key, algorithm=settings.algorithm
     )
