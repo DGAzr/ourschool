@@ -6,11 +6,65 @@ All notable changes to OurSchool are documented here.
 
 ## [Unreleased]
 
-### Lesson planning flexibility
+### Assignment and template performance
+
+- Assignment, grading, template-library, and assignment-report screens now load
+  bounded pages with server-side filtering and complete counts. Library search
+  finds templates beyond the first 100 results.
+- Long instructions, feedback, and materials load when details or editors open.
+  Template statistics and progress/dashboard totals use grouped queries.
+- Assignment reports provide a separate CSV export for complete filtered history.
+- Bulk grading recalculates each student's subject/term grade once per batch,
+  while preserving successful unrelated groups if a recalculation fails.
+- Added concurrent database indexes for list ordering, effective dates, and
+  template search, plus bounded per-route request-performance measurements.
+
+## [v1.1-beta4] — 2026-09-27
+
+### Teach and lesson preparation
+
+- **Teach is now a dedicated workspace** — run a single day's lesson plan from
+  the new Teach navigation item, with date navigation, student and subject
+  filters, preparation status, lesson editing, and mark-taught actions in one
+  place. Planner links and the dashboard now lead directly to the relevant
+  day; previous `?view=teach` links continue to redirect correctly.
+- **Materials Drawer** — the Lesson Drawer now includes a compact, range-aware
+  preparation checklist. Mark materials gathered without opening each lesson
+  and see progress by lesson and for the selected planner range.
+- Assignment-template details in Teach show the student assignments generated
+  for that lesson and provide direct links to grade them.
+
+### Lesson-planning flexibility
 
 - Taught lessons can now be reordered, rescheduled, and moved to or from the
   Lesson Drawer without changing their status. Graded and submitted work keeps
   its existing protections.
+
+### Session security
+
+- Administrators can set the rolling session timeout in **Settings → Users &
+  access**. The timeout applies to new and renewed sessions; setting it to `0`
+  creates sessions without an expiration time.
+- Added the normal database migration for the new security setting. Existing
+  installations start with the previous 30-minute default.
+
+### Usability and accessibility
+
+- Improved phone-sized layouts and touch targets throughout navigation,
+  assignments, dashboard actions, filters, dialogs, and drawers. The
+  assignments page now uses readable, expandable cards on small screens.
+- Mobile navigation and overlays now trap focus, close with Escape, restore
+  focus when dismissed, and prevent interaction with the page behind them.
+- Consolidated Admin settings into the Admin area, added a useful 404 page,
+  and made settings/status failures retryable instead of silently failing.
+
+### Fixes
+
+- The planner date control now reliably opens its date picker when selected.
+
+## [v1.1-beta3] — 2026-08-23
+
+### Lesson planning flexibility
 
 - Added a persistent Lesson Drawer for unscheduled lesson blocks, with drag and
   keyboard-accessible actions for stashing, ordering, and scheduling lessons.

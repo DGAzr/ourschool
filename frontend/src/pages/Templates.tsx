@@ -40,6 +40,8 @@ import SubmissionDialog from '../components/assignments/SubmissionDialog'
 import { AssignmentTemplate, AssignmentTemplateImportRequest, StudentAssignment } from '../types'
 import { getErrorMessage } from '../services/api'
 
+import PageNavigation from '../components/assignments/PageNavigation'
+
 const Templates: React.FC = () => {
   const { user } = useAuth()
   const isAdmin = user?.role === 'admin'
@@ -58,7 +60,7 @@ const Templates: React.FC = () => {
   const [exportingTemplate, setExportingTemplate] = useState<AssignmentTemplate | null>(null)
   const [submittingAssignment, setSubmittingAssignment] = useState<StudentAssignment | null>(null)
   const [deletingStudentAssignment, setDeletingStudentAssignment] = useState<StudentAssignment | null>(null)
-  const [selectedTemplates, setSelectedTemplates] = useState<Set<number>>(new Set())
+  const [selection, setSelection] = useState({ key: '', ids: new Set<number>() })
   const [collapsedShelves, setCollapsedShelves] = useState<Set<string>>(() => {
     try {
       const raw = localStorage.getItem('assignments.collapsedShelves')
@@ -79,9 +81,6 @@ const Templates: React.FC = () => {
     setSelectedSubject,
     selectedType,
     setSelectedType,
-    filterTemplates,
-    filterStudentAssignments,
-    filterGradingAssignments
   } = useAssignmentFilters()
 
   // Data
@@ -94,14 +93,18 @@ const Templates: React.FC = () => {
     loading,
     error,
     refetch,
-    setTemplates,
+    pagination, pageKey,
     setError
   } = useAssignments({
     isAdmin,
     adminViewMode: 'templates',
     selectedSubject,
     includeArchived: showArchived,
+    search: searchTerm, assignmentType: selectedType || undefined,
   })
+
+  const selectedTemplates = selection.key === pageKey ? selection.ids : new Set<number>()
+  const setSelectedTemplates = (ids: Set<number>) => setSelection({ key: pageKey, ids })
 
   // Assignment types (labels + filter options come from the provider)
   const { types, getTypeLabel } = useAssignmentTypes()
@@ -114,8 +117,9 @@ const Templates: React.FC = () => {
     setComposer({ kind: 'create', showAssign: true, libraryDefault: true })
   }
 
-  const handleEditTemplate = (template: AssignmentTemplate) => {
-    setComposer({ kind: 'edit', template })
+  const handleEditTemplate = async (template: AssignmentTemplate) => {
+    try { setComposer({ kind: 'edit', template: await assignmentsApi.getById(template.id) }) }
+    catch { setError('Unable to load template details') }
   }
 
   const handleDeleteTemplate = (template: AssignmentTemplate) => {
@@ -123,8 +127,9 @@ const Templates: React.FC = () => {
     setShowDeleteConfirm(true)
   }
 
-  const handleAssignTemplate = (template: AssignmentTemplate) => {
-    setComposer({ kind: 'assign', template })
+  const handleAssignTemplate = async (template: AssignmentTemplate) => {
+    try { setComposer({ kind: 'assign', template: await assignmentsApi.getById(template.id) }) }
+    catch { setError('Unable to load template details') }
   }
 
   const handleArchiveTemplate = (template: AssignmentTemplate) => {
@@ -205,7 +210,7 @@ const Templates: React.FC = () => {
     try {
       setDeletingLoading(true)
       await assignmentsApi.delete(deletingTemplate.id)
-      setTemplates(templates.filter(t => t.id !== deletingTemplate.id))
+      refetch()
       setShowDeleteConfirm(false)
       setDeletingTemplate(null)
     } catch (error) {
@@ -301,10 +306,8 @@ const Templates: React.FC = () => {
   })()
 
   // Apply filters — when showArchived is on, restrict to only archived templates
-  const filteredTemplates = filterTemplates(templates).filter(t => showArchived ? t.is_archived : !t.is_archived)
-  const filteredStudentAssignments = filterStudentAssignments(studentAssignments)
-
-  void filterGradingAssignments
+  const filteredTemplates = templates
+  const filteredStudentAssignments = studentAssignments
 
   if (!user) {
     return (
@@ -346,7 +349,7 @@ const Templates: React.FC = () => {
           <h1 className="text-[27px] font-bold text-ink tracking-[-0.02em] leading-none">Templates</h1>
           {isAdmin && (
             <p className="mt-1.5 text-[13px] text-muted">
-              <span className="font-mono">{filteredTemplates.length}</span> template{filteredTemplates.length !== 1 ? 's' : ''}
+              <span className="font-mono">{pagination.total}</span> matching template{pagination.total !== 1 ? 's' : ''}
               {submittedAssignments.length > 0 && (
                 <> · <Link to="/grading" className="text-accent font-semibold hover:underline">{submittedAssignments.length} awaiting grade</Link></>
               )}
@@ -399,7 +402,7 @@ const Templates: React.FC = () => {
       {/* ════════════════════════════════════════
           ADMIN — LIBRARY (templates)
       ════════════════════════════════════════ */}
-      {!loading && isAdmin && (
+      {isAdmin && (
         <>
           {/* Toolbar */}
           <div className="flex flex-col sm:flex-row sm:items-center gap-3 mb-8">
@@ -487,7 +490,7 @@ const Templates: React.FC = () => {
                       : <SubjectDot color={group.color} size={10} />
                     }
                     <span className="font-bold text-[13.5px] tracking-[-0.01em] text-ink">{group.name}</span>
-                    <span className="font-mono text-[11.5px] text-faint">{group.templates.length}</span>
+                    <span className="font-mono text-[11.5px] text-faint">{group.templates.length} on this page</span>
                     {/* Collapse chevron */}
                     <svg
                       className={`ml-auto text-faint transition-transform duration-150 ${isCollapsed ? '-rotate-90' : ''}`}
@@ -670,6 +673,7 @@ const Templates: React.FC = () => {
 
       {/* ── Modals ── */}
 
+      <PageNavigation {...pagination} />
       {/* Assignment composer (create / edit / assign) */}
       {composer && (
         <AssignmentComposer

@@ -16,19 +16,17 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-import React, { useState, useMemo, useEffect } from 'react'
-import { AssignmentReport as AssignmentReportType } from '../../../types'
+import React, { useState, useEffect } from 'react'
+import { AssignmentReport as AssignmentReportType, AssignmentReportItem, AssignmentReportPage } from '../../../types/reports'
+import { usePagedData } from '../../../hooks/usePagedData'
+import { api } from '../../../services/api'
+import PageNavigation from '../../assignments/PageNavigation'
 import { Term } from '../../../types/term'
-import { reportsApi } from '../../../services/reports'
+import { reportsApi, assignmentReportPage } from '../../../services/reports'
 import AssignmentDetailModal from '../../assignments/AssignmentDetailModal'
 import { Pill, statusToPillVariant, Select } from '../../ui'
 import { isPastDateOnly, formatDateOnly } from '../../../utils/formatters'
 import DonutChart from '../shared/DonutChart'
-
-interface AssignmentReportProps {
-  assignmentReport: AssignmentReportType | null
-  loading: boolean
-}
 
 const DONUT_COLORS: Record<string, string> = {
   graded: 'var(--pos-fg)',
@@ -55,9 +53,9 @@ const gradeBg = (p: number) =>
     ? 'bg-sub-bg text-sub-fg'
     : 'bg-neg-bg text-neg-fg'
 
-const AssignmentReport: React.FC<AssignmentReportProps> = ({ assignmentReport, loading }) => {
-  const [selectedStudentId, setSelectedStudentId] = useState<number | null>(null)
-  const [selectedTermId, setSelectedTermId] = useState<number | null>(null)
+const AssignmentReport: React.FC = () => {
+  const [selectedStudentId, setSelectedStudentId] = useState<number | null | undefined>(undefined)
+  const [selectedTermId, setSelectedTermId] = useState<number | null | undefined>(undefined)
   const [allTerms, setAllTerms] = useState<Term[]>([])
   const [showDetailModal, setShowDetailModal] = useState(false)
   const [selectedAssignmentId, setSelectedAssignmentId] = useState<number | null>(null)
@@ -67,88 +65,39 @@ const AssignmentReport: React.FC<AssignmentReportProps> = ({ assignmentReport, l
     reportsApi.getTerms().then(setAllTerms).catch(() => {})
   }, [])
 
-  // Default selections are derived at render time (no state-syncing effect):
-  // the first available student, and the active term best matching the season.
-  const availableStudents = assignmentReport?.available_students
-  const availableTerms = assignmentReport?.available_terms
-  const effectiveStudentId = selectedStudentId ?? availableStudents?.[0]?.id ?? null
-
-  let defaultTermId: number | null = null
-  if (availableTerms?.length && allTerms.length) {
-    const currentMonth = new Date().getMonth() + 1
-    const availableIds = new Set(availableTerms.map((t) => t.id))
-    const active = allTerms.filter((t) => t.is_active && availableIds.has(t.id))
-    let best = active[0] || availableTerms[0]
-    if (active.length > 0) {
-      const seasonal = active.find((t) => {
-        const n = t.name.toLowerCase()
-        if (currentMonth >= 8 && currentMonth <= 12)
-          return n.includes('fall') || n.includes('semester 1') || n.includes('q1')
-        if (currentMonth >= 1 && currentMonth <= 5)
-          return n.includes('spring') || n.includes('semester 2') || n.includes('q2')
-        return n.includes('summer') || n.includes('q3')
-      })
-      if (seasonal) best = seasonal
-    }
-    defaultTermId = best.id
+  const [options, setOptions] = useState<Pick<AssignmentReportType, 'available_students' | 'available_terms'> | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  useEffect(() => {
+    api.get('/reports/admin/assignment-options').then(setOptions).catch(err => setError(err.message))
+  }, [])
+  const effectiveStudentId = selectedStudentId === undefined ? options?.available_students[0]?.id : selectedStudentId
+  const effectiveTermId = selectedTermId === undefined ? allTerms.find(term => term.is_active)?.id : selectedTermId
+  const page = usePagedData<AssignmentReportItem, AssignmentReportPage>({
+    student_id: effectiveStudentId, term_id: effectiveTermId,
+  }, assignmentReportPage, options !== null)
+  const assignmentReport = page.data
+  const loading = page.loading || options === null
+  const filteredAssignments = page.items
+  const summary = {
+    total: page.total, completed: page.counts.graded ?? 0,
+    inProgress: page.counts.in_progress ?? 0, submitted: page.counts.submitted ?? 0,
+    notStarted: page.counts.not_started ?? 0, overdue: page.counts.overdue ?? 0,
+    avgGrade: assignmentReport?.summary.average_grade,
   }
-  const effectiveTermId = selectedTermId ?? defaultTermId
-
-  const assignments = assignmentReport?.assignments
-  const filteredAssignments = useMemo(() => {
-    if (!assignments) return []
-    return assignments.filter((a) => {
-      const matchesStudent = !effectiveStudentId || a.student_id === effectiveStudentId
-      const matchesTerm = !effectiveTermId || a.term_id === effectiveTermId
-      return matchesStudent && matchesTerm
-    })
-  }, [assignments, effectiveStudentId, effectiveTermId])
-
-  const summary = useMemo(() => {
-    const total = filteredAssignments.length
-    const completed = filteredAssignments.filter((a) => a.status === 'graded').length
-    const inProgress = filteredAssignments.filter((a) => a.status === 'in_progress').length
-    const notStarted = filteredAssignments.filter((a) => a.status === 'not_started').length
-    const submitted = filteredAssignments.filter((a) => a.status === 'submitted').length
-    const overdue = filteredAssignments.filter(
-      (a) => isPastDateOnly(a.due_date) && a.status !== 'graded' && a.status !== 'excused',
-    ).length
-    const graded = filteredAssignments.filter((a) => a.percentage_grade != null)
-    const avgGrade =
-      graded.length
-        ? graded.reduce((s, a) => s + (a.percentage_grade || 0), 0) / graded.length
-        : null
-    return { total, completed, inProgress, notStarted, submitted, overdue, avgGrade }
-  }, [filteredAssignments])
-
-  // Completion by subject
-  const bySubject = useMemo(() => {
-    if (!filteredAssignments.length) return []
-    const map: Record<
-      number,
-      { name: string; color: string; total: number; done: number }
-    > = {}
-    for (const a of filteredAssignments) {
-      if (!map[a.subject_id]) {
-        map[a.subject_id] = { name: a.subject_name, color: a.subject_color, total: 0, done: 0 }
-      }
-      map[a.subject_id].total++
-      if (a.status === 'graded') map[a.subject_id].done++
-    }
-    return Object.values(map).sort((a, b) => b.done / b.total - a.done / a.total)
-  }, [filteredAssignments])
-
-  // Recently graded (last 10, newest first)
-  const recentlyGraded = useMemo(() => {
-    return filteredAssignments
-      .filter((a) => a.is_graded && a.graded_date)
-      .sort((a, b) => {
-        const da = new Date(a.graded_date!).getTime()
-        const db = new Date(b.graded_date!).getTime()
-        return db - da
-      })
-      .slice(0, 10)
-  }, [filteredAssignments])
+  const bySubject = assignmentReport?.by_subject ?? []
+  const recentlyGraded = assignmentReport?.recently_graded ?? []
+  const exportReport = async () => {
+    try {
+      const params = new URLSearchParams()
+      if (effectiveStudentId) params.set('student_id', String(effectiveStudentId))
+      if (effectiveTermId) params.set('term_id', String(effectiveTermId))
+      const blob = await api.getBlob(`/reports/admin/assignments/export?${params}`)
+      const url = URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = url; link.download = 'assignments.csv'; link.click()
+      setTimeout(() => URL.revokeObjectURL(url), 1000)
+    } catch (err) { setError(err instanceof Error ? err.message : 'Export failed') }
+  }
 
   const donutSegments = [
     { label: STATUS_LABELS.graded, count: summary.completed, color: DONUT_COLORS.graded },
@@ -157,6 +106,8 @@ const AssignmentReport: React.FC<AssignmentReportProps> = ({ assignmentReport, l
     { label: STATUS_LABELS.not_started, count: summary.notStarted, color: DONUT_COLORS.not_started },
     { label: STATUS_LABELS.overdue, count: summary.overdue, color: DONUT_COLORS.overdue },
   ].filter((s) => s.count > 0)
+
+  if (error || page.error) return <p role="alert" className="text-neg-fg">{error || page.error}</p>
 
   if (loading) {
     return (
@@ -215,6 +166,10 @@ const AssignmentReport: React.FC<AssignmentReportProps> = ({ assignmentReport, l
         </div>
       </div>
 
+      <div className="flex items-center justify-between gap-3">
+        <PageNavigation {...page.pagination} />
+        <button type="button" onClick={exportReport} className="px-3 py-2 border border-line rounded-field">Export all matching assignments</button>
+      </div>
       {/* Summary tiles + donut */}
       <div className="grid gap-4" style={{ gridTemplateColumns: '340px 1fr' }}>
         {/* Donut + legend */}
@@ -445,7 +400,7 @@ const AssignmentReport: React.FC<AssignmentReportProps> = ({ assignmentReport, l
             </thead>
             <tbody className="bg-panel divide-y divide-line">
               {filteredAssignments.map((a) => {
-                const isOverdue = isPastDateOnly(a.due_date) && a.status !== 'graded'
+                const isOverdue = isPastDateOnly(a.extended_due_date ?? a.due_date) && a.status !== 'graded'
                 return (
                   <tr
                     key={a.assignment_id}

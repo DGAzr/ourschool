@@ -16,76 +16,19 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-import { useState, useMemo } from 'react'
-import { AssignmentTemplate, StudentAssignment } from '../types'
+import { useState } from 'react'
 
+/** Filter state is shared; matching rows and counts come from the page API. */
 export const useAssignmentFilters = () => {
   const [searchTerm, setSearchTerm] = useState('')
   const [selectedSubject, setSelectedSubject] = useState<number | null>(null)
   const [selectedType, setSelectedType] = useState<string | null>(null)
-  const [selectedDifficulty, setSelectedDifficulty] = useState<string | null>(null)
-  const [selectedStatuses, setSelectedStatuses] = useState<string[]>(['not_started', 'in_progress', 'submitted'])
   const [selectedStudent, setSelectedStudent] = useState<number | null>(null)
 
-  const filterTemplates = useMemo(() => {
-    return (templates: AssignmentTemplate[]) => {
-      return templates.filter(template => {
-        const matchesSearch = template.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                             template.description?.toLowerCase().includes(searchTerm.toLowerCase())
-        const matchesSubject = !selectedSubject || template.subject_id === selectedSubject
-        const matchesType = !selectedType || template.assignment_type === selectedType
-
-        return matchesSearch && matchesSubject && matchesType
-      })
-    }
-  }, [searchTerm, selectedSubject, selectedType])
-
-  const filterStudentAssignments = useMemo(() => {
-    return (assignments: StudentAssignment[]) => {
-      return assignments.filter(assignment => {
-        const template = assignment.template
-        const matchesSearch = template?.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                             template?.description?.toLowerCase().includes(searchTerm.toLowerCase())
-        const matchesSubject = !selectedSubject || template?.subject_id === selectedSubject
-        const matchesType = !selectedType || template?.assignment_type === selectedType
-        
-        return matchesSearch && matchesSubject && matchesType
-      })
-    }
-  }, [searchTerm, selectedSubject, selectedType])
-
-  const filterGradingAssignments = useMemo(() => {
-    return (assignments: StudentAssignment[]) => {
-      return assignments.filter(assignment => {
-        const template = assignment.template
-        const matchesSearch = template?.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                             template?.description?.toLowerCase().includes(searchTerm.toLowerCase())
-        const matchesSubject = !selectedSubject || template?.subject_id === selectedSubject
-        // Multi-select status filtering
-        const matchesStatus = selectedStatuses.length === 0 || selectedStatuses.includes(assignment.status)
-        // Student filtering
-        const matchesStudent = !selectedStudent || assignment.student_id === selectedStudent
-        
-        return matchesSearch && matchesSubject && matchesStatus && matchesStudent
-      })
-    }
-  }, [searchTerm, selectedSubject, selectedStatuses, selectedStudent])
-
   return {
-    searchTerm,
-    setSearchTerm,
-    selectedSubject,
-    setSelectedSubject,
-    selectedType,
-    setSelectedType,
-    selectedDifficulty,
-    setSelectedDifficulty,
-    selectedStatuses,
-    setSelectedStatuses,
-    selectedStudent,
-    setSelectedStudent,
-    filterTemplates,
-    filterStudentAssignments,
-    filterGradingAssignments
+    searchTerm, setSearchTerm,
+    selectedSubject, setSelectedSubject,
+    selectedType, setSelectedType,
+    selectedStudent, setSelectedStudent,
   }
 }

@@ -20,6 +20,7 @@ from fastapi import APIRouter
 
 from .analytics import router as analytics_router
 from .grading import router as grading_router
+from .pages import router as pages_router
 from .student_assignments import (
     STUDENT_EDITABLE_ASSIGNMENT_FIELDS,
     router as student_assignments_router,
@@ -28,6 +29,7 @@ from .templates import router as templates_router
 
 router = APIRouter()
 
+router.include_router(pages_router)
 router.include_router(templates_router)
 router.include_router(student_assignments_router)
 router.include_router(grading_router)

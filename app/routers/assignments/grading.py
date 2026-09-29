@@ -161,71 +161,97 @@ def bulk_grade_assignments(
         AuthUser, Depends(require_admin_or_permission("assignments:grade"))
     ],
 ):
-    """Grade multiple student assignments in one request. Each item is graded independently; one failure does not roll back others."""
-    results: list[BulkGradeResult] = []
+    """Grade items independently and recalculate each student/subject/term once.
+
+    An aggregate failure rolls back its bucket to keep term grades consistent.
+    Successful unrelated buckets are preserved.
+    """
+    # A bucket savepoint includes its final aggregate update. A failure there
+    # must not leave persisted assignment grades with a stale term grade, and
+    # must not roll back unrelated students/subjects that succeeded.
+    results = [None] * len(items)
     points_enabled = points_crud.is_points_system_enabled(db)
-    for item in items:
+    scale = get_grade_scale(db)
+    assignments = {
+        a.id: a
+        for a in db.query(StudentAssignment)
+        .filter(StudentAssignment.id.in_([item.assignment_id for item in items]))
+        .all()
+    }
+    buckets = {}
+    term_cache = {}
+    for index, item in enumerate(items):
+        assignment = assignments.get(item.assignment_id)
+        if assignment is None:
+            results[index] = BulkGradeResult(
+                assignment_id=item.assignment_id,
+                success=False,
+                error="Assignment not found",
+            )
+            continue
+        effective = (
+            assignment.extended_due_date
+            or assignment.due_date
+            or assignment.assigned_date
+        )
+        if effective not in term_cache:
+            term_cache[effective] = assignment.resolve_grade_term(db)
+        term = term_cache[effective]
+        key = (
+            assignment.student_id,
+            assignment.template.subject_id,
+            term.id if term else None,
+        )
+        buckets.setdefault(key, []).append((index, item, assignment))
+
+    for bucket in buckets.values():
+        successful = []
         try:
-            assignment = (
-                db.query(StudentAssignment)
-                .filter(StudentAssignment.id == item.assignment_id)
-                .first()
-            )
-            if not assignment:
-                results.append(
-                    BulkGradeResult(
-                        assignment_id=item.assignment_id,
-                        success=False,
-                        error="Assignment not found",
-                    )
-                )
-                continue
-
-            # Points earned may exceed the maximum (e.g. extra credit) — no upper
-            # bound is enforced. Each item commits or rolls back independently via
-            # a savepoint, so one failure never discards previously-applied items.
             with db.begin_nested():
-                assignment.points_earned = item.points_earned
-                assignment.teacher_feedback = item.teacher_feedback
-                assignment.is_graded = True
-                assignment.graded_date = date.today()
-                assignment.graded_by = get_user_id_from_auth(auth_user)
-
-                percentage = assignment.calculate_percentage_grade()
-                if percentage is not None:
-                    assignment.letter_grade = calculate_letter_grade(
-                        percentage, get_grade_scale(db)
-                    )
-
-                assignment.backfill_lifecycle_dates_for_grading()
-                assignment.update_status()
-                assignment.update_term_grade(db)
-
-                if points_enabled:
-                    title = (
-                        assignment.template.name
-                        if assignment.template
-                        else f"Assignment {assignment.id}"
-                    )
-                    # Idempotent delta sync handles both first grade and re-grade.
-                    points_crud.set_assignment_points(
-                        db=db,
-                        student_id=assignment.student_id,
-                        assignment_id=assignment.id,
-                        points_earned=item.points_earned,
-                        assignment_title=title,
-                    )
-
-            results.append(
-                BulkGradeResult(assignment_id=item.assignment_id, success=True)
-            )
-        except Exception as e:
-            results.append(
-                BulkGradeResult(
-                    assignment_id=item.assignment_id, success=False, error=str(e)
+                representative = None
+                for index, item, assignment in bucket:
+                    try:
+                        with db.begin_nested():
+                            assignment.points_earned = item.points_earned
+                            assignment.teacher_feedback = item.teacher_feedback
+                            assignment.is_graded = True
+                            assignment.graded_date = date.today()
+                            assignment.graded_by = get_user_id_from_auth(auth_user)
+                            percentage = assignment.calculate_percentage_grade()
+                            if percentage is not None:
+                                assignment.letter_grade = calculate_letter_grade(
+                                    percentage, scale
+                                )
+                            assignment.backfill_lifecycle_dates_for_grading()
+                            assignment.update_status()
+                            if points_enabled:
+                                points_crud.set_assignment_points(
+                                    db=db,
+                                    student_id=assignment.student_id,
+                                    assignment_id=assignment.id,
+                                    points_earned=item.points_earned,
+                                    assignment_title=assignment.template.name,
+                                )
+                        representative = assignment
+                        successful.append(index)
+                        results[index] = BulkGradeResult(
+                            assignment_id=item.assignment_id, success=True
+                        )
+                    except Exception as error:
+                        results[index] = BulkGradeResult(
+                            assignment_id=item.assignment_id,
+                            success=False,
+                            error=str(error),
+                        )
+                if representative is not None:
+                    representative.update_term_grade(db)
+        except Exception as error:
+            for index in successful:
+                results[index] = BulkGradeResult(
+                    assignment_id=items[index].assignment_id,
+                    success=False,
+                    error=str(error),
                 )
-            )
-
     db.commit()
     return results
 

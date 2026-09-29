@@ -203,6 +203,81 @@ def get_assignment_report(
     )
 
 
+@router.get("/admin/assignment-options")
+def assignment_report_options(
+    db: Annotated[Session, Depends(get_db)],
+    auth_user: Annotated[
+        AuthUser, Depends(require_admin_or_permission("reports:read"))
+    ],
+):
+    from app.crud.assignment_report_pages import options
+
+    return options(db)
+
+
+@router.get("/admin/assignments/page")
+def paged_assignment_report(
+    db: Annotated[Session, Depends(get_db)],
+    auth_user: Annotated[
+        AuthUser, Depends(require_admin_or_permission("reports:read"))
+    ],
+    subject_id: Optional[int] = None,
+    student_id: Optional[int] = None,
+    term_id: Optional[int] = None,
+    status: Optional[str] = None,
+    limit: int = Query(50, ge=1, le=100),
+    cursor: Optional[str] = Query(None, max_length=1024),
+):
+    from app.crud.assignment_report_pages import report_page
+
+    return report_page(
+        db,
+        subject_id=subject_id,
+        student_id=student_id,
+        term_id=term_id,
+        status=status,
+        limit=limit,
+        cursor=cursor,
+    )
+
+
+@router.get("/admin/assignments/export")
+def export_assignment_report(
+    db: Annotated[Session, Depends(get_db)],
+    auth_user: Annotated[
+        AuthUser, Depends(require_admin_or_permission("reports:read"))
+    ],
+    subject_id: Optional[int] = None,
+    student_id: Optional[int] = None,
+    term_id: Optional[int] = None,
+    status: Optional[str] = None,
+):
+    from fastapi.responses import StreamingResponse
+    from app.crud.assignment_report_pages import csv_chunks, report_query
+
+    filters = dict(
+        subject_id=subject_id, student_id=student_id, term_id=term_id, status=status
+    )
+    # Validate before headers are sent. Own the generator session explicitly.
+    report_query(db, **filters)
+    bind = db.get_bind()
+    # Release the validation/authentication connection before the stream takes
+    # one of its own; concurrent exports must not occupy two pool slots each.
+    db.close()
+
+    def stream():
+        with Session(bind) as export_db:
+            yield from csv_chunks(export_db, **filters)
+
+    return StreamingResponse(
+        stream(),
+        media_type="text/csv",
+        headers={
+            "Content-Disposition": 'attachment; filename="assignments.csv"',
+        },
+    )
+
+
 @router.get("/report-card/{student_id}/{term_id}", response_model=ReportCard)
 def get_report_card(
     student_id: int,

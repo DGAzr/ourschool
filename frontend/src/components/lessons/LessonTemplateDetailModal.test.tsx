@@ -29,12 +29,12 @@ import type {
   AssignmentTemplate,
   StudentAssignment,
 } from '../../types/assignment'
-import { assignmentsApi } from '../../services/assignments'
+import { assignmentsApi, assignmentPage } from '../../services/assignments'
 
 vi.mock('../../services/assignments', () => ({
+  assignmentPage: vi.fn(),
   assignmentsApi: {
     getById: vi.fn(),
-    getTemplateAssignments: vi.fn(),
   },
 }))
 
@@ -126,7 +126,7 @@ const renderModal = (
   )
 
 beforeEach(() => {
-  vi.mocked(assignmentsApi.getTemplateAssignments).mockResolvedValue([])
+  vi.mocked(assignmentPage).mockResolvedValue({ items: [], total: 0, next_cursor: null })
 })
 
 afterEach(() => {
@@ -185,11 +185,10 @@ describe('LessonTemplateDetailModal', () => {
 
   it('links each lesson assignment to its grading record', async () => {
     vi.mocked(assignmentsApi.getById).mockResolvedValue(template)
-    vi.mocked(assignmentsApi.getTemplateAssignments).mockResolvedValue([
+    vi.mocked(assignmentPage).mockResolvedValue({ items: [
       studentAssignment({}),
       studentAssignment({ id: 92, student_id: 9 }),
-      studentAssignment({ id: 93, lesson_id: 99 }),
-    ])
+    ], total: 2, next_cursor: null })
     const onClose = vi.fn()
     renderModal(link, onClose)
 
@@ -205,6 +204,9 @@ describe('LessonTemplateDetailModal', () => {
 
     fireEvent.click(milesLink)
 
+    expect(assignmentPage).toHaveBeenCalledWith(
+      expect.objectContaining({ template_id: 42, lesson_id: 12 }), expect.any(AbortSignal)
+    )
     expect(onClose).toHaveBeenCalledOnce()
     expect(JSON.parse(screen.getByTestId('location').textContent ?? '')).toEqual({
       pathname: '/grading',

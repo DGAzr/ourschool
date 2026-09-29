@@ -16,6 +16,9 @@
 
 """Database configuration."""
 
+from time import perf_counter
+from app.utils.request_performance import instrument_engine, record_acquire
+
 from sqlalchemy import create_engine
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
@@ -28,7 +31,11 @@ def get_engine():
     # pool_pre_ping validates connections before use so the app recovers
     # transparently from DB/container restarts instead of serving stale
     # connections.
-    return create_engine(settings.effective_database_url, pool_pre_ping=True)
+    configured_engine = create_engine(
+        settings.effective_database_url, pool_pre_ping=True
+    )
+    instrument_engine(configured_engine)
+    return configured_engine
 
 
 # Initialize these as None initially
@@ -53,6 +60,9 @@ def get_db():
         init_db()
     db = SessionLocal()
     try:
+        started = perf_counter()
+        db.connection()
+        record_acquire(perf_counter() - started)
         yield db
     finally:
         db.close()

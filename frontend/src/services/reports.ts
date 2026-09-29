@@ -145,3 +145,8 @@ export const reportsApi = {
     return response
   },
 }
+
+export const assignmentReportPage = (params: Record<string, unknown>, signal: AbortSignal): Promise<import('../types/reports').AssignmentReportPage> => {
+  const query = new URLSearchParams(Object.entries(params).filter(([, v]) => v != null).map(([k, v]) => [k, String(v)]))
+  return api.get(`/reports/admin/assignments/page?${query}`, signal)
+}

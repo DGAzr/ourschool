@@ -23,7 +23,7 @@ import { useCallback, useSyncExternalStore } from 'react'
  * first render (via useSyncExternalStore), so the wrong layout is never
  * flashed on mount; the server snapshot defaults to false.
  */
-function useMediaQuery(query: string): boolean {
+export function useMediaQuery(query: string): boolean {
   const subscribe = useCallback(
     (onChange: () => void) => {
       const mql = window.matchMedia(query)

@@ -33,10 +33,12 @@ import AssignmentTimeLog from '../components/assignments/AssignmentTimeLog'
 import { AssignmentInfo, SubmissionCard } from '../components/assignments/AssignmentInfo'
 import { StudentAssignment, Term } from '../types'
 import { formatDateOnly } from '../utils/formatters'
-import { isOverdue } from '../utils/assignmentStatus'
 import { termsApi } from '../services/terms'
 import { getErrorMessage } from '../services/api'
 
+
+import PageNavigation from '../components/assignments/PageNavigation'
+import { useAssignmentDetail } from '../hooks/useAssignmentDetail'
 
 type Subject = { id: number; name: string; color?: string }
 type Student = { id: number; first_name: string; last_name: string }
@@ -346,43 +348,31 @@ const Grading: React.FC = () => {
     students,
     loading,
     error,
-    refetch,
+    refetch, counts, pagination, pageKey,
   } = useAssignments({
     isAdmin,
     adminViewMode: 'grading',
-    selectedSubject,
+    selectedSubject, studentId: selectedStudent, tab: queueFilter,
   })
 
   const { toast } = useToast()
 
   const getSubjectById = (id: number) => subjects.find(s => s.id === id)
 
-  const needsGrading = allAssignments.filter(a => a.status === 'submitted' && !a.is_graded)
-  const overdueAssignments = allAssignments.filter(isOverdue)
-  const awaitingAssignments = allAssignments.filter(a =>
-    (a.status === 'not_started' || a.status === 'in_progress' || a.status === 'overdue') && !a.is_graded
-  )
-  const awaitingSubmission = allAssignments.filter(a => a.status === 'not_started' || a.status === 'in_progress').length
+  const needsGradingCount = counts.needs ?? 0
+  const overdueCount = counts.overdue ?? 0
+  const awaitingCount = counts.awaiting ?? 0
+  const awaitingSubmission = counts.awaiting_submission ?? 0
 
   const termDateRange = activeTerm
     ? `${formatDateOnly(activeTerm.start_date, { month: 'short', day: 'numeric' })} – ${formatDateOnly(activeTerm.end_date, { month: 'short', day: 'numeric', year: 'numeric' })}`
     : null
 
-  // "All" shows every assignment; subject/student filters still apply.
-  const filteredAllAssignments = allAssignments.filter(a => {
-    const matchesSubject = !selectedSubject || a.template?.subject_id === selectedSubject
-    const matchesStudent = !selectedStudent || a.student_id === selectedStudent
-    return matchesSubject && matchesStudent
-  })
-
-  const queueItems = queueFilter === 'needs' ? needsGrading
-    : queueFilter === 'overdue' ? overdueAssignments
-    : queueFilter === 'awaiting' ? awaitingAssignments
-    : filteredAllAssignments
-
-  const selectedAssignment = selectedQueueId
-    ? queueItems.find(a => a.id === selectedQueueId) ?? queueItems[0]
-    : queueItems[0]
+  const queueItems = allAssignments
+  // Deep links may target a row outside the current page.
+  const selectedId = selectedQueueId ?? queueItems[0]?.id
+  const detail = useAssignmentDetail(selectedId, pageKey)
+  const selectedAssignment = detail.data
 
   const queueIds = queueItems.map(q => q.id)
 
@@ -472,6 +462,12 @@ const Grading: React.FC = () => {
         </div>
       )}
 
+      <PageNavigation {...pagination}
+        next={() => { setSelectedQueueId(null); pagination.next() }}
+        previous={() => { setSelectedQueueId(null); pagination.previous() }}
+      />
+      {detail.loading && <p role="status">Loading assignment details…</p>}
+      {detail.error && <p role="alert" className="text-neg-fg">{detail.error}</p>}
       {loading ? (
         <div className="flex items-center justify-center py-16">
           <svg className="h-6 w-6 animate-spin text-accent" fill="none" viewBox="0 0 24 24">
@@ -496,25 +492,25 @@ const Grading: React.FC = () => {
       ) : (
         <>
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-5 flex-none">
-            <StatTile label="Awaiting grade" value={String(needsGrading.length)} accent={needsGrading.length > 0} />
-            <StatTile label="Overdue" value={String(overdueAssignments.length)} />
+            <StatTile label="Awaiting grade" value={String(needsGradingCount)} accent={needsGradingCount > 0} />
+            <StatTile label="Overdue" value={String(overdueCount)} />
             <StatTile label="Awaiting submission" value={String(awaitingSubmission)} />
             <StatTile label="Current term" value={activeTerm?.name ?? '—'} sub={termDateRange ?? undefined} />
           </div>
 
           {/* ── Desktop: side-by-side split ── */}
-          <div className="hidden lg:flex gap-4 flex-1 min-h-0">
+          {!isMobile && <div className="flex gap-4 flex-1 min-h-0">
             <div className="flex-none w-[360px] flex flex-col min-h-0">
               <QueuePanel
-                needsGradingCount={needsGrading.length}
-                overdueCount={overdueAssignments.length}
-                awaitingCount={awaitingAssignments.length}
+                needsGradingCount={needsGradingCount}
+                overdueCount={overdueCount}
+                awaitingCount={awaitingCount}
                 queueFilter={queueFilter}
-                setQueueFilter={setQueueFilter}
+                setQueueFilter={value => { setSelectedQueueId(null); setQueueFilter(value) }}
                 selectedSubject={selectedSubject}
-                setSelectedSubject={setSelectedSubject}
+                setSelectedSubject={value => { setSelectedQueueId(null); setSelectedSubject(value) }}
                 selectedStudent={selectedStudent}
-                setSelectedStudent={setSelectedStudent}
+                setSelectedStudent={value => { setSelectedQueueId(null); setSelectedStudent(value) }}
                 subjects={subjects}
                 students={students}
                 queueItems={queueItems}
@@ -536,21 +532,21 @@ const Grading: React.FC = () => {
                 actions={assignmentActions}
               />
             </div>
-          </div>
+          </div>}
 
           {/* ── Mobile: drill-in — queue OR detail, full width ── */}
-          <div className="lg:hidden flex-1 min-h-0">
+          {isMobile && <div className="flex-1 min-h-0">
             {mobileView === 'queue' ? (
               <QueuePanel
-                needsGradingCount={needsGrading.length}
-                overdueCount={overdueAssignments.length}
-                awaitingCount={awaitingAssignments.length}
+                needsGradingCount={needsGradingCount}
+                overdueCount={overdueCount}
+                awaitingCount={awaitingCount}
                 queueFilter={queueFilter}
-                setQueueFilter={setQueueFilter}
+                setQueueFilter={value => { setSelectedQueueId(null); setQueueFilter(value) }}
                 selectedSubject={selectedSubject}
-                setSelectedSubject={setSelectedSubject}
+                setSelectedSubject={value => { setSelectedQueueId(null); setSelectedSubject(value) }}
                 selectedStudent={selectedStudent}
-                setSelectedStudent={setSelectedStudent}
+                setSelectedStudent={value => { setSelectedQueueId(null); setSelectedStudent(value) }}
                 subjects={subjects}
                 students={students}
                 queueItems={queueItems}
@@ -571,7 +567,7 @@ const Grading: React.FC = () => {
                 actions={assignmentActions}
               />
             )}
-          </div>
+          </div>}
         </>
       )}
 

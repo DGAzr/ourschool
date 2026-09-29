@@ -65,8 +65,6 @@ const ReportsContainer: React.FC = () => {
     selectedStudentCalendarReport,
     calendarStudentLoading,
     fetchStudentCalendar,
-    assignmentReport,
-    assignmentLoading,
     reportCard,
     reportCardStudentId,
     setReportCardStudentId,
@@ -186,10 +184,7 @@ const ReportsContainer: React.FC = () => {
           )}
 
           {selectedView === 'assignments' && isAdmin && (
-            <AssignmentReport
-              assignmentReport={assignmentReport}
-              loading={assignmentLoading}
-            />
+            <AssignmentReport />
           )}
 
           {selectedView === 'students' && isAdmin && (

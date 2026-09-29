@@ -84,3 +84,15 @@ def get_query_heavy_operations(
 ):
     """Get operations that are slower than threshold (admin only)."""
     return find_query_heavy_operations(min_avg_time)
+
+
+@router.get("/requests")
+def request_metrics(
+    auth_user: Annotated[
+        AuthUser, Depends(require_admin_or_permission("performance:read"))
+    ],
+):
+    """Last 256 requests per route/process; connection acquisition includes ping/connect."""
+    from app.utils.request_performance import request_performance_snapshot
+
+    return request_performance_snapshot()

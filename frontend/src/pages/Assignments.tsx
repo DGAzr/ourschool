@@ -37,11 +37,16 @@ import { formatDateOnly } from '../utils/formatters'
 import { isOverdue } from '../utils/assignmentStatus'
 import { letterGrade } from '../utils/grading'
 
+import PageNavigation from '../components/assignments/PageNavigation'
+import { useAssignmentDetail } from '../hooks/useAssignmentDetail'
+import { useMediaQuery } from '../hooks/useMediaQuery'
+
 type StatusFilter = 'all' | 'open' | 'to_grade' | 'graded' | 'excused'
 
 const Assignments: React.FC = () => {
   const { user } = useAuth()
   const isAdmin = user?.role === 'admin'
+  const isDesktop = useMediaQuery('(min-width: 768px)')
   const { toast } = useToast()
   const navigate = useNavigate()
   const [searchParams, setSearchParams] = useSearchParams()
@@ -67,14 +72,21 @@ const Assignments: React.FC = () => {
     students,
     loading,
     error,
-    refetch,
-  } = useAssignments({ isAdmin, adminViewMode: 'grading', selectedSubject, enabled: isAdmin })
+    refetch, counts, pagination, pageKey,
+  } = useAssignments({ isAdmin, adminViewMode: 'grading', selectedSubject, enabled: isAdmin,
+    studentId: selectedStudent, templateId: templateFilter, termId: selectedTerm,
+    termBasis: 'assigned', tab: statusFilter, search: searchTerm,
+  })
 
   // Terms are admin-only and have no hook equivalent — loaded locally
   const [terms, setTerms] = useState<Term[]>([])
 
   // ── Selection ──
-  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set())
+  const [selection, setSelection] = useState({ key: '', ids: new Set<number>() })
+  const selectedIds = selection.key === pageKey ? selection.ids : new Set<number>()
+  const setSelectedIds = (value: React.SetStateAction<Set<number>>) => setSelection({
+    key: pageKey, ids: typeof value === 'function' ? value(selectedIds) : value,
+  })
   const [expandedId, setExpandedId] = useState<number | null>(null)
 
   // ── Bulk action state ──
@@ -101,69 +113,19 @@ const Assignments: React.FC = () => {
 
   const getSubjectById = (id: number) => subjects.find(s => s.id === id)
 
-  // ── Filter logic ──
-  const filteredAssignments = allAssignments.filter(a => {
-    const stu = students.find(s => s.id === a.student_id)
-    const stuName = stu ? `${stu.first_name} ${stu.last_name}`.toLowerCase() : ''
-    const tplName = a.template?.name?.toLowerCase() ?? ''
-
-    if (searchTerm && !stuName.includes(searchTerm.toLowerCase()) && !tplName.includes(searchTerm.toLowerCase())) return false
-    if (selectedStudent && a.student_id !== selectedStudent) return false
-    if (selectedSubject && a.template?.subject_id !== selectedSubject) return false
-    if (templateFilter && a.template_id !== templateFilter) return false
-    if (selectedTerm) {
-      const term = terms.find(t => t.id === selectedTerm)
-      if (term && a.assigned_date) {
-        if (a.assigned_date < term.start_date || a.assigned_date > term.end_date) return false
-      }
-    }
-
-    switch (statusFilter) {
-      case 'open': return a.status === 'not_started' || a.status === 'in_progress' || isOverdue(a)
-      case 'to_grade': return a.status === 'submitted' && !a.is_graded
-      case 'graded': return a.is_graded || a.status === 'graded'
-      case 'excused': return a.status === 'excused'
-      default: return true
-    }
-  })
-
-  // Sort by due date ascending (null last)
-  const sortedAssignments = [...filteredAssignments].sort((a, b) => {
-    if (!a.due_date && !b.due_date) return 0
-    if (!a.due_date) return 1
-    if (!b.due_date) return -1
-    return a.due_date.localeCompare(b.due_date)
-  })
-
-  // Status tab counts (across all assignments, ignoring status filter but respecting other filters)
-  const baseFiltered = allAssignments.filter(a => {
-    const stu = students.find(s => s.id === a.student_id)
-    const stuName = stu ? `${stu.first_name} ${stu.last_name}`.toLowerCase() : ''
-    const tplName = a.template?.name?.toLowerCase() ?? ''
-    if (searchTerm && !stuName.includes(searchTerm.toLowerCase()) && !tplName.includes(searchTerm.toLowerCase())) return false
-    if (selectedStudent && a.student_id !== selectedStudent) return false
-    if (selectedSubject && a.template?.subject_id !== selectedSubject) return false
-    if (templateFilter && a.template_id !== templateFilter) return false
-    if (selectedTerm) {
-      const term = terms.find(t => t.id === selectedTerm)
-      if (term && a.assigned_date) {
-        if (a.assigned_date < term.start_date || a.assigned_date > term.end_date) return false
-      }
-    }
-    return true
-  })
-
-  const tabCounts = {
-    all: baseFiltered.length,
-    open: baseFiltered.filter(a => a.status === 'not_started' || a.status === 'in_progress' || isOverdue(a)).length,
-    to_grade: baseFiltered.filter(a => a.status === 'submitted' && !a.is_graded).length,
-    graded: baseFiltered.filter(a => a.is_graded || a.status === 'graded').length,
-    excused: baseFiltered.filter(a => a.status === 'excused').length,
+  const detail = useAssignmentDetail(expandedId, pageKey)
+  const sortedAssignments = allAssignments.map(a => a.id === detail.data?.id ? detail.data : a)
+  const tabCounts = { all: counts.all ?? 0, open: counts.open ?? 0,
+    to_grade: counts.to_grade ?? 0, graded: counts.graded ?? 0, excused: counts.excused ?? 0 }
+  const studentMap = new Map(students.map(student => [student.id, student]))
+  const openEditor = async (assignment: StudentAssignment) => {
+    try { setEditingAssignment(await assignmentsApi.getStudentAssignment(assignment.id)) }
+    catch (err) { toast(getErrorMessage(err, 'Unable to load assignment'), 'danger') }
   }
 
   // ── Handlers ──
   const studentNameFor = (assignment: StudentAssignment | null) => {
-    const stu = assignment ? students.find(s => s.id === assignment.student_id) : undefined
+    const stu = assignment ? studentMap.get(assignment.student_id) : undefined
     return stu ? `${stu.first_name} ${stu.last_name}` : 'this student'
   }
 
@@ -288,7 +250,7 @@ const Assignments: React.FC = () => {
   const actionItemsFor = (assignment: StudentAssignment): ActionMenuEntry[] => {
     const isActive = !assignment.is_graded && assignment.status !== 'excused'
     return [
-      { label: 'Edit assigned work', onSelect: () => setEditingAssignment(assignment) },
+      { label: 'Edit assigned work', onSelect: () => { void openEditor(assignment) } },
       'separator',
       ...(isActive
         ? [
@@ -336,7 +298,7 @@ const Assignments: React.FC = () => {
           {isAdmin && !loading && (
             <p className="mt-1.5 text-[13px] text-muted">
               Every assignment given to a student — current and past.{' '}
-              <span className="font-mono">{baseFiltered.length}</span> shown
+              <span className="font-mono">{tabCounts.all}</span> matching
               {tabCounts.to_grade > 0 && (
                 <>
                   {' · '}
@@ -375,7 +337,7 @@ const Assignments: React.FC = () => {
       {/* ════════════════════════════════════════
           ADMIN VIEW
       ════════════════════════════════════════ */}
-      {!loading && isAdmin && (
+      {isAdmin && (
         <>
           {/* Status filter tabs */}
           <div className="flex items-center gap-1.5 mb-4 flex-wrap">
@@ -475,12 +437,16 @@ const Assignments: React.FC = () => {
             )
           })()}
 
+          <PageNavigation {...pagination} />
+          {detail.loading && <p role="status" className="text-muted">Loading assignment details…</p>}
+          {detail.error && <p role="alert" className="text-neg-fg">{detail.error}</p>}
+
           {/* Mobile cards keep every key field and action reachable without
               squeezing a seven-column table into a phone viewport. */}
-          {sortedAssignments.length > 0 && (
-            <div className="space-y-3 md:hidden">
+          {!isDesktop && sortedAssignments.length > 0 && (
+            <div className="space-y-3">
               {sortedAssignments.map((assignment) => {
-                const stu = students.find((student) => student.id === assignment.student_id)
+                const stu = studentMap.get(assignment.student_id)
                 const sub = assignment.template?.subject_id
                   ? getSubjectById(assignment.template.subject_id)
                   : undefined
@@ -592,9 +558,7 @@ const Assignments: React.FC = () => {
           )}
 
           {/* Desktop/tablet table */}
-          <div className={`bg-panel border border-line rounded-card overflow-hidden ${
-            sortedAssignments.length > 0 ? 'hidden md:block' : ''
-          }`}>
+          {(isDesktop || sortedAssignments.length === 0) && <div className="bg-panel border border-line rounded-card overflow-hidden">
             {sortedAssignments.length === 0 ? (
               <div className="py-14 text-center">
                 <p className="text-[15px] font-semibold text-ink-2 mb-1">No assignments match your filters</p>
@@ -629,7 +593,7 @@ const Assignments: React.FC = () => {
                 </thead>
                 <tbody>
                   {sortedAssignments.map((assignment, idx) => {
-                    const stu = students.find(s => s.id === assignment.student_id)
+                    const stu = studentMap.get(assignment.student_id)
                     const sub = assignment.template?.subject_id ? getSubjectById(assignment.template.subject_id) : undefined
                     const overdue = isOverdue(assignment)
                     const effectiveStatus = overdue ? 'overdue' : assignment.status
@@ -827,7 +791,7 @@ const Assignments: React.FC = () => {
                 </tbody>
               </table>
             )}
-          </div>
+          </div>}
 
           {/* Bulk action bar */}
           {selectedIds.size > 0 && (

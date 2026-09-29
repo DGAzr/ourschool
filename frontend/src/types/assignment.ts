@@ -60,6 +60,8 @@ export interface AssignmentTypeUpdate {
 }
 
 export interface AssignmentTemplate {
+  /** List previews must be replaced by detail before editing. */
+  is_summary?: boolean
   id: number
   name: string
   description?: string
@@ -86,6 +88,7 @@ export interface AssignmentTemplate {
 }
 
 export interface StudentAssignment {
+  is_summary?: boolean
   id: number
   template_id: number
   student_id: number

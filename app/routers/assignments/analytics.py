@@ -20,7 +20,9 @@ from datetime import date
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy.orm import Session, joinedload
+from sqlalchemy.orm import Session
+from sqlalchemy import func
+from app.models.subject import Subject
 
 from app.core.database import get_db
 from app.crud import reports as crud_reports
@@ -79,50 +81,43 @@ def get_student_progress(
     else:
         student = auth_user
 
-    # Get all assignments for this student grouped by subject
-    assignments = (
-        db.query(StudentAssignment)
-        .options(
-            joinedload(StudentAssignment.template).joinedload(
-                AssignmentTemplate.subject
-            )
+    # Aggregate scalar columns only; retain the existing all-work denominator.
+    graded = StudentAssignment.is_graded.is_(
+        True
+    ) & StudentAssignment.points_earned.is_not(None)
+    rows = (
+        db.query(
+            Subject.id.label("subject_id"),
+            Subject.name.label("subject_name"),
+            Subject.color.label("subject_color"),
+            func.count(StudentAssignment.id).label("total_assignments"),
+            func.count(StudentAssignment.id)
+            .filter(graded)
+            .label("completed_assignments"),
+            func.coalesce(
+                func.sum(StudentAssignment.points_earned).filter(graded), 0
+            ).label("total_points_earned"),
+            func.sum(
+                func.coalesce(
+                    func.nullif(StudentAssignment.custom_max_points, 0),
+                    func.nullif(AssignmentTemplate.max_points, 0),
+                    100,
+                )
+            ).label("total_points_possible"),
         )
+        .select_from(StudentAssignment)
+        .join(AssignmentTemplate)
+        .join(Subject)
         .filter(StudentAssignment.student_id == student_id)
+        .group_by(Subject.id)
+        .order_by(Subject.id)
         .all()
     )
-
-    # Group by subject
-    subjects_data = {}
-    total_assignments = len(assignments)
-    total_completed = 0
-    total_points_earned = 0
-    total_points_possible = 0
-
-    for assignment in assignments:
-        subject = assignment.template.subject
-        subject_id = subject.id
-
-        if subject_id not in subjects_data:
-            subjects_data[subject_id] = {
-                "subject_id": subject_id,
-                "subject_name": subject.name,
-                "subject_color": subject.color,
-                "total_assignments": 0,
-                "completed_assignments": 0,
-                "total_points_earned": 0,
-                "total_points_possible": 0,
-            }
-
-        subjects_data[subject_id]["total_assignments"] += 1
-        subjects_data[subject_id]["total_points_possible"] += assignment.max_points
-
-        if assignment.is_graded and assignment.points_earned is not None:
-            subjects_data[subject_id]["completed_assignments"] += 1
-            subjects_data[subject_id]["total_points_earned"] += assignment.points_earned
-            total_completed += 1
-            total_points_earned += assignment.points_earned
-
-        total_points_possible += assignment.max_points
+    subjects_data = {row.subject_id: dict(row._mapping) for row in rows}
+    total_assignments = sum(row.total_assignments for row in rows)
+    total_completed = sum(row.completed_assignments for row in rows)
+    total_points_earned = sum(row.total_points_earned for row in rows)
+    total_points_possible = sum(row.total_points_possible for row in rows)
 
     # Calculate subject progress
     subject_progress = []
@@ -174,90 +169,73 @@ def get_assignment_dashboard(
     current_user: Annotated[User, Depends(get_current_active_user)],
 ):
     """Get assignment dashboard overview for admin or student."""
+    a = StudentAssignment
     if current_user.role == UserRole.ADMIN:
-        # Admin dashboard - overview of all managed students
-        students = db.query(User).filter(User.role == UserRole.STUDENT).all()
-
-        dashboard_data = {
-            "total_students": len(students),
-            "total_templates": db.query(AssignmentTemplate).count(),
-            "active_assignments": db.query(StudentAssignment)
-            .join(User, StudentAssignment.student_id == User.id)
-            .filter(
-                User.role == UserRole.STUDENT,
-                StudentAssignment.status.in_(
-                    [AssignmentStatus.NOT_STARTED, AssignmentStatus.IN_PROGRESS]
-                ),
+        rows = (
+            db.query(
+                User.id,
+                User.first_name,
+                User.last_name,
+                func.count(a.id).label("total"),
+                func.count(a.id).filter(a.is_graded).label("completed"),
+                func.count(a.id)
+                .filter(
+                    (a.status == AssignmentStatus.SUBMITTED) & a.is_graded.is_(False)
+                )
+                .label("pending"),
+                func.count(a.id)
+                .filter(
+                    a.status.in_(
+                        [AssignmentStatus.NOT_STARTED, AssignmentStatus.IN_PROGRESS]
+                    )
+                )
+                .label("active"),
             )
-            .count(),
-            "pending_grades": db.query(StudentAssignment)
-            .join(User, StudentAssignment.student_id == User.id)
-            .filter(
-                User.role == UserRole.STUDENT,
-                StudentAssignment.status == AssignmentStatus.SUBMITTED,
-                StudentAssignment.is_graded.is_(False),
-            )
-            .count(),
-            "students": [],
+            .outerjoin(a, a.student_id == User.id)
+            .filter(User.role == UserRole.STUDENT)
+            .group_by(User.id)
+            .order_by(User.id)
+            .all()
+        )
+        return {
+            "total_students": len(rows),
+            "total_templates": db.query(func.count(AssignmentTemplate.id)).scalar(),
+            "active_assignments": sum(r.active for r in rows),
+            "pending_grades": sum(r.pending for r in rows),
+            "students": [
+                dict(
+                    id=r.id,
+                    name=f"{r.first_name} {r.last_name}",
+                    total_assignments=r.total,
+                    completed_assignments=r.completed,
+                    pending_grades=r.pending,
+                )
+                for r in rows
+            ],
         }
 
-        for student in students:
-            student_assignments = (
-                db.query(StudentAssignment)
-                .filter(StudentAssignment.student_id == student.id)
-                .all()
-            )
-
-            total = len(student_assignments)
-            completed = len([a for a in student_assignments if a.is_graded])
-            pending = len(
-                [
-                    a
-                    for a in student_assignments
-                    if a.status == AssignmentStatus.SUBMITTED and not a.is_graded
-                ]
-            )
-
-            dashboard_data["students"].append(
-                {
-                    "id": student.id,
-                    "name": f"{student.first_name} {student.last_name}",
-                    "total_assignments": total,
-                    "completed_assignments": completed,
-                    "pending_grades": pending,
-                }
-            )
-
-        return dashboard_data
-
-    # Student dashboard
-    assignments = (
-        db.query(StudentAssignment)
-        .filter(StudentAssignment.student_id == current_user.id)
-        .all()
+    total, completed, in_progress, overdue = (
+        db.query(
+            func.count(a.id),
+            func.count(a.id).filter(a.is_graded),
+            func.count(a.id).filter(a.status == AssignmentStatus.IN_PROGRESS),
+            func.count(a.id).filter(a.status == AssignmentStatus.OVERDUE),
+        )
+        .filter(a.student_id == current_user.id)
+        .one()
     )
-
-    total = len(assignments)
-    completed = len([a for a in assignments if a.is_graded])
-    in_progress = len(
-        [a for a in assignments if a.status == AssignmentStatus.IN_PROGRESS]
-    )
-    overdue = len([a for a in assignments if a.status == AssignmentStatus.OVERDUE])
-
     return {
         "total_assignments": total,
         "completed_assignments": completed,
         "in_progress_assignments": in_progress,
         "overdue_assignments": overdue,
-        "upcoming_due": db.query(StudentAssignment)
+        "upcoming_due": db.query(a)
         .filter(
-            StudentAssignment.student_id == current_user.id,
-            StudentAssignment.due_date >= date.today(),
-            StudentAssignment.status.in_(
-                [AssignmentStatus.NOT_STARTED, AssignmentStatus.IN_PROGRESS]
-            ),
+            a.student_id == current_user.id,
+            a.due_date >= date.today(),
+            a.status.in_([AssignmentStatus.NOT_STARTED, AssignmentStatus.IN_PROGRESS]),
         )
-        .order_by(StudentAssignment.due_date.asc())
+        .order_by(a.due_date, a.id)
         .limit(5)
         .all(),
     }

@@ -48,6 +48,18 @@ export const isAssignmentTemplateExport = (value: unknown): value is AssignmentT
   return typeof record.name === 'string' && typeof record.assignment_type === 'string'
 }
 
+export const assignmentPage = (params: Record<string, unknown>, signal?: AbortSignal): Promise<import('../hooks/usePagedData').Page<StudentAssignment>> =>
+  api.get(`/assignments/page?${pageParams(params)}`, signal)
+
+export const templatePage = (params: Record<string, unknown>, signal?: AbortSignal): Promise<import('../hooks/usePagedData').Page<AssignmentTemplate>> =>
+  api.get(`/assignments/templates/page?${pageParams(params)}`, signal)
+
+function pageParams(params: Record<string, unknown>): string {
+  return new URLSearchParams(Object.entries(params)
+    .filter(([, value]) => value !== undefined && value !== null && value !== '')
+    .map(([key, value]) => [key, String(value)])).toString()
+}
+
 export const assignmentsApi = {
   // Assignment Template Management
   async getAll(params?: {

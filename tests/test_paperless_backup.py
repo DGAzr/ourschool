@@ -202,7 +202,11 @@ def test_paperless_backup_round_trip(
     assert materials[0]["external_id"] == doc_lesson["external_id"]
 
     # Template attachment survived (template matched by name after re-create).
-    r = client.get("/api/assignments/templates", headers=admin_headers)
+    r = client.get(
+        "/api/assignments/templates",
+        params={"search": template["name"]},
+        headers=admin_headers,
+    )
     assert r.status_code == 200, r.text
     restored_template = [t for t in r.json() if t["name"] == template["name"]][0]
     assert [m["title"] for m in restored_template["paperless_materials"]] == [

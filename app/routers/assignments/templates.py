@@ -21,7 +21,6 @@ from datetime import date, datetime, timezone
 from typing import Annotated, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import func
 from sqlalchemy.orm import Session, joinedload
 
 from app.core.database import get_db
@@ -40,7 +39,7 @@ from app.core.dual_auth import (
     require_admin_or_permission,
     require_user_or_permission,
 )
-from app.enums import AssignmentStatus
+from app.crud.assignment_reads import template_stats
 from app.crud import assignment_types as crud_types
 from app.routers.validators import validate_students
 from app.schemas.assignment import (
@@ -77,36 +76,13 @@ def _attach_template_stats(db: Session, templates: List[AssignmentTemplate]) -> 
     in_progress, overdue, submitted), excluding graded and excused. This is the
     count shown on the badge that links to the active-work view.
     """
-    _active_statuses = [
-        AssignmentStatus.NOT_STARTED,
-        AssignmentStatus.IN_PROGRESS,
-        AssignmentStatus.OVERDUE,
-        AssignmentStatus.SUBMITTED,
-    ]
+    stats = template_stats(db, [template.id for template in templates])
     for template in templates:
-        template.total_assigned = (
-            db.query(StudentAssignment)
-            .filter(StudentAssignment.template_id == template.id)
-            .count()
+        values = stats.get(
+            template.id, dict(total_assigned=0, active_assigned=0, average_grade=None)
         )
-        template.active_assigned = (
-            db.query(StudentAssignment)
-            .filter(
-                StudentAssignment.template_id == template.id,
-                StudentAssignment.status.in_(_active_statuses),
-            )
-            .count()
-        )
-
-        avg_result = (
-            db.query(func.avg(StudentAssignment.percentage_grade))
-            .filter(
-                StudentAssignment.template_id == template.id,
-                StudentAssignment.is_graded,
-            )
-            .scalar()
-        )
-        template.average_grade = float(avg_result) if avg_result else None
+        for key, value in values.items():
+            setattr(template, key, value)
 
 
 # Assignment Template Management
@@ -262,7 +238,12 @@ def get_assignment_templates(
             | AssignmentTemplate.description.ilike(f"%{search}%")
         )
 
-    templates = query.offset(skip).limit(limit).all()
+    templates = (
+        query.order_by(AssignmentTemplate.name, AssignmentTemplate.id)
+        .offset(skip)
+        .limit(limit)
+        .all()
+    )
 
     _attach_template_stats(db, templates)
 

@@ -16,109 +16,69 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-import { useState, useEffect, useCallback } from 'react'
-import { assignmentsApi } from '../services/assignments'
+import { useState, useEffect } from 'react'
+import { assignmentPage, templatePage, assignmentsApi } from '../services/assignments'
 import { subjectsApi } from '../services/subjects'
 import { AssignmentTemplate, Subject, User, StudentAssignment } from '../types'
+import { usePagedData, useDebouncedSearch } from './usePagedData'
 
 interface UseAssignmentsProps {
   isAdmin: boolean
   adminViewMode: 'templates' | 'grading'
   selectedSubject: number | null
   includeArchived?: boolean
-  /** Set false when another component on the page owns this data. */
   enabled?: boolean
+  search?: string
+  assignmentType?: string
+  studentId?: number | null
+  templateId?: number | null
+  termId?: number | null
+  termBasis?: 'assigned' | 'original_due' | 'effective'
+  tab?: string
 }
 
-export const useAssignments = ({ isAdmin, adminViewMode, selectedSubject, includeArchived, enabled = true }: UseAssignmentsProps) => {
-  const [templates, setTemplates] = useState<AssignmentTemplate[]>([])
-  const [studentAssignments, setStudentAssignments] = useState<StudentAssignment[]>([])
-  const [submittedAssignments] = useState<StudentAssignment[]>([])
-  const [allAssignments, setAllAssignments] = useState<StudentAssignment[]>([])
+export const useAssignments = ({ isAdmin, adminViewMode, selectedSubject, includeArchived,
+  enabled = true, search = '', assignmentType, studentId, templateId, termId,
+  termBasis = 'effective', tab = 'all',
+}: UseAssignmentsProps) => {
   const [subjects, setSubjects] = useState<Subject[]>([])
   const [students, setStudents] = useState<User[]>([])
-  const [loading, setLoading] = useState(true)
+  const [metadata, setMetadata] = useState({ loaded: false, error: null as string | null })
   const [error, setError] = useState<string | null>(null)
-
-  // No synchronous spinner toggle here: loading starts true for the initial
-  // load, and user-triggered refreshes go through `refetch` below. State is
-  // only set from promise callbacks, never synchronously.
-  const fetchData = useCallback(() => {
-    if (!enabled) {
-      // Async like the real loads so setState stays out of the effect body.
-      return Promise.resolve().then(() => setLoading(false))
-    }
-    const load = isAdmin
-      ? // Admin sees assignment templates and submitted assignments
-        Promise.all([
-          assignmentsApi.getAll({
-            subject_id: selectedSubject || undefined,
-            include_archived: includeArchived || undefined,
-          }),
-          subjectsApi.getAll(),
-          assignmentsApi.getStudents(),
-          // In grading mode, also fetch all assignments for admin control;
-          // a failure here falls back to an empty list without failing the load
-          adminViewMode === 'grading'
-            ? assignmentsApi
-                .getAllAssignmentsForGrading({ subject_id: selectedSubject || undefined })
-                .catch(() => [] as StudentAssignment[])
-            : Promise.resolve(null),
-        ]).then(([templatesData, subjectsData, studentsData, allAssignmentsData]) => {
-          setTemplates(templatesData || [])
-          setSubjects(subjectsData || [])
-          setStudents(studentsData || [])
-          if (adminViewMode === 'grading') {
-            setAllAssignments(allAssignmentsData || [])
-          }
-          setError(null)
-        })
-      : // Students see their assigned assignments
-        Promise.all([
-          assignmentsApi.getMyAssignments({ subject_id: selectedSubject || undefined }),
-          subjectsApi.getAll(),
-        ]).then(([assignmentsData, subjectsData]) => {
-          setStudentAssignments(assignmentsData || [])
-          setSubjects(subjectsData || [])
-          setError(null)
-        })
-
-    return load
-      .catch(() => {
-        setError('Failed to load assignments. Please check your connection and ensure you are logged in.')
-
-        // Set empty arrays as fallbacks
-        setTemplates([])
-        setStudentAssignments([])
-        setAllAssignments([])
-        setSubjects([])
-      })
-      .finally(() => {
-        setLoading(false)
-      })
-  }, [isAdmin, selectedSubject, adminViewMode, includeArchived, enabled])
-
-  // User-triggered refresh: shows the loading spinner while refetching.
-  const refetch = useCallback(async () => {
-    setLoading(true)
-    await fetchData()
-  }, [fetchData])
+  const settledSearch = useDebouncedSearch(search)
+  const templatesMode = isAdmin && adminViewMode === 'templates'
+  const templateData = usePagedData<AssignmentTemplate>({
+    subject_id: selectedSubject, archived: !!includeArchived,
+    search: settledSearch, assignment_type: assignmentType,
+  }, templatePage, enabled && templatesMode)
+  const assignmentData = usePagedData<StudentAssignment>({
+    subject_id: selectedSubject, student_id: studentId, template_id: templateId,
+    term_id: termId, term_basis: termBasis, student_view: !isAdmin, tab,
+    search: settledSearch, assignment_type: assignmentType,
+  }, assignmentPage, enabled && !templatesMode)
 
   useEffect(() => {
-    fetchData()
-  }, [fetchData])
-
+    if (!enabled) return
+    let cancelled = false
+    Promise.all([subjectsApi.getAll(), isAdmin ? assignmentsApi.getStudents() : Promise.resolve([])])
+      .then(([subjectData, studentData]) => {
+        if (!cancelled) {
+          setSubjects(subjectData); setStudents(studentData)
+          setMetadata({ loaded: true, error: null })
+        }
+      }).catch(() => { if (!cancelled) setMetadata({ loaded: true, error: 'Unable to load students and subjects' }) })
+    return () => { cancelled = true }
+  }, [isAdmin, enabled])
+  const page = templatesMode ? templateData : assignmentData
   return {
-    templates,
-    studentAssignments,
-    submittedAssignments,
-    allAssignments,
-    subjects,
-    students,
-    loading,
-    error,
-    refetch,
-    setTemplates,
-    setError
+    templates: templateData.items,
+    studentAssignments: isAdmin ? [] : assignmentData.items,
+    submittedAssignments: [] as StudentAssignment[],
+    allAssignments: isAdmin ? assignmentData.items : [],
+    subjects, students,
+    loading: enabled && (!metadata.loaded || page.loading),
+    error: error ?? metadata.error ?? page.error,
+    refetch: () => { setError(null); page.refetch() },
+    setError, counts: page.counts, pagination: page.pagination, pageKey: page.pageKey,
   }
 }

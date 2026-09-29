@@ -40,8 +40,6 @@ import {
   URGENCY_LABELS,
   URGENCY_ORDER,
   UrgencyGroup,
-  bucketTab,
-  inTerm,
   urgencyGroup,
 } from '../../utils/studentAssignments'
 
@@ -57,6 +55,8 @@ const EMPTY_COPY: Record<StudentTab, { title: string; hint: string }> = {
   done: { title: 'No finished work yet', hint: 'Graded assignments will collect here.' },
 }
 
+import PageNavigation from './PageNavigation'
+
 const StudentAssignmentsView: React.FC = () => {
   const { user } = useAuth()
   const { types: assignmentTypes } = useAssignmentTypes()
@@ -66,13 +66,13 @@ const StudentAssignmentsView: React.FC = () => {
   const [selectedTerm, setSelectedTerm] = useState<number | null | undefined>(undefined)
   const [terms, setTerms] = useState<Term[]>([])
 
-  const { searchTerm, setSearchTerm, selectedSubject, setSelectedSubject, filterStudentAssignments } =
+  const { searchTerm, setSearchTerm, selectedSubject, setSelectedSubject } =
     useAssignmentFilters()
 
-  const { studentAssignments, subjects, loading, error, refetch, setError } = useAssignments({
+  const { studentAssignments, subjects, loading, error, refetch, setError, counts, pagination } = useAssignments({
     isAdmin: false,
     adminViewMode: 'grading',
-    selectedSubject,
+    selectedSubject, search: searchTerm, tab: activeTab, termId: selectedTerm, termBasis: 'original_due',
   })
 
   const [submittingAssignment, setSubmittingAssignment] = useState<StudentAssignment | null>(null)
@@ -119,22 +119,12 @@ const StudentAssignmentsView: React.FC = () => {
   }
 
   // ── Bucketing ──
-  const searched = filterStudentAssignments(studentAssignments)
-
-  const tabCounts = useMemo(() => {
-    const counts: Record<StudentTab, number> = { todo: 0, submitted: 0, done: 0 }
-    for (const a of searched) counts[bucketTab(a)]++
-    return counts
-  }, [searched])
-
-  const visible = useMemo(() => {
-    let list = searched.filter(a => bucketTab(a) === activeTab)
-    if (activeTab === 'done' && selectedTerm) {
-      const term = terms.find(t => t.id === selectedTerm)
-      if (term) list = list.filter(a => inTerm(a, term))
-    }
-    return list
-  }, [searched, activeTab, selectedTerm, terms])
+  const tabCounts = { todo: counts.todo ?? 0, submitted: counts.submitted ?? 0, done: counts.done ?? 0 }
+  const visible = studentAssignments
+  const openOwnEditor = async (assignment: StudentAssignment) => {
+    try { setEditingOwn(await assignmentsApi.getStudentAssignment(assignment.id)) }
+    catch { setError('Unable to load assignment details') }
+  }
 
   // To-do tab: section by urgency, preserving the API's due-date ordering.
   const todoSections = useMemo(() => {
@@ -163,13 +153,13 @@ const StudentAssignmentsView: React.FC = () => {
           onStart={handleStart}
           onComplete={handleComplete}
           onView={a => setDetailAssignmentId(a.id)}
-          onEditSelf={setEditingOwn}
+          onEditSelf={openOwnEditor}
         />
       ))}
     </div>
   )
 
-  if (loading) {
+  if (loading && subjects.length === 0) {
     return (
       <div className="flex items-center justify-center py-16">
         <div className="w-6 h-6 border-2 border-line border-t-accent rounded-full animate-spin" />
@@ -181,6 +171,8 @@ const StudentAssignmentsView: React.FC = () => {
 
   return (
     <>
+      <PageNavigation {...pagination} />
+      {loading && <p role="status">Loading assignments…</p>}
       {error && (
         <div className="mb-4 px-4 py-3 rounded-card text-[13px] text-neg-fg bg-neg-bg border border-neg-fg/20">
           {error}

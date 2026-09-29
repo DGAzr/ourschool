@@ -377,8 +377,19 @@ def _recalculate_term_subject(
         .first()
     )
     assignments = (
-        db.query(StudentAssignment)
-        .join(AssignmentTemplate)
+        db.query(
+            StudentAssignment.points_earned,
+            StudentAssignment.is_graded,
+            StudentAssignment.status,
+            func.coalesce(
+                func.nullif(StudentAssignment.custom_max_points, 0),
+                AssignmentTemplate.max_points,
+            ).label("max_points"),
+            AssignmentTemplate.assignment_type,
+        )
+        .join(
+            AssignmentTemplate, StudentAssignment.template_id == AssignmentTemplate.id
+        )
         .filter(
             StudentAssignment.student_id == student_id,
             AssignmentTemplate.subject_id == subject_id,
@@ -423,7 +434,7 @@ def _recalculate_term_subject(
     ]
     earned, possible, percentage = compute_weighted_grade(
         (
-            (item.points_earned, item.max_points, item.template.assignment_type)
+            (item.points_earned, item.max_points, item.assignment_type)
             for item in graded
         ),
         get_assignment_type_weights(db),

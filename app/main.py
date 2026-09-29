@@ -33,6 +33,7 @@ from app.core.logging import (
 )
 from app.core.error_tracking import ErrorHandler
 from app.core.config import settings
+from app.utils.request_performance import RequestPerformanceMiddleware
 from app.models.user import User
 from app.routers.auth import get_current_admin_user
 from app.routers import (
@@ -87,6 +88,9 @@ app = FastAPI(
     redoc_url="/redoc" if settings.enable_api_docs else None,
     openapi_url="/openapi.json" if settings.enable_api_docs else None,
 )
+
+
+app.add_middleware(RequestPerformanceMiddleware)
 
 # Add error handlers
 app.add_exception_handler(HTTPException, ErrorHandler.http_exception_handler)

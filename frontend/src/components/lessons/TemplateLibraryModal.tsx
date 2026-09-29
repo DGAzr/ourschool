@@ -16,11 +16,13 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 
 import Modal from '../ui/Modal/Modal'
 import { Button, EmptyState, Input, Spinner } from '../ui'
-import { assignmentsApi } from '../../services/assignments'
+import { templatePage } from '../../services/assignments'
+import { usePagedData, useDebouncedSearch } from '../../hooks/usePagedData'
+import PageNavigation from '../assignments/PageNavigation'
 import { AssignmentTemplate, Subject } from '../../types'
 
 interface TemplateLibraryModalProps {
@@ -47,33 +49,10 @@ const TemplateLibraryModal: React.FC<TemplateLibraryModalProps> = ({
   onCreateNew,
 }) => {
   const [search, setSearch] = useState('')
-  // The fetched result is tagged with the subject key it was fetched for, so a
-  // subject change reads as "loading" without a synchronous setState reset in
-  // the effect (which the hooks lint rule forbids).
-  const [fetched, setFetched] = useState<{
-    key: number | null
-    data: AssignmentTemplate[]
-  } | null>(null)
-
-  const subjectKey = subjectId ?? null
-  const loading = isOpen && (fetched === null || fetched.key !== subjectKey)
-  const templates = loading ? [] : (fetched?.data ?? [])
-
-  useEffect(() => {
-    if (!isOpen) return
-    let cancelled = false
-    assignmentsApi
-      .getAll(subjectId ? { subject_id: subjectId } : undefined)
-      .then((data) => {
-        if (!cancelled) setFetched({ key: subjectKey, data: data || [] })
-      })
-      .catch(() => {
-        if (!cancelled) setFetched({ key: subjectKey, data: [] })
-      })
-    return () => {
-      cancelled = true
-    }
-  }, [isOpen, subjectId, subjectKey])
+  const settledSearch = useDebouncedSearch(search)
+  const { items: templates, loading, error, pagination } = usePagedData<AssignmentTemplate>({
+    subject_id: subjectId, search: settledSearch, with_stats: false,
+  }, templatePage, isOpen)
 
   const subjectName = (id: number): string =>
     subjects.find((s) => s.id === id)?.name ?? ''
@@ -81,8 +60,7 @@ const TemplateLibraryModal: React.FC<TemplateLibraryModalProps> = ({
   const excluded = new Set(excludeTemplateIds)
   const visible = (templates ?? []).filter(
     (t) =>
-      !excluded.has(t.id) &&
-      t.name.toLowerCase().includes(search.toLowerCase())
+      !excluded.has(t.id)
   )
 
   const controls = (
@@ -100,13 +78,15 @@ const TemplateLibraryModal: React.FC<TemplateLibraryModalProps> = ({
 
   return (
     <Modal isOpen={isOpen} onClose={onClose} title="Template library" size="lg">
+      {error && <p role="alert" className="text-neg-fg">{error}</p>}
+      {controls}
+      <PageNavigation {...pagination} />
       {loading ? (
         <div className="flex justify-center py-10">
           <Spinner />
         </div>
       ) : visible.length === 0 ? (
         <>
-          {controls}
           <EmptyState
             title="No templates to link"
             subtext='No templates match. Create one right here with "New assignment".'
@@ -114,7 +94,6 @@ const TemplateLibraryModal: React.FC<TemplateLibraryModalProps> = ({
         </>
       ) : (
         <div className="flex flex-col gap-2">
-          {controls}
           {visible.map((template) => (
             <div
               key={template.id}

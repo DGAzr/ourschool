@@ -18,6 +18,7 @@
 
 import { useState, useEffect, useCallback, useEffectEvent } from 'react'
 import { useAuth } from '../../../contexts/AuthContext'
+import { api } from '../../../services/api'
 import { reportsApi } from '../../../services/reports'
 import {
   StudentReport,
@@ -27,7 +28,6 @@ import {
   AcademicYear,
   StudentAttendanceReport,
   BulkAttendanceReport,
-  AssignmentReport,
   ReportCard
 } from '../../../types'
 import { Term } from '../../../types/term'
@@ -74,8 +74,6 @@ interface UseReportsDataReturn {
   fetchStudentCalendar: (studentId: number) => Promise<void>
 
   // Assignment report data
-  assignmentReport: AssignmentReport | null
-  assignmentLoading: boolean
   
   // Report card data
   reportCard: ReportCard | null
@@ -128,8 +126,6 @@ export const useReportsData = (): UseReportsDataReturn => {
   const [calendarStudentLoading, setCalendarStudentLoading] = useState(false)
   
   // Assignment report states
-  const [assignmentReport, setAssignmentReport] = useState<AssignmentReport | null>(null)
-  const [assignmentLoading, setAssignmentLoading] = useState(false)
   
   // Report card states
   const [reportCard, setReportCard] = useState<ReportCard | null>(null)
@@ -172,7 +168,7 @@ export const useReportsData = (): UseReportsDataReturn => {
               .then(setStudentProgress)
           })
         } else if (selectedView === 'assignments' && isAdmin) {
-          return fetchAssignmentReport()
+          return Promise.resolve() // AssignmentReport owns its paged queries.
         } else if (selectedView === 'reportcard') {
           return loadReportCardOptions()
         }
@@ -183,18 +179,6 @@ export const useReportsData = (): UseReportsDataReturn => {
       .finally(() => {
         setLoading(false)
       })
-  }
-
-  const fetchAssignmentReport = async () => {
-    try {
-      setAssignmentLoading(true)
-      const data = await reportsApi.getAssignmentReport()
-      setAssignmentReport(data)
-    } catch (err) {
-      setError('Failed to load assignment report')
-    } finally {
-      setAssignmentLoading(false)
-    }
   }
 
   const loadReportCardOptions = async () => {
@@ -210,7 +194,7 @@ export const useReportsData = (): UseReportsDataReturn => {
 
       if (isAdmin) {
         // Load available students for admin
-        const assignmentData = await reportsApi.getAssignmentReport()
+        const assignmentData = await api.get('/reports/admin/assignment-options')
         setAvailableStudentsForReportCard(assignmentData.available_students)
       } else {
         // For students, only show themselves
@@ -415,8 +399,6 @@ export const useReportsData = (): UseReportsDataReturn => {
     selectedStudentCalendarReport,
     calendarStudentLoading,
     fetchStudentCalendar,
-    assignmentReport,
-    assignmentLoading,
     reportCard,
     reportCardStudentId,
     setReportCardStudentId,

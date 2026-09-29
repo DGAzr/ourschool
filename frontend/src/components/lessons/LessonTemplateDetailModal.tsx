@@ -23,7 +23,9 @@ import { useNavigate } from 'react-router-dom'
 import Modal from '../ui/Modal'
 import Button from '../ui/Button'
 import { AssignmentInfo } from '../assignments/AssignmentInfo'
-import { assignmentsApi } from '../../services/assignments'
+import { assignmentsApi, assignmentPage } from '../../services/assignments'
+import { usePagedData } from '../../hooks/usePagedData'
+import PageNavigation from '../assignments/PageNavigation'
 import { AssignmentTemplate, StudentAssignment } from '../../types/assignment'
 import {
   LessonStudentSummary,
@@ -76,11 +78,12 @@ const DetailContent: React.FC<DetailContentProps> = ({
 }) => {
   const navigate = useNavigate()
   const [template, setTemplate] = useState<AssignmentTemplate | null>(null)
-  const [gradingAssignments, setGradingAssignments] = useState<
-    StudentAssignment[]
-  >([])
   const [error, setError] = useState(false)
   const templateId = link.template_id ?? null
+  const { items: gradingAssignments, pagination, error: pageError } = usePagedData<StudentAssignment>({
+    template_id: templateId, lesson_id: lessonId,
+  }, assignmentPage, templateId !== null)
+
 
   useEffect(() => {
     if (templateId == null) return
@@ -89,18 +92,9 @@ const DetailContent: React.FC<DetailContentProps> = ({
       .getById(templateId)
       .then((t) => { if (!cancelled) setTemplate(t) })
       .catch(() => { if (!cancelled) setError(true) })
-    assignmentsApi
-      .getTemplateAssignments(templateId)
-      .then((assignments) => {
-        if (!cancelled) {
-          setGradingAssignments(
-            assignments.filter((assignment) => assignment.lesson_id === lessonId)
-          )
-        }
-      })
-      .catch(() => {})
     return () => { cancelled = true }
-  }, [lessonId, templateId])
+  }, [templateId])
+
 
   const summary = link.template as LessonTemplateSummary
 
@@ -157,6 +151,8 @@ const DetailContent: React.FC<DetailContentProps> = ({
           <p className="text-[13px] text-faint">Loading details…</p>
         )}
 
+        {pageError && <p role="alert">{pageError}</p>}
+        <PageNavigation {...pagination} />
         {gradingAssignments.length > 0 && (
           <div className="border-t border-line pt-4">
             <p className="text-[11px] font-semibold text-faint uppercase tracking-[.06em] mb-2">

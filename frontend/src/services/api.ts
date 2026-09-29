@@ -115,7 +115,7 @@ export const getErrorMessage = (err: unknown, fallback = 'An unexpected error oc
   err instanceof Error && err.message ? err.message : fallback
 
 export const api = {
-  get: (endpoint: string) => request(endpoint, { method: 'GET' }),
+  get: (endpoint: string, signal?: AbortSignal) => request(endpoint, { method: 'GET', signal }),
 
   post: (endpoint: string, data?: unknown) =>
     request(endpoint, { method: 'POST', body: JSON.stringify(data ?? {}) }),

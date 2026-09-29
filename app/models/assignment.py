@@ -32,6 +32,7 @@ from sqlalchemy import (
     String,
     Text,
     CheckConstraint,
+    func,
 )
 from sqlalchemy.orm import relationship
 
@@ -302,17 +303,30 @@ class StudentAssignment(Base):
         else:
             self.status = AssignmentStatus.NOT_STARTED
 
+    def resolve_grade_term(self, session):
+        """Resolve the canonical effective-date bucket without changing a grade."""
+        from app.models.term import Term
+
+        effective = self.extended_due_date or self.due_date or self.assigned_date
+        term = None
+        if effective is not None:
+            term = (
+                session.query(Term)
+                .filter(Term.start_date <= effective, Term.end_date >= effective)
+                .order_by(Term.start_date.desc(), Term.is_active.desc(), Term.id.desc())
+                .first()
+            )
+        return (
+            term
+            if term is not None
+            else session.query(Term).filter(Term.is_active).first()
+        )
+
     def update_term_grade(self, session):
-        """Update the student's term grade when this assignment is graded.
-
-        Uses the canonical points-weighted calculation (with per-assignment-type
-        weights) and buckets assignments into the term by effective due date, so
-        the persisted StudentTermGrade agrees with the live report card.
-        """
-        if not self.is_graded or self.points_earned is None:
+        """Recalculate one points-weighted term/subject bucket after grading."""
+        if not self.is_graded or self.points_earned is None or self.template is None:
             return
-
-        from app.models.term import StudentTermGrade, Term, TermSubject
+        from app.models.term import StudentTermGrade, TermSubject
         from app.crud.settings import get_assignment_type_weights
         from app.utils.grading import (
             calculate_letter_grade,
@@ -320,30 +334,10 @@ class StudentAssignment(Base):
             term_membership_filter,
         )
 
-        # Resolve the term this assignment belongs to by its effective due date,
-        # so grading past/future-dated work persists to the correct term rather
-        # than only the active one. Fall back to the active term if none matches.
-        if self.template is None:
-            return
-
-        eff = self.extended_due_date or self.due_date or self.assigned_date
-        target_term = None
-        if eff is not None:
-            target_term = (
-                session.query(Term)
-                .filter(Term.start_date <= eff, Term.end_date >= eff)
-                .order_by(
-                    Term.start_date.desc(),
-                    Term.is_active.desc(),
-                    Term.id.desc(),
-                )
-                .first()
-            )
-        if target_term is None:
-            target_term = session.query(Term).filter(Term.is_active).first()
+        target_term = self.resolve_grade_term(session)
         if target_term is None:
             return
-
+        session.flush()
         # Find (or auto-create) the term-subject relationship.
         term_subject = (
             session.query(TermSubject)
@@ -381,8 +375,20 @@ class StudentAssignment(Base):
         # Recalculate from all assignments in this term/subject (membership by
         # effective due date), applying the same weighting as the report card.
         assignments = (
-            session.query(StudentAssignment)
-            .join(AssignmentTemplate)
+            session.query(
+                StudentAssignment.points_earned,
+                StudentAssignment.is_graded,
+                StudentAssignment.status,
+                func.coalesce(
+                    func.nullif(StudentAssignment.custom_max_points, 0),
+                    AssignmentTemplate.max_points,
+                ).label("max_points"),
+                AssignmentTemplate.assignment_type,
+            )
+            .join(
+                AssignmentTemplate,
+                StudentAssignment.template_id == AssignmentTemplate.id,
+            )
             .filter(
                 StudentAssignment.student_id == self.student_id,
                 AssignmentTemplate.subject_id == self.template.subject_id,
@@ -402,9 +408,8 @@ class StudentAssignment(Base):
             (
                 (
                     a.points_earned,
-                    a.custom_max_points
-                    or (a.template.max_points if a.template else None),
-                    a.template.assignment_type if a.template else None,
+                    a.max_points,
+                    a.assignment_type,
                 )
                 for a in graded
             ),
@@ -463,3 +468,38 @@ class AssignmentTimeEntry(Base):
 
     assignment = relationship("StudentAssignment", back_populates="time_entries")
     logger = relationship("User", foreign_keys=[logged_by])
+
+
+# Match the bounded list ordering and effective-date predicates exactly.
+Index("idx_sa_due_id", StudentAssignment.due_date, StudentAssignment.id)
+Index(
+    "idx_sa_status_due_id",
+    StudentAssignment.status,
+    StudentAssignment.due_date,
+    StudentAssignment.id,
+)
+Index("idx_sa_assigned_id", StudentAssignment.assigned_date, StudentAssignment.id)
+Index(
+    "idx_sa_student_effective_due_id",
+    StudentAssignment.student_id,
+    func.coalesce(StudentAssignment.extended_due_date, StudentAssignment.due_date),
+    StudentAssignment.id,
+)
+Index(
+    "idx_sa_student_term_date",
+    StudentAssignment.student_id,
+    func.coalesce(
+        StudentAssignment.extended_due_date,
+        StudentAssignment.due_date,
+        StudentAssignment.assigned_date,
+    ),
+)
+Index(
+    "idx_at_library_name_id",
+    AssignmentTemplate.is_archived,
+    AssignmentTemplate.is_library,
+    func.lower(AssignmentTemplate.name),
+    AssignmentTemplate.id,
+)
+# Template trigram indexes, like Paperless search indexes, live in the migration
+# because metadata-only schemas cannot assume the pg_trgm extension is installed.

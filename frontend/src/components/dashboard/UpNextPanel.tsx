@@ -23,7 +23,7 @@
 
 import React, { useCallback, useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { assignmentsApi } from '../../services/assignments'
+import { assignmentsApi, assignmentPage } from '../../services/assignments'
 import { subjectsApi } from '../../services/subjects'
 import { SubjectDot } from '../ui'
 import { StudentAssignment } from '../../types/assignment'
@@ -55,9 +55,9 @@ const UpNextPanel: React.FC<UpNextPanelProps> = ({ onViewAssignment }) => {
   const [startingId, setStartingId] = useState<number | null>(null)
 
   const load = useCallback(() => {
-    return Promise.all([assignmentsApi.getMyAssignments(), subjectsApi.getAll()])
+    return Promise.all([assignmentPage({ student_view: true, tab: 'todo', limit: MAX_ROWS }), subjectsApi.getAll()])
       .then(([assignmentsData, subjectsData]) => {
-        setAssignments(assignmentsData || [])
+        setAssignments(assignmentsData.items)
         setSubjects(subjectsData || [])
       })
       .catch(() => setAssignments([]))

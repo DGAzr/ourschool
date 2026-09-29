@@ -146,7 +146,8 @@ export interface AcademicYear {
 }
 
 
-interface AssignmentReportItem {
+export interface AssignmentReportItem {
+  extended_due_date?: string
   assignment_id: number
   template_id: number
   assignment_name: string
@@ -233,4 +234,12 @@ export interface ReportCard {
   teacher_comments?: string
   parent_signature_line: boolean
   next_term_info?: string
+}
+export interface AssignmentReportPage extends Omit<AssignmentReport, 'assignments'> {
+  items: AssignmentReportItem[]
+  total: number
+  next_cursor: string | null
+  counts: Record<string, number>
+  by_subject: { id: number; name: string; color: string; total: number; done: number }[]
+  recently_graded: AssignmentReportItem[]
 }
