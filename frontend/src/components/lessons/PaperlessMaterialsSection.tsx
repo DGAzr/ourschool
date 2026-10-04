@@ -25,10 +25,7 @@ import PaperlessPickerModal from './PaperlessPickerModal'
 import { paperlessApi } from '../../services/paperless'
 import { getErrorMessage } from '../../services/api'
 import { usePaperlessStatus } from '../../hooks/usePaperlessStatus'
-import {
-  PaperlessDocument,
-  PaperlessMaterial,
-} from '../../types/paperless'
+import { PaperlessDocument, PaperlessMaterial } from '../../types/paperless'
 import { Lesson } from '../../types/lesson'
 import { kindBadge } from '../materials/materialsLogic'
 import {
@@ -82,7 +79,9 @@ const PaperlessMaterialsSection: React.FC<PaperlessMaterialsSectionProps> = ({
   const connected = status?.connected === true
   const writeThrough = lesson !== undefined
   const materials = writeThrough ? ownMaterials : (pendingMaterials ?? [])
-  const effectiveSubjectId = writeThrough ? lesson.subject_id : (subjectId ?? null)
+  const effectiveSubjectId = writeThrough
+    ? lesson.subject_id
+    : (subjectId ?? null)
   const lessonId = lesson?.id
 
   // Refresh ranked suggestions whenever the attachment set changes. All
@@ -250,7 +249,9 @@ const PaperlessMaterialsSection: React.FC<PaperlessMaterialsSectionProps> = ({
                   <p className="font-mono text-[9.5px] text-faint tracking-wide">
                     {kindBadge(doc.material_kind)}
                     {doc.page_count ? ` · ${doc.page_count} pp` : ''}
-                    {doc.match_pct != null ? ` · ${doc.match_pct}% MATCH` : ''}
+                    {doc.match_reasons?.length
+                      ? ` · ${doc.match_reasons.join(' · ')}`
+                      : ''}
                   </p>
                 </div>
                 {busyDocId === doc.id ? (
@@ -279,6 +280,16 @@ const PaperlessMaterialsSection: React.FC<PaperlessMaterialsSectionProps> = ({
         }
         subjectId={effectiveSubjectId}
         subjectName={subjectName}
+        attachBatch={
+          lesson
+            ? (docs) =>
+                paperlessApi.attachBatch(
+                  'lessons',
+                  lesson.id,
+                  docs.map((d) => d.id)
+                )
+            : undefined
+        }
         attach={
           lesson
             ? (doc) => paperlessApi.attachToLesson(lesson.id, doc.id)

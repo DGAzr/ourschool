@@ -37,7 +37,9 @@ from app.models.lesson import Lesson, LessonMaterial, LessonResource, LessonTemp
 from app.models.paperless import (
     LessonPaperlessMaterial,
     PaperlessDoctypeMap,
+    PaperlessLibrary,
     PaperlessDocument,
+    PaperlessConnection,
     PaperlessTagMap,
     PaperlessThumbnail,
     StudentAssignmentPaperlessMaterial,
@@ -55,7 +57,7 @@ from .shared import log_backup_operation, sanitize_import_data, validate_backup_
 logger = logging.getLogger(__name__)
 
 # Backup format versions supported by this importer
-SUPPORTED_VERSIONS = {"1.0", "2.0", "2.1", "2.2"}
+SUPPORTED_VERSIONS = {"1.0", "2.0", "2.1", "2.2", "2.3"}
 LEGACY_VERSIONS = {"1.0"}  # Versions that lack external_id — name-only fallback
 
 # Typed phrase required in the request body to arm wipe_before_import.
@@ -252,6 +254,17 @@ def import_system_data(
         backup_dict = sanitize_import_data(backup_data.model_dump())
         backup_data = SystemBackup(**backup_dict)
 
+        if not dry_run:
+            from app.services import paperless_jobs
+
+            conn = (
+                db.query(PaperlessConnection).filter_by(id=1).with_for_update().first()
+            )
+            if conn:
+                paperless_jobs.cancel_jobs(db, conn.library_id)
+                conn.revision += 1
+                conn.last_success_at = None
+
         # Default restore semantics are MERGE: existing records (matched by
         # external_id, then by natural key) are skipped or updated per
         # import_options; nothing is deleted. With wipe_before_import (gated
@@ -303,6 +316,7 @@ def import_system_data(
         _import_lessons(db, backup_data.lessons, result, dry_run)
         # Paperless after lessons: attachment links resolve through the
         # lessons/templates/users maps plus the document map built here.
+        _import_paperless_libraries(db, backup_data, result, dry_run)
         _import_paperless_maps(
             db,
             backup_data.paperless_tag_maps,
@@ -1683,6 +1697,51 @@ def _import_lessons(db: Session, lessons_data, result, dry_run):
     result.imported_counts["lessons"] = imported
 
 
+def _import_paperless_libraries(db, backup, result, dry_run):
+    # Backups preceding library identity cannot safely be assigned to a live
+    # server. Give each old backup a stable, isolated namespace; an admin can
+    # explicitly identify that restored library when reconnecting it.
+    from app.models.paperless import LEGACY_LIBRARY_ID
+
+    if not backup.paperless_libraries and backup.paperless_documents:
+        import uuid
+
+        restored_id = str(
+            uuid.uuid5(
+                uuid.NAMESPACE_URL,
+                "ourschool-legacy-paperless:" + backup.backup_timestamp.isoformat(),
+            )
+        )
+        for collection in (
+            backup.paperless_documents,
+            backup.paperless_tag_maps,
+            backup.paperless_doctype_maps,
+            backup.lesson_paperless_materials,
+            backup.template_paperless_materials,
+            backup.student_assignment_paperless_materials,
+        ):
+            for item in collection:
+                if item.library_id == LEGACY_LIBRARY_ID:
+                    item.library_id = restored_id
+        result.warnings.append(
+            "Legacy Paperless backup has an isolated library identity; identify the restored library explicitly when reconnecting."
+        )
+    libraries = {library.id: library.url for library in backup.paperless_libraries}
+    for item in [
+        *backup.paperless_documents,
+        *backup.paperless_tag_maps,
+        *backup.paperless_doctype_maps,
+    ]:
+        libraries.setdefault(item.library_id, None)
+    if not libraries:
+        return
+    for library_id, url in libraries.items():
+        if not dry_run and db.get(PaperlessLibrary, library_id) is None:
+            db.add(PaperlessLibrary(id=library_id, url=url))
+    if not dry_run:
+        db.flush()
+
+
 def _import_paperless_maps(
     db: Session, tag_maps_data, doctype_maps_data, result, dry_run
 ):
@@ -1696,7 +1755,9 @@ def _import_paperless_maps(
     subjects_by_name = result.id_mappings.get("subjects_by_name", {})
     imported = 0
 
-    existing_tags = {m.paperless_tag_id: m for m in db.query(PaperlessTagMap).all()}
+    existing_tags = {
+        (m.library_id, m.paperless_tag_id): m for m in db.query(PaperlessTagMap).all()
+    }
     for m_data in tag_maps_data:
         subject_id = None
         if m_data.subject_external_id or m_data.subject_name:
@@ -1712,10 +1773,11 @@ def _import_paperless_maps(
                     f"'{m_data.subject_name}' unresolved — left unmapped"
                 )
         if not dry_run:
-            row = existing_tags.get(m_data.paperless_tag_id)
+            row = existing_tags.get((m_data.library_id, m_data.paperless_tag_id))
             if row is None:
                 db.add(
                     PaperlessTagMap(
+                        library_id=m_data.library_id,
                         paperless_tag_id=m_data.paperless_tag_id,
                         paperless_tag_name=m_data.paperless_tag_name,
                         subject_id=subject_id,
@@ -1729,14 +1791,18 @@ def _import_paperless_maps(
         imported += 1
 
     existing_doctypes = {
-        m.paperless_doctype_id: m for m in db.query(PaperlessDoctypeMap).all()
+        (m.library_id, m.paperless_doctype_id): m
+        for m in db.query(PaperlessDoctypeMap).all()
     }
     for m_data in doctype_maps_data:
         if not dry_run:
-            row = existing_doctypes.get(m_data.paperless_doctype_id)
+            row = existing_doctypes.get(
+                (m_data.library_id, m_data.paperless_doctype_id)
+            )
             if row is None:
                 db.add(
                     PaperlessDoctypeMap(
+                        library_id=m_data.library_id,
                         paperless_doctype_id=m_data.paperless_doctype_id,
                         paperless_doctype_name=m_data.paperless_doctype_name,
                         material_kind=m_data.material_kind,
@@ -1765,11 +1831,13 @@ def _import_paperless_documents(db: Session, documents_data, result, dry_run):
     by_pid: Dict[str, int] = {}
     imported = skipped = 0
 
-    existing = {d.paperless_id: d for d in db.query(PaperlessDocument).all()}
+    existing = {
+        (d.library_id, d.paperless_id): d for d in db.query(PaperlessDocument).all()
+    }
     for d_data in documents_data:
-        row = existing.get(d_data.paperless_id)
+        row = existing.get((d_data.library_id, d_data.paperless_id))
         if row is not None:
-            by_pid[str(d_data.paperless_id)] = row.id
+            by_pid[f"{d_data.library_id}:{d_data.paperless_id}"] = row.id
             skipped += 1
             result.import_log.append(f"Skipped existing Paperless doc: {d_data.title}")
             continue
@@ -1785,6 +1853,7 @@ def _import_paperless_documents(db: Session, documents_data, result, dry_run):
 
         if not dry_run:
             new_doc = PaperlessDocument(
+                library_id=d_data.library_id,
                 external_id=d_data.external_id,
                 paperless_id=d_data.paperless_id,
                 asn=d_data.asn,
@@ -1799,16 +1868,17 @@ def _import_paperless_documents(db: Session, documents_data, result, dry_run):
                 paperless_added=d_data.paperless_added,
                 paperless_modified=d_data.paperless_modified,
                 keywords=d_data.keywords,
+                ocr_indexed_at=d_data.ocr_indexed_at,
                 present=d_data.present,
                 synced_at=d_data.synced_at,
             )
             db.add(new_doc)
             db.flush()
-            by_pid[str(d_data.paperless_id)] = new_doc.id
+            by_pid[f"{d_data.library_id}:{d_data.paperless_id}"] = new_doc.id
         else:
             # Placeholder id so dry-run attachment resolution mirrors a real
             # import (no DB access happens with it under dry_run).
-            by_pid[str(d_data.paperless_id)] = -1
+            by_pid[f"{d_data.library_id}:{d_data.paperless_id}"] = -1
         imported += 1
 
     result.id_mappings["paperless_docs_by_pid"] = by_pid
@@ -1846,7 +1916,9 @@ def _import_lesson_paperless_materials(db: Session, links_data, result, dry_run)
 
     for link_data in links_data:
         lesson_id = lessons_by_uuid.get(link_data.lesson_external_id)
-        document_id = docs_by_pid.get(str(link_data.document_paperless_id))
+        document_id = docs_by_pid.get(
+            f"{link_data.library_id}:{link_data.document_paperless_id}"
+        )
         if lesson_id is None or document_id is None:
             result.import_log.append(
                 f"Skipped lesson attachment '{link_data.title}' (unresolved "
@@ -1893,7 +1965,9 @@ def _import_template_paperless_materials(db: Session, links_data, result, dry_ru
             templates_by_uuid,
             templates_by_name,
         )
-        document_id = docs_by_pid.get(str(link_data.document_paperless_id))
+        document_id = docs_by_pid.get(
+            f"{link_data.library_id}:{link_data.document_paperless_id}"
+        )
         if template_id is None or document_id is None:
             result.import_log.append(
                 f"Skipped template attachment '{link_data.title}' (unresolved "
@@ -1955,7 +2029,9 @@ def _import_student_assignment_paperless_materials(
             templates_by_uuid,
             templates_by_name,
         )
-        document_id = docs_by_pid.get(str(link_data.document_paperless_id))
+        document_id = docs_by_pid.get(
+            f"{link_data.library_id}:{link_data.document_paperless_id}"
+        )
         if student_id is None or template_id is None or document_id is None:
             result.import_log.append(
                 f"Skipped assignment attachment '{link_data.title}' "

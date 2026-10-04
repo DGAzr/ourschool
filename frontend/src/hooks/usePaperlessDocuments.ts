@@ -68,6 +68,7 @@ export const usePaperlessDocuments = ({
   const [loadingMore, setLoadingMore] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const requestSeq = useRef(0)
+  const controller = useRef<AbortController | null>(null)
 
   // Stable dependency keys for the array params.
   const subjectKey = subjectIds.join(',')
@@ -79,6 +80,8 @@ export const usePaperlessDocuments = ({
       const append = offset > 0
       if (append) setLoadingMore(true)
       else setLoading(true)
+      controller.current?.abort()
+      controller.current = new AbortController()
       const seq = ++requestSeq.current
       const params: DocumentListParams = {
         subject_ids: subjectKey ? subjectKey.split(',').map(Number) : [],
@@ -88,11 +91,41 @@ export const usePaperlessDocuments = ({
         limit: windowLimit,
         offset,
       }
-      return paperlessApi
-        .listDocuments(params)
+      const signal = controller.current.signal
+      const fetchPages = async () => {
+        const items: PaperlessDocument[] = []
+        let last: Awaited<
+          ReturnType<typeof paperlessApi.listDocuments>
+        > | null = null
+        do {
+          last = await paperlessApi.listDocuments(
+            {
+              ...params,
+              offset: offset + items.length,
+              limit: Math.min(MAX_WINDOW, windowLimit - items.length),
+            },
+            signal
+          )
+          if (seq !== requestSeq.current) return null
+          items.push(...last.items)
+        } while (
+          last.items.length &&
+          items.length < windowLimit &&
+          offset + items.length < last.total
+        )
+        return { ...last, items }
+      }
+      return fetchPages()
         .then((data) => {
-          if (seq !== requestSeq.current) return
-          setDocuments((prev) => (append ? [...prev, ...data.items] : data.items))
+          if (!data || seq !== requestSeq.current) return
+          setDocuments((prev) =>
+            append
+              ? [
+                  ...prev,
+                  ...data.items.filter((d) => !prev.some((p) => p.id === d.id)),
+                ]
+              : data.items
+          )
           setFacets(data.facets)
           setTotal(data.total)
           setError(null)
@@ -121,13 +154,19 @@ export const usePaperlessDocuments = ({
   )
 
   useEffect(() => {
+    requestSeq.current += 1
+    controller.current?.abort()
     if (!enabled) return
     // Debounce only the free-text query; other param changes are immediate
     // (a single code path keeps request-ordering simple, and 250ms on facet
     // clicks is imperceptible). fetchWindow flips `loading` itself — inside
     // the timeout callback, per the set-state-in-effect rule.
     const timer = setTimeout(fetchFirstPage, query ? SEARCH_DEBOUNCE_MS : 0)
-    return () => clearTimeout(timer)
+    return () => {
+      clearTimeout(timer)
+      requestSeq.current += 1
+      controller.current?.abort()
+    }
   }, [enabled, fetchFirstPage, query])
 
   const loadMore = useCallback(
@@ -138,7 +177,7 @@ export const usePaperlessDocuments = ({
   const refresh = useCallback(async () => {
     // Re-fetch everything currently shown (not just the first page) so an
     // attach or sync doesn't collapse a grid the user has loaded out.
-    await fetchWindow(0, Math.min(Math.max(documents.length, pageSize), MAX_WINDOW))
+    await fetchWindow(0, Math.max(documents.length, pageSize))
   }, [fetchWindow, documents.length, pageSize])
 
   return {

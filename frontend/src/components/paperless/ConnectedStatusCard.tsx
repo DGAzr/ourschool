@@ -67,10 +67,26 @@ const ConnectedStatusCard: React.FC<ConnectedStatusCardProps> = ({
             </span>
           </div>
           <p className="mt-1 text-[13px] text-muted">
-            Last sync {formatRelativeTime(status.last_sync_at)} ·{' '}
+            Last successful sync {formatRelativeTime(status.last_success_at)} ·{' '}
             {status.document_count} documents · {status.mapped_subject_count}{' '}
             subjects
           </p>
+          {status.active_job && (
+            <p role="status" className="mt-2 text-[13px] text-muted">
+              {status.active_job.state === 'queued' ? 'Queued' : 'Syncing'} ·{' '}
+              {status.active_job.phase} · {status.active_job.processed}{' '}
+              documents processed
+              {status.active_job.error
+                ? ` · Retry: ${status.active_job.error}`
+                : ''}
+            </p>
+          )}
+          {status.next_sync_at && (
+            <p className="text-[12px] text-muted">
+              Next automatic sync:{' '}
+              {new Date(status.next_sync_at).toLocaleString()}
+            </p>
+          )}
           {status.last_sync_status === 'error' && status.last_sync_error && (
             <p className="mt-2 flex items-center gap-1.5 text-[12.5px] text-neg-fg">
               <AlertTriangle size={13} className="flex-shrink-0" />

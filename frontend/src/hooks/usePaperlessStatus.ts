@@ -36,23 +36,31 @@ import {
 export const usePaperlessStatus = () => {
   const { status, ready, error, refresh, applyStatus } =
     usePaperlessStatusContext()
-  const [syncing, setSyncing] = useState(false)
+  const [submitting, setSyncing] = useState(false)
+  const syncing =
+    submitting ||
+    status?.active_job?.state === 'queued' ||
+    status?.active_job?.state === 'running'
 
   const connect = useCallback(
     async (
       url: string,
       token: string,
       scopeTagIds: number[] = [],
-      scopeDoctypeIds: number[] = []
+      scopeDoctypeIds: number[] = [],
+      scopeMode: 'all' | 'selected' = 'selected',
+      libraryId?: string
     ): Promise<PaperlessStatus> => {
       const next = await paperlessApi.connect(
         url,
         token,
         scopeTagIds,
-        scopeDoctypeIds
+        scopeDoctypeIds,
+        scopeMode,
+        libraryId
       )
-      applyStatus(next)
-      return next
+      applyStatus(next.status)
+      return next.status
     },
     [applyStatus]
   )
@@ -85,6 +93,8 @@ export const usePaperlessStatus = () => {
       if (status) {
         applyStatus({
           ...status,
+          sync_interval_minutes:
+            update.sync_interval_minutes ?? status.sync_interval_minutes,
           auto_import: update.auto_import ?? status.auto_import,
           index_ocr: update.index_ocr ?? status.index_ocr,
           mapped_only: update.mapped_only ?? status.mapped_only,

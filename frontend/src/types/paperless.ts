@@ -17,12 +17,7 @@
  */
 
 export type MaterialKind =
-  | 'worksheet'
-  | 'test'
-  | 'reading'
-  | 'reference'
-  | 'form'
-  | 'other'
+  'worksheet' | 'test' | 'reading' | 'reference' | 'form' | 'other'
 
 export interface PaperlessTagMap {
   paperless_tag_id: number
@@ -51,6 +46,14 @@ export interface PaperlessScopeOptions {
 
 export interface PaperlessStatus {
   connected: boolean
+  library_id?: string | null
+  libraries?: { id: string; url: string | null }[]
+  cache_available?: boolean
+  sync_interval_minutes?: number
+  api_version?: number
+  next_sync_at?: string | null
+  last_success_at?: string | null
+  active_job?: PaperlessSyncResult | null
   // A connection row exists but its token can't be decrypted any more
   // (SECRET_KEY rotated) — show "reconnect required".
   needs_reconnect: boolean
@@ -67,8 +70,8 @@ export interface PaperlessStatus {
   doctype_count: number
   mapped_subject_count: number
   // Sync scope (union semantics: any scoped tag OR a scoped doctype).
-  // Empty on both axes = the whole library. tag_maps/doctype_maps arrive
-  // already filtered to the scope (per non-empty axis).
+  // Empty on both axes = explicit whole-library scope; mappings include
+  // tags outside roots carried by imported documents.
   scope_tag_ids: number[]
   scope_doctype_ids: number[]
   tag_maps: PaperlessTagMap[]
@@ -77,6 +80,8 @@ export interface PaperlessStatus {
 
 export interface PaperlessTestResult {
   ok: boolean
+  api_version?: number
+  server_version?: string | null
   document_count: number
   tag_count: number
   document_type_count: number
@@ -85,18 +90,21 @@ export interface PaperlessTestResult {
 }
 
 export interface PaperlessSyncResult {
-  document_count: number
-  tag_count: number
-  doctype_count: number
-  // Absent, unattached documents hard-deleted by the post-sync cleanup.
-  purged_count: number
-  // True when the listing hit the sync's page cap (status becomes "partial").
-  truncated: boolean
-  last_sync_at: string
-  duration_ms: number
+  id: string
+  library_id: string
+  state: 'queued' | 'running' | 'ok' | 'error' | 'cancelled'
+  phase: string
+  processed: number
+  counts: Record<string, number>
+  attempt: number
+  created_at: string
+  started_at?: string | null
+  finished_at?: string | null
+  error?: string | null
 }
 
 export interface PaperlessSettingsUpdate {
+  sync_interval_minutes?: number
   auto_import?: boolean
   index_ocr?: boolean
   mapped_only?: boolean
@@ -117,10 +125,11 @@ export interface PaperlessDocument {
   material_kind: MaterialKind
   subject_id?: number | null
   page_count?: number | null
+  paperless_modified?: string | null
   paperless_added?: string | null
   used_in_count: number
   // Present only when the list was ranked against a lesson (lesson_id param).
-  match_pct?: number | null
+  match_reasons?: string[]
   attached?: boolean | null
 }
 
@@ -155,7 +164,7 @@ export interface PaperlessDocumentDetail extends PaperlessDocument {
 
 // An attached document link (on a lesson or an assignment template) with
 // display fields snapshotted at attach time. `external_id` is the linked
-// document's thumbnail capability id.
+// document's authenticated thumbnail identifier.
 export interface PaperlessMaterial {
   id: number
   document_id: number

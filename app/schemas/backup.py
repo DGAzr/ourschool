@@ -419,8 +419,15 @@ class LessonBackup(BaseModel):
 # attachments survive a wipe-and-restore.
 
 
+class PaperlessLibraryBackup(BaseModel):
+    id: str
+    url: Optional[str] = None
+
+
 class PaperlessTagMapBackup(BaseModel):
     """Schema for backing up a Paperless tag → subject mapping."""
+
+    library_id: str = "00000000-0000-0000-0000-000000000001"
 
     paperless_tag_id: int
     paperless_tag_name: str
@@ -432,6 +439,8 @@ class PaperlessTagMapBackup(BaseModel):
 class PaperlessDoctypeMapBackup(BaseModel):
     """Schema for backing up a Paperless document type → material kind mapping."""
 
+    library_id: str = "00000000-0000-0000-0000-000000000001"
+
     paperless_doctype_id: int
     paperless_doctype_name: str
     material_kind: str
@@ -441,8 +450,10 @@ class PaperlessDocumentBackup(BaseModel):
     """Schema for backing up one cached Paperless document's metadata.
 
     ``paperless_id`` is the stable identity (unique per server); ``external_id``
-    is preserved so thumbnail capability URLs keep working after restore.
+    is preserved so authenticated thumbnail references survive restoration.
     """
+
+    library_id: str = "00000000-0000-0000-0000-000000000001"
 
     external_id: str
     paperless_id: int
@@ -459,6 +470,7 @@ class PaperlessDocumentBackup(BaseModel):
     paperless_added: Optional[datetime] = None
     paperless_modified: Optional[datetime] = None
     keywords: Optional[str] = None
+    ocr_indexed_at: Optional[datetime] = None
     present: bool = True
     synced_at: Optional[datetime] = None
 
@@ -469,6 +481,8 @@ class PaperlessAttachmentBackupBase(BaseModel):
     Mirrors ``app.models.paperless.snapshot_fields`` so restored links render
     identically to the originals even before the next sync.
     """
+
+    library_id: str = "00000000-0000-0000-0000-000000000001"
 
     document_paperless_id: int
     title: str
@@ -515,7 +529,7 @@ class SystemBackup(BaseModel):
     """Complete system backup schema containing all data."""
 
     # Metadata
-    format_version: str = "2.2"
+    format_version: str = "2.3"
     backup_timestamp: datetime
     created_by: str
     system_info: Dict[str, Any] = {}
@@ -543,6 +557,7 @@ class SystemBackup(BaseModel):
     lessons: List[LessonBackup] = []
     # Paperless-NGX (mappings, document metadata cache, attachment links;
     # never the connection/token — see the schema comments above).
+    paperless_libraries: List[PaperlessLibraryBackup] = []
     paperless_tag_maps: List[PaperlessTagMapBackup] = []
     paperless_doctype_maps: List[PaperlessDoctypeMapBackup] = []
     paperless_documents: List[PaperlessDocumentBackup] = []

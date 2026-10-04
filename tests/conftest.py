@@ -4,6 +4,7 @@ Requires a reachable PostgreSQL instance. Point DATABASE_URL (or
 TEST_DATABASE_URL) at a throwaway database; tables are created/dropped per
 session via the ORM metadata. SECRET_KEY must also be set.
 """
+
 import itertools
 import os
 
@@ -26,6 +27,7 @@ def engine():
     os.environ["DATABASE_URL"] = _database_url()
 
     from app.core.database import Base
+
     # Import models so all tables register on the metadata.
     import app.models  # noqa: F401
 
@@ -61,6 +63,7 @@ def client(engine):
         finally:
             db.close()
 
+    app.state.disable_paperless_worker = True
     app.dependency_overrides[get_db] = override_get_db
     with TestClient(app) as c:
         yield c

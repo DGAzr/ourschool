@@ -18,7 +18,7 @@ curl -H "X-API-Key: os_YOUR_KEY_HERE" \
   http://localhost:8000/api/points/admin/overview
 ```
 
-Every authenticated endpoint accepts a Bearer token. Most admin automation endpoints also accept an API key carrying the matching permission listed below. User self-service, student-only operations, authentication, user creation/management, and API-key mutation remain session-only. A few capability URLs (shop images and Paperless thumbnails), health checks, and the first-user bootstrap are intentionally unauthenticated.
+Every authenticated endpoint accepts a Bearer token. Most admin automation endpoints also accept an API key carrying the matching permission listed below. User self-service, student-only operations, authentication, user creation/management, and API-key mutation remain session-only. Shop image capability URLs, health checks, and the first-user bootstrap are intentionally unauthenticated.
 
 **Design rule:** the API-key surface is admin automation only. A key may read or write any student's data (subject to its permissions) and attribute writes to a real admin via `X-On-Behalf-Of`, but it never acts *as* a student: current-user endpoints (`/my-*`, `/reports/student/*`) require a student login session, and nothing on the API surface can author content in a student's name.
 
@@ -348,20 +348,21 @@ Lesson writes synchronize assignments generated from the lesson's linked templat
 
 ### Paperless-ngx integration
 
-Connection management and attachment writes require an admin session or `paperless:write`. Document-library reads require an authenticated user or `paperless:read`; student access to document content is limited to material attached to their lessons or assignments. Cached metadata and attachments survive a disconnect.
+Connection management and attachment writes require an admin session or `paperless:write`. Document-library reads require an admin session or `paperless:read`; student access to document content is limited to material attached to their lessons or assignments. Cached metadata and attachments survive a disconnect.
 
 | Endpoint | Description |
 |----------|-------------|
 | `POST /api/integrations/paperless/test` | Test server credentials without saving them (`paperless:write`) |
-| `POST /api/integrations/paperless/connect` | Validate and store a connection, then perform the initial sync (`paperless:write`) |
+| `POST /api/integrations/paperless/connect` | Validate/store a connection and return `202 {status, job}` for initial sync (`paperless:write`) |
 | `GET /api/integrations/paperless/scope-options` | Fetch live tags and document types for configuring sync scope (`paperless:write`) |
 | `GET /api/integrations/paperless/status` | Connection status, cached counts, settings, and mappings (`paperless:read`) |
 | `PATCH /api/integrations/paperless/settings` | Update sync scope, toggles, and tag/document-type mappings (`paperless:write`) |
 | `DELETE /api/integrations/paperless/connection` | Disconnect while retaining cached documents and attachments (`paperless:write`) |
-| `POST /api/integrations/paperless/sync` | Run a synchronous metadata sync (`paperless:write`) |
+| `POST /api/integrations/paperless/sync` | Return `202` with the new or existing active sync job (`paperless:write`) |
+| `GET /api/integrations/paperless/sync-jobs/{job_id}` | Job state, phase, progress, counts, timestamps, and actionable errors (`paperless:read`) |
 | `GET /api/integrations/paperless/documents` | Search and filter cached documents; optionally rank for a lesson (`paperless:read`) |
 | `GET /api/integrations/paperless/documents/{document_id}` | Document details and lesson/template usage (`paperless:read`) |
-| `GET /api/integrations/paperless/documents/{external_id}/thumbnail` | Serve a cached thumbnail by capability URL (no authentication) |
+| `GET /api/integrations/paperless/documents/{external_id}/thumbnail` | Serve an authenticated cached thumbnail; student attachment checks also apply to conditional requests |
 | `GET /api/integrations/paperless/documents/{document_id}/content` | Stream inline or attachment content; student access is attachment-scoped (`paperless:read` or authorized session) |
 | `POST /api/integrations/paperless/lessons/{lesson_id}/materials` | Attach a cached document to a lesson (`paperless:write`) |
 | `DELETE /api/integrations/paperless/lessons/{lesson_id}/materials/{document_id}` | Detach a document from a lesson (`paperless:write`) |
@@ -369,6 +370,52 @@ Connection management and attachment writes require an admin session or `paperle
 | `DELETE /api/integrations/paperless/templates/{template_id}/materials/{document_id}` | Detach a document from an assignment template (`paperless:write`) |
 | `POST /api/integrations/paperless/student-assignments/{assignment_id}/materials` | Attach a one-off document to a student assignment (`paperless:write`) |
 | `DELETE /api/integrations/paperless/student-assignments/{assignment_id}/materials/{document_id}` | Detach a one-off document from a student assignment (`paperless:write`) |
+
+New setup must send `scope_mode: "all"` explicitly, or `scope_mode: "selected"`
+with nonempty `scope_tag_ids` and/or `scope_doctype_ids`. The two selected axes
+are a union. Credentials are validated with API version 10, falling back to 9
+only after `406`; subsequent requests explicitly use the negotiated version.
+
+`connect` accepts an optional existing `library_id` for a moved/restored library.
+Without that field, the same normalized server URL reuses its namespace and a
+new URL creates a separate namespace. Inactive-library content returns `409`;
+missing upstream documents return `404`, missing local permission `403`, and
+expired/absent OurSchool authentication `401`. The content proxy forwards one
+`Range` and `If-Range`, preserving `206`, `416`, range metadata and filenames.
+
+Settings accept `sync_interval_minutes` (integer 5–1440, default 15). Status
+includes `library_id`, saved `libraries`, `cache_available`, `api_version`,
+`active_job`, `last_sync_at` (last attempt), `last_success_at`, and `next_sync_at`.
+Automatic jobs run without an open browser; disabling auto-import leaves
+manual sync available. Credential failures require reconnecting. Config edits
+and disconnects fence/cancel older jobs. Jobs use `queued`, `running`, `ok`,
+`error`, or `cancelled`; phase reports inventory progress. Transient failures
+retry at most three attempts. Completed job history is retained for 30 days.
+
+Cached document pages default to 60 (maximum 500), support `offset`, `q`, repeated
+`subject_id` and `kind`, and optional `lesson_id`. Totals count the complete
+filtered active library. Keyword terms are combined with AND; title and
+correspondent support literal substring matching. Ranking runs over the complete
+filtered library, with stable score/title/ID ordering. `match_reasons` replaces
+`match_pct`; an empty list means there is no matching evidence. OCR keywords
+are excluded from browsing projections.
+
+Atomic batch attachment routes: `POST /api/integrations/paperless/{target}/{id}/materials/batch`,
+where target is `lessons`, `templates`, or `student-assignments`. Send
+`{"document_ids": [1, 2]}` (1–100 IDs). All IDs must be selectable; validation
+failure writes nothing. Existing links are returned without duplication.
+
+Backups include library identities/URLs and namespace all documents, mappings,
+and attachment references in format 2.3. Credentials and worker jobs are excluded.
+Older backups without library identity restore into an isolated legacy namespace;
+explicitly select that library when reconnecting its source. Restoring a backup
+cancels active jobs and invalidates published cache counts.
+
+Scope narrowing removes documents from selection, while existing attachments
+retain their snapshots and authenticated access through the active library.
+Documents belonging to an inactive library return `409` for content and
+uncached thumbnails. Missing upstream documents return `404`; local attachment
+permission failures return `403`, and absent/revoked sessions return `401`.
 
 ### Discovery & monitoring
 

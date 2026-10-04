@@ -17,7 +17,7 @@
 """Paperless-NGX integration models.
 
 OurSchool keeps a **local metadata cache** of a self-hosted Paperless-NGX
-library: a synchronous sync (``app/services/paperless_sync.py``) pulls tags,
+library: a durable background sync (``app/services/paperless_sync.py``) pulls tags,
 document types and document metadata into the tables below so browsing,
 faceting, search and objective-match ranking never need a live round-trip.
 Thumbnails are fetched lazily and cached as bytea (mirroring the
@@ -39,6 +39,8 @@ from sqlalchemy import (
     JSON,
     Boolean,
     Column,
+    CheckConstraint,
+    Computed,
     DateTime,
     ForeignKey,
     Index,
@@ -49,7 +51,8 @@ from sqlalchemy import (
     UniqueConstraint,
     text,
 )
-from sqlalchemy.orm import relationship
+from sqlalchemy.orm import relationship, deferred
+from sqlalchemy.dialects.postgresql import TSVECTOR
 
 from app.core.database import Base
 from app.enums import MaterialKind
@@ -57,6 +60,63 @@ from app.enums import MaterialKind
 
 def _utcnow() -> datetime:
     return datetime.now(timezone.utc)
+
+
+LEGACY_LIBRARY_ID = "00000000-0000-0000-0000-000000000001"
+
+
+class PaperlessLibrary(Base):
+    """Persistent server identity, retained after disconnect and in backups."""
+
+    __tablename__ = "paperless_libraries"
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    url = Column(String(500), nullable=True, index=True)
+    created_at = Column(DateTime(timezone=True), default=_utcnow, nullable=False)
+
+
+class PaperlessSyncJob(Base):
+    """Durable, leased work; partial unique index deduplicates all workers."""
+
+    __tablename__ = "paperless_sync_jobs"
+    __table_args__ = (
+        Index(
+            "uq_paperless_active_job",
+            "library_id",
+            unique=True,
+            postgresql_where=text("state IN ('queued', 'running')"),
+        ),
+    )
+    id = Column(String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    library_id = Column(
+        String(36), ForeignKey("paperless_libraries.id"), nullable=False
+    )
+    revision = Column(Integer, nullable=False)
+    state = Column(String(20), default="queued", nullable=False)
+    phase = Column(String(30), default="queued", nullable=False)
+    processed = Column(Integer, default=0, nullable=False)
+    counts = Column(JSON, default=dict, nullable=False)
+    attempt = Column(Integer, default=0, nullable=False)
+    owner = Column(String(36))
+    lease_until = Column(DateTime(timezone=True))
+    available_at = Column(DateTime(timezone=True), default=_utcnow, nullable=False)
+    created_at = Column(DateTime(timezone=True), default=_utcnow, nullable=False)
+    started_at = Column(DateTime(timezone=True))
+    finished_at = Column(DateTime(timezone=True))
+    error = Column(Text)
+
+
+class PaperlessSyncStage(Base):
+    """Validated metadata, never raw OCR, awaiting atomic publication."""
+
+    __tablename__ = "paperless_sync_stage"
+    job_id = Column(
+        String(36),
+        ForeignKey("paperless_sync_jobs.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    kind = Column(String(20), primary_key=True)
+    upstream_id = Column(Integer, primary_key=True)
+    payload = Column(JSON, nullable=False)
 
 
 class PaperlessConnection(Base):
@@ -70,7 +130,17 @@ class PaperlessConnection(Base):
 
     __tablename__ = "paperless_connection"
 
-    id = Column(Integer, primary_key=True, index=True)
+    __table_args__ = (CheckConstraint("id = 1", name="ck_paperless_single_connection"),)
+    id = Column(Integer, primary_key=True, default=1)
+    library_id = Column(
+        String(36), ForeignKey("paperless_libraries.id"), nullable=False
+    )
+    revision = Column(Integer, default=1, nullable=False)
+    api_version = Column(Integer, default=10, nullable=False)
+    sync_interval_minutes = Column(Integer, default=15, nullable=False)
+    next_sync_at = Column(DateTime(timezone=True))
+    last_success_at = Column(DateTime(timezone=True))
+    needs_reconnect = Column(Boolean, default=False, nullable=False)
     url = Column(String(500), nullable=False)
     token_encrypted = Column(Text, nullable=False)
 
@@ -109,7 +179,15 @@ class PaperlessTagMap(Base):
     __tablename__ = "paperless_tag_subject_map"
 
     id = Column(Integer, primary_key=True, index=True)
-    paperless_tag_id = Column(Integer, unique=True, nullable=False)
+    __table_args__ = (
+        UniqueConstraint(
+            "library_id", "paperless_tag_id", name="uq_paperless_library_tag"
+        ),
+    )
+    library_id = Column(
+        String(36), ForeignKey("paperless_libraries.id"), nullable=False
+    )
+    paperless_tag_id = Column(Integer, nullable=False)
     paperless_tag_name = Column(String(200), nullable=False)
     subject_id = Column(
         Integer, ForeignKey("subjects.id", ondelete="SET NULL"), nullable=True
@@ -125,7 +203,15 @@ class PaperlessDoctypeMap(Base):
     __tablename__ = "paperless_doctype_map"
 
     id = Column(Integer, primary_key=True, index=True)
-    paperless_doctype_id = Column(Integer, unique=True, nullable=False)
+    __table_args__ = (
+        UniqueConstraint(
+            "library_id", "paperless_doctype_id", name="uq_paperless_library_doctype"
+        ),
+    )
+    library_id = Column(
+        String(36), ForeignKey("paperless_libraries.id"), nullable=False
+    )
+    paperless_doctype_id = Column(Integer, nullable=False)
     paperless_doctype_name = Column(String(200), nullable=False)
     # Stored as a plain string (MaterialKind.value) like other runtime-flexible
     # keys; see app.enums.MaterialKind for the valid set.
@@ -137,9 +223,8 @@ class PaperlessDocument(Base):
 
     Rows are never hard-deleted by sync — a document missing from Paperless
     is flagged ``present=False`` so lesson/template links can't be
-    cascade-orphaned by a flaky sync. ``external_id`` doubles as the
-    unguessable capability URL for the thumbnail endpoint (same pattern as
-    ``ShopImage``).
+    cascade-orphaned by a flaky sync. ``external_id`` identifies the authenticated
+    thumbnail endpoint; it grants no access by itself.
     """
 
     __tablename__ = "paperless_documents"
@@ -148,6 +233,17 @@ class PaperlessDocument(Base):
     # only in the migration (they need CREATE EXTENSION, which the ORM-driven
     # test schema can't assume).
     __table_args__ = (
+        Index("idx_paperless_search_terms", "search_vector", postgresql_using="gin"),
+        UniqueConstraint(
+            "library_id", "paperless_id", name="uq_paperless_library_document"
+        ),
+        Index(
+            "idx_paperless_library_order",
+            "library_id",
+            "present",
+            text("paperless_added DESC NULLS LAST"),
+            text("id DESC"),
+        ),
         Index("idx_paperless_documents_subject_id", "subject_id"),
         # Covers the list filters and both facet GROUP BYs, which all start
         # from present=True.
@@ -163,7 +259,10 @@ class PaperlessDocument(Base):
     external_id = Column(
         String(36), unique=True, nullable=False, default=lambda: str(uuid.uuid4())
     )
-    paperless_id = Column(Integer, unique=True, nullable=False, index=True)
+    library_id = Column(
+        String(36), ForeignKey("paperless_libraries.id"), nullable=False
+    )
+    paperless_id = Column(Integer, nullable=False, index=True)
 
     asn = Column(String(32))  # Archive Serial Number (nullable across versions)
     title = Column(String(500), nullable=False)
@@ -187,7 +286,17 @@ class PaperlessDocument(Base):
 
     # Lowercased distinct words (len > 3, capped) extracted from OCR content
     # when index_ocr is on — the ranking signal. Full OCR text is never stored.
-    keywords = Column(Text)
+    keywords = deferred(Column(Text))
+    search_vector = deferred(
+        Column(
+            TSVECTOR,
+            Computed(
+                "to_tsvector('simple', coalesce(title,'') || ' ' || coalesce(keywords,''))",
+                persisted=True,
+            ),
+        )
+    )
+    ocr_indexed_at = Column(DateTime(timezone=True))
 
     present = Column(Boolean, default=True, nullable=False)
     synced_at = Column(DateTime(timezone=True), default=_utcnow)
@@ -282,7 +391,7 @@ class LessonPaperlessMaterial(Base):
 
     @property
     def external_id(self):
-        """Thumbnail capability id of the linked document (schema field)."""
+        """Public identifier of the linked document; access still requires authorization."""
         return self.document.external_id if self.document else None
 
 
@@ -331,7 +440,7 @@ class TemplatePaperlessMaterial(Base):
 
     @property
     def external_id(self):
-        """Thumbnail capability id of the linked document (schema field)."""
+        """Public identifier of the linked document; access still requires authorization."""
         return self.document.external_id if self.document else None
 
 
@@ -391,5 +500,5 @@ class StudentAssignmentPaperlessMaterial(Base):
 
     @property
     def external_id(self):
-        """Thumbnail capability id of the linked document (schema field)."""
+        """Public identifier of the linked document; access still requires authorization."""
         return self.document.external_id if self.document else None

@@ -31,13 +31,18 @@ interface DocumentCardProps {
 }
 
 /** One card in the Materials grid: thumbnail, title, subject, meta, usage. */
-const DocumentCard: React.FC<DocumentCardProps> = ({ doc, subject, onOpen }) => (
+const DocumentCard: React.FC<DocumentCardProps> = ({
+  doc,
+  subject,
+  onOpen,
+}) => (
   <button
     onClick={() => onOpen(doc)}
     className="text-left bg-panel border border-line rounded-[12px] p-3 transition-all duration-150 hover:border-check-border hover:shadow-[0_3px_14px_var(--shadow-card-color,rgba(0,0,0,.08))] focus:outline-none focus-visible:ring-2 focus-visible:ring-accent/50"
   >
     <DocumentThumb
       externalId={doc.external_id}
+      revision={doc.paperless_modified}
       title={doc.title}
       accentColor={subject?.color}
       className="h-[104px] w-full mb-2.5"

@@ -28,7 +28,12 @@ import uuid
 import pytest
 
 from app.services import paperless_client
-from test_paperless import BASE, FakePaperlessClient, make_library
+from app.models.paperless import (
+    LessonPaperlessMaterial,
+    PaperlessDocument,
+    PaperlessLibrary,
+)
+from test_paperless import BASE, FakePaperlessClient, make_library, _connect_and_wait
 
 
 @pytest.fixture()
@@ -47,9 +52,13 @@ def connected(client, admin_headers, monkeypatch):
     fake = FakePaperlessClient(**library)
     monkeypatch.setattr(paperless_client, "create_client", lambda url, token: fake)
 
-    r = client.post(
-        f"{BASE}/connect",
-        json={"url": "http://paperless.fake:8000", "token": f"token-{tok}-abcd"},
+    r = _connect_and_wait(
+        client,
+        json={
+            "scope_mode": "all",
+            "url": "http://paperless.fake:8000",
+            "token": f"token-{tok}-abcd",
+        },
         headers=admin_headers,
     )
     assert r.status_code == 200, r.text
@@ -71,7 +80,7 @@ def _doc_by_pid(client, admin_headers, paperless_id):
 
 
 def test_paperless_backup_round_trip(
-    client, admin_headers, classroom, student_factory, assign, connected
+    client, admin_headers, classroom, student_factory, assign, connected, db_session
 ):
     library = connected["library"]
     doc_lesson = _doc_by_pid(client, admin_headers, library["documents"][0]["id"])
@@ -110,6 +119,33 @@ def test_paperless_backup_round_trip(
     )
     assert r.status_code == 201, r.text
 
+    # A previous server reused the upstream ID. Restore must preserve both
+    # documents and resolve each attachment through its library namespace.
+    historical_library = PaperlessLibrary(url="http://historical.fake")
+    db_session.add(historical_library)
+    db_session.flush()
+    historical_doc = PaperlessDocument(
+        library_id=historical_library.id,
+        paperless_id=doc_lesson["paperless_id"],
+        title="Historical source title",
+        material_kind="reading",
+        tag_ids=[],
+        present=False,
+    )
+    db_session.add(historical_doc)
+    db_session.flush()
+    historical_external_id = historical_doc.external_id
+    historical_library_id = historical_library.id
+    db_session.add(
+        LessonPaperlessMaterial(
+            lesson_id=lesson["id"],
+            document_id=historical_doc.id,
+            title="Historical preserved snapshot",
+            material_kind="reading",
+        )
+    )
+    db_session.commit()
+
     template = classroom["template"]
     r = client.post(
         f"{BASE}/templates/{template['id']}/materials",
@@ -133,7 +169,9 @@ def test_paperless_backup_round_trip(
     backup = r.json()
     our_pids = {d["id"] for d in library["documents"]}
     exported_docs = [
-        d for d in backup["paperless_documents"] if d["paperless_id"] in our_pids
+        d
+        for d in backup["paperless_documents"]
+        if d["paperless_id"] in our_pids and d["library_id"] != historical_library_id
     ]
     assert len(exported_docs) == 4
     exported_tag = [
@@ -183,7 +221,7 @@ def test_paperless_backup_round_trip(
     assert restored_tag[0]["auto_matched"] is False
     assert restored_tag[0]["subject_id"] is not None
 
-    # Documents restored with their capability external_ids intact.
+    # Documents restored with their authenticated thumbnail identifiers intact.
     restored_doc = _doc_by_pid(client, admin_headers, doc_lesson["paperless_id"])
     assert restored_doc["external_id"] == doc_lesson["external_id"]
 
@@ -198,8 +236,23 @@ def test_paperless_backup_round_trip(
     ]
     assert len(restored_lessons) == 1
     materials = restored_lessons[0]["paperless_materials"]
-    assert [m["title"] for m in materials] == [doc_lesson["title"]]
-    assert materials[0]["external_id"] == doc_lesson["external_id"]
+    assert {m["title"] for m in materials} == {
+        doc_lesson["title"],
+        "Historical preserved snapshot",
+    }
+    assert {m["external_id"] for m in materials} == {
+        doc_lesson["external_id"],
+        historical_external_id,
+    }
+    db_session.expire_all()
+    historical_restored = (
+        db_session.query(PaperlessDocument)
+        .filter_by(external_id=historical_external_id)
+        .one()
+    )
+    assert historical_restored.library_id == historical_library_id
+    assert historical_restored.paperless_id == doc_lesson["paperless_id"]
+    assert historical_restored.id != restored_doc["id"]
 
     # Template attachment survived (template matched by name after re-create).
     r = client.get(

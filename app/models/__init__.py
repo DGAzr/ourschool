@@ -37,6 +37,9 @@ from .lesson import (
 )
 from .paperless import (
     LessonPaperlessMaterial,
+    PaperlessLibrary,
+    PaperlessSyncJob,
+    PaperlessSyncStage,
     PaperlessConnection,
     PaperlessDoctypeMap,
     PaperlessDocument,
@@ -69,6 +72,9 @@ __all__ = [
     "LessonResource",
     "LessonTemplate",
     "lesson_students",
+    "PaperlessLibrary",
+    "PaperlessSyncJob",
+    "PaperlessSyncStage",
     "PaperlessConnection",
     "PaperlessDoctypeMap",
     "PaperlessDocument",

@@ -29,8 +29,12 @@ class FakeStreamResponse:
         self.body = body
         self.headers = {"content-type": content_type}
         self.closed = False
+        self.status_code = 200
 
     def iter_bytes(self):
+        yield self.body
+
+    def iter_raw(self):
         yield self.body
 
     def close(self):
@@ -143,7 +147,7 @@ class FakePaperlessClient:
         self.thumb_calls += 1
         return b"THUMBNAIL-BYTES", "image/webp"
 
-    def stream_content(self, paperless_id, kind="preview"):
+    def stream_content(self, paperless_id, kind="preview", headers=None):
         self._maybe_fail()
         self.content_calls += 1
         return FakeStreamResponse(b"%PDF-1.7 fake content")
@@ -233,6 +237,8 @@ def make_library(math_name, sci_name):
             "content": "some unrelated household paperwork",
         },
     ]
+    for document in docs:
+        document["modified"] = "2026-07-01T00:00:00Z"
     return {
         "tags": tags,
         "doctypes": doctypes,
@@ -259,9 +265,13 @@ def paperless_env(client, admin_headers, fake_factory):
     library = make_library(math_name, sci_name)
     fake = fake_factory(FakePaperlessClient(**library))
 
-    r = client.post(
-        f"{BASE}/connect",
-        json={"url": "http://paperless.fake:8000", "token": f"token-{tok}-abcd"},
+    r = _connect_and_wait(
+        client,
+        json={
+            "scope_mode": "all",
+            "url": "http://paperless.fake:8000",
+            "token": f"token-{tok}-abcd",
+        },
         headers=admin_headers,
     )
     assert r.status_code == 200, r.text
@@ -312,28 +322,14 @@ def test_crypto_roundtrip(engine):
 # --- ranking (pure) ----------------------------------------------------------
 
 
-def test_ranking_scores_subject_and_hits():
-    # Same subject alone: 60.
-    assert paperless_ranking.score(1, None, "Doc", 1, "Lesson", None) == 60
-    # Different subject, no word overlap: 0.
-    assert paperless_ranking.score(2, None, "Doc", 1, "Lesson", None) == 0
-    # Hits are words len > 3, capped at 4, 11 points each.
-    score = paperless_ranking.score(
-        1,
-        "fractions denominators practice adding",
-        "Adding fractions",
-        1,
-        "Fractions",
-        "practice adding fractions with unlike denominators today",
-    )
-    assert score == 60 + 4 * 11  # cap at 4 hits
-
-
-def test_ranking_match_pct_clamps():
-    assert paperless_ranking.match_pct(0) == 46
-    assert paperless_ranking.match_pct(60) == 73
-    assert paperless_ranking.match_pct(104) == 97  # 126.88 clamped
-    assert paperless_ranking.match_pct(500) == 97
+def test_search_words_preserve_short_terms_numbers_and_unicode():
+    assert paperless_ranking.words("A 3 cm café fractions") == {
+        "a",
+        "3",
+        "cm",
+        "café",
+        "fractions",
+    }
 
 
 # --- real client pagination (httpx transport) ---------------------------------
@@ -357,9 +353,12 @@ def test_pagination_ignores_advertised_next_host():
                         "?page=2&page_size=100"
                     ),
                     "results": [{"id": 1}],
+                    "count": 2,
                 },
             )
-        return httpx.Response(200, json={"next": None, "results": [{"id": 2}]})
+        return httpx.Response(
+            200, json={"count": 2, "next": None, "results": [{"id": 2}]}
+        )
 
     client = paperless_client.PaperlessClient("https://papers.example.com", "tok")
     client._client = httpx.Client(
@@ -376,7 +375,7 @@ def test_iter_documents_sends_scope_filter_params():
 
     def handler(request: httpx.Request) -> httpx.Response:
         calls.append(request.url)
-        return httpx.Response(200, json={"next": None, "results": []})
+        return httpx.Response(200, json={"count": 0, "next": None, "results": []})
 
     client = paperless_client.PaperlessClient("https://papers.example.com", "tok")
     client._client = httpx.Client(
@@ -405,6 +404,7 @@ def test_pagination_page_cap_sets_truncated(monkeypatch):
             json={
                 "next": f"https://papers.example.com/api/documents/?page={page + 1}",
                 "results": [{"id": page}],
+                "count": 100,
             },
         )
 
@@ -417,7 +417,9 @@ def test_pagination_page_cap_sets_truncated(monkeypatch):
     assert client.truncated is True
 
     def one_page(request: httpx.Request) -> httpx.Response:
-        return httpx.Response(200, json={"next": None, "results": [{"id": 1}]})
+        return httpx.Response(
+            200, json={"count": 1, "next": None, "results": [{"id": 1}]}
+        )
 
     client = paperless_client.PaperlessClient("https://papers.example.com", "tok")
     client._client = httpx.Client(
@@ -426,6 +428,40 @@ def test_pagination_page_cap_sets_truncated(monkeypatch):
     )
     list(client.iter_documents())
     assert client.truncated is False
+
+
+def _connect_and_wait(client, **kwargs):
+    response = client.post(f"{BASE}/connect", **kwargs)
+    assert response.status_code == 202, response.text
+    from app.core.database import get_db
+    from app.main import app
+    from app.services.paperless_jobs import run_job
+
+    with next(app.dependency_overrides[get_db]()) as db:
+        run_job(db, response.json()["job"]["id"])
+    return client.get(f"{BASE}/status", headers=kwargs.get("headers"))
+
+
+def _sync_and_wait(client, **kwargs):
+    response = client.post(f"{BASE}/sync", **kwargs)
+    assert response.status_code == 202, response.text
+    from app.core.database import get_db
+    from app.main import app
+    from app.services.paperless_jobs import run_job
+
+    with next(app.dependency_overrides[get_db]()) as db:
+        from app.models.paperless import PaperlessSyncJob
+        from app.services.paperless_sync import _utcnow
+
+        job = db.get(PaperlessSyncJob, response.json()["id"])
+        job.available_at = (
+            _utcnow()
+        )  # advance the retry delay in this synchronous test helper
+        db.commit()
+        run_job(db, response.json()["id"])
+    return client.get(
+        f"{BASE}/sync-jobs/{response.json()['id']}", headers=kwargs.get("headers")
+    )
 
 
 # --- connection lifecycle ----------------------------------------------------
@@ -538,7 +574,7 @@ def test_settings_remap_toggles_and_manual_map_survives_sync(
     assert d1.subject_id == paperless_env["sci"]["id"]
 
     # A manual mapping survives a fresh sync (auto-match must not overwrite).
-    r = client.post(f"{BASE}/sync", headers=admin_headers)
+    r = _sync_and_wait(client, headers=admin_headers)
     assert r.status_code == 200, r.text
     db_session.expire_all()
     row = (
@@ -565,9 +601,14 @@ def test_settings_remap_toggles_and_manual_map_survives_sync(
 
 def _reconnect_with_scope(client, admin_headers, env, scope):
     """Reconnect the paperless_env server with a sync scope (re-runs sync)."""
-    r = client.post(
-        f"{BASE}/connect",
-        json={"url": "http://paperless.fake:8000", "token": env["token"], **scope},
+    r = _connect_and_wait(
+        client,
+        json={
+            "scope_mode": "selected" if any(scope.values()) else "all",
+            "url": "http://paperless.fake:8000",
+            "token": env["token"],
+            **scope,
+        },
         headers=admin_headers,
     )
     assert r.status_code == 200, r.text
@@ -579,7 +620,11 @@ def test_test_returns_scope_options(client, admin_headers, fake_factory):
     fake_factory(FakePaperlessClient(**library))
     r = client.post(
         f"{BASE}/test",
-        json={"url": "http://paperless.fake:8000", "token": "token-abcd"},
+        json={
+            "scope_mode": "all",
+            "url": "http://paperless.fake:8000",
+            "token": "token-abcd",
+        },
         headers=admin_headers,
     )
     assert r.status_code == 200, r.text
@@ -604,8 +649,8 @@ def test_connect_with_scope_imports_subset(
 
     assert status["scope_tag_ids"] == [math_tag]
     assert status["document_count"] == 2  # only the two math-tagged docs
-    # Mapping card shrinks to the scoped tag; doctype axis (empty) stays full.
-    assert [m["paperless_tag_id"] for m in status["tag_maps"]] == [math_tag]
+    # Imported-document tags remain available for mapping, including outside roots.
+    assert math_tag in {m["paperless_tag_id"] for m in status["tag_maps"]}
     lib_doctype_ids = {d["id"] for d in lib["doctypes"]}
     returned_doctypes = {
         m["paperless_doctype_id"] for m in status["doctype_maps"]
@@ -680,7 +725,7 @@ def test_scope_change_resync_and_manual_map_survives(
     assert r.json()["scope_tag_ids"] == [sci_tag]
     assert _doc_pk(db_session, lib["documents"][0]["id"]).present is True
 
-    r = client.post(f"{BASE}/sync", headers=admin_headers)
+    r = _sync_and_wait(client, headers=admin_headers)
     assert r.status_code == 200, r.text
     db_session.expire_all()
     # Unattached and now out of scope → the cleanup purged the cache row.
@@ -694,7 +739,7 @@ def test_scope_change_resync_and_manual_map_survives(
         headers=admin_headers,
     )
     assert r.status_code == 200, r.text
-    r = client.post(f"{BASE}/sync", headers=admin_headers)
+    r = _sync_and_wait(client, headers=admin_headers)
     assert r.status_code == 200, r.text
     db_session.expire_all()
     d1 = _doc_pk(db_session, lib["documents"][0]["id"])
@@ -817,7 +862,7 @@ def test_lesson_ranking_attach_detach(client, admin_headers, db_session, paperle
     assert r.status_code == 200, r.text
     items = r.json()["items"]
     assert items[0]["title"] == "Adding fractions practice"
-    assert items[0]["match_pct"] > items[1]["match_pct"]
+    assert len(items[0]["match_reasons"]) > len(items[1]["match_reasons"])
     assert all(item["attached"] is False for item in items)
 
     # Attach → embedded in the lesson payload, usage counts update.
@@ -985,7 +1030,9 @@ def test_lesson_material_student_content_scope(
         headers=rostered_headers,
     )
     assert r.status_code == 200, r.text
-    mine = [lesson_json for lesson_json in r.json() if lesson_json["id"] == lesson["id"]]
+    mine = [
+        lesson_json for lesson_json in r.json() if lesson_json["id"] == lesson["id"]
+    ]
     assert [m["document_id"] for m in mine[0]["paperless_materials"]] == [doc.id]
 
     # Detach → access revoked.
@@ -1020,9 +1067,7 @@ def test_assignment_attach_detach_and_embed(
         headers=admin_headers,
     )
     assert r.status_code == 404, r.text
-    r = client.post(
-        materials_url, json={"document_id": 999999}, headers=admin_headers
-    )
+    r = client.post(materials_url, json={"document_id": 999999}, headers=admin_headers)
     assert r.status_code == 404, r.text
 
     # Embedded on the assignment detail (instance list, not the template's).
@@ -1160,32 +1205,37 @@ def test_assignment_delete_cascades_links(
     remaining = (
         db_session.query(StudentAssignmentPaperlessMaterial)
         .filter(
-            StudentAssignmentPaperlessMaterial.student_assignment_id
-            == assignment["id"]
+            StudentAssignmentPaperlessMaterial.student_assignment_id == assignment["id"]
         )
         .count()
     )
     assert remaining == 0
 
 
-def test_thumbnail_capability_url_caches(client, db_session, paperless_env):
+def test_thumbnail_authorized_url_caches(
+    client, admin_headers, db_session, paperless_env
+):
     doc = _doc_pk(db_session, paperless_env["library"]["documents"][0]["id"])
     fake = paperless_env["fake"]
 
     # No auth headers at all — capability URL.
-    r = client.get(f"{BASE}/documents/{doc.external_id}/thumbnail")
+    r = client.get(
+        f"{BASE}/documents/{doc.external_id}/thumbnail", headers=admin_headers
+    )
     assert r.status_code == 200, r.text
     assert r.content == b"THUMBNAIL-BYTES"
     assert r.headers["content-type"].startswith("image/webp")
     assert fake.thumb_calls == 1
 
     # Second hit is served from the cache (no new upstream call).
-    r = client.get(f"{BASE}/documents/{doc.external_id}/thumbnail")
+    r = client.get(
+        f"{BASE}/documents/{doc.external_id}/thumbnail", headers=admin_headers
+    )
     assert r.status_code == 200, r.text
     assert fake.thumb_calls == 1
 
     # Unknown id → 404.
-    r = client.get(f"{BASE}/documents/{uuid.uuid4()}/thumbnail")
+    r = client.get(f"{BASE}/documents/{uuid.uuid4()}/thumbnail", headers=admin_headers)
     assert r.status_code == 404, r.text
 
 
@@ -1247,9 +1297,9 @@ def test_disconnect_keeps_cache_and_attachments(
     r = client.delete(f"{BASE}/connection", headers=admin_headers)
     assert r.status_code == 204, r.text
 
-    # Connection + maps gone; cache and attachments survive.
+    # Connection is removed; library mappings, cache, and attachments survive.
     assert db_session.query(PaperlessConnection).count() == 0
-    assert db_session.query(PaperlessTagMap).count() == 0
+    assert db_session.query(PaperlessTagMap).count() > 0
     assert (
         db_session.query(PaperlessDocument)
         .filter(PaperlessDocument.id == doc.id)
@@ -1279,24 +1329,24 @@ def test_truncated_sync_is_partial_and_never_removes_documents(
     removed = lib["documents"][3]
     fake.documents = [d for d in lib["documents"] if d["id"] != removed["id"]]
     fake.truncated = True
-    r = client.post(f"{BASE}/sync", headers=admin_headers)
+    r = _sync_and_wait(client, headers=admin_headers)
     assert r.status_code == 200, r.text
     body = r.json()
-    assert body["truncated"] is True
-    assert body["purged_count"] == 0
+    assert body["state"] == "queued"
+    assert body["counts"].get("purged_count", 0) == 0
     db_session.expire_all()
     assert _doc_pk(db_session, removed["id"]).present is True
 
     status = client.get(f"{BASE}/status", headers=admin_headers).json()
-    assert status["last_sync_status"] == "partial"
+    assert status["last_sync_status"] == "error"
     assert status["last_sync_error"]
 
     # A later complete sync recovers: absence detection and cleanup resume.
     fake.truncated = False
-    r = client.post(f"{BASE}/sync", headers=admin_headers)
+    r = _sync_and_wait(client, headers=admin_headers)
     assert r.status_code == 200, r.text
-    assert r.json()["truncated"] is False
-    assert r.json()["purged_count"] == 1
+    assert r.json()["state"] == "ok"
+    assert r.json()["counts"]["purged_count"] == 1
     db_session.expire_all()
     assert _doc_row(db_session, removed["id"]) is None
     status = client.get(f"{BASE}/status", headers=admin_headers).json()
@@ -1315,7 +1365,7 @@ def test_sync_fetches_ocr_content_only_for_changed_documents(
     assert set(fake.content_id_requests[0]) == {d["id"] for d in lib["documents"]}
 
     # Steady state: nothing changed, so a re-sync downloads no OCR content.
-    r = client.post(f"{BASE}/sync", headers=admin_headers)
+    r = _sync_and_wait(client, headers=admin_headers)
     assert r.status_code == 200, r.text
     assert len(fake.content_id_requests) == 1
 
@@ -1323,7 +1373,7 @@ def test_sync_fetches_ocr_content_only_for_changed_documents(
     doc = lib["documents"][0]
     doc["modified"] = "2026-07-12T08:00:00Z"
     doc["content"] = "brand new fraction drills"
-    r = client.post(f"{BASE}/sync", headers=admin_headers)
+    r = _sync_and_wait(client, headers=admin_headers)
     assert r.status_code == 200, r.text
     assert fake.content_id_requests[-1] == [doc["id"]]
     db_session.expire_all()
@@ -1331,7 +1381,7 @@ def test_sync_fetches_ocr_content_only_for_changed_documents(
 
     # Unchanged again (modified stamp kept) → still no refetch.
     requests_before = len(fake.content_id_requests)
-    r = client.post(f"{BASE}/sync", headers=admin_headers)
+    r = _sync_and_wait(client, headers=admin_headers)
     assert r.status_code == 200, r.text
     assert len(fake.content_id_requests) == requests_before
 
@@ -1362,7 +1412,9 @@ def test_cleanup_purges_unattached_absent_docs_and_their_thumbnails(
 
     # Cache both thumbnails.
     for doc in (attached, unattached):
-        r = client.get(f"{BASE}/documents/{doc.external_id}/thumbnail")
+        r = client.get(
+            f"{BASE}/documents/{doc.external_id}/thumbnail", headers=admin_headers
+        )
         assert r.status_code == 200, r.text
     assert (
         db_session.query(PaperlessThumbnail)
@@ -1374,9 +1426,9 @@ def test_cleanup_purges_unattached_absent_docs_and_their_thumbnails(
     # Both vanish from the server; sync prunes.
     gone = {attached.paperless_id, unattached.paperless_id}
     fake.documents = [d for d in lib["documents"] if d["id"] not in gone]
-    r = client.post(f"{BASE}/sync", headers=admin_headers)
+    r = _sync_and_wait(client, headers=admin_headers)
     assert r.status_code == 200, r.text
-    assert r.json()["purged_count"] == 1
+    assert r.json()["counts"]["purged_count"] == 1
 
     db_session.expire_all()
     # Attached doc: soft-deleted but kept (snapshots/detail need the row) —

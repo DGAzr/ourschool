@@ -28,7 +28,7 @@ import {
   Paperclip,
   CheckCircle,
   AlertCircle,
-  Users
+  Users,
 } from 'lucide-react'
 import { assignmentsApi } from '../../services/assignments'
 import { paperlessApi } from '../../services/paperless'
@@ -63,19 +63,27 @@ interface DetailedAssignment extends StudentAssignment {
 }
 
 const SECTION = 'bg-panel-2 border border-line rounded-card-lg p-5'
-const SECTION_TITLE = 'text-[13px] font-semibold text-ink mb-4 flex items-center gap-2'
-const ROW = 'flex items-center justify-between py-2.5 border-b border-line last:border-0'
+const SECTION_TITLE =
+  'text-[13px] font-semibold text-ink mb-4 flex items-center gap-2'
+const ROW =
+  'flex items-center justify-between py-2.5 border-b border-line last:border-0'
 const ROW_LABEL = 'text-[12.5px] text-muted flex items-center gap-2'
 const ROW_VALUE = 'text-[13px] font-medium text-ink'
 
 const statusBadge = (status: string) => {
   switch (status) {
-    case 'not_started': return 'bg-track text-faint border border-line'
-    case 'in_progress': return 'bg-accent/10 text-accent border border-accent/20'
-    case 'submitted': return 'bg-pos-bg text-pos-fg border border-[var(--pos-fg)]/20'
-    case 'graded': return 'bg-pos-bg text-pos-fg border border-[var(--pos-fg)]/20'
-    case 'overdue': return 'bg-neg-bg text-neg-fg border border-[var(--neg-fg)]/20'
-    default: return 'bg-track text-faint border border-line'
+    case 'not_started':
+      return 'bg-track text-faint border border-line'
+    case 'in_progress':
+      return 'bg-accent/10 text-accent border border-accent/20'
+    case 'submitted':
+      return 'bg-pos-bg text-pos-fg border border-[var(--pos-fg)]/20'
+    case 'graded':
+      return 'bg-pos-bg text-pos-fg border border-[var(--pos-fg)]/20'
+    case 'overdue':
+      return 'bg-neg-bg text-neg-fg border border-[var(--neg-fg)]/20'
+    default:
+      return 'bg-track text-faint border border-line'
   }
 }
 
@@ -89,7 +97,7 @@ const AssignmentDetailModalContent: React.FC<AssignmentDetailModalProps> = ({
   assignmentId,
   studentId,
   isOpen,
-  onClose
+  onClose,
 }) => {
   const { toast } = useToast()
   const { user } = useAuth()
@@ -97,9 +105,12 @@ const AssignmentDetailModalContent: React.FC<AssignmentDetailModalProps> = ({
   const [assignment, setAssignment] = useState<DetailedAssignment | null>(null)
   const [loading, setLoading] = useState(isOpen && !!assignmentId)
   const [error, setError] = useState<string | null>(null)
-  const [viewingMaterial, setViewingMaterial] = useState<PaperlessMaterial | null>(null)
+  const [viewingMaterial, setViewingMaterial] =
+    useState<PaperlessMaterial | null>(null)
   // One-off materials on this instance; editable by admins (write-through).
-  const [instanceMaterials, setInstanceMaterials] = useState<PaperlessMaterial[]>([])
+  const [instanceMaterials, setInstanceMaterials] = useState<
+    PaperlessMaterial[]
+  >([])
   const [pickerOpen, setPickerOpen] = useState(false)
   const [busyDocId, setBusyDocId] = useState<number | null>(null)
 
@@ -135,7 +146,10 @@ const AssignmentDetailModalContent: React.FC<AssignmentDetailModalProps> = ({
     if (!assignment) return
     setBusyDocId(material.document_id)
     try {
-      await paperlessApi.detachFromAssignment(assignment.id, material.document_id)
+      await paperlessApi.detachFromAssignment(
+        assignment.id,
+        material.document_id
+      )
       setInstanceMaterials((prev) =>
         prev.filter((m) => m.document_id !== material.document_id)
       )
@@ -148,7 +162,14 @@ const AssignmentDetailModalContent: React.FC<AssignmentDetailModalProps> = ({
   }
 
   const pct = assignment?.percentage_grade
-  const pctColor = pct == null ? 'text-muted' : pct >= 90 ? 'text-pos-fg' : pct >= 70 ? 'text-accent' : 'text-neg-fg'
+  const pctColor =
+    pct == null
+      ? 'text-muted'
+      : pct >= 90
+        ? 'text-pos-fg'
+        : pct >= 70
+          ? 'text-accent'
+          : 'text-neg-fg'
 
   return (
     <Modal
@@ -158,7 +179,9 @@ const AssignmentDetailModalContent: React.FC<AssignmentDetailModalProps> = ({
       subtitle={assignment?.template?.name}
       size="lg"
       footer={
-        <Button variant="secondary" onClick={onClose}>Close</Button>
+        <Button variant="secondary" onClick={onClose}>
+          Close
+        </Button>
       }
     >
       <div className="space-y-4">
@@ -170,7 +193,9 @@ const AssignmentDetailModalContent: React.FC<AssignmentDetailModalProps> = ({
         )}
 
         {error && (
-          <div className="bg-neg-bg text-neg-fg px-4 py-3 rounded-field text-[13px]">{error}</div>
+          <div className="bg-neg-bg text-neg-fg px-4 py-3 rounded-field text-[13px]">
+            {error}
+          </div>
         )}
 
         {assignment && (
@@ -179,13 +204,23 @@ const AssignmentDetailModalContent: React.FC<AssignmentDetailModalProps> = ({
             <div className={SECTION}>
               <div className="flex items-start justify-between mb-4">
                 <div>
-                  <h2 className="text-[18px] font-bold text-ink mb-1">{assignment.template?.name}</h2>
+                  <h2 className="text-[18px] font-bold text-ink mb-1">
+                    {assignment.template?.name}
+                  </h2>
                   <div className="flex items-center gap-2">
-                    <p className="text-[12.5px] text-muted">Assignment #{assignment.id}</p>
-                    {assignment.is_student_created && <span className="px-2 py-0.5 rounded-pill bg-accent-soft text-accent text-[10px] font-semibold uppercase tracking-wide">Student created</span>}
+                    <p className="text-[12.5px] text-muted">
+                      Assignment #{assignment.id}
+                    </p>
+                    {assignment.is_student_created && (
+                      <span className="px-2 py-0.5 rounded-pill bg-accent-soft text-accent text-[10px] font-semibold uppercase tracking-wide">
+                        Student created
+                      </span>
+                    )}
                   </div>
                 </div>
-                <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-semibold uppercase tracking-wide ${statusBadge(assignment.status)}`}>
+                <span
+                  className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-semibold uppercase tracking-wide ${statusBadge(assignment.status)}`}
+                >
                   {assignment.status.replace('_', ' ')}
                 </span>
               </div>
@@ -194,35 +229,59 @@ const AssignmentDetailModalContent: React.FC<AssignmentDetailModalProps> = ({
               <div className="grid grid-cols-4 gap-2">
                 {[
                   {
-                    value: assignment.points_earned !== null && assignment.points_earned !== undefined
-                      ? `${assignment.points_earned} / ${assignment.custom_max_points || assignment.template?.max_points || 0}`
-                      : `— / ${assignment.custom_max_points || assignment.template?.max_points || 0}`,
-                    label: 'Points'
+                    value:
+                      assignment.points_earned !== null &&
+                      assignment.points_earned !== undefined
+                        ? `${assignment.points_earned} / ${assignment.custom_max_points || assignment.template?.max_points || 0}`
+                        : `— / ${assignment.custom_max_points || assignment.template?.max_points || 0}`,
+                    label: 'Points',
                   },
-                  { value: assignment.letter_grade || '—', label: 'Letter Grade' },
+                  {
+                    value: assignment.letter_grade || '—',
+                    label: 'Letter Grade',
+                  },
                   {
                     value: assignment.template?.estimated_duration_minutes
-                      ? `${assignment.template.estimated_duration_minutes}m` : '—',
-                    label: 'Est. Duration'
+                      ? `${assignment.template.estimated_duration_minutes}m`
+                      : '—',
+                    label: 'Est. Duration',
                   },
-                  { value: `${assignment.time_spent_minutes ?? 0}m`, label: 'Time Spent' },
+                  {
+                    value: `${assignment.time_spent_minutes ?? 0}m`,
+                    label: 'Time Spent',
+                  },
                 ].map(({ value, label }) => (
-                  <div key={label} className="bg-panel border border-line rounded-field p-3 text-center">
-                    <div className={`text-[15px] font-semibold ${label === 'Letter Grade' && pct != null ? pctColor : 'text-ink'}`}>{value}</div>
+                  <div
+                    key={label}
+                    className="bg-panel border border-line rounded-field p-3 text-center"
+                  >
+                    <div
+                      className={`text-[15px] font-semibold ${label === 'Letter Grade' && pct != null ? pctColor : 'text-ink'}`}
+                    >
+                      {value}
+                    </div>
                     <div className="text-[11px] text-faint mt-0.5">{label}</div>
                   </div>
                 ))}
               </div>
 
               {pct !== null && pct !== undefined && (
-                <p className={`text-right text-[12.5px] font-semibold mt-2 ${pctColor}`}>{pct.toFixed(1)}%</p>
+                <p
+                  className={`text-right text-[12.5px] font-semibold mt-2 ${pctColor}`}
+                >
+                  {pct.toFixed(1)}%
+                </p>
               )}
             </div>
 
             {/* Description & instructions */}
-            {(assignment.template?.description || assignment.template?.instructions || assignment.custom_instructions) && (
+            {(assignment.template?.description ||
+              assignment.template?.instructions ||
+              assignment.custom_instructions) && (
               <div className={SECTION}>
-                <h3 className={SECTION_TITLE}><FileText className="w-4 h-4 text-muted" /> Assignment Details</h3>
+                <h3 className={SECTION_TITLE}>
+                  <FileText className="w-4 h-4 text-muted" /> Assignment Details
+                </h3>
 
                 <AssignmentInfo
                   description={assignment.template?.description}
@@ -236,58 +295,65 @@ const AssignmentDetailModalContent: React.FC<AssignmentDetailModalProps> = ({
             {(materialRows.length > 0 || canEditMaterials) && (
               <div className={SECTION}>
                 <h3 className={SECTION_TITLE}>
-                  <Paperclip className="w-4 h-4 text-muted" /> Attached Documents
+                  <Paperclip className="w-4 h-4 text-muted" /> Attached
+                  Documents
                 </h3>
                 <div className="space-y-1.5">
-                  {materialRows.map(({ material, fromTemplate, fromInstance }) => (
-                    <div
-                      key={material.document_id}
-                      className="flex items-center gap-3 px-3 py-2 bg-panel border border-line rounded-field"
-                    >
-                      <DocumentThumb
-                        externalId={material.external_id}
-                        title={material.title}
-                        className="w-[28px] h-[36px] flex-shrink-0"
-                      />
-                      <div className="flex-1 min-w-0">
-                        <p className="text-[13px] font-medium text-ink truncate">
-                          {material.title}
-                        </p>
-                        <p className="font-mono text-[9.5px] text-faint tracking-wide">
-                          {kindBadge(material.material_kind)}
-                          {material.page_count ? ` · ${material.page_count} pp` : ''}
-                          {isAdmin &&
-                            ` · ${
-                              fromTemplate && fromInstance
-                                ? 'TEMPLATE + THIS ASSIGNMENT'
-                                : fromTemplate
-                                  ? 'TEMPLATE'
-                                  : 'THIS ASSIGNMENT'
-                            }`}
-                        </p>
-                      </div>
-                      {canEditMaterials &&
-                        fromInstance &&
-                        (busyDocId === material.document_id ? (
-                          <Spinner size="sm" />
-                        ) : (
-                          <button
-                            type="button"
-                            onClick={() => handleRemoveInstanceMaterial(material)}
-                            className="text-[12px] font-medium text-muted hover:text-danger transition-colors flex-shrink-0"
-                          >
-                            Remove
-                          </button>
-                        ))}
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={() => setViewingMaterial(material)}
+                  {materialRows.map(
+                    ({ material, fromTemplate, fromInstance }) => (
+                      <div
+                        key={material.document_id}
+                        className="flex items-center gap-3 px-3 py-2 bg-panel border border-line rounded-field"
                       >
-                        View
-                      </Button>
-                    </div>
-                  ))}
+                        <DocumentThumb
+                          externalId={material.external_id}
+                          title={material.title}
+                          className="w-[28px] h-[36px] flex-shrink-0"
+                        />
+                        <div className="flex-1 min-w-0">
+                          <p className="text-[13px] font-medium text-ink truncate">
+                            {material.title}
+                          </p>
+                          <p className="font-mono text-[9.5px] text-faint tracking-wide">
+                            {kindBadge(material.material_kind)}
+                            {material.page_count
+                              ? ` · ${material.page_count} pp`
+                              : ''}
+                            {isAdmin &&
+                              ` · ${
+                                fromTemplate && fromInstance
+                                  ? 'TEMPLATE + THIS ASSIGNMENT'
+                                  : fromTemplate
+                                    ? 'TEMPLATE'
+                                    : 'THIS ASSIGNMENT'
+                              }`}
+                          </p>
+                        </div>
+                        {canEditMaterials &&
+                          fromInstance &&
+                          (busyDocId === material.document_id ? (
+                            <Spinner size="sm" />
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() =>
+                                handleRemoveInstanceMaterial(material)
+                              }
+                              className="text-[12px] font-medium text-muted hover:text-danger transition-colors flex-shrink-0"
+                            >
+                              Remove
+                            </button>
+                          ))}
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => setViewingMaterial(material)}
+                        >
+                          View
+                        </Button>
+                      </div>
+                    )
+                  )}
                   {canEditMaterials && (
                     <button
                       type="button"
@@ -303,54 +369,91 @@ const AssignmentDetailModalContent: React.FC<AssignmentDetailModalProps> = ({
 
             {/* Timeline */}
             <div className={SECTION}>
-              <h3 className={SECTION_TITLE}><Clock className="w-4 h-4 text-muted" /> Work sessions</h3>
+              <h3 className={SECTION_TITLE}>
+                <Clock className="w-4 h-4 text-muted" /> Work sessions
+              </h3>
               <AssignmentTimeLog
                 assignment={assignment}
-                onTotalChanged={minutes => setAssignment(current => current ? { ...current, time_spent_minutes: minutes } : current)}
+                onTotalChanged={(minutes) =>
+                  setAssignment((current) =>
+                    current
+                      ? { ...current, time_spent_minutes: minutes }
+                      : current
+                  )
+                }
               />
             </div>
 
             {/* Timeline */}
             <div className={SECTION}>
-              <h3 className={SECTION_TITLE}><Clock className="w-4 h-4 text-muted" /> Timeline</h3>
+              <h3 className={SECTION_TITLE}>
+                <Clock className="w-4 h-4 text-muted" /> Timeline
+              </h3>
               <div>
                 {assignment.assigned_date && (
                   <div className={ROW}>
-                    <span className={ROW_LABEL}><Calendar className="w-3.5 h-3.5" /> Assigned</span>
-                    <span className={ROW_VALUE}>{formatDateOnly(assignment.assigned_date)}</span>
+                    <span className={ROW_LABEL}>
+                      <Calendar className="w-3.5 h-3.5" /> Assigned
+                    </span>
+                    <span className={ROW_VALUE}>
+                      {formatDateOnly(assignment.assigned_date)}
+                    </span>
                   </div>
                 )}
                 {assignment.due_date && (
                   <div className={ROW}>
-                    <span className={ROW_LABEL}><Target className="w-3.5 h-3.5 text-[var(--neg-fg)]" /> Due</span>
-                    <span className={ROW_VALUE}>{formatDateOnly(assignment.due_date)}</span>
+                    <span className={ROW_LABEL}>
+                      <Target className="w-3.5 h-3.5 text-[var(--neg-fg)]" />{' '}
+                      Due
+                    </span>
+                    <span className={ROW_VALUE}>
+                      {formatDateOnly(assignment.due_date)}
+                    </span>
                   </div>
                 )}
                 {assignment.started_date && (
                   <div className={ROW}>
-                    <span className={ROW_LABEL}><CheckCircle className="w-3.5 h-3.5 text-accent" /> Started</span>
-                    <span className={ROW_VALUE}>{formatDateOnly(assignment.started_date)}</span>
+                    <span className={ROW_LABEL}>
+                      <CheckCircle className="w-3.5 h-3.5 text-accent" />{' '}
+                      Started
+                    </span>
+                    <span className={ROW_VALUE}>
+                      {formatDateOnly(assignment.started_date)}
+                    </span>
                   </div>
                 )}
                 {assignment.submitted_date && (
                   <div className={ROW}>
-                    <span className={ROW_LABEL}><AlertCircle className="w-3.5 h-3.5 text-pos-fg" /> Submitted</span>
-                    <span className={ROW_VALUE}>{formatDateOnly(assignment.submitted_date)}</span>
+                    <span className={ROW_LABEL}>
+                      <AlertCircle className="w-3.5 h-3.5 text-pos-fg" />{' '}
+                      Submitted
+                    </span>
+                    <span className={ROW_VALUE}>
+                      {formatDateOnly(assignment.submitted_date)}
+                    </span>
                   </div>
                 )}
                 {assignment.graded_date && (
                   <div className={ROW}>
-                    <span className={ROW_LABEL}><Award className="w-3.5 h-3.5 text-pos-fg" /> Graded</span>
-                    <span className={ROW_VALUE}>{formatDateOnly(assignment.graded_date)}</span>
+                    <span className={ROW_LABEL}>
+                      <Award className="w-3.5 h-3.5 text-pos-fg" /> Graded
+                    </span>
+                    <span className={ROW_VALUE}>
+                      {formatDateOnly(assignment.graded_date)}
+                    </span>
                   </div>
                 )}
               </div>
             </div>
 
             {/* Submission */}
-            {(assignment.submission_notes || (assignment.submission_artifacts && assignment.submission_artifacts.length > 0)) && (
+            {(assignment.submission_notes ||
+              (assignment.submission_artifacts &&
+                assignment.submission_artifacts.length > 0)) && (
               <div className={SECTION}>
-                <h3 className={SECTION_TITLE}><Users className="w-4 h-4 text-muted" /> Your Submission</h3>
+                <h3 className={SECTION_TITLE}>
+                  <Users className="w-4 h-4 text-muted" /> Your Submission
+                </h3>
 
                 <SubmissionCard
                   notes={assignment.submission_notes}
@@ -362,11 +465,16 @@ const AssignmentDetailModalContent: React.FC<AssignmentDetailModalProps> = ({
             {/* Feedback & notes */}
             {(assignment.teacher_feedback || assignment.student_notes) && (
               <div className={SECTION}>
-                <h3 className={SECTION_TITLE}><MessageSquare className="w-4 h-4 text-muted" /> Notes & Feedback</h3>
+                <h3 className={SECTION_TITLE}>
+                  <MessageSquare className="w-4 h-4 text-muted" /> Notes &
+                  Feedback
+                </h3>
 
                 {assignment.teacher_feedback && (
                   <div className="mb-3">
-                    <p className="text-[11.5px] font-semibold text-muted uppercase tracking-wide mb-1.5">Teacher Feedback</p>
+                    <p className="text-[11.5px] font-semibold text-muted uppercase tracking-wide mb-1.5">
+                      Teacher Feedback
+                    </p>
                     <div className="px-3 py-2.5 bg-pos-bg border border-[var(--pos-fg)]/20 rounded-field text-[13px] text-pos-fg whitespace-pre-wrap">
                       {assignment.teacher_feedback}
                     </div>
@@ -375,7 +483,9 @@ const AssignmentDetailModalContent: React.FC<AssignmentDetailModalProps> = ({
 
                 {assignment.student_notes && (
                   <div>
-                    <p className="text-[11.5px] font-semibold text-muted uppercase tracking-wide mb-1.5">Student Notes</p>
+                    <p className="text-[11.5px] font-semibold text-muted uppercase tracking-wide mb-1.5">
+                      Student Notes
+                    </p>
                     <div className="px-3 py-2.5 bg-track border border-line rounded-field text-[13px] text-ink whitespace-pre-wrap">
                       {assignment.student_notes}
                     </div>
@@ -385,24 +495,36 @@ const AssignmentDetailModalContent: React.FC<AssignmentDetailModalProps> = ({
             )}
 
             {/* Additional info */}
-            {(assignment.template?.prerequisites || assignment.template?.materials_needed) && (
+            {(assignment.template?.prerequisites ||
+              assignment.template?.materials_needed) && (
               <div className={SECTION}>
-                <h3 className={SECTION_TITLE}><BookOpen className="w-4 h-4 text-muted" /> Additional Information</h3>
+                <h3 className={SECTION_TITLE}>
+                  <BookOpen className="w-4 h-4 text-muted" /> Additional
+                  Information
+                </h3>
 
                 {assignment.template?.prerequisites && (
                   <div className="mb-4">
-                    <p className="text-[11.5px] font-semibold text-muted uppercase tracking-wide mb-1.5">Prerequisites</p>
+                    <p className="text-[11.5px] font-semibold text-muted uppercase tracking-wide mb-1.5">
+                      Prerequisites
+                    </p>
                     <div className="text-[13.5px] text-ink">
-                      <MarkdownRenderer content={assignment.template.prerequisites} />
+                      <MarkdownRenderer
+                        content={assignment.template.prerequisites}
+                      />
                     </div>
                   </div>
                 )}
 
                 {assignment.template?.materials_needed && (
                   <div>
-                    <p className="text-[11.5px] font-semibold text-muted uppercase tracking-wide mb-1.5">Materials Needed</p>
+                    <p className="text-[11.5px] font-semibold text-muted uppercase tracking-wide mb-1.5">
+                      Materials Needed
+                    </p>
                     <div className="text-[13.5px] text-ink">
-                      <MarkdownRenderer content={assignment.template.materials_needed} />
+                      <MarkdownRenderer
+                        content={assignment.template.materials_needed}
+                      />
                     </div>
                   </div>
                 )}
@@ -426,7 +548,16 @@ const AssignmentDetailModalContent: React.FC<AssignmentDetailModalProps> = ({
             instanceMaterials
           )}
           subjectId={assignment.template?.subject_id}
-          attach={(doc) => paperlessApi.attachToAssignment(assignment.id, doc.id)}
+          attachBatch={(docs) =>
+            paperlessApi.attachBatch(
+              'student-assignments',
+              assignment.id,
+              docs.map((d) => d.id)
+            )
+          }
+          attach={(doc) =>
+            paperlessApi.attachToAssignment(assignment.id, doc.id)
+          }
           attachNoun="assignment"
           onAttached={(added) =>
             setInstanceMaterials((prev) => [...prev, ...added])

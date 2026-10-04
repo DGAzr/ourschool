@@ -72,7 +72,20 @@ async def lifespan(app: FastAPI):
         extra={"application": "ourschool", "version": __version__, "event": "startup"},
     )
 
-    yield
+    from app.services.paperless_jobs import PaperlessWorker
+
+    worker = (
+        PaperlessWorker()
+        if not getattr(app.state, "disable_paperless_worker", False)
+        else None
+    )
+    if worker:
+        worker.start()
+    try:
+        yield
+    finally:
+        if worker:
+            worker.stop()
 
     # Shutdown
     logger = get_logger("shutdown")

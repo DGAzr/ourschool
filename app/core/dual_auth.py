@@ -30,12 +30,13 @@ from app.models.user import User
 AuthUser = Union[User, APIKeyUser]
 
 
-async def get_current_user_optional(
+def get_current_user_optional(
     request: Request,
     db: Session = Depends(get_db),
 ) -> Optional[User]:
     """
     Get current user without raising an exception if not authenticated.
+    Runs in FastAPI's thread pool because PostgreSQL access is synchronous.
     Returns None if no valid Bearer token is provided.
     """
     from fastapi.security.utils import get_authorization_scheme_param

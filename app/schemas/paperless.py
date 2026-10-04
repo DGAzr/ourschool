@@ -17,9 +17,10 @@
 """Paperless-NGX integration schemas."""
 
 from datetime import date as date_type, datetime
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Literal
+from urllib.parse import urlsplit, urlunsplit
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 from app.enums import MaterialKind
 
@@ -32,6 +33,25 @@ class PaperlessCredentials(BaseModel):
 
     url: str = Field(..., min_length=1, max_length=500)
     token: str = Field(..., min_length=1, max_length=500)
+
+    @field_validator("url")
+    @classmethod
+    def normalize_url(cls, value: str) -> str:
+        parts = urlsplit(value.strip())
+        if (
+            parts.scheme not in {"http", "https"}
+            or not parts.hostname
+            or parts.username
+            or parts.password
+            or parts.query
+            or parts.fragment
+        ):
+            raise ValueError(
+                "Use an HTTP(S) server URL without credentials, query, or fragment"
+            )
+        return urlunsplit(
+            (parts.scheme.lower(), parts.netloc.lower(), parts.path.rstrip("/"), "", "")
+        )
 
 
 class PaperlessScopeOption(BaseModel):
@@ -50,6 +70,8 @@ class PaperlessTestResponse(BaseModel):
     """
 
     ok: bool = True
+    api_version: int = 10
+    server_version: Optional[str] = None
     document_count: int
     tag_count: int
     document_type_count: int
@@ -66,6 +88,20 @@ class PaperlessConnectRequest(PaperlessCredentials):
 
     scope_tag_ids: List[int] = []
     scope_doctype_ids: List[int] = []
+    scope_mode: Literal["all", "selected"]
+    library_id: Optional[str] = None
+
+    @model_validator(mode="after")
+    def check_scope(self):
+        if self.scope_mode == "selected" and not (
+            self.scope_tag_ids or self.scope_doctype_ids
+        ):
+            raise ValueError(
+                "Select at least one tag or document type, or explicitly choose the entire library"
+            )
+        if self.scope_mode == "all" and (self.scope_tag_ids or self.scope_doctype_ids):
+            raise ValueError("Entire-library scope cannot include selected filters")
+        return self
 
 
 class PaperlessScopeOptionsResponse(BaseModel):
@@ -102,10 +138,40 @@ class DoctypeMapResponse(BaseModel):
         from_attributes = True
 
 
+class PaperlessJobResponse(BaseModel):
+    id: str
+    library_id: str
+    state: str
+    phase: str
+    processed: int
+    counts: dict = {}
+    attempt: int
+    created_at: datetime
+    started_at: Optional[datetime] = None
+    finished_at: Optional[datetime] = None
+    error: Optional[str] = None
+
+    model_config = {"from_attributes": True}
+
+
+class PaperlessLibraryResponse(BaseModel):
+    id: str
+    url: Optional[str] = None
+    model_config = {"from_attributes": True}
+
+
 class PaperlessStatusResponse(BaseModel):
     """Connection status + mappings (drives the whole Settings screen)."""
 
     connected: bool
+    library_id: Optional[str] = None
+    libraries: List[PaperlessLibraryResponse] = []
+    cache_available: bool = False
+    sync_interval_minutes: int = 15
+    api_version: int = 10
+    next_sync_at: Optional[datetime] = None
+    last_success_at: Optional[datetime] = None
+    active_job: Optional[PaperlessJobResponse] = None
     # "Reconnect required": a connection row exists but its token can no
     # longer be decrypted (SECRET_KEY rotated).
     needs_reconnect: bool = False
@@ -123,8 +189,8 @@ class PaperlessStatusResponse(BaseModel):
     mapped_subject_count: int = 0
     scope_tag_ids: List[int] = []
     scope_doctype_ids: List[int] = []
-    # Filtered to the sync scope (per non-empty axis) so the mapping cards
-    # only show rows the teacher opted into.
+    # All library mappings remain visible, including imported-document tags
+    # outside the selected scope roots.
     tag_maps: List[TagMapResponse] = []
     doctype_maps: List[DoctypeMapResponse] = []
 
@@ -153,6 +219,7 @@ class DoctypeMapUpdate(BaseModel):
 class PaperlessSettingsUpdate(BaseModel):
     """Partial settings PATCH: toggles and/or mapping changes."""
 
+    sync_interval_minutes: Optional[int] = Field(None, ge=5, le=1440)
     auto_import: Optional[bool] = None
     index_ocr: Optional[bool] = None
     mapped_only: Optional[bool] = None
@@ -163,19 +230,9 @@ class PaperlessSettingsUpdate(BaseModel):
     doctype_maps: Optional[List[DoctypeMapUpdate]] = None
 
 
-class PaperlessSyncResponse(BaseModel):
-    """Result of a manual sync."""
-
-    document_count: int
-    tag_count: int
-    doctype_count: int
-    # Absent, unattached documents hard-deleted by the post-sync cleanup.
-    purged_count: int = 0
-    # True when the listing hit the client's page cap; absence detection and
-    # cleanup were skipped and last_sync_status is "partial".
-    truncated: bool = False
-    last_sync_at: datetime
-    duration_ms: int
+class PaperlessConnectResponse(BaseModel):
+    status: PaperlessStatusResponse
+    job: PaperlessJobResponse
 
 
 # --- Documents ---
@@ -192,9 +249,10 @@ class PaperlessDocumentItem(BaseModel):
     subject_id: Optional[int] = None
     page_count: Optional[int] = None
     paperless_added: Optional[datetime] = None
+    paperless_modified: Optional[datetime] = None
     used_in_count: int = 0
     # Present only when the list was ranked against a lesson (lesson_id param).
-    match_pct: Optional[int] = None
+    match_reasons: List[str] = []
     attached: Optional[bool] = None
 
     class Config:
@@ -248,10 +306,14 @@ class PaperlessAttachRequest(BaseModel):
     document_id: int
 
 
+class PaperlessBatchAttachRequest(BaseModel):
+    document_ids: List[int] = Field(..., min_length=1, max_length=100)
+
+
 class PaperlessMaterialResponse(BaseModel):
     """An attached document link with snapshotted display fields.
 
-    ``external_id`` (the thumbnail capability id) is resolved from the
+    ``external_id`` (the authenticated thumbnail identifier) is resolved from the
     linked document via a model property.
     """
 

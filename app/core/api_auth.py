@@ -92,12 +92,12 @@ def _resolve_acting_admin(db: Session, raw: str) -> User:
     return user
 
 
-async def get_api_key_auth(
+def get_api_key_auth(
     x_api_key: Optional[str] = Header(None, alias="X-API-Key"),
     x_on_behalf_of: Optional[str] = Header(None, alias="X-On-Behalf-Of"),
     db: Session = Depends(get_db),
 ) -> Optional[APIKeyUser]:
-    """Authenticate via API key. Returns None if no API key provided."""
+    """Authenticate via API key in the worker pool for synchronous SQL reads."""
     if not x_api_key:
         return None
 

@@ -16,89 +16,158 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
+import type { PDFDocumentLoadingTask, RenderTask } from 'pdfjs-dist'
+import pdfWorkerUrl from 'pdfjs-dist/build/pdf.worker.min.mjs?url'
 import { Download } from 'lucide-react'
-
 import Modal from '../ui/Modal/Modal'
 import { Button, Spinner, useToast } from '../ui'
 import { paperlessApi } from '../../services/paperless'
-import { getErrorMessage } from '../../services/api'
+import { getAuthOnlyHeaders, getErrorMessage } from '../../services/api'
 import { PaperlessMaterial } from '../../types/paperless'
 
-interface DocumentViewerModalProps {
+interface Props {
   material: PaperlessMaterial | null
   onClose: () => void
 }
-
-/**
- * Inline PDF viewer for an attached Paperless document. The content is
- * fetched with the session token (the proxy authorizes students per
- * assignment) and shown via a blob URL; Download streams the original file.
- *
- * The outer component remounts the content per material so blob/error state
- * starts fresh (ConfirmDialog pattern — no state-sync effect).
- */
-const DocumentViewerModal: React.FC<DocumentViewerModalProps> = (props) =>
+const DocumentViewerModal: React.FC<Props> = (props) =>
   props.material ? (
-    <ViewerContent key={props.material.id} {...props} material={props.material} />
+    <ViewerContent
+      key={props.material.document_id}
+      material={props.material}
+      onClose={props.onClose}
+    />
   ) : null
-
-interface ViewerContentProps extends DocumentViewerModalProps {
+const ViewerContent: React.FC<{
   material: PaperlessMaterial
-}
-
-const ViewerContent: React.FC<ViewerContentProps> = ({ material, onClose }) => {
+  onClose: () => void
+}> = ({ material, onClose }) => {
   const { toast } = useToast()
-  const [blobUrl, setBlobUrl] = useState<string | null>(null)
+  const canvas = useRef<HTMLCanvasElement>(null)
+  const downloadController = useRef<AbortController | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [page, setPage] = useState(1)
+  const [pages, setPages] = useState(0)
   const [downloading, setDownloading] = useState(false)
-
+  const [progress, setProgress] = useState('')
+  const [pdf, setPdf] = useState<import('pdfjs-dist').PDFDocumentProxy | null>(
+    null
+  )
   useEffect(() => {
     let cancelled = false
-    let url: string | null = null
-    paperlessApi
-      .fetchContentBlob(material.document_id, 'inline')
-      .then((blob) => {
-        url = URL.createObjectURL(blob)
+    let task: PDFDocumentLoadingTask | null = null
+    void import('pdfjs-dist')
+      .then(async ({ getDocument, GlobalWorkerOptions }) => {
+        if (cancelled) return
+        GlobalWorkerOptions.workerSrc = pdfWorkerUrl
+        task = getDocument({
+          url: paperlessApi.previewUrl(material.document_id),
+          httpHeaders: getAuthOnlyHeaders(),
+          disableAutoFetch: true,
+          disableStream: true,
+          cMapUrl: `${import.meta.env.BASE_URL}pdfjs/cmaps/`,
+          cMapPacked: true,
+          standardFontDataUrl: `${import.meta.env.BASE_URL}pdfjs/standard_fonts/`,
+          wasmUrl: `${import.meta.env.BASE_URL}pdfjs/wasm/`,
+          iccUrl: `${import.meta.env.BASE_URL}pdfjs/iccs/`,
+        })
+        const document = await task.promise
         if (cancelled) {
-          URL.revokeObjectURL(url)
-        } else {
-          setBlobUrl(url)
+          await task.destroy()
+          return
         }
+        setPages(document.numPages)
+        setPdf(document)
+      })
+      .catch((err) => {
+        if (cancelled) return
+        const status = (err as { status?: number }).status
+        setError(
+          status === 403
+            ? 'You no longer have access to this material.'
+            : status === 404
+              ? 'This document is no longer available in Paperless.'
+              : status === 409
+                ? 'The document’s Paperless library is disconnected. Ask an administrator to reconnect it.'
+                : status === 401
+                  ? 'Your session has expired. Sign in again.'
+                  : status === 415
+                    ? 'No PDF preview is available. Download the original instead.'
+                    : 'Could not open the PDF. Check the Paperless connection or download the original.'
+        )
+        setLoading(false)
+      })
+    return () => {
+      cancelled = true
+      void task?.destroy()
+      downloadController.current?.abort()
+    }
+  }, [material.document_id])
+  useEffect(() => {
+    if (!pdf) return
+    let cancelled = false
+    let render: RenderTask | null = null
+    void pdf
+      .getPage(page)
+      .then(async (pdfPage) => {
+        if (cancelled || !canvas.current) return
+        const context = canvas.current.getContext('2d')
+        if (!context) throw new Error('PDF rendering is unavailable')
+        const viewport = pdfPage.getViewport({ scale: 1.5 })
+        canvas.current.width = viewport.width
+        canvas.current.height = viewport.height
+        render = pdfPage.render({
+          canvas: canvas.current,
+          canvasContext: context,
+          viewport,
+        })
+        await render.promise
+        if (!cancelled) setLoading(false)
       })
       .catch((err) => {
         if (!cancelled) {
-          setError(
-            getErrorMessage(err, 'Could not load the document — is the Paperless server reachable?')
-          )
+          setError(getErrorMessage(err, 'Could not render this page'))
+          setLoading(false)
         }
       })
     return () => {
       cancelled = true
-      if (url) URL.revokeObjectURL(url)
+      render?.cancel()
     }
-  }, [material.document_id])
-
+  }, [pdf, page])
   const handleDownload = async () => {
+    const controller = new AbortController()
+    downloadController.current = controller
     setDownloading(true)
     try {
-      const blob = await paperlessApi.fetchContentBlob(
+      const { blob, filename } = await paperlessApi.download(
         material.document_id,
-        'attachment'
+        controller.signal,
+        (loaded, total) =>
+          setProgress(
+            total
+              ? `${Math.round((loaded / total) * 100)}%`
+              : `${Math.round(loaded / 1024)} KB`
+          )
       )
+      if (controller.signal.aborted) return
       const url = URL.createObjectURL(blob)
       const anchor = document.createElement('a')
       anchor.href = url
-      anchor.download = material.title || 'document'
+      anchor.download = filename
       anchor.click()
-      URL.revokeObjectURL(url)
+      setTimeout(() => URL.revokeObjectURL(url), 1000)
     } catch (err) {
-      toast(getErrorMessage(err, 'Download failed'), 'danger')
+      if (!controller.signal.aborted)
+        toast(getErrorMessage(err, 'Download failed'), 'danger')
     } finally {
-      setDownloading(false)
+      if (!controller.signal.aborted) {
+        setDownloading(false)
+        setProgress('')
+      }
     }
   }
-
   return (
     <Modal
       isOpen
@@ -114,8 +183,20 @@ const ViewerContent: React.FC<ViewerContentProps> = ({ material, onClose }) => {
             loading={downloading}
             icon={<Download className="h-4 w-4" />}
           >
-            Download
+            Download {progress}
           </Button>
+          {downloading && (
+            <Button
+              variant="outline"
+              onClick={() => {
+                downloadController.current?.abort()
+                setDownloading(false)
+                setProgress('')
+              }}
+            >
+              Cancel download
+            </Button>
+          )}
           <Button variant="outline" onClick={onClose}>
             Close
           </Button>
@@ -123,23 +204,48 @@ const ViewerContent: React.FC<ViewerContentProps> = ({ material, onClose }) => {
       }
     >
       {error ? (
-        <div className="px-4 py-3 rounded-card text-[13px] text-neg-fg bg-neg-bg border border-neg-fg/20">
+        <p role="alert" className="text-neg-fg p-4">
           {error}
-        </div>
-      ) : blobUrl ? (
-        <iframe
-          src={blobUrl}
-          title={material.title}
-          className="w-full h-[62vh] rounded-[10px] border border-line bg-white"
-        />
+        </p>
       ) : (
-        <div className="flex items-center justify-center gap-2 h-[62vh] text-[13px] text-muted">
-          <Spinner size="sm" />
-          Loading document…
-        </div>
+        <>
+          {loading && (
+            <div role="status" className="flex justify-center gap-2 p-8">
+              <Spinner size="sm" />
+              Loading document…
+            </div>
+          )}
+          <div className="max-h-[62vh] overflow-auto">
+            <canvas
+              ref={canvas}
+              aria-label={`Page ${page} of ${material.title}`}
+              className="max-w-full mx-auto"
+            />
+          </div>
+          {pages > 1 && (
+            <div className="flex justify-center items-center gap-3 mt-3">
+              <Button
+                variant="outline"
+                disabled={page === 1}
+                onClick={() => setPage((p) => p - 1)}
+              >
+                Previous
+              </Button>
+              <span>
+                Page {page} of {pages}
+              </span>
+              <Button
+                variant="outline"
+                disabled={page === pages}
+                onClick={() => setPage((p) => p + 1)}
+              >
+                Next
+              </Button>
+            </div>
+          )}
+        </>
       )}
     </Modal>
   )
 }
-
 export default DocumentViewerModal

@@ -68,7 +68,8 @@ describe('usePaperlessDocuments paging', () => {
 
     await waitFor(() => expect(result.current.loading).toBe(false))
     expect(listDocuments).toHaveBeenCalledWith(
-      expect.objectContaining({ limit: 60, offset: 0 })
+      expect.objectContaining({ limit: 60, offset: 0 }),
+      expect.any(AbortSignal)
     )
     expect(result.current.documents).toHaveLength(60)
     expect(result.current.total).toBe(150)
@@ -82,7 +83,8 @@ describe('usePaperlessDocuments paging', () => {
 
     await act(() => result.current.loadMore())
     expect(listDocuments).toHaveBeenLastCalledWith(
-      expect.objectContaining({ limit: 60, offset: 60 })
+      expect.objectContaining({ limit: 60, offset: 60 }),
+      expect.any(AbortSignal)
     )
     expect(result.current.documents.map((d) => d.id)).toEqual(
       Array.from({ length: 90 }, (_, i) => i + 1)
@@ -104,7 +106,8 @@ describe('usePaperlessDocuments paging', () => {
     rerender({ kinds: ['worksheet' as MaterialKind] })
     await waitFor(() => expect(result.current.documents).toHaveLength(40))
     expect(listDocuments).toHaveBeenLastCalledWith(
-      expect.objectContaining({ kinds: ['worksheet'], limit: 60, offset: 0 })
+      expect.objectContaining({ kinds: ['worksheet'], limit: 60, offset: 0 }),
+      expect.any(AbortSignal)
     )
     expect(result.current.hasMore).toBe(false)
   })
@@ -118,8 +121,53 @@ describe('usePaperlessDocuments paging', () => {
 
     await act(() => result.current.refresh())
     expect(listDocuments).toHaveBeenLastCalledWith(
-      expect.objectContaining({ limit: 120, offset: 0 })
+      expect.objectContaining({ limit: 120, offset: 0 }),
+      expect.any(AbortSignal)
     )
     expect(result.current.documents).toHaveLength(120)
   })
+})
+
+it('aborts and rejects an old result during the new query debounce', async () => {
+  let resolveOld!: (
+    value: Awaited<ReturnType<typeof paperlessApi.listDocuments>>
+  ) => void
+  listDocuments.mockImplementationOnce(
+    () =>
+      new Promise((resolve) => {
+        resolveOld = resolve
+      })
+  )
+  const { result, rerender } = renderHook(
+    (props: { query: string }) => usePaperlessDocuments(props),
+    { initialProps: { query: '' } }
+  )
+  await waitFor(() => expect(listDocuments).toHaveBeenCalledTimes(1))
+  const oldSignal = listDocuments.mock.calls[0][1]!
+  serveLibrary(1)
+  rerender({ query: 'new query' })
+  expect(oldSignal.aborted).toBe(true)
+  await act(async () =>
+    resolveOld({
+      items: [doc(999)],
+      total: 1,
+      facets: { kinds: {}, subjects: {} },
+    })
+  )
+  expect(result.current.documents.some((d) => d.id === 999)).toBe(false)
+  await waitFor(() => expect(result.current.documents[0]?.id).toBe(1))
+})
+
+it('refresh preserves a loaded window larger than the API page maximum', async () => {
+  serveLibrary(750)
+  const { result } = renderHook(() => usePaperlessDocuments({ limit: 500 }))
+  await waitFor(() => expect(result.current.documents).toHaveLength(500))
+  await act(() => result.current.loadMore())
+  expect(result.current.documents).toHaveLength(750)
+  await act(() => result.current.refresh())
+  expect(result.current.documents).toHaveLength(750)
+  expect(listDocuments).toHaveBeenLastCalledWith(
+    expect.objectContaining({ offset: 500, limit: 250 }),
+    expect.any(AbortSignal)
+  )
 })

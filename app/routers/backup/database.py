@@ -31,6 +31,7 @@ from app.core.dual_auth import (
     require_admin_or_permission,
 )
 from app.models.user import User
+from app.models.paperless import PaperlessLibrary
 from app.schemas.backup import (
     SystemBackup,
     SystemBackupImportRequest,
@@ -113,7 +114,7 @@ def export_system_backup(
 
         # Create system backup
         backup = SystemBackup(
-            format_version="2.2",
+            format_version="2.3",
             backup_timestamp=datetime.now(timezone.utc),
             created_by=actor,
             system_info={
@@ -158,6 +159,10 @@ def export_system_backup(
             shop_items=shop_items_data,
             shop_redemptions=shop_redemptions_data,
             lessons=lessons_data,
+            paperless_libraries=[
+                {"id": library.id, "url": library.url}
+                for library in db.query(PaperlessLibrary)
+            ],
             paperless_tag_maps=paperless_tag_maps_data,
             paperless_doctype_maps=paperless_doctype_maps_data,
             paperless_documents=paperless_documents_data,

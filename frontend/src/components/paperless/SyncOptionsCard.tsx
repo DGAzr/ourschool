@@ -20,10 +20,7 @@ import React from 'react'
 import { RefreshCw } from 'lucide-react'
 
 import Toggle from '../ui/Toggle'
-import {
-  PaperlessSettingsUpdate,
-  PaperlessStatus,
-} from '../../types/paperless'
+import { PaperlessSettingsUpdate, PaperlessStatus } from '../../types/paperless'
 
 interface SyncOptionsCardProps {
   status: PaperlessStatus
@@ -40,8 +37,7 @@ const OPTIONS: OptionRow[] = [
   {
     key: 'auto_import',
     label: 'Auto-import new documents',
-    description:
-      'Refresh the library automatically when it goes stale (about every 15 minutes while in use).',
+    description: 'Refresh on a schedule, even when nobody has OurSchool open.',
   },
   {
     key: 'index_ocr',
@@ -58,7 +54,10 @@ const OPTIONS: OptionRow[] = [
 ]
 
 /** Three labeled toggle rows; PATCHes on change (optimistic in the hook). */
-const SyncOptionsCard: React.FC<SyncOptionsCardProps> = ({ status, onUpdate }) => (
+const SyncOptionsCard: React.FC<SyncOptionsCardProps> = ({
+  status,
+  onUpdate,
+}) => (
   <div className="bg-panel border border-line rounded-card p-6">
     <div className="flex items-center gap-2 mb-4">
       <RefreshCw className="h-4 w-4 text-faint" />
@@ -66,13 +65,45 @@ const SyncOptionsCard: React.FC<SyncOptionsCardProps> = ({ status, onUpdate }) =
     </div>
 
     <div className="space-y-5">
+      <label className="block text-[13px] text-muted">
+        Automatic sync interval (minutes)
+        <input
+          aria-label="Automatic sync interval"
+          type="number"
+          required
+          step={1}
+          min={5}
+          max={1440}
+          defaultValue={status.sync_interval_minutes ?? 15}
+          key={status.sync_interval_minutes}
+          className="block mt-1 p-2 rounded border border-line bg-panel w-28"
+          onBlur={(e) => {
+            if (!e.target.reportValidity()) return
+            const value = Number(e.target.value)
+            if (
+              Number.isInteger(value) &&
+              value >= 5 &&
+              value <= 1440 &&
+              value !== status.sync_interval_minutes
+            )
+              onUpdate({ sync_interval_minutes: value })
+          }}
+        />
+        Choose 5–1,440 minutes. Sync now remains available with automatic sync
+        disabled.
+      </label>
       {OPTIONS.map((option) => (
-        <div key={option.key} className="flex items-start justify-between gap-6">
+        <div
+          key={option.key}
+          className="flex items-start justify-between gap-6"
+        >
           <div>
             <h3 className="text-[13.5px] font-semibold text-ink">
               {option.label}
             </h3>
-            <p className="text-[13px] text-muted mt-0.5">{option.description}</p>
+            <p className="text-[13px] text-muted mt-0.5">
+              {option.description}
+            </p>
           </div>
           <Toggle
             aria-label={option.label}

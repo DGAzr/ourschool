@@ -34,7 +34,7 @@ describe('pruneSelection', () => {
     const docs = [
       makeDoc({ id: 1 }),
       makeDoc({ id: 2, attached: true }),
-      makeDoc({ id: 3 }),
+      makeDoc({ id: 3, match_reasons: ['Same subject'] }),
     ]
     expect(pruneSelection([1, 2, 3, 4], docs)).toEqual([1, 3])
   })
@@ -42,7 +42,10 @@ describe('pruneSelection', () => {
 
 describe('withAttachedFlags', () => {
   it('merges caller-side attachment ids into the flags', () => {
-    const docs = [makeDoc({ id: 1 }), makeDoc({ id: 2 })]
+    const docs = [
+      makeDoc({ id: 1 }),
+      makeDoc({ id: 2, match_reasons: ['Same subject'] }),
+    ]
     const flagged = withAttachedFlags(docs, [2])
     expect(flagged[0].attached).toBeUndefined()
     expect(flagged[1].attached).toBe(true)
@@ -73,9 +76,9 @@ describe('topSuggestions', () => {
   it('takes the first N unattached docs (list is already ranked)', () => {
     const docs = [
       makeDoc({ id: 1, attached: true }),
-      makeDoc({ id: 2 }),
-      makeDoc({ id: 3 }),
-      makeDoc({ id: 4 }),
+      makeDoc({ id: 2, match_reasons: ['Same subject'] }),
+      makeDoc({ id: 3, match_reasons: ['Same subject'] }),
+      makeDoc({ id: 4, match_reasons: ['Same subject'] }),
       makeDoc({ id: 5 }),
     ]
     expect(topSuggestions(docs).map((d) => d.id)).toEqual([2, 3, 4])

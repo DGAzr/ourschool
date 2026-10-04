@@ -44,7 +44,9 @@ export const pickerFooterLabel = (
   total: number,
   subjectName?: string | null
 ): string => {
-  const scope = subjectName ? `${total} in ${subjectName}` : `${total} available`
+  const scope = subjectName
+    ? `${total} in ${subjectName}`
+    : `${total} available`
   return `${selectedCount} selected · ${scope}`
 }
 
@@ -77,7 +79,10 @@ export const withAttachedFlags = (
 export const topSuggestions = (
   docs: PaperlessDocument[],
   limit = 3
-): PaperlessDocument[] => docs.filter((d) => !d.attached).slice(0, limit)
+): PaperlessDocument[] =>
+  docs
+    .filter((d) => !d.attached && (d.match_reasons?.length ?? 0) > 0)
+    .slice(0, limit)
 
 /**
  * A picker result for local-accumulate flows (create/assign, where the
@@ -86,7 +91,9 @@ export const topSuggestions = (
  * placeholder (UI keys by `document_id`); real links are created
  * server-side once the target exists.
  */
-export const docToPendingMaterial = (doc: PaperlessDocument): PaperlessMaterial => ({
+export const docToPendingMaterial = (
+  doc: PaperlessDocument
+): PaperlessMaterial => ({
   id: doc.id,
   document_id: doc.id,
   external_id: doc.external_id,

@@ -159,6 +159,16 @@ const PaperlessMaterialsPicker: React.FC<PaperlessMaterialsPickerProps> = ({
         ]}
         subjectId={subjectId}
         subjectName={subjectName}
+        attachBatch={
+          writeThrough
+            ? (docs) =>
+                paperlessApi.attachBatch(
+                  'templates',
+                  template.id,
+                  docs.map((d) => d.id)
+                )
+            : undefined
+        }
         attach={
           writeThrough
             ? (doc) => paperlessApi.attachToTemplate(template.id, doc.id)

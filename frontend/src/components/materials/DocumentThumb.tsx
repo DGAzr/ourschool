@@ -16,12 +16,14 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-import React, { useState } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
 
+import { useAuth } from '../../contexts/AuthContext'
 import { paperlessApi } from '../../services/paperless'
 
 interface DocumentThumbProps {
   externalId?: string | null
+  revision?: string | null
   title: string
   /** Tint for the placeholder header band (usually the subject color). */
   accentColor?: string | null
@@ -37,23 +39,70 @@ interface DocumentThumbProps {
 const DocumentThumb: React.FC<DocumentThumbProps> = ({
   externalId,
   title,
+  revision,
   accentColor,
   className = '',
 }) => {
-  const [failed, setFailed] = useState(false)
-  const showImage = externalId && !failed
+  const container = useRef<HTMLDivElement>(null)
+  const { user } = useAuth()
+  const [image, setImage] = useState<{
+    id: string
+    userId: number
+    url: string
+  } | null>(null)
+  useEffect(() => {
+    if (!externalId || !user) return
+    const controller = new AbortController()
+    let url: string | null = null
+    let started = false
+    const load = () => {
+      if (started || controller.signal.aborted) return
+      started = true
+      void paperlessApi
+        .fetchThumbnail(externalId, controller.signal)
+        .then((blob) => {
+          if (controller.signal.aborted) return
+          url = URL.createObjectURL(blob)
+          setImage({ id: externalId, userId: user.id, url })
+        })
+        .catch(() => {
+          /* Placeholder for unavailable thumbnails. */
+        })
+    }
+    const observer =
+      typeof IntersectionObserver !== 'undefined'
+        ? new IntersectionObserver(
+            (entries) => {
+              if (entries.some((entry) => entry.isIntersecting)) {
+                load()
+                observer?.disconnect()
+              }
+            },
+            { rootMargin: '100px' }
+          )
+        : null
+    if (observer && container.current) observer.observe(container.current)
+    else load()
+    return () => {
+      observer?.disconnect()
+      controller.abort()
+      if (url) URL.revokeObjectURL(url)
+    }
+  }, [externalId, user, revision])
+  const showImage =
+    image && image.id === externalId && image.userId === user?.id
 
   return (
     <div
+      ref={container}
       className={`relative overflow-hidden rounded-[7px] border border-line bg-white dark:bg-panel-2 ${className}`}
     >
       {showImage ? (
         <img
-          src={paperlessApi.thumbnailUrl(externalId)}
+          src={image?.url}
           alt={title}
           loading="lazy"
           className="absolute inset-0 w-full h-full object-cover object-top"
-          onError={() => setFailed(true)}
         />
       ) : (
         <div className="absolute inset-0 flex flex-col">

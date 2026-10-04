@@ -38,7 +38,7 @@ import { useAuth } from './AuthContext'
  * consumers (nav, pickers, the Materials page, the settings panel) don't each
  * hit ``/integrations/paperless/status`` independently. Mutations flow back in
  * through ``applyStatus``/``refresh`` (see hooks/usePaperlessStatus), so the
- * nav updates the moment a connect/disconnect succeeds — no polling.
+ * nav updates on mutations; visible pages poll job progress and cache age.
  *
  * The status endpoint is admin-only; for non-admin users the provider settles
  * immediately with a null status (students never need the connection state).
@@ -48,24 +48,29 @@ export const PaperlessStatusProvider: React.FC<{ children: ReactNode }> = ({
 }) => {
   const { user } = useAuth()
   const isAdmin = user?.role === 'admin'
+  const requestSequence = React.useRef(0)
   const [status, setStatus] = useState<PaperlessStatus | null>(null)
   const [ready, setReady] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   const refresh = useCallback(async () => {
+    const sequence = ++requestSequence.current
     try {
       const next = await paperlessApi.getStatus()
+      if (sequence !== requestSequence.current) return
       setStatus(next)
       setError(null)
     } catch (err) {
+      if (sequence !== requestSequence.current) return
       setStatus(null)
       setError(getErrorMessage(err, 'Failed to load Paperless status.'))
     } finally {
-      setReady(true)
+      if (sequence === requestSequence.current) setReady(true)
     }
   }, [])
 
   const applyStatus = useCallback((next: PaperlessStatus | null) => {
+    requestSequence.current += 1
     setStatus(next)
     setError(null)
     setReady(true)
@@ -79,7 +84,28 @@ export const PaperlessStatusProvider: React.FC<{ children: ReactNode }> = ({
       await refresh()
     }
     load()
+    return () => {
+      requestSequence.current += 1
+    }
   }, [user, isAdmin, refresh])
+
+  useEffect(() => {
+    if (!isAdmin || !status?.connected) return
+    const interval = setInterval(
+      () => {
+        if (document.visibilityState === 'visible') void refresh()
+      },
+      status.active_job ? 2000 : 30000
+    )
+    const visible = () => {
+      if (document.visibilityState === 'visible') void refresh()
+    }
+    document.addEventListener('visibilitychange', visible)
+    return () => {
+      clearInterval(interval)
+      document.removeEventListener('visibilitychange', visible)
+    }
+  }, [isAdmin, status?.connected, status?.active_job, refresh])
 
   const value = useMemo<PaperlessStatusContextType>(
     () => ({

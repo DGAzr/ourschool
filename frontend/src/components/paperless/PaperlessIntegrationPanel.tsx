@@ -65,14 +65,23 @@ const PaperlessIntegrationPanel: React.FC = () => {
     url: string,
     token: string,
     scopeTagIds: number[],
-    scopeDoctypeIds: number[]
+    scopeDoctypeIds: number[],
+    scopeMode: 'all' | 'selected',
+    libraryId?: string
   ) => {
-    await connect(url, token, scopeTagIds, scopeDoctypeIds)
+    await connect(
+      url,
+      token,
+      scopeTagIds,
+      scopeDoctypeIds,
+      scopeMode,
+      libraryId
+    )
     setEditing(false)
     toast(
       editing
-        ? 'Connection updated — library re-synced'
-        : 'Connected to Paperless — library imported'
+        ? 'Connection updated — sync queued'
+        : 'Connected to Paperless — initial sync queued'
     )
   }
 
@@ -82,8 +91,8 @@ const PaperlessIntegrationPanel: React.FC = () => {
         scope_tag_ids: tagIds,
         scope_doctype_ids: doctypeIds,
       })
-      const result = await syncNow()
-      toast(`Scope saved — synced ${result.document_count} documents`)
+      await syncNow()
+      toast('Scope saved — sync queued')
     } catch (err) {
       toast(getErrorMessage(err, 'Could not update the sync scope'), 'danger')
     }
@@ -100,14 +109,8 @@ const PaperlessIntegrationPanel: React.FC = () => {
 
   const handleSyncNow = async () => {
     try {
-      const result = await syncNow()
-      // The partial detail (cap hit, what was skipped) shows on the status
-      // card via last_sync_status/error.
-      toast(
-        result.truncated
-          ? `Synced ${result.document_count} documents — partial sync`
-          : `Synced ${result.document_count} documents`
-      )
+      await syncNow()
+      toast('Sync queued — progress appears below')
     } catch (err) {
       toast(getErrorMessage(err, 'Sync failed'), 'danger')
     }
@@ -122,7 +125,9 @@ const PaperlessIntegrationPanel: React.FC = () => {
   }
 
   const handleTagRemap = (paperlessTagId: number, subjectId: number | null) =>
-    handleToggle({ tag_maps: [{ paperless_tag_id: paperlessTagId, subject_id: subjectId }] })
+    handleToggle({
+      tag_maps: [{ paperless_tag_id: paperlessTagId, subject_id: subjectId }],
+    })
 
   const handleDoctypeRemap = (paperlessDoctypeId: number, kind: MaterialKind) =>
     handleToggle({
@@ -154,6 +159,7 @@ const PaperlessIntegrationPanel: React.FC = () => {
     return (
       <div className="space-y-6">
         <ConnectCard
+          libraries={status?.libraries}
           editing
           initialUrl={status.url ?? undefined}
           initialScope={{
@@ -170,6 +176,7 @@ const PaperlessIntegrationPanel: React.FC = () => {
   if (!status?.connected) {
     return (
       <ConnectCard
+        libraries={status?.libraries}
         needsReconnect={status?.needs_reconnect}
         initialScope={
           status?.needs_reconnect
@@ -199,7 +206,10 @@ const PaperlessIntegrationPanel: React.FC = () => {
         subjects={subjects}
         onRemap={handleTagRemap}
       />
-      <DoctypeMapCard doctypeMaps={status.doctype_maps} onRemap={handleDoctypeRemap} />
+      <DoctypeMapCard
+        doctypeMaps={status.doctype_maps}
+        onRemap={handleDoctypeRemap}
+      />
       <SyncOptionsCard status={status} onUpdate={handleToggle} />
       <p className="text-[12px] text-faint text-center pb-1">
         Read-only access · OurSchool never writes to your Paperless server.

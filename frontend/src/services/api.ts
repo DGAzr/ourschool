@@ -29,7 +29,7 @@ export const UNAUTHORIZED_EVENT = 'ourschool:unauthorized'
 const getAuthHeaders = (): Record<string, string> => {
   const token = localStorage.getItem(STORAGE_KEYS.TOKEN)
   const headers: Record<string, string> = {
-    'Content-Type': 'application/json'
+    'Content-Type': 'application/json',
   }
   if (token) {
     headers['Authorization'] = `Bearer ${token}`
@@ -38,7 +38,7 @@ const getAuthHeaders = (): Record<string, string> => {
 }
 
 /** Auth-only headers (no Content-Type) for multipart/FormData requests. */
-const getAuthOnlyHeaders = (): Record<string, string> => {
+export const getAuthOnlyHeaders = (): Record<string, string> => {
   const token = localStorage.getItem(STORAGE_KEYS.TOKEN)
   return token ? { Authorization: `Bearer ${token}` } : {}
 }
@@ -68,7 +68,10 @@ const parseError = async (response: Response): Promise<string> => {
     if (text) {
       const data = JSON.parse(text)
       if (data?.detail) {
-        message = typeof data.detail === 'string' ? data.detail : JSON.stringify(data.detail)
+        message =
+          typeof data.detail === 'string'
+            ? data.detail
+            : JSON.stringify(data.detail)
       }
     }
   } catch {
@@ -85,7 +88,7 @@ const request = async (endpoint: string, init: RequestInit = {}) => {
     init.body instanceof FormData ? getAuthOnlyHeaders() : getAuthHeaders()
   const response = await fetch(`${API_BASE}${endpoint}`, {
     ...init,
-    headers: { ...baseHeaders, ...(init.headers || {}) }
+    headers: { ...baseHeaders, ...(init.headers || {}) },
   })
 
   if (response.status === 401) {
@@ -111,11 +114,14 @@ const request = async (endpoint: string, init: RequestInit = {}) => {
  * already contains the parsed backend detail, so narrowing on `Error`
  * covers the real cases; anything else falls back to the provided text.
  */
-export const getErrorMessage = (err: unknown, fallback = 'An unexpected error occurred'): string =>
-  err instanceof Error && err.message ? err.message : fallback
+export const getErrorMessage = (
+  err: unknown,
+  fallback = 'An unexpected error occurred'
+): string => (err instanceof Error && err.message ? err.message : fallback)
 
 export const api = {
-  get: (endpoint: string, signal?: AbortSignal) => request(endpoint, { method: 'GET', signal }),
+  get: (endpoint: string, signal?: AbortSignal) =>
+    request(endpoint, { method: 'GET', signal }),
 
   post: (endpoint: string, data?: unknown) =>
     request(endpoint, { method: 'POST', body: JSON.stringify(data ?? {}) }),
@@ -135,10 +141,11 @@ export const api = {
 
   // Authenticated binary fetch (e.g. streamed document content). Returns a
   // Blob; callers turn it into an object URL for inline viewing/downloads.
-  getBlob: async (endpoint: string): Promise<Blob> => {
+  getBlob: async (endpoint: string, signal?: AbortSignal): Promise<Blob> => {
     const response = await fetch(`${API_BASE}${endpoint}`, {
       method: 'GET',
-      headers: getAuthOnlyHeaders()
+      signal,
+      headers: getAuthOnlyHeaders(),
     })
     if (response.status === 401) {
       handleUnauthorized()
@@ -154,12 +161,14 @@ export const api = {
   extendSession: async () => {
     const response = await fetch(`${API_BASE}/auth/extend-session`, {
       method: 'POST',
-      headers: getAuthHeaders()
+      headers: getAuthHeaders(),
     })
     if (!response.ok) {
       // Don't force-redirect here; the caller (AuthProvider) decides.
-      throw new Error(`Session extension failed: ${response.status} ${response.statusText}`)
+      throw new Error(
+        `Session extension failed: ${response.status} ${response.statusText}`
+      )
     }
     return response.json()
-  }
+  },
 }

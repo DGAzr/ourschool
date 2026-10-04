@@ -6,6 +6,28 @@ All notable changes to OurSchool are documented here.
 
 ## [Unreleased]
 
+### Paperless-NGX release readiness
+
+- Paperless libraries now have persistent identities. Changing servers keeps
+  existing attachment snapshots isolated; administrators can explicitly reconnect
+  a moved library without breaking its attachments.
+- Sync runs in a durable PostgreSQL-backed worker with progress, restart recovery,
+  bounded retries, and configurable 5-minute to 24-hour scheduling. The default
+  is 15 minutes; manual sync remains available with automatic sync disabled.
+- Validated, staged batch imports prevent failed or malformed listings from
+  deleting cached materials. Empty OCR is indexed once and unchanged metadata
+  avoids repeated writes.
+- Search and lesson ranking cover the complete filtered library. Match evidence
+  replaces percentage badges, and multi-document attachment actions are atomic.
+- Thumbnails require authentication and attachment access. PDF previews use
+  authenticated range requests; downloads support cancellation, progress, and
+  original filenames. Materials can be previewed before attachment.
+- Includes the library-identity migration and backup format 2.3. Credentials
+  remain excluded from backups. Backend and frontend must be upgraded together;
+  existing unauthenticated thumbnail URLs no longer grant access.
+- The frontend build now uses Node.js 22 for PDF.js. Setup explicitly selects a
+  scope and negotiates Paperless API version 9 or 10.
+
 ### Assignment and template performance
 
 - Assignment, grading, template-library, and assignment-report screens now load

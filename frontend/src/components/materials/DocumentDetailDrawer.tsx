@@ -21,6 +21,7 @@ import { Plus } from 'lucide-react'
 
 import { Button, Drawer, Pill, Spinner, SubjectDot, useToast } from '../ui'
 import DocumentThumb from './DocumentThumb'
+import DocumentViewerModal from './DocumentViewerModal'
 import { paperlessApi } from '../../services/paperless'
 import { lessonsApi } from '../../services/lessons'
 import { getErrorMessage } from '../../services/api'
@@ -55,7 +56,9 @@ const todayISO = () => new Date().toISOString().slice(0, 10)
  * state starts fresh (ConfirmDialog pattern — no state-sync effect).
  */
 const DocumentDetailDrawer: React.FC<DocumentDetailDrawerProps> = (props) =>
-  props.doc ? <DrawerContent key={props.doc.id} {...props} doc={props.doc} /> : null
+  props.doc ? (
+    <DrawerContent key={props.doc.id} {...props} doc={props.doc} />
+  ) : null
 
 interface DrawerContentProps extends DocumentDetailDrawerProps {
   doc: PaperlessDocument
@@ -70,6 +73,7 @@ const DrawerContent: React.FC<DrawerContentProps> = ({
   const { toast } = useToast()
   const [detail, setDetail] = useState<PaperlessDocumentDetail | null>(null)
   const [menuOpen, setMenuOpen] = useState(false)
+  const [previewOpen, setPreviewOpen] = useState(false)
   const [upcomingLessons, setUpcomingLessons] = useState<Lesson[]>([])
   const [attachingId, setAttachingId] = useState<number | null>(null)
   const menuRef = useRef<HTMLDivElement>(null)
@@ -104,7 +108,7 @@ const DrawerContent: React.FC<DrawerContentProps> = ({
   }, [menuOpen])
 
   const attachedLessonIds = new Set(
-    (detail?.used_in ?? []).map((usage) => usage.lesson_id)
+    (detail?.used_in ?? []).map((usage) => usage.lesson_id),
   )
 
   const handleAttach = async (lesson: Lesson) => {
@@ -123,81 +127,91 @@ const DrawerContent: React.FC<DrawerContentProps> = ({
   }
 
   return (
-    <Drawer
-      isOpen
-      onClose={onClose}
-      title={doc.asn ? `ASN ${doc.asn}` : 'Document'}
-      footer={
-        <div ref={menuRef} className="relative w-full">
-          {menuOpen && (
-            <div className="absolute bottom-full left-0 right-0 mb-2 bg-panel border border-line rounded-card shadow-menu p-1.5 animate-pop max-h-64 overflow-y-auto">
-              {lessonGroups.length === 0 ? (
-                <p className="px-3 py-2.5 text-[12.5px] text-faint">
-                  No upcoming lessons planned.
-                </p>
-              ) : (
-                lessonGroups.map((group) => (
-                  <div key={group.date}>
-                    <p className="px-3 pt-2 pb-1 text-[10.5px] font-semibold uppercase tracking-[.06em] text-faint">
-                      {group.label}
-                    </p>
-                    {group.lessons.map((lesson) => {
-                      const added = attachedLessonIds.has(lesson.id)
-                      return (
-                        <button
-                          key={lesson.id}
-                          disabled={added || attachingId !== null}
-                          onClick={() => handleAttach(lesson)}
-                          className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-[8px] text-left transition-colors ${
-                            added ? 'cursor-default' : 'hover:bg-track/60'
-                          }`}
-                        >
-                          <SubjectDot
-                            color={lesson.subject?.color ?? undefined}
-                            size={8}
-                          />
-                          <span className="flex-1 text-[13px] text-ink truncate">
-                            {lesson.title}
-                          </span>
-                          {attachingId === lesson.id ? (
-                            <Spinner size="sm" />
-                          ) : (
-                            <span
-                              className={`text-[12px] font-semibold ${
-                                added ? 'text-pos-fg' : 'text-accent'
-                              }`}
-                            >
-                              {added ? 'Added' : 'Add'}
+    <>
+      <Drawer
+        isOpen={!previewOpen}
+        onClose={onClose}
+        title={doc.asn ? `ASN ${doc.asn}` : 'Document'}
+        footer={
+          <div ref={menuRef} className="relative w-full">
+            {menuOpen && (
+              <div className="absolute bottom-full left-0 right-0 mb-2 bg-panel border border-line rounded-card shadow-menu p-1.5 animate-pop max-h-64 overflow-y-auto">
+                {lessonGroups.length === 0 ? (
+                  <p className="px-3 py-2.5 text-[12.5px] text-faint">
+                    No upcoming lessons planned.
+                  </p>
+                ) : (
+                  lessonGroups.map((group) => (
+                    <div key={group.date}>
+                      <p className="px-3 pt-2 pb-1 text-[10.5px] font-semibold uppercase tracking-[.06em] text-faint">
+                        {group.label}
+                      </p>
+                      {group.lessons.map((lesson) => {
+                        const added = attachedLessonIds.has(lesson.id)
+                        return (
+                          <button
+                            key={lesson.id}
+                            disabled={added || attachingId !== null}
+                            onClick={() => handleAttach(lesson)}
+                            className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-[8px] text-left transition-colors ${
+                              added ? 'cursor-default' : 'hover:bg-track/60'
+                            }`}
+                          >
+                            <SubjectDot
+                              color={lesson.subject?.color ?? undefined}
+                              size={8}
+                            />
+                            <span className="flex-1 text-[13px] text-ink truncate">
+                              {lesson.title}
                             </span>
-                          )}
-                        </button>
-                      )
-                    })}
-                  </div>
-                ))
-              )}
-            </div>
-          )}
-          <Button
-            fullWidth
-            icon={<Plus className="h-4 w-4" />}
-            onClick={() => setMenuOpen((open) => !open)}
-          >
-            Add to a lesson
-          </Button>
-        </div>
-      }
-    >
-      <div className="space-y-5">
+                            {attachingId === lesson.id ? (
+                              <Spinner size="sm" />
+                            ) : (
+                              <span
+                                className={`text-[12px] font-semibold ${
+                                  added ? 'text-pos-fg' : 'text-accent'
+                                }`}
+                              >
+                                {added ? 'Added' : 'Add'}
+                              </span>
+                            )}
+                          </button>
+                        )
+                      })}
+                    </div>
+                  ))
+                )}
+              </div>
+            )}
+            <Button
+              fullWidth
+              icon={<Plus className="h-4 w-4" />}
+              onClick={() => setMenuOpen((open) => !open)}
+            >
+              Add to a lesson
+            </Button>
+          </div>
+        }
+      >
+        <div className="space-y-5">
           {/* Large preview */}
           <div className="flex justify-center pt-1">
             <DocumentThumb
               externalId={doc.external_id}
+              revision={doc.paperless_modified}
               title={doc.title}
               accentColor={subject?.color}
               className="w-[190px] h-[246px] shadow-float"
             />
           </div>
+
+          <Button
+            fullWidth
+            variant="secondary"
+            onClick={() => setPreviewOpen(true)}
+          >
+            Preview document
+          </Button>
 
           <div>
             <h2 className="text-[18px] font-bold text-ink leading-snug">
@@ -267,7 +281,7 @@ const DrawerContent: React.FC<DrawerContentProps> = ({
               <div className="space-y-1.5">
                 {detail.used_in.map((usage) => {
                   const usageSubject = subjects.find(
-                    (s) => s.id === usage.subject_id
+                    (s) => s.id === usage.subject_id,
                   )
                   return (
                     <div
@@ -312,7 +326,12 @@ const DrawerContent: React.FC<DrawerContentProps> = ({
             </div>
           )}
         </div>
-    </Drawer>
+      </Drawer>
+      <DocumentViewerModal
+        material={previewOpen ? { ...doc, id: 0, document_id: doc.id } : null}
+        onClose={() => setPreviewOpen(false)}
+      />
+    </>
   )
 }
 

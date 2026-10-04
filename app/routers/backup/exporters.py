@@ -19,7 +19,7 @@
 import base64
 from typing import List
 
-from sqlalchemy.orm import Session, joinedload
+from sqlalchemy.orm import Session, undefer, joinedload
 
 from app.models.assignment import (
     AssignmentTemplate,
@@ -613,6 +613,7 @@ def export_paperless_tag_maps(db: Session) -> List[PaperlessTagMapBackup]:
     """Export Paperless tag → subject mappings (subject by external_id)."""
     return [
         PaperlessTagMapBackup(
+            library_id=m.library_id,
             paperless_tag_id=m.paperless_tag_id,
             paperless_tag_name=m.paperless_tag_name,
             subject_external_id=m.subject.external_id if m.subject else None,
@@ -627,6 +628,7 @@ def export_paperless_doctype_maps(db: Session) -> List[PaperlessDoctypeMapBackup
     """Export Paperless document type → material kind mappings."""
     return [
         PaperlessDoctypeMapBackup(
+            library_id=m.library_id,
             paperless_doctype_id=m.paperless_doctype_id,
             paperless_doctype_name=m.paperless_doctype_name,
             material_kind=m.material_kind,
@@ -639,6 +641,7 @@ def export_paperless_documents(db: Session) -> List[PaperlessDocumentBackup]:
     """Export the cached document metadata (thumbnails excluded by design)."""
     return [
         PaperlessDocumentBackup(
+            library_id=doc.library_id,
             external_id=doc.external_id,
             paperless_id=doc.paperless_id,
             asn=doc.asn,
@@ -654,10 +657,13 @@ def export_paperless_documents(db: Session) -> List[PaperlessDocumentBackup]:
             paperless_added=doc.paperless_added,
             paperless_modified=doc.paperless_modified,
             keywords=doc.keywords,
+            ocr_indexed_at=doc.ocr_indexed_at,
             present=doc.present,
             synced_at=doc.synced_at,
         )
-        for doc in db.query(PaperlessDocument).all()
+        for doc in db.query(PaperlessDocument)
+        .options(undefer(PaperlessDocument.keywords))
+        .all()
     ]
 
 
@@ -671,6 +677,7 @@ def _attachment_snapshot(link, subjects: dict) -> dict:
     """Shared snapshot fields for the three attachment backup schemas."""
     subject = subjects.get(link.subject_id) if link.subject_id else None
     return {
+        "library_id": link.document.library_id,
         "document_paperless_id": link.document.paperless_id,
         "title": link.title,
         "asn": link.asn,

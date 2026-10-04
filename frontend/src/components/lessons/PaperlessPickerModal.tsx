@@ -39,7 +39,6 @@ import {
 import {
   attachButtonLabel,
   pickerFooterLabel,
-  pruneSelection,
   toggleSelection,
   withAttachedFlags,
 } from './paperlessPickerLogic'
@@ -58,6 +57,7 @@ interface PaperlessPickerModalProps {
    * document so local-accumulate callers (assign flow, where no target
    * exists yet) can build a pending material without a server round-trip.
    */
+  attachBatch?: (docs: PaperlessDocument[]) => Promise<PaperlessMaterial[]>
   attach: (doc: PaperlessDocument) => Promise<PaperlessMaterial>
   /** Wording for the primary button, e.g. "Attach 2 to lesson". */
   attachNoun?: 'lesson' | 'assignment'
@@ -88,6 +88,7 @@ const PickerContent: React.FC<PaperlessPickerModalProps> = ({
   subjectId,
   subjectName,
   attach,
+  attachBatch,
   attachNoun = 'lesson',
   successMessage,
   onAttached,
@@ -96,6 +97,9 @@ const PickerContent: React.FC<PaperlessPickerModalProps> = ({
   const { status } = usePaperlessStatus()
   const [chip, setChip] = useState<KindChip>('all')
   const [query, setQuery] = useState('')
+  const [selectedDocs, setSelectedDocs] = React.useState<
+    Record<number, PaperlessDocument>
+  >({})
   const [selected, setSelected] = useState<number[]>([])
   const [attaching, setAttaching] = useState(false)
 
@@ -117,17 +121,21 @@ const PickerContent: React.FC<PaperlessPickerModalProps> = ({
   // Selection is pruned at render time (no state-sync effect): docs that
   // became attached or fell out of the current filter stay in `selected`
   // harmlessly but never count or submit.
-  const effectiveSelected = pruneSelection(selected, documents)
+  const effectiveSelected = selected.filter(
+    (id) =>
+      !attachedDocumentIds.includes(id) &&
+      !documents.some((d) => d.id === id && d.attached)
+  )
 
   const handleAttach = async () => {
     setAttaching(true)
     const attached: PaperlessMaterial[] = []
     try {
-      for (const docId of effectiveSelected) {
-        // Ids in effectiveSelected always come from `documents`.
-        const doc = documents.find((d) => d.id === docId)
-        if (doc) attached.push(await attach(doc))
-      }
+      const picked = effectiveSelected
+        .map((id) => selectedDocs[id])
+        .filter(Boolean)
+      if (attachBatch) attached.push(...(await attachBatch(picked)))
+      else for (const doc of picked) attached.push(await attach(doc))
       toast(
         successMessage
           ? successMessage(attached.length)
@@ -162,7 +170,12 @@ const PickerContent: React.FC<PaperlessPickerModalProps> = ({
           <span className="mr-auto text-[12.5px] text-muted">
             {pickerFooterLabel(effectiveSelected.length, total, subjectName)}
           </span>
-          <Button variant="outline" size="sm" onClick={onClose} disabled={attaching}>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={onClose}
+            disabled={attaching}
+          >
             Cancel
           </Button>
           <Button
@@ -195,7 +208,9 @@ const PickerContent: React.FC<PaperlessPickerModalProps> = ({
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder={
-              subjectName ? `Search within ${subjectName}…` : 'Search documents…'
+              subjectName
+                ? `Search within ${subjectName}…`
+                : 'Search documents…'
             }
             className="w-full h-9 pl-9 pr-3 rounded-[9px] border border-field-border bg-panel text-[13px] text-ink placeholder:text-faint focus:outline-none focus:border-accent transition-colors"
           />
@@ -240,9 +255,14 @@ const PickerContent: React.FC<PaperlessPickerModalProps> = ({
                 <button
                   key={doc.id}
                   disabled={isAttached}
-                  onClick={() =>
+                  onClick={() => {
+                    if (!isSelected && effectiveSelected.length >= 100) {
+                      toast('Select up to 100 documents per batch.', 'danger')
+                      return
+                    }
+                    setSelectedDocs((prev) => ({ ...prev, [doc.id]: doc }))
                     setSelected((prev) => toggleSelection(prev, doc.id))
-                  }
+                  }}
                   className={`relative flex items-start gap-3 p-3 rounded-[11px] border text-left transition-all ${
                     isAttached
                       ? 'bg-panel-2 border-line opacity-60 cursor-default'
@@ -253,6 +273,7 @@ const PickerContent: React.FC<PaperlessPickerModalProps> = ({
                 >
                   <DocumentThumb
                     externalId={doc.external_id}
+                    revision={doc.paperless_modified}
                     title={doc.title}
                     className="w-[44px] h-[58px] flex-shrink-0"
                   />
@@ -268,9 +289,9 @@ const PickerContent: React.FC<PaperlessPickerModalProps> = ({
                         <span className="font-mono text-[9.5px] font-bold tracking-wide text-pos-fg">
                           ATTACHED
                         </span>
-                      ) : doc.match_pct != null ? (
+                      ) : (doc.match_reasons?.length ?? 0) > 0 ? (
                         <span className="font-mono text-[9.5px] font-bold tracking-wide text-accent px-1.5 py-0.5 rounded-[4px] bg-accent-soft">
-                          {doc.match_pct}% MATCH
+                          {doc.match_reasons?.join(' · ')}
                         </span>
                       ) : null}
                     </p>

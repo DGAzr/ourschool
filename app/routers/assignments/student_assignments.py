@@ -38,6 +38,7 @@ from app.models.assignment import (
 from app.models.subject import Subject
 from app.models.paperless import (
     PaperlessDocument,
+    PaperlessConnection,
     StudentAssignmentPaperlessMaterial,
     snapshot_fields,
 )
@@ -150,6 +151,11 @@ def assign_template_to_students(
     # validated up front so a bad document id fails the whole request before
     # anything is created.
     doc_ids = list(dict.fromkeys(assignment_request.paperless_document_ids))
+    conn = (
+        db.query(PaperlessConnection).filter_by(id=1).with_for_update().first()
+        if doc_ids
+        else None
+    )
     docs = (
         db.query(PaperlessDocument).filter(PaperlessDocument.id.in_(doc_ids)).all()
         if doc_ids
@@ -161,6 +167,12 @@ def assign_template_to_students(
             status_code=404,
             detail=f"Paperless documents with IDs "
             f"{sorted(missing_doc_ids)} not found",
+        )
+    if any(
+        not doc.present or (conn and doc.library_id != conn.library_id) for doc in docs
+    ):
+        raise HTTPException(
+            status_code=409, detail="A Paperless document is no longer selectable"
         )
     material_snapshots = [(doc.id, snapshot_fields(doc)) for doc in docs]
 

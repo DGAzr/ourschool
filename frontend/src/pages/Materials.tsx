@@ -46,7 +46,12 @@ const Materials: React.FC = () => {
   const { user } = useAuth()
   const { toast } = useToast()
   const navigate = useNavigate()
-  const { status, loading: statusLoading, syncing, syncNow } = usePaperlessStatus()
+  const {
+    status,
+    loading: statusLoading,
+    syncing,
+    syncNow,
+  } = usePaperlessStatus()
   const [subjects, setSubjects] = useState<Subject[]>([])
   const [selectedKinds, setSelectedKinds] = useState<MaterialKind[]>([])
   const [selectedSubjects, setSelectedSubjects] = useState<number[]>([])
@@ -68,7 +73,7 @@ const Materials: React.FC = () => {
     subjectIds: selectedSubjects,
     kinds: selectedKinds,
     query,
-    enabled: connected,
+    enabled: connected || status?.cache_available === true,
   })
 
   useEffect(() => {
@@ -77,6 +82,12 @@ const Materials: React.FC = () => {
       .then(setSubjects)
       .catch(() => setSubjects([]))
   }, [])
+
+  useEffect(() => {
+    if (status?.last_success_at) void refresh()
+    // Refresh the loaded window only when a generation is published.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [status?.last_success_at])
 
   if (user?.role !== 'admin') {
     return (
@@ -101,7 +112,7 @@ const Materials: React.FC = () => {
     )
   }
 
-  if (!connected) {
+  if (!connected && !status?.cache_available) {
     return (
       <EmptyState
         icon={FolderOpen}
@@ -118,13 +129,8 @@ const Materials: React.FC = () => {
 
   const handleSyncNow = async () => {
     try {
-      const result = await syncNow()
-      toast(
-        result.truncated
-          ? `Synced ${result.document_count} documents — partial sync, see Settings`
-          : `Synced ${result.document_count} documents`
-      )
-      refresh()
+      await syncNow()
+      toast('Sync queued')
     } catch (err) {
       toast(getErrorMessage(err, 'Sync failed'), 'danger')
     }

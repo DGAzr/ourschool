@@ -37,11 +37,14 @@ interface ConnectCardProps {
   initialScope?: { tagIds: number[]; doctypeIds: number[] }
   /** Cancel out of edit mode without saving. */
   onCancel?: () => void
+  libraries?: { id: string; url: string | null }[]
   onConnect: (
     url: string,
     token: string,
     scopeTagIds: number[],
-    scopeDoctypeIds: number[]
+    scopeDoctypeIds: number[],
+    scopeMode: 'all' | 'selected',
+    libraryId?: string
   ) => Promise<unknown>
 }
 
@@ -60,6 +63,7 @@ const ConnectCard: React.FC<ConnectCardProps> = ({
   initialUrl,
   initialScope,
   onCancel,
+  libraries = [],
   onConnect,
 }) => {
   const [urlDraft, setUrlDraft] = useState(initialUrl ?? '')
@@ -69,6 +73,8 @@ const ConnectCard: React.FC<ConnectCardProps> = ({
   const [tested, setTested] = useState<PaperlessTestResult | null>(null)
   const [scopeTagIds, setScopeTagIds] = useState<number[]>([])
   const [scopeDoctypeIds, setScopeDoctypeIds] = useState<number[]>([])
+  const [scopeMode, setScopeMode] = useState<'all' | 'selected'>('selected')
+  const [libraryId, setLibraryId] = useState('')
   const [error, setError] = useState<string | null>(null)
 
   const canSubmit = urlDraft.trim().length > 0 && tokenDraft.trim().length > 0
@@ -89,6 +95,11 @@ const ConnectCard: React.FC<ConnectCardProps> = ({
       // Reconnect: seed with the stored scope, minus ids the server no
       // longer knows.
       if (initialScope) {
+        setScopeMode(
+          initialScope.tagIds.length || initialScope.doctypeIds.length
+            ? 'selected'
+            : 'all'
+        )
         const tagIds = new Set(result.tags.map((t) => t.id))
         const doctypeIds = new Set(result.document_types.map((d) => d.id))
         setScopeTagIds(initialScope.tagIds.filter((id) => tagIds.has(id)))
@@ -112,8 +123,10 @@ const ConnectCard: React.FC<ConnectCardProps> = ({
       await onConnect(
         urlDraft.trim(),
         tokenDraft.trim(),
-        scopeTagIds,
-        scopeDoctypeIds
+        scopeMode === 'all' ? [] : scopeTagIds,
+        scopeMode === 'all' ? [] : scopeDoctypeIds,
+        scopeMode,
+        libraryId || undefined
       )
     } catch (err) {
       setError(getErrorMessage(err, 'Connection failed.'))
@@ -130,7 +143,10 @@ const ConnectCard: React.FC<ConnectCardProps> = ({
     >
       <div
         className="w-10 h-10 rounded-[10px] flex items-center justify-center font-mono text-[11px] font-bold text-white mb-4"
-        style={{ background: 'var(--btn-primary-bg)', color: 'var(--btn-primary-fg)' }}
+        style={{
+          background: 'var(--btn-primary-bg)',
+          color: 'var(--btn-primary-fg)',
+        }}
       >
         NGX
       </div>
@@ -143,7 +159,7 @@ const ConnectCard: React.FC<ConnectCardProps> = ({
       </h2>
       <p className="mt-1 mb-5 text-[13px] text-muted">
         {editing
-          ? 'Update the server URL and re-enter your API token. Saving re-tests the connection and runs a fresh sync.'
+          ? 'Update the server URL and re-enter your API token. Saving re-tests the connection and queues a fresh sync.'
           : needsReconnect
             ? 'The stored API token can no longer be read (the server secret changed). Enter your credentials again to reconnect.'
             : 'Pull scanned worksheets, tests and reference sheets from your document server straight into lesson planning.'}
@@ -178,7 +194,8 @@ const ConnectCard: React.FC<ConnectCardProps> = ({
             <CheckCircle className="h-4 w-4 flex-shrink-0" />
             <span>
               Connection verified · found {tested.document_count} documents,{' '}
-              {tested.tag_count} tags, {tested.document_type_count} document types.
+              {tested.tag_count} tags, {tested.document_type_count} document
+              types.
             </span>
           </div>
         )}
@@ -187,14 +204,30 @@ const ConnectCard: React.FC<ConnectCardProps> = ({
           <div className="pt-1">
             <p className="text-[13px] font-medium text-ink mb-2">
               Choose what to sync{' '}
-              <span className="font-normal text-muted">(optional)</span>
+            </p>
+            <label className="block text-[13px] text-muted mb-3">
+              <input
+                type="checkbox"
+                checked={scopeMode === 'all'}
+                onChange={(e) =>
+                  setScopeMode(e.target.checked ? 'all' : 'selected')
+                }
+              />{' '}
+              Import the entire library, including documents outside selected
+              subjects
+            </label>
+            <p className="text-[12px] text-muted mb-2">
+              Paperless API {tested.api_version ?? 10}
+              {tested.server_version
+                ? ` · Server ${tested.server_version}`
+                : ''}
             </p>
             <ScopeChecklist
               tags={tested.tags}
               documentTypes={tested.document_types}
               selectedTagIds={scopeTagIds}
               selectedDoctypeIds={scopeDoctypeIds}
-              disabled={connecting}
+              disabled={connecting || scopeMode === 'all'}
               onToggleTag={(id) => setScopeTagIds((prev) => toggleId(prev, id))}
               onToggleDoctype={(id) =>
                 setScopeDoctypeIds((prev) => toggleId(prev, id))
@@ -203,6 +236,27 @@ const ConnectCard: React.FC<ConnectCardProps> = ({
           </div>
         )}
 
+        {libraries.length > 0 && (
+          <label className="block text-[13px] text-muted">
+            Library identity
+            <select
+              aria-label="Library identity"
+              value={libraryId}
+              onChange={(e) => setLibraryId(e.target.value)}
+              className="block w-full mt-1 rounded border border-line bg-panel p-2"
+            >
+              <option value="">Match the server URL automatically</option>
+              {libraries.map((library) => (
+                <option key={library.id} value={library.id}>
+                  Moved/restored library: {library.url || library.id}
+                </option>
+              ))}
+            </select>
+            Select an existing library only if this is the same server after a
+            move or restore. A different server uses separate documents and
+            attachments.
+          </label>
+        )}
         {error && (
           <div className="flex items-center gap-2 px-3.5 py-2.5 rounded-card text-[13px] text-neg-fg bg-neg-bg border border-neg-fg/20">
             <AlertTriangle className="h-4 w-4 flex-shrink-0" />
@@ -231,12 +285,18 @@ const ConnectCard: React.FC<ConnectCardProps> = ({
           <Button
             onClick={handleConnect}
             loading={connecting}
-            disabled={!canSubmit || testing}
+            disabled={
+              !canSubmit ||
+              testing ||
+              !tested ||
+              (scopeMode === 'selected' &&
+                scopeTagIds.length + scopeDoctypeIds.length === 0)
+            }
           >
             {connecting
               ? editing
                 ? 'Saving…'
-                : 'Importing…'
+                : 'Connecting…'
               : editing
                 ? 'Save & re-sync'
                 : 'Connect & import'}
