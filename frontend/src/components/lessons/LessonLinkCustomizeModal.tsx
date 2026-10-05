@@ -19,7 +19,7 @@
 import { useState } from 'react'
 
 import Modal from '../ui/Modal/Modal'
-import { Button } from '../ui'
+import { Button, Select, Input } from '../ui'
 import AssignmentOverridesFields from '../assignments/composer/AssignmentOverridesFields'
 
 export interface LinkDraft {
@@ -27,6 +27,8 @@ export interface LinkDraft {
   name: string
   assignment_type: string
   max_points: number
+  assignment_timing?: 'draft' | 'on_schedule' | 'now'
+  due_offset_days?: number
   custom_due_date?: string | null
   custom_max_points?: number | null
   custom_instructions?: string | null
@@ -51,6 +53,8 @@ const LessonLinkCustomizeModal: React.FC<LessonLinkCustomizeModalProps> = ({
   onClose,
   onSave,
 }) => {
+  const [timing, setTiming] = useState(link.assignment_timing ?? 'on_schedule')
+  const [offset, setOffset] = useState(link.due_offset_days ?? 0)
   const [dueDate, setDueDate] = useState(link.custom_due_date ?? '')
   const [maxPoints, setMaxPoints] = useState<number | undefined>(
     link.custom_max_points ?? undefined
@@ -61,6 +65,8 @@ const LessonLinkCustomizeModal: React.FC<LessonLinkCustomizeModalProps> = ({
 
   const handleSave = () => {
     onSave({
+      assignment_timing: timing,
+      due_offset_days: offset,
       custom_due_date: dueDate || null,
       custom_max_points: maxPoints ?? null,
       custom_instructions: instructions.trim() || null,
@@ -87,6 +93,12 @@ const LessonLinkCustomizeModal: React.FC<LessonLinkCustomizeModalProps> = ({
       }
     >
       <div className="flex flex-col gap-4">
+        <Select label="When students receive this activity" value={timing} onChange={e => setTiming(e.target.value as typeof timing)} options={[
+          {value:'draft', label:'Keep as draft'},
+          {value:'on_schedule', label:'Assign when lesson is scheduled'},
+          {value:'now', label:'Assign now, including in the drawer'},
+        ]} helperText="Changing to draft does not withdraw already published work." />
+        <Input label="Days after the lesson to finish" type="number" min={0} max={365} value={offset} onChange={e => setOffset(Number(e.target.value))} helperText="0 means the lesson day. This follows rescheduling until work is submitted or graded." />
         <AssignmentOverridesFields
           dueDate={dueDate}
           onDueDate={setDueDate}
@@ -97,7 +109,7 @@ const LessonLinkCustomizeModal: React.FC<LessonLinkCustomizeModalProps> = ({
           defaultMaxPoints={link.max_points}
         />
         <p className="text-[11.5px] text-muted">
-          Due date defaults to the lesson date ({lessonDate}). A custom date stays
+          With no fixed date, work is due {offset} days after the lesson ({lessonDate || 'unscheduled: no deadline'}). A custom date stays
           fixed if the lesson is rescheduled.
         </p>
       </div>

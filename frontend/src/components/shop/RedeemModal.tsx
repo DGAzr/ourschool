@@ -25,6 +25,7 @@ import type { RedeemResponse, ShopItem } from '../../types/shop'
 
 interface RedeemModalProps {
   item: ShopItem | null
+  showPersonalPoints?:boolean
   balance: number
   onClose: () => void
   /** Called after a successful redeem so the page can update balance/stock/lists. */
@@ -36,6 +37,7 @@ interface RedeemModalProps {
 export const RedeemModal: React.FC<RedeemModalProps> = ({
   item,
   balance,
+  showPersonalPoints=true,
   onClose,
   onRedeemed,
   onViewRedemptions,
@@ -107,8 +109,8 @@ export const RedeemModal: React.FC<RedeemModalProps> = ({
           </p>
           <p className="mt-1.5 text-[13px] text-muted">
             {isInstant
-              ? `${item.name} is yours. Your new balance is ◆ ${(newBalance ?? after).toLocaleString()}.`
-              : `Your points are held and a request for ${item.name} went to your admin.`}
+              ? `${item.name} is yours.${showPersonalPoints ? ` Your new balance is ◆ ${(newBalance ?? after).toLocaleString()}.` : ''}`
+              : `Your points are held and a request for ${item.name} went to your teacher.`}
           </p>
         </div>
       </Modal>
@@ -137,8 +139,8 @@ export const RedeemModal: React.FC<RedeemModalProps> = ({
         {/* Receipt */}
         <div className="space-y-2 text-[13.5px]">
           <div className="flex items-center justify-between">
-            <span className="text-muted">Your balance</span>
-            <span className="font-mono text-ink">◆ {balance.toLocaleString()}</span>
+            <span hidden={!showPersonalPoints} className="text-muted">Your balance</span>
+            <span hidden={!showPersonalPoints} className="font-mono text-ink">◆ {balance.toLocaleString()}</span>
           </div>
           <div className="flex items-center justify-between">
             <span className="text-muted">This costs</span>
@@ -146,7 +148,7 @@ export const RedeemModal: React.FC<RedeemModalProps> = ({
               – ◆ {cost.toLocaleString()}
             </span>
           </div>
-          <div className="border-t border-line pt-2 flex items-center justify-between">
+          <div hidden={!showPersonalPoints} className="border-t border-line pt-2 flex items-center justify-between">
             <span className="font-semibold text-ink">Balance after</span>
             <span className="font-mono font-semibold text-ink">
               ◆ {after.toLocaleString()}

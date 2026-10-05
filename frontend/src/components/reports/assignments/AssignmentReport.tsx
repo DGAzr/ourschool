@@ -29,6 +29,7 @@ import { isPastDateOnly, formatDateOnly } from '../../../utils/formatters'
 import DonutChart from '../shared/DonutChart'
 
 const DONUT_COLORS: Record<string, string> = {
+  excused: 'var(--neutral)',
   graded: 'var(--pos-fg)',
   in_progress: '#4F7CAC',
   submitted: 'var(--accent)',
@@ -37,6 +38,7 @@ const DONUT_COLORS: Record<string, string> = {
 }
 
 const STATUS_LABELS: Record<string, string> = {
+  excused: 'Excused',
   graded: 'Graded',
   in_progress: 'In progress',
   submitted: 'Submitted',
@@ -83,6 +85,7 @@ const AssignmentReport: React.FC = () => {
     inProgress: page.counts.in_progress ?? 0, submitted: page.counts.submitted ?? 0,
     notStarted: page.counts.not_started ?? 0, overdue: page.counts.overdue ?? 0,
     avgGrade: assignmentReport?.summary.average_grade,
+    excused:page.counts.excused??0,
   }
   const bySubject = assignmentReport?.by_subject ?? []
   const recentlyGraded = assignmentReport?.recently_graded ?? []
@@ -100,6 +103,7 @@ const AssignmentReport: React.FC = () => {
   }
 
   const donutSegments = [
+    {label:STATUS_LABELS.excused,count:summary.excused,color:DONUT_COLORS.excused},
     { label: STATUS_LABELS.graded, count: summary.completed, color: DONUT_COLORS.graded },
     { label: STATUS_LABELS.in_progress, count: summary.inProgress, color: DONUT_COLORS.in_progress },
     { label: STATUS_LABELS.submitted, count: summary.submitted, color: DONUT_COLORS.submitted },
@@ -166,12 +170,13 @@ const AssignmentReport: React.FC = () => {
         </div>
       </div>
 
-      <div className="flex items-center justify-between gap-3">
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <PageNavigation {...page.pagination} />
         <button type="button" onClick={exportReport} className="px-3 py-2 border border-line rounded-field">Export all matching assignments</button>
       </div>
+      <p className="text-xs text-muted">{assignmentReport.summary.calculation_note} · Total: {summary.total}, including {summary.excused} excused. Counts and scores cover all matching records, across all pages.</p>
       {/* Summary tiles + donut */}
-      <div className="grid gap-4" style={{ gridTemplateColumns: '340px 1fr' }}>
+      <div className="grid grid-cols-1 lg:grid-cols-[340px_minmax(0,1fr)] gap-4">
         {/* Donut + legend */}
         <div
           className="bg-panel border border-line rounded-card"
@@ -375,7 +380,7 @@ const AssignmentReport: React.FC = () => {
                   color: 'var(--ink)',
                 }}
               >
-                {a.points_earned != null ? `${a.points_earned}/${a.max_points}` : '—'}
+                {a.points_earned != null ? `${Math.round(a.points_earned)}/${a.max_points}` : '—'}
               </span>
             </div>
           ))}
@@ -414,7 +419,7 @@ const AssignmentReport: React.FC = () => {
                     <td className="px-5 py-3.5 whitespace-nowrap">
                       <p className="text-[13.5px] font-semibold text-ink">{a.assignment_name}</p>
                       <p className="text-[11.5px] text-faint font-mono">
-                        Assigned {new Date(a.assigned_date).toLocaleDateString()}
+                        Assigned {formatDateOnly(a.assigned_date)}
                       </p>
                     </td>
                     <td className="px-5 py-3.5 whitespace-nowrap">
@@ -440,7 +445,7 @@ const AssignmentReport: React.FC = () => {
                     </td>
                     <td className="px-5 py-3.5 whitespace-nowrap text-[13.5px] font-mono text-ink-2">
                       {a.points_earned != null
-                        ? `${a.points_earned} / ${a.max_points}`
+                        ? `${Math.round(a.points_earned)} / ${a.max_points}`
                         : `— / ${a.max_points}`}
                     </td>
                     <td className="px-5 py-3.5 whitespace-nowrap">

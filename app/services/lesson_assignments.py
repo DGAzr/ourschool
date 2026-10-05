@@ -24,21 +24,25 @@ the SAs currently linked to the lesson (all matched by ``lesson_id``, then
 keyed within the lesson by ``(template_id, student_id)``) and
 creates/removes/reschedules to converge.
 
-Graded or submitted work is never destroyed: instead of deleting such an SA we
+Moving a lesson into the drawer preserves existing assignments and their dates;
+rescheduling reuses those rows. New assignments follow the explicit draft/on-schedule/now publication policy.
+
+Student work is never destroyed: instead of deleting such an SA we
 "orphan" it (``lesson_id = None``, keep the row) and return a warning, so a
 parent's real grades survive edits to the lesson that produced them.
 
 A link's ``custom_due_date`` is a fixed override — it does not follow the lesson
 date on reschedule. Only links without one have their SA due date track
-``lesson.date`` (and graded SAs never move regardless).
+``lesson.date`` plus the relative due offset (and submitted/graded SAs never move).
 
 No ``commit`` here — the router owns the transaction boundary.
 """
 
-from datetime import date
+from datetime import date, timedelta
 
 from sqlalchemy.orm import Session
 
+from app.enums import AssignmentStatus
 from app.models.assignment import StudentAssignment
 from app.models.lesson import Lesson, LessonTemplate
 
@@ -53,11 +57,32 @@ def _student_label(sa: StudentAssignment) -> str:
 
 
 def _is_protected(sa: StudentAssignment) -> bool:
-    """True when an SA holds real work that must not be silently deleted."""
+    """True when rescheduling must leave a submitted/graded deadline alone."""
     return (
         bool(sa.is_graded)
         or sa.submitted_date is not None
         or (sa.points_earned is not None)
+    )
+
+
+def _has_work(sa: StudentAssignment) -> bool:
+    """Preserve progress and teacher decisions when a link/student is removed."""
+    return (
+        _is_protected(sa)
+        or sa.status != AssignmentStatus.NOT_STARTED
+        or sa.started_date is not None
+        or sa.completed_date is not None
+        or sa.extended_due_date is not None
+        or sa.graded_date is not None
+        or bool(sa.grade_history)
+        or bool(sa.time_spent_minutes)
+        or bool(sa.time_entries)
+        or bool(sa.student_notes)
+        or bool(sa.submission_notes)
+        or bool(sa.submission_artifacts)
+        or bool(sa.teacher_feedback)
+        or bool(sa.paperless_materials)
+        or bool(sa.help_requests)
     )
 
 
@@ -78,10 +103,9 @@ def sync_lesson_assignments(db: Session, lesson: Lesson, *, assigned_by) -> list
         .all()
     )
 
-    # Drawer lessons are intentionally not assigned. Moving a lesson into the
-    # drawer therefore runs the normal removal/orphaning pass; scheduling it
-    # again recreates the desired assignment rows.
-    student_ids = [s.id for s in lesson.students] if lesson.date is not None else []
+    # Placement is not publication: moving to the drawer must not withdraw
+    # assignments students already received, even if they haven't started.
+    student_ids = [s.id for s in lesson.students]
 
     # Desired state: one SA per (link, selected student). Later links to the
     # same template would collide on the (template_id, student_id) key, so the
@@ -105,10 +129,10 @@ def sync_lesson_assignments(db: Session, lesson: Lesson, *, assigned_by) -> list
         key = (sa.template_id, sa.student_id)
         if kept.get(key) is sa:
             continue
-        if _is_protected(sa):
+        if _has_work(sa):
             sa.lesson_id = None
             warnings.append(
-                f"Kept graded/submitted work for {_student_label(sa)} "
+                f"Kept student work for {_student_label(sa)} "
                 "(unlinked from this lesson)"
             )
         else:
@@ -117,8 +141,22 @@ def sync_lesson_assignments(db: Session, lesson: Lesson, *, assigned_by) -> list
     # --- Reschedule/refresh kept SAs + create missing ones ---
     for key, link in desired.items():
         template_id, student_id = key
+        # Keep drawer records exactly as they were. A newly drafted or added
+        # template/student gets an assignment only once the lesson is dated.
+        sa = kept.get(key)
+        timing = link.assignment_timing or "on_schedule"
+        if lesson.date is None and sa is not None:
+            continue
+        if timing == "draft":
+            continue
+        if lesson.date is None and timing != "now":
+            continue
         # A custom due date is a fixed override; otherwise follow the lesson.
-        target_due = link.custom_due_date or lesson.date
+        target_due = link.custom_due_date or (
+            (lesson.date + timedelta(days=link.due_offset_days or 0))
+            if lesson.date
+            else None
+        )
 
         sa = kept.get(key)
         if sa is not None:
@@ -126,7 +164,7 @@ def sync_lesson_assignments(db: Session, lesson: Lesson, *, assigned_by) -> list
                 # Graded/submitted: never move it across term buckets.
                 if sa.due_date != target_due:
                     warnings.append(
-                        f"Left the due date on graded work for "
+                        f"Left the due date on graded/submitted work for "
                         f"{_student_label(sa)} unchanged"
                     )
             else:
@@ -151,3 +189,93 @@ def sync_lesson_assignments(db: Session, lesson: Lesson, *, assigned_by) -> list
         )
 
     return warnings
+
+
+def assignment_impact(lesson_date, students, links, existing, templates):
+    """Mirror reconciliation rules without writing; retain duplicate/removal visibility."""
+    desired = {
+        (link.template_id, student.id): link for link in links for student in students
+    }
+    student_names = {
+        s.id: f"{s.first_name} {s.last_name}".strip() or s.username for s in students
+    }
+    template_names = {t.id: t.name for t in templates}
+    result = []
+    kept = {}
+
+    def record(key, sa, action, due, explanation):
+        result.append(
+            dict(
+                assignment_id=sa.id if sa else None,
+                student_id=key[1],
+                student_name=student_names.get(key[1]) or _student_label(sa),
+                template_name=template_names.get(key[0])
+                or (sa.template.name if sa and sa.template else "Removed activity"),
+                action=action,
+                due_date=due,
+                explanation=explanation,
+            )
+        )
+
+    for sa in existing:
+        key = (sa.template_id, sa.student_id)
+        if key in desired and key not in kept:
+            kept[key] = sa
+        else:
+            record(
+                key,
+                sa,
+                "unlink" if _has_work(sa) else "remove",
+                sa.due_date,
+                (
+                    "Student work stays available separately."
+                    if _has_work(sa)
+                    else "Untouched generated assignment will be removed."
+                ),
+            )
+    for key, link in desired.items():
+        sa = kept.get(key)
+        timing = link.assignment_timing or "on_schedule"
+        due = link.custom_due_date or (
+            lesson_date + timedelta(days=link.due_offset_days or 0)
+            if lesson_date
+            else None
+        )
+        if timing == "draft" or (
+            lesson_date is None and (sa is not None or timing != "now")
+        ):
+            record(
+                key,
+                sa,
+                "retain" if sa else "draft",
+                sa.due_date if sa else None,
+                (
+                    "Published assignment and dates stay unchanged."
+                    if sa
+                    else "Activity stays a draft; no student assignment created."
+                ),
+            )
+        elif sa and _is_protected(sa):
+            record(
+                key,
+                sa,
+                "retain",
+                sa.due_date,
+                "Submitted or graded work keeps its dates and overrides.",
+            )
+        else:
+            action = (
+                "create" if sa is None else "reuse" if sa.due_date == due else "move"
+            )
+            record(
+                key,
+                sa,
+                action,
+                due,
+                (
+                    "Assign to student now."
+                    if sa is None
+                    else "Reuse the same student record; keep notes and progress."
+                ),
+            )
+    return result

@@ -17,7 +17,7 @@
  */
 
 import React, { useState, useEffect } from 'react'
-import { Link, useLocation } from 'react-router-dom'
+import { Link, useLocation, useSearchParams } from 'react-router-dom'
 import { ClipboardCheck } from 'lucide-react'
 import { useAuth } from '../contexts/AuthContext'
 import { assignmentsApi } from '../services/assignments'
@@ -27,7 +27,7 @@ import { useIsMobile } from '../hooks/useMediaQuery'
 import { SegmentedControl, StatTile, Pill, SubjectDot, statusToPillVariant, useToast, EmptyState, ActionMenu } from '../components/ui'
 import type { ActionMenuEntry } from '../components/ui'
 import ConfirmDialog from '../components/ui/ConfirmDialog'
-import GradeForm from '../components/assignments/GradeForm'
+import GradeForm, { GradeDraft } from '../components/assignments/GradeForm'
 import AssignedAssignmentEditor from '../components/assignments/AssignedAssignmentEditor'
 import AssignmentTimeLog from '../components/assignments/AssignmentTimeLog'
 import { AssignmentInfo, SubmissionCard } from '../components/assignments/AssignmentInfo'
@@ -42,6 +42,9 @@ import { useAssignmentDetail } from '../hooks/useAssignmentDetail'
 
 type Subject = { id: number; name: string; color?: string }
 type Student = { id: number; first_name: string; last_name: string }
+
+import { useRecoverableDraft } from '../hooks/useRecoverableDraft'
+import DraftRecovery from '../components/ui/DraftRecovery'
 
 interface QueuePanelProps {
   needsGradingCount: number
@@ -153,7 +156,7 @@ const QueuePanel: React.FC<QueuePanelProps> = ({
               <span>{sub?.name ?? '—'}</span>
               {a.due_date && (
                 <span className="font-mono">
-                  Due {new Date(a.due_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                  Due {formatDateOnly(a.due_date, { month: 'short', day: 'numeric' })}
                 </span>
               )}
             </div>
@@ -165,11 +168,13 @@ const QueuePanel: React.FC<QueuePanelProps> = ({
 )
 
 interface DetailPanelProps {
+  draft?: GradeDraft
+  onDraftChange: (id: number, draft: GradeDraft) => void
   selectedAssignment: StudentAssignment | undefined
   students: Student[]
   getSubjectById: (id: number) => Subject | undefined
   queueIds: number[]
-  onSaveGrade: (points: number, feedback: string, advance: boolean) => void
+  onSaveGrade: (points: number, feedback: string, advance: boolean) => Promise<boolean>
   saving: boolean
   isMobile: boolean
   onBack: () => void
@@ -177,6 +182,8 @@ interface DetailPanelProps {
 }
 
 const DetailPanel: React.FC<DetailPanelProps> = ({
+  draft,
+  onDraftChange,
   selectedAssignment,
   students,
   getSubjectById,
@@ -217,6 +224,16 @@ const DetailPanel: React.FC<DetailPanelProps> = ({
       const curIdx = queueIds.indexOf(selectedAssignment.id)
       const hasNext = curIdx >= 0 && curIdx < queueIds.length - 1
       const queuePosition = curIdx >= 0 ? { index: curIdx, total: queueIds.length } : undefined
+      const submittedWork = (<>
+                  {selectedAssignment.submission_method==='paper'&&<p className="rounded-card bg-accent-soft p-3 text-sm font-semibold">Finished on paper · review the original work with the student.</p>}
+                  <SubmissionCard notes={selectedAssignment.submission_notes} artifacts={selectedAssignment.submission_artifacts} />
+                  {selectedAssignment.student_notes && <div className="bg-panel-2 rounded-card p-4"><h3 className="font-semibold text-ink">Student working notes</h3><p className="whitespace-pre-wrap text-sm text-muted mt-2">{selectedAssignment.student_notes}</p></div>}
+                  <AssignmentInfo collapsible description={selectedAssignment.template?.description} instructions={selectedAssignment.template?.instructions} customInstructions={selectedAssignment.custom_instructions} />
+                  <details className="bg-panel-2 border border-line rounded-card p-4">
+                    <summary className="text-[12px] font-semibold text-ink cursor-pointer">Work sessions · {selectedAssignment.time_spent_minutes ?? 0} min logged</summary>
+                    <div className="mt-3"><AssignmentTimeLog assignment={selectedAssignment} onTotalChanged={() => {}} /></div>
+                  </details>
+                </>)
 
       return (
         <div className="p-6 space-y-5">
@@ -231,7 +248,7 @@ const DetailPanel: React.FC<DetailPanelProps> = ({
               Back to queue
             </button>
           )}
-          <div className="flex items-start justify-between gap-4">
+          <div className="flex flex-wrap items-start justify-between gap-4">
             <div className="min-w-0">
               <div className="flex items-center gap-2 text-[12.5px] text-muted mb-1.5">
                 {sub && <SubjectDot color={sub?.color ?? '#74716A'} size={9} />}
@@ -246,7 +263,7 @@ const DetailPanel: React.FC<DetailPanelProps> = ({
               <div className="mt-1.5 text-[13.5px] text-muted">
                 {stu ? `${stu.first_name} ${stu.last_name}` : ''}
                 {selectedAssignment.submitted_date && (
-                  <> · submitted {new Date(selectedAssignment.submitted_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}</>
+                  <> · submitted {formatDateOnly(selectedAssignment.submitted_date, { month: 'short', day: 'numeric' })}</>
                 )}
               </div>
             </div>
@@ -258,21 +275,9 @@ const DetailPanel: React.FC<DetailPanelProps> = ({
             </div>
           </div>
 
-          <SubmissionCard notes={selectedAssignment.submission_notes} artifacts={selectedAssignment.submission_artifacts} />
-
-          <AssignmentInfo
-            collapsible
-            description={selectedAssignment.template?.description}
-            instructions={selectedAssignment.template?.instructions}
-            customInstructions={selectedAssignment.custom_instructions}
-          />
-
-          <div className="bg-panel-2 border border-line rounded-card p-4">
-            <p className="text-[12px] font-semibold text-ink mb-3">Work sessions</p>
-            <AssignmentTimeLog assignment={selectedAssignment} onTotalChanged={() => {}} />
-          </div>
-
           {selectedAssignment.is_graded && !editing ? (
+            <div className="space-y-4">
+              {submittedWork}
             <div className="bg-pos-bg border border-pos-fg/20 rounded-card p-4">
               <p className="text-[11px] font-semibold text-faint uppercase tracking-[.05em] mb-1">Grade recorded</p>
               <p className="font-mono text-[22px] font-semibold text-pos-fg">
@@ -291,9 +296,13 @@ const DetailPanel: React.FC<DetailPanelProps> = ({
                 Edit grade
               </button>
             </div>
+            </div>
           ) : (
             <GradeForm
               key={editing ? `${selectedAssignment.id}-edit` : selectedAssignment.id}
+              draft={draft}
+              onDraftChange={next => onDraftChange(selectedAssignment.id, next)}
+              work={submittedWork}
               maxPoints={maxPts}
               initialPoints={editing ? selectedAssignment.points_earned : undefined}
               initialFeedback={editing ? (selectedAssignment.teacher_feedback ?? '') : ''}
@@ -301,8 +310,7 @@ const DetailPanel: React.FC<DetailPanelProps> = ({
               queuePosition={queuePosition}
               saving={saving}
               onSave={(points, feedback, advance) => {
-                onSaveGrade(points, feedback, advance)
-                setEditing(false)
+                void onSaveGrade(points, feedback, advance).then(saved => { if (saved) setEditing(false) })
               }}
             />
           )}
@@ -319,13 +327,30 @@ const Grading: React.FC = () => {
   const isMobile = useIsMobile()
 
   const location = useLocation()
-  const incomingId: number | undefined = (location.state as { assignmentId?: number } | null)?.assignmentId
+  const [searchParams, setSearchParams] = useSearchParams()
+  const queryId = Number(searchParams.get('assignmentId'))
+  const incomingId: number | undefined = Number.isSafeInteger(queryId) && queryId > 0
+    ? queryId : (location.state as { assignmentId?: number } | null)?.assignmentId
 
   const [queueFilter, setQueueFilter] = useState<'needs' | 'overdue' | 'awaiting' | 'all'>(
-    incomingId ? 'all' : 'needs'
+    ['needs', 'overdue', 'awaiting', 'all'].includes(searchParams.get('queue') ?? '')
+      ? searchParams.get('queue') as 'needs' | 'overdue' | 'awaiting' | 'all' : 'needs'
   )
-  const [selectedQueueId, setSelectedQueueId] = useState<number | null>(incomingId ?? null)
+  const [selection, setSelection] = useState({ locationKey: location.key, id: incomingId ?? null as number | null })
+  const selectedQueueId = selection.locationKey === location.key ? selection.id : incomingId ?? null
+  const setSelectedQueueId = (id: number | null) => {
+    setSelection({ locationKey: location.key, id })
+    setSearchParams(previous => {
+      const next = new URLSearchParams(previous)
+      if (id) next.set('assignmentId', String(id))
+      else next.delete('assignmentId')
+      return next
+    }, { replace: true })
+  }
   const [mobileView, setMobileView] = useState<'queue' | 'detail'>(incomingId ? 'detail' : 'queue')
+  const [drafts, setDrafts] = useState<Record<number, GradeDraft>>({})
+  const recoverable = useRecoverableDraft('grading', drafts, setDrafts)
+  const updateDraft = (id: number, draft: GradeDraft) => setDrafts(previous => ({ ...previous, [id]: draft }))
   const [saving, setSaving] = useState(false)
   const [activeTerm, setActiveTerm] = useState<Term | null>(null)
   const [unassigning, setUnassigning] = useState<StudentAssignment | null>(null)
@@ -377,7 +402,7 @@ const Grading: React.FC = () => {
   const queueIds = queueItems.map(q => q.id)
 
   const handleSaveGrade = async (points: number, feedback: string, advance: boolean) => {
-    if (!selectedAssignment) return
+    if (!selectedAssignment || saving) return false
     // Capture the next id now, before the queue shifts on refetch
     const curIdx = queueIds.indexOf(selectedAssignment.id)
     const nextId = advance && curIdx >= 0 ? (queueIds[curIdx + 1] ?? null) : null
@@ -387,11 +412,14 @@ const Grading: React.FC = () => {
         points_earned: points,
         teacher_feedback: feedback,
       })
+      setDrafts(previous => { const next = { ...previous }; delete next[selectedAssignment.id]; return next })
       toast('Grade saved')
       if (advance) setSelectedQueueId(nextId)
       refetch()
+      return true
     } catch (err) {
       toast(getErrorMessage(err, 'Failed to save grade'), 'danger')
+      return false
     } finally {
       setSaving(false)
     }
@@ -456,6 +484,7 @@ const Grading: React.FC = () => {
         <h1 className="text-[27px] font-bold text-ink tracking-[-0.02em] leading-none">Grading</h1>
       </div>
 
+      <DraftRecovery closing={recoverable.pendingClose !== null} onConfirmClose={recoverable.confirmClose} onCancelClose={recoverable.cancelClose} available={recoverable.recovery !== null} dirty={recoverable.dirty} storageError={recoverable.storageError} onResume={recoverable.resume} onDiscard={recoverable.discard} />
       {error && (
         <div className="flex-none mb-4 px-4 py-3 rounded-card text-[13px] text-neg-fg bg-neg-bg border border-neg-fg/20">
           {error}
@@ -521,6 +550,8 @@ const Grading: React.FC = () => {
             </div>
             <div className="flex-1 min-h-0">
               <DetailPanel
+                draft={selectedAssignment ? drafts[selectedAssignment.id] : undefined}
+                onDraftChange={updateDraft}
                 selectedAssignment={selectedAssignment}
                 students={students}
                 getSubjectById={getSubjectById}
@@ -556,6 +587,8 @@ const Grading: React.FC = () => {
               />
             ) : (
               <DetailPanel
+                draft={selectedAssignment ? drafts[selectedAssignment.id] : undefined}
+                onDraftChange={updateDraft}
                 selectedAssignment={selectedAssignment}
                 students={students}
                 getSubjectById={getSubjectById}

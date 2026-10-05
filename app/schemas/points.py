@@ -199,6 +199,9 @@ class SystemSettingCreate(SystemSettingBase):
 class SystemSetting(SystemSettingBase):
     """Schema for system setting responses."""
 
+    # Creation through the points API remains bounded; shared settings can hold
+    # normalized school logos and larger grading configuration values.
+    setting_value: str
     id: int
     created_at: datetime
     updated_at: datetime

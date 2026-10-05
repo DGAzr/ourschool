@@ -102,8 +102,11 @@ class StudentProgress(BaseModel):
     last_activity_date: Optional[str] = None
     subjects: List[SubjectPerformance] = []
     grade_series: List[float] = []
-    trend: int = 0
+    trend: Optional[int] = None
     journal_summary: str = ""
+
+    calculation_note: str = ""
+    excused_assignments: int = 0
 
     class Config:
         """Pydantic configuration."""
@@ -118,7 +121,7 @@ class MetricTrend(BaseModel):
     value: str
     series: List[float]
     delta: str
-    delta_positive: bool
+    delta_positive: Optional[bool] = None
 
 
 class SubjectAverage(BaseModel):
@@ -137,9 +140,9 @@ class StudentGlanceRow(BaseModel):
 
     student_id: int
     name: str
-    grade: float
-    letter: str
-    trend: int
+    grade: Optional[float] = None
+    letter: Optional[str] = None
+    trend: Optional[int] = None
     completion: float
     attendance_rate: Optional[float] = None
     effort: str
@@ -153,11 +156,14 @@ class StudentReport(BaseModel):
     completed_assignments: int
     in_progress_assignments: int
     pending_grades: int
-    average_grade: float
-    current_term_grade: float
+    average_grade: Optional[float] = None
+    current_term_grade: Optional[float] = None
     grade_series: List[float] = []
     journal_summary: str = ""
-    trend: int = 0
+    trend: Optional[int] = None
+
+    calculation_note: str = ""
+    excused_assignments: int = 0
 
     class Config:
         """Pydantic configuration."""
@@ -171,13 +177,16 @@ class AdminReport(BaseModel):
     total_students: int
     active_assignments: int
     pending_grades: int
-    average_grade: float
+    average_grade: Optional[float] = None
     total_assignments: int
     completed_assignments: int
     kpis: List[MetricTrend] = []
     class_average_series: List[float] = []
     subject_averages: List[SubjectAverage] = []
     students_glance: List[StudentGlanceRow] = []
+
+    calculation_note: str = ""
+    excused_assignments: int = 0
 
     class Config:
         """Pydantic configuration."""
@@ -285,6 +294,8 @@ class AssignmentReportItem(BaseModel):
 
 
 class AssignmentReportSummary(BaseModel):
+    excused_assignments: int = 0
+    calculation_note: str = ""
     """Schema for assignment report summaries."""
 
     total_assignments: int
@@ -308,6 +319,7 @@ class AssignmentReport(BaseModel):
 
 # Report Card Schemas
 class ReportCardSubjectGrade(BaseModel):
+    excused_assignments: int = 0
     """Schema for report card subject grades."""
 
     subject_id: int
@@ -324,10 +336,11 @@ class ReportCardSubjectGrade(BaseModel):
 
 
 class ReportCardSummary(BaseModel):
+    excused_assignments: int = 0
     """Schema for report card summaries."""
 
-    overall_percentage: float
-    overall_letter_grade: str
+    overall_percentage: Optional[float] = None
+    overall_letter_grade: Optional[str] = None
     total_assignments: int
     completed_assignments: int
     subjects_count: int
@@ -338,6 +351,7 @@ class ReportCardSummary(BaseModel):
 
 
 class ReportCard(BaseModel):
+    calculation_note: str = ""
     """Schema for report cards."""
 
     student_id: int

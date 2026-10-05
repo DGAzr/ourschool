@@ -1,5 +1,6 @@
 """Paged list APIs; existing array endpoints remain compatible."""
 
+from datetime import date, datetime
 from typing import Annotated, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -141,6 +142,10 @@ def assignment_page(
         "awaiting",
         "queue_all",
     ] = "all",
+    due_from: date | None = None,
+    due_to: date | None = None,
+    include_undated: bool = False,
+    sort: Literal["due", "recent"] = "due",
     search: str | None = Query(None, max_length=200),
     assignment_type: str | None = None,
     limit: int = Query(50, ge=1, le=100),
@@ -161,6 +166,17 @@ def assignment_page(
     )
     if lesson_id is not None:
         query = query.filter(A.lesson_id == lesson_id)
+    due = func.coalesce(A.extended_due_date, A.due_date) if student_view else A.due_date
+    if due_from and due_to and due_from > due_to:
+        raise HTTPException(422, "Start date must be on or before end date")
+    if due_from:
+        query = query.filter(
+            or_(due >= due_from, due.is_(None)) if include_undated else due >= due_from
+        )
+    if due_to:
+        query = query.filter(
+            or_(due <= due_to, due.is_(None)) if include_undated else due <= due_to
+        )
     predicates = tab_predicates()
     if term_id is not None:
         term = db.query(Term).filter(Term.id == term_id).first()
@@ -179,13 +195,27 @@ def assignment_page(
     ).one()
     counts = dict(counts_row._mapping)
     query = query.filter(predicates[tab])
-    due = func.coalesce(A.extended_due_date, A.due_date) if student_view else A.due_date
-    if cursor:
-        query = query.filter(after_date(cursor, due))
+    if sort == "recent":
+        ordering = func.coalesce(A.updated_at, A.created_at)
+        if cursor:
+            stamp, row_id = decode_cursor(cursor)
+            try:
+                stamp = datetime.fromisoformat(stamp)
+            except (TypeError, ValueError):
+                raise HTTPException(422, "Invalid recent-work cursor") from None
+            query = query.filter(
+                or_(ordering < stamp, (ordering == stamp) & (A.id < row_id))
+            )
+        order_by = (ordering.desc(), A.id.desc())
+    else:
+        ordering = due
+        if cursor:
+            query = query.filter(after_date(cursor, due))
+        order_by = (due.asc().nullslast(), A.id)
     rows = (
         assignment_projection(query)
-        .add_columns(due.label("sort_date"))
-        .order_by(due.asc().nullslast(), A.id)
+        .add_columns(ordering.label("sort_date"))
+        .order_by(*order_by)
         .limit(limit + 1)
         .all()
     )

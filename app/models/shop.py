@@ -167,6 +167,10 @@ class ShopRedemption(Base):
         nullable=True,
     )
     created_at = Column(DateTime(timezone=True), default=_utcnow)
+    pickup_instructions = Column(Text, nullable=True)
+    points_refunded = Column(
+        Boolean, nullable=False, default=False, server_default="false"
+    )
     decided_at = Column(DateTime(timezone=True), nullable=True)
     fulfilled_at = Column(DateTime(timezone=True), nullable=True)
     decided_by = Column(

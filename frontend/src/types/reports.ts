@@ -57,6 +57,8 @@ export interface SubjectPerformance {
 }
 
 export interface StudentProgress {
+  calculation_note?: string
+  excused_assignments?: number
   student_id: number
   student_name: string
   first_name: string
@@ -78,7 +80,7 @@ export interface StudentProgress {
   last_activity_date?: string
   subjects: SubjectPerformance[]
   grade_series: number[]
-  trend: number
+  trend: number | null
   journal_summary: string
 }
 
@@ -87,7 +89,7 @@ export interface MetricTrend {
   value: string
   series: number[]
   delta: string
-  delta_positive: boolean
+  delta_positive: boolean | null
 }
 
 interface SubjectAverage {
@@ -102,9 +104,9 @@ interface SubjectAverage {
 interface StudentGlanceRow {
   student_id: number
   name: string
-  grade: number
-  letter: string
-  trend: number
+  grade: number | null
+  letter: string | null
+  trend: number | null
   completion: number
   attendance_rate?: number
   effort: string
@@ -112,22 +114,26 @@ interface StudentGlanceRow {
 }
 
 export interface StudentReport {
+  calculation_note?: string
+  excused_assignments?: number
   total_assignments: number
   completed_assignments: number
   in_progress_assignments: number
   pending_grades: number
-  average_grade: number
-  current_term_grade: number
+  average_grade: number | null
+  current_term_grade: number | null
   grade_series: number[]
-  trend: number
+  trend: number | null
   journal_summary: string
 }
 
 export interface AdminReport {
+  calculation_note?: string
+  excused_assignments?: number
   total_students: number
   active_assignments: number
   pending_grades: number
-  average_grade: number
+  average_grade: number | null
   total_assignments: number
   completed_assignments: number
   kpis: MetricTrend[]
@@ -174,6 +180,8 @@ export interface AssignmentReportItem {
 }
 
 interface AssignmentReportSummary {
+  excused_assignments?:number
+  calculation_note?:string
   total_assignments: number
   completed_assignments: number
   in_progress_assignments: number
@@ -194,6 +202,7 @@ export interface AssignmentReport {
 }
 
 export interface ReportCardSubjectGrade {
+  excused_assignments?:number
   subject_id: number
   subject_name: string
   subject_color: string
@@ -208,8 +217,9 @@ export interface ReportCardSubjectGrade {
 }
 
 interface ReportCardSummary {
-  overall_percentage: number
-  overall_letter_grade: string
+  excused_assignments?:number
+  overall_percentage: number | null
+  overall_letter_grade: string | null
   total_assignments: number
   completed_assignments: number
   subjects_count: number
@@ -220,6 +230,7 @@ interface ReportCardSummary {
 }
 
 export interface ReportCard {
+  calculation_note?:string
   student_id: number
   student_name: string
   student_grade_level?: number

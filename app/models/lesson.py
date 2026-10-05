@@ -186,6 +186,10 @@ class LessonTemplate(Base):
     # Per-link overrides applied to the StudentAssignments this link produces.
     # A custom_due_date is a fixed override: it does not follow the lesson date
     # when the lesson is rescheduled (the sync service enforces this).
+    assignment_timing = Column(
+        String(20), nullable=False, default="on_schedule", server_default="on_schedule"
+    )
+    due_offset_days = Column(Integer, nullable=False, default=0, server_default="0")
     custom_due_date = Column(Date)
     custom_max_points = Column(Integer)
     custom_instructions = Column(Text)

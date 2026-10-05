@@ -4,7 +4,7 @@ import csv
 import io
 
 from fastapi import HTTPException
-from sqlalchemy import func, case, String
+from sqlalchemy import func, case, String, and_, or_
 from sqlalchemy.orm import aliased
 
 from app.crud.assignment_reads import (
@@ -16,6 +16,9 @@ from app.crud.assignment_reads import (
     encode_cursor,
     after_date,
 )
+from app.crud import settings as crud_settings
+from app.crud.reports.shared import calculation_note
+from app.utils.grading import compute_weighted_grade
 from app.models.subject import Subject
 from app.models.user import User, UserRole
 from app.models.term import Term
@@ -119,16 +122,38 @@ def report_page(
     query = report_query(db, subject_id, student_id, term_id, status)
     overdue = assignment_status_filter("overdue")
     effective_status = case((overdue, "overdue"), else_=A.status.cast(String))
+    graded = and_(
+        A.status != "excused",
+        A.points_earned.is_not(None),
+        or_(A.is_graded, A.status == "graded"),
+    )
     summary_row = query.with_entities(
         func.count(A.id).label("total_assignments"),
-        func.count(A.id).filter(A.is_graded).label("graded_assignments"),
+        func.count(A.id).filter(graded).label("graded_assignments"),
         func.count(A.id).filter(A.status == "submitted").label("pending_assignments"),
         func.count(A.id).filter(overdue).label("overdue_assignments"),
-        func.avg(A.percentage_grade).filter(A.is_graded).label("average_grade"),
+        func.count(A.id).filter(A.status == "excused").label("excused_assignments"),
         func.count(func.distinct(T.subject_id)).label("subjects_count"),
         func.count(func.distinct(A.student_id)).label("students_count"),
     ).one()
     summary = dict(summary_row._mapping)
+    weights = crud_settings.get_assignment_type_weights(db)
+    scored_groups = (
+        query.filter(graded)
+        .with_entities(
+            func.sum(A.points_earned),
+            func.sum(func.coalesce(A.custom_max_points, T.max_points)),
+            T.assignment_type,
+        )
+        .group_by(T.assignment_type)
+        .all()
+    )
+    _, possible, percentage = compute_weighted_grade(scored_groups, weights)
+    summary["average_grade"] = round(percentage, 2) if possible > 0 else None
+    summary["calculation_note"] = calculation_note(
+        weights,
+        "selected student, term and report filters; scores pooled across matching work",
+    )
     counts = dict(
         query.with_entities(effective_status, func.count(A.id))
         .group_by(effective_status)
@@ -150,7 +175,7 @@ def report_page(
     ]
     recent = [
         row_dict(row)
-        for row in projection(query.filter(A.is_graded, A.graded_date.is_not(None)))
+        for row in projection(query.filter(graded, A.graded_date.is_not(None)))
         .order_by(A.graded_date.desc(), A.id.desc())
         .limit(10)
         .all()

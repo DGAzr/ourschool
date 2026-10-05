@@ -192,10 +192,13 @@ def test_full_request_queue_flow_with_refund(
 
     # Approve -> ready.
     r = client.post(
-        f"/api/shop/redemptions/{redemption_id}/approve", headers=admin_headers
+        f"/api/shop/redemptions/{redemption_id}/approve",
+        json={"pickup_instructions": "Collect your book from the library shelf"},
+        headers=admin_headers,
     )
     assert r.status_code == 200
     assert r.json()["status"] == "ready"
+    assert r.json()["pickup_instructions"] == "Collect your book from the library shelf"
 
     # Fulfill -> fulfilled.
     r = client.post(
@@ -246,6 +249,7 @@ def test_decline_refunds_points(
     )
     assert r.status_code == 200
     assert r.json()["status"] == "declined"
+    assert r.json()["points_refunded"] is True
 
     r = client.get("/api/points/my-balance", headers=student_headers)
     assert r.json()["current_balance"] == 50
@@ -334,9 +338,7 @@ def test_reorder_items_endpoint(client, admin_headers, _points_enabled):
     assert listed == [c["id"], a["id"], b["id"]]
 
 
-def test_set_my_goal_endpoint(
-    client, admin_headers, student_factory, _points_enabled
-):
+def test_set_my_goal_endpoint(client, admin_headers, student_factory, _points_enabled):
     cat = _create_category(client, admin_headers, "GoalCat")
     item = _create_item(client, admin_headers, cat["id"], name="GoalItem")
     hidden = _create_item(
@@ -356,9 +358,7 @@ def test_set_my_goal_endpoint(
     assert r.json()["goal_item_id"] == item["id"]
 
     # Clearing works.
-    r = client.put(
-        "/api/shop/my-goal", json={"item_id": None}, headers=student_headers
-    )
+    r = client.put("/api/shop/my-goal", json={"item_id": None}, headers=student_headers)
     assert r.status_code == 200
     assert r.json()["goal_item_id"] is None
 
@@ -391,3 +391,36 @@ def test_admin_overview_surfaces_student_goal(
     )
     assert mine["goal_item_id"] == item["id"]
     assert mine["goal_item_name"] == "AdminGoalItem"
+
+
+def test_legacy_pending_metadata_does_not_hide_an_actionable_request(
+    client, admin_headers, student_factory, db_session, _points_enabled
+):
+    from app.models.shop import ShopRedemption
+
+    student, _ = student_factory()
+    category = _create_category(client, admin_headers, "LegacyQueue")
+    item = _create_item(client, admin_headers, category["id"], name="Legacy request")
+    redemption = ShopRedemption(
+        student_id=student["id"],
+        item_id=item["id"],
+        item_name=item["name"],
+        cost_points=50,
+        fulfillment_type="instant",
+        status="pending",
+    )
+    db_session.add(redemption)
+    db_session.commit()
+    request_id = redemption.id
+    pending = client.get("/api/shop/redemptions?status=pending", headers=admin_headers)
+    assert pending.status_code == 200, pending.text
+    assert any(row["id"] == request_id for row in pending.json())
+    approved = client.post(
+        f"/api/shop/redemptions/{request_id}/approve",
+        json={"pickup_instructions": "Ask me after lunch."},
+        headers=admin_headers,
+    )
+    assert approved.status_code == 200, approved.text
+    ready = client.get("/api/shop/redemptions?status=ready", headers=admin_headers)
+    assert ready.status_code == 200, ready.text
+    assert any(row["id"] == request_id for row in ready.json())

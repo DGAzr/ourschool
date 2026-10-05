@@ -23,18 +23,21 @@
  * start for review.
  */
 
+import { Link } from 'react-router-dom'
 import React, { useEffect, useMemo, useState } from 'react'
 import { Clock, ExternalLink, Paperclip } from 'lucide-react'
 import { lessonsApi } from '../services/lessons'
 import { termsApi } from '../services/terms'
 import { SubjectDot } from '../components/ui'
 import DocumentThumb from '../components/materials/DocumentThumb'
+import MaterialPreviewButton from '../components/materials/MaterialPreviewButton'
 import DocumentViewerModal from '../components/materials/DocumentViewerModal'
 import { kindBadge } from '../components/materials/materialsLogic'
 import { StudentLesson } from '../types/lesson'
 import { PaperlessMaterial } from '../types/paperless'
 import { Term } from '../types/term'
 import { formatDateOnly } from '../utils/formatters'
+import { assignmentHref, assignmentProgress } from '../utils/studentAssignments'
 import { todayISO } from '../utils/lessonPlanning'
 
 const addDaysISO = (iso: string, days: number): string => {
@@ -67,7 +70,7 @@ const MyLessons: React.FC = () => {
       setLoading(true)
       try {
         const term = await termsApi.getActive()
-        const start = showPast && term ? term.start_date : undefined
+        const start = showPast && term ? term.start_date : today
         // Guard against a stale active term whose end date is already behind
         // us — that would make the range empty.
         const end =
@@ -154,21 +157,19 @@ const MyLessons: React.FC = () => {
                 {dayLessons.map(lesson => (
                   <div
                     key={lesson.id}
-                    className={`bg-panel border border-line rounded-card-lg overflow-hidden ${
-                      lesson.status === 'taught' ? 'opacity-70' : ''
-                    }`}
+                    className="bg-panel border border-line rounded-card-lg overflow-hidden"
                   >
                     <div className="h-1" style={{ backgroundColor: lesson.subject?.color || 'var(--accent)' }} />
                     <div className="p-5">
                       {/* Title row */}
-                      <div className="flex items-start justify-between gap-3 mb-1">
+                      <div className="flex flex-wrap items-start justify-between gap-3 mb-1">
                         <div className="flex items-center gap-2 min-w-0">
                           <SubjectDot color={lesson.subject?.color ?? '#74716A'} size={9} className="flex-none" />
-                          <h3 className="text-[15px] font-semibold text-ink truncate">{lesson.title}</h3>
+                          <h3 className="text-[15px] font-semibold text-ink break-words">{lesson.title}</h3>
                         </div>
                         {lesson.status === 'taught' && (
                           <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold uppercase tracking-wide bg-pos-bg text-pos-fg border border-[var(--pos-fg)]/20 flex-shrink-0">
-                            Done
+                            Taught
                           </span>
                         )}
                       </div>
@@ -188,18 +189,25 @@ const MyLessons: React.FC = () => {
                         <p className="text-[13px] text-ink-2 leading-relaxed mb-3">{lesson.objective}</p>
                       )}
 
+                      {lesson.status === 'taught' && (
+                        <p className="text-[12px] text-muted mb-3">
+                          {(lesson.assignments ?? []).filter(a => ['not_started', 'in_progress'].includes(assignmentProgress(a))).length} activities still to finish
+                        </p>
+                      )}
                       {/* Linked work */}
                       {lesson.templates.length > 0 && (
                         <div className="flex items-center gap-1.5 flex-wrap mb-3">
                           <span className="text-[11px] font-semibold text-faint uppercase tracking-[.06em]">Work:</span>
-                          {lesson.templates.map(link => (
-                            <span
-                              key={link.id}
-                              className="inline-flex items-center px-2.5 py-1 rounded-full bg-accent-soft text-accent text-[12px] font-semibold"
-                            >
-                              {link.template?.name ?? 'Assignment'}
-                            </span>
-                          ))}
+                          {lesson.templates.map(link => {
+                            const work = (lesson.assignments ?? []).filter(a => a.template_id === link.template_id)
+                            return work.length ? work.map(a => (
+                              <Link key={a.id} to={assignmentHref(a.id)} className="inline-flex items-center px-2.5 py-2 rounded-field bg-accent-soft text-accent text-[12px] font-semibold hover:underline">
+                                {link.template?.name ?? 'Assignment'} · {assignmentProgress(a).replace('_', ' ')}
+                              </Link>
+                            )) : (
+                              <span key={link.id} className="text-[12px] text-muted">{link.template?.name ?? 'Activity'} · Not assigned yet</span>
+                            )
+                          })}
                         </div>
                       )}
 
@@ -239,7 +247,7 @@ const MyLessons: React.FC = () => {
                           {lesson.paperless_materials.map(material => (
                             <div
                               key={material.document_id}
-                              className="flex items-center gap-3 px-3 py-2 bg-panel-2 border border-line rounded-field"
+                              className="flex flex-wrap items-center gap-3 px-3 py-2 bg-panel-2 border border-line rounded-field"
                             >
                               <DocumentThumb
                                 externalId={material.external_id}
@@ -253,12 +261,7 @@ const MyLessons: React.FC = () => {
                                   {material.page_count ? ` · ${material.page_count} pp` : ''}
                                 </p>
                               </div>
-                              <button
-                                onClick={() => setViewingMaterial(material)}
-                                className="h-[28px] px-3 text-[12.5px] font-semibold rounded-[7px] bg-panel border border-line text-muted hover:text-ink hover:bg-track transition-colors flex-shrink-0"
-                              >
-                                View
-                              </button>
+                              <MaterialPreviewButton material={material} onOpen={() => setViewingMaterial(material)} />
                             </div>
                           ))}
                         </div>

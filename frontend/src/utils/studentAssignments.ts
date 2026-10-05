@@ -38,7 +38,18 @@ export const effectiveDueDate = (a: StudentAssignment): string | undefined =>
   a.extended_due_date ?? a.due_date
 
 const isActionable = (a: StudentAssignment): boolean =>
-  a.status === 'not_started' || a.status === 'in_progress' || a.status === 'overdue'
+  ['not_started', 'in_progress'].includes(assignmentProgress(a))
+
+/** Deadline urgency must never replace the student's actual work state. */
+export const assignmentProgress = (a: Pick<StudentAssignment, 'status' | 'is_graded' | 'submitted_date' | 'started_date' | 'time_spent_minutes'>): Exclude<StudentAssignment['status'], 'overdue'> => {
+  if (a.is_graded || a.status === 'graded') return 'graded'
+  if (a.status === 'excused') return 'excused'
+  if (a.submitted_date || a.status === 'submitted') return 'submitted'
+  if (a.started_date || a.time_spent_minutes > 0 || a.status === 'in_progress') return 'in_progress'
+  return 'not_started'
+}
+
+export const assignmentHref = (id: number): string => `/assignments/${id}`
 
 /**
  * Whether unfinished work is past its effective due date. Computed from dates
@@ -53,7 +64,7 @@ export const isOverdue = (a: StudentAssignment, today = todayISO()): boolean => 
 /** Which student-view tab an assignment belongs to. */
 export const bucketTab = (a: StudentAssignment): StudentTab => {
   if (a.is_graded || a.status === 'graded' || a.status === 'excused') return 'done'
-  if (a.status === 'submitted') return 'submitted'
+  if (assignmentProgress(a) === 'submitted') return 'submitted'
   return 'todo'
 }
 

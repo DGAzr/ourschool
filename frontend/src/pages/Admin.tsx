@@ -1,3 +1,5 @@
+import SchoolIdentityPanel from '../components/admin/SchoolIdentityPanel'
+import SetupChecklist from '../components/dashboard/SetupChecklist'
 /*
  * OurSchool - Homeschool Management System
  * Copyright (C) 2025 Dustan Ashley
@@ -16,9 +18,10 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
+import { termCalendarProgress } from '../utils/dates'
 import { getErrorMessage } from '../services/api'
 import React, { useState, useEffect, useCallback, useRef } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { usePointsStatus } from '../contexts/PointsStatusContext'
 import { usePaperlessStatusContext } from '../contexts/PaperlessStatusContext'
@@ -56,6 +59,7 @@ import {
 // ── Category rail ──────────────────────────────────────────────────────────
 const CATS = [
   { key: 'overview',    label: 'Overview',               icon: LayoutDashboard },
+  { key: 'school', label: 'School identity', icon: BookOpen },
   { key: 'attendance',  label: 'Attendance & compliance', icon: Calendar },
   { key: 'grading',     label: 'Grading',                  icon: BookOpen },
   { key: 'points',      label: 'Points & rewards',        icon: Coins },
@@ -125,7 +129,17 @@ const Admin: React.FC = () => {
   const navigate = useNavigate()
   const { refresh: refreshAssignmentTypes } = useAssignmentTypes()
   const { refresh: refreshPointsStatus } = usePointsStatus()
-  const [section, setSection] = useState<SectionKey>('overview')
+  const [searchParams, setSearchParams] = useSearchParams()
+  const requestedSection = searchParams.get('section')
+  const section: SectionKey = CATS.some(category => category.key === requestedSection)
+    ? requestedSection as SectionKey : 'overview'
+  const setSection = (next: SectionKey) => {
+    setSearchParams(previous => {
+      const updated = new URLSearchParams(previous)
+      updated.set('section', next)
+      return updated
+    })
+  }
   const [pendingAction, setPendingAction] = useState<PendingAction | null>(null)
 
   // ── Attendance settings ──
@@ -187,7 +201,7 @@ const Admin: React.FC = () => {
 
   // ── User management ──
   const EMPTY_NEW_USER = { first_name: '', last_name: '', email: '', username: '', password: '', role: 'student' as 'admin' | 'student', date_of_birth: '', grade_level: 1 }
-  const EMPTY_EDIT_USER = { first_name: '', last_name: '', email: '', username: '', is_active: true, date_of_birth: '', grade_level: 1 }
+  const EMPTY_EDIT_USER = { student_ui_mode: 'regular' as 'regular'|'simple', first_name: '', last_name: '', email: '', username: '', is_active: true, date_of_birth: '', grade_level: 1 }
   const [showAddUser, setShowAddUser] = useState(false)
   const [showEditUser, setShowEditUser] = useState(false)
   const [editingUser, setEditingUser] = useState<User | null>(null)
@@ -224,9 +238,16 @@ const Admin: React.FC = () => {
   const [importStep, setImportStep] = useState<'idle' | 'configure' | 'loading' | 'result'>('idle')
   const [importData, setImportData] = useState<SystemBackupFile | null>(null)
   const [importOptions, setImportOptions] = useState({ skip_existing_users: true, update_existing_data: false, preserve_ids: false, dry_run: true })
+  const [previewKey,setPreviewKey]=useState<string|null>(null)
+  const [lastBackup,setLastBackup]=useState<{timestamp:string;count:number}|null>(()=>{try{return JSON.parse(localStorage.getItem('ourschool.lastBackup')??'null')}catch{return null}})
+  const exportBackup=useCallback(async()=>{const data=await backupApi.exportSystemBackup();const summary={timestamp:data.backup_timestamp,count:Object.values(data).reduce((sum,value)=>sum+(Array.isArray(value)?value.length:0),0)};setLastBackup(summary);try{localStorage.setItem('ourschool.lastBackup',JSON.stringify(summary))}catch{/* Download still succeeds. */}return data},[])
   const [importResult, setImportResult] = useState<SystemBackupImportResult | null>(null)
+  const backupSectionLabel = (key: string) => key.replace(/_/g, ' ')
+  const backupCounts = (counts: Record<string, number>) => Object.entries(counts).filter(([, count]) => count > 0)
+  const backupTotal = (counts: Record<string, number>) => Object.values(counts).reduce((sum, count) => sum + count, 0)
   const [importError, setImportError] = useState<string | null>(null)
   const [restoreMode, setRestoreMode] = useState<'merge' | 'wipe'>('merge')
+  const importKey=JSON.stringify({data:importData,options:{...importOptions,dry_run:true},mode:restoreMode})
   const [showWipeConfirm, setShowWipeConfirm] = useState(false)
   const backupFileInputRef = useRef<HTMLInputElement>(null)
 
@@ -238,17 +259,19 @@ const Admin: React.FC = () => {
       try {
         const data: unknown = JSON.parse(e.target?.result as string)
         if (!isSystemBackupFile(data)) throw new Error('Invalid backup format')
+        setPreviewKey(null)
+        setImportOptions(prev=>({...prev,dry_run:true}))
         setImportData(data)
         setImportError(null)
         setImportStep('configure')
       } catch {
-        setImportError("Failed to parse backup file. Please ensure it's a valid system backup.")
+        setImportError("Unsupported or incomplete backup. Choose an OurSchool JSON backup in format 1.0, 2.0, 2.1, 2.2, 2.3 or 2.4.")
       }
     }
     reader.readAsText(file)
   }
 
-  const performImport = async () => {
+  const performImport = async (previewOnly=false) => {
     if (!importData) return
     setShowWipeConfirm(false)
     setImportStep('loading')
@@ -257,10 +280,12 @@ const Admin: React.FC = () => {
     try {
       const result = await backupApi.importSystemBackup({
         backup_data: importData,
-        import_options: { ...importOptions, wipe_before_import: wipe },
+        import_options: { ...importOptions, dry_run:previewOnly || importOptions.dry_run, wipe_before_import: wipe },
         ...(wipe ? { wipe_confirmation: WIPE_CONFIRMATION_PHRASE } : {}),
       })
       setImportResult(result)
+      if(result.success&&result.dry_run)setPreviewKey(importKey)
+      else if(!result.success)setImportError(result.errors.join(' · ')||'Import could not be completed.')
       setImportStep('result')
     } catch (err) {
       setImportError(getErrorMessage(err, 'Import failed'))
@@ -270,6 +295,7 @@ const Admin: React.FC = () => {
 
   // A real (non-dry-run) wipe import must pass the typed-phrase dialog first.
   const requestImport = () => {
+    if(!importOptions.dry_run && previewKey!==importKey){void performImport(true);return}
     if (restoreMode === 'wipe' && !importOptions.dry_run) {
       setShowWipeConfirm(true)
     } else {
@@ -571,16 +597,7 @@ const Admin: React.FC = () => {
   // ── Term helpers ──────────────────────────────────────────────────────────
   const formatTermDate = (s: string) => { try { return format(parseISO(s), 'MMM d, yyyy') } catch { return s } }
 
-  const calcTermProgress = (start: string, end: string) => {
-    try {
-      const s = parseISO(start), e = parseISO(end), now = new Date()
-      if (now < s) return { progress: 0, daysRemaining: Math.ceil((e.getTime() - s.getTime()) / 86400000) }
-      if (now > e) return { progress: 100, daysRemaining: 0 }
-      const total = Math.ceil((e.getTime() - s.getTime()) / 86400000)
-      const elapsed = Math.ceil((now.getTime() - s.getTime()) / 86400000)
-      return { progress: Math.round(Math.min(Math.max((elapsed / total) * 100, 0), 100)), daysRemaining: Math.max(Math.ceil((e.getTime() - now.getTime()) / 86400000), 0) }
-    } catch { return { progress: 0, daysRemaining: 0 } }
-  }
+  const calcTermProgress = termCalendarProgress
 
   const termTypeLabel = (t: string) => ({ semester: 'Semester', quarter: 'Quarter', trimester: 'Trimester', custom: 'Custom' }[t] || t)
 
@@ -719,7 +736,7 @@ const Admin: React.FC = () => {
     const errors = validateEditUser()
     if (Object.keys(errors).length > 0) { setEditUserErrors(errors); return }
     try {
-      await usersApi.update(editingUser.id, editUser)
+      await usersApi.update(editingUser.id, {...editUser, date_of_birth: editUser.date_of_birth || null})
       const data = await usersApi.getAll()
       setUsers(data)
       setShowEditUser(false)
@@ -751,7 +768,7 @@ const Admin: React.FC = () => {
   const openEditUser = (u: User) => {
     setEditingUser(u)
     setEditUserErrors({})
-    setEditUser({ first_name: u.first_name, last_name: u.last_name, email: u.email, username: u.username, is_active: u.is_active, date_of_birth: u.date_of_birth || '', grade_level: u.grade_level ?? 1 })
+    setEditUser({ student_ui_mode: u.student_ui_mode ?? 'regular', first_name: u.first_name, last_name: u.last_name, email: u.email, username: u.username, is_active: u.is_active, date_of_birth: u.date_of_birth || '', grade_level: u.grade_level ?? 1 })
     setShowEditUser(true)
   }
 
@@ -860,6 +877,7 @@ const Admin: React.FC = () => {
   // ── Section content ───────────────────────────────────────────────────────
   const renderSection = () => {
     switch (section) {
+      case 'school': return <SchoolIdentityPanel/>
 
       case 'overview': return (
         <div>
@@ -889,7 +907,7 @@ const Admin: React.FC = () => {
               <p className="text-[13.5px] font-medium text-ink mb-0.5">Required days of instruction</p>
               <p className="text-[12px] text-muted mb-3">Used for compliance tracking. Most jurisdictions require 160–200 days per year.</p>
               <div className="flex items-center gap-3">
-                <input
+                <input aria-label="Required instruction days"
                   type="number" min="1" max="365"
                   value={requiredDaysDraft}
                   onChange={e => setRequiredDaysDraft(e.target.value)}
@@ -931,7 +949,7 @@ const Admin: React.FC = () => {
               {grades.map(([letter, min], i) => (
                 <div key={letter} className="flex items-center gap-3">
                   <span className="w-8 text-right font-semibold text-[13px]" style={{ color: gradeColor(min) }}>{letter}</span>
-                  <input
+                  <input aria-label="Minimum percentage for grade band"
                     type="number" min="0" max="100"
                     value={min}
                     onChange={e => setGrades(g => g.map((x, idx) => idx === i ? [x[0], Math.max(0, Math.min(100, parseInt(e.target.value) || 0))] : x))}
@@ -991,7 +1009,7 @@ const Admin: React.FC = () => {
                         const share = t.is_active && activeTotal > 0 ? (Number(t.weight) || 0) / activeTotal * 100 : 0
                         return (
                           <div key={t.id} className={`flex items-center gap-3 py-1.5 ${t.is_active ? '' : 'opacity-50'}`}>
-                            <input
+                            <input aria-label="Assignment type color"
                               type="color"
                               value={t.color}
                               onChange={e => updateTypeField(t.id, { color: e.target.value })}
@@ -1003,14 +1021,14 @@ const Admin: React.FC = () => {
                               color={t.color}
                               onSelect={name => updateTypeField(t.id, { icon: name ?? undefined })}
                             />
-                            <input
+                            <input aria-label="Assignment type name"
                               type="text"
                               value={t.name}
                               onChange={e => updateTypeField(t.id, { name: e.target.value })}
                               className="flex-1 min-w-0 bg-field-bg border border-field-border text-ink text-[13.5px] rounded-field px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent"
                             />
                             <div className="flex items-center gap-1.5">
-                              <input
+                              <input aria-label="Assignment type weight"
                                 type="number" min="0" max="100" step="1"
                                 value={t.weight}
                                 onChange={e => updateTypeField(t.id, { weight: Math.max(0, Math.min(100, parseFloat(e.target.value) || 0)) })}
@@ -1038,7 +1056,7 @@ const Admin: React.FC = () => {
 
                   {/* Add new type */}
                   <div className="flex items-center gap-2 mt-4 pt-4 border-t border-line-2">
-                    <input
+                    <input aria-label="New assignment type color"
                       type="color"
                       value={newTypeColor}
                       onChange={e => setNewTypeColor(e.target.value)}
@@ -1050,7 +1068,7 @@ const Admin: React.FC = () => {
                       color={newTypeColor}
                       onSelect={name => setNewTypeIcon(name ?? undefined)}
                     />
-                    <input
+                    <input aria-label="New assignment type name"
                       type="text"
                       placeholder="New category name"
                       value={newTypeName}
@@ -1058,7 +1076,7 @@ const Admin: React.FC = () => {
                       onKeyDown={e => { if (e.key === 'Enter') addType() }}
                       className="flex-1 min-w-0 bg-field-bg border border-field-border text-ink text-[13.5px] rounded-field px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent placeholder:text-faintest"
                     />
-                    <input
+                    <input aria-label="New assignment type weight"
                       type="number" min="0" max="100" placeholder="Wt"
                       value={newTypeWeight}
                       onChange={e => setNewTypeWeight(e.target.value)}
@@ -1119,9 +1137,9 @@ const Admin: React.FC = () => {
               ))}
             </div>
             <div className="flex items-center gap-2">
-              <input type="text" placeholder="Label" value={presetLabel} onChange={e => setPresetLabel(e.target.value)}
+              <input aria-label="Point award label" type="text" placeholder="Label" value={presetLabel} onChange={e => setPresetLabel(e.target.value)}
                 className="flex-1 bg-field-bg border border-field-border text-ink text-[13px] rounded-field px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent placeholder:text-faintest" />
-              <input type="number" placeholder="Pts" value={presetAmount} onChange={e => setPresetAmount(e.target.value)}
+              <input aria-label="Point award amount" type="number" placeholder="Pts" value={presetAmount} onChange={e => setPresetAmount(e.target.value)}
                 className="w-16 bg-field-bg border border-field-border text-ink font-mono text-[13px] rounded-field px-2.5 py-1.5 focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent" />
               <button onClick={addPreset} className="px-3 py-1.5 rounded-field text-[13px] font-semibold bg-btn-primary-bg text-btn-primary-fg hover:opacity-90 transition-opacity">Add</button>
             </div>
@@ -1221,13 +1239,13 @@ const Admin: React.FC = () => {
                     {adjustError && <div className="bg-neg-bg text-neg-fg px-4 py-3 rounded-field text-[13px]">{adjustError}</div>}
                     <div>
                       <label className="block text-[12px] font-semibold text-muted uppercase tracking-wide mb-1.5">Point Adjustment <span className="text-neg-fg normal-case">*</span></label>
-                      <input type="number" value={adjustAmount} onChange={e => setAdjustAmount(e.target.value)} placeholder="Positive to add, negative to deduct"
+                      <input aria-label="Point adjustment amount" type="number" value={adjustAmount} onChange={e => setAdjustAmount(e.target.value)} placeholder="Positive to add, negative to deduct"
                         className="bg-field-bg border border-field-border rounded-field px-3 py-2 text-[13.5px] text-ink focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent placeholder:text-faintest w-full" autoFocus />
                       <p className="mt-1.5 text-[12px] text-faint">Use positive to award, negative to deduct</p>
                     </div>
                     <div>
                       <label className="block text-[12px] font-semibold text-muted uppercase tracking-wide mb-1.5">Reason <span className="text-neg-fg normal-case">*</span></label>
-                      <textarea value={adjustNotes} onChange={e => setAdjustNotes(e.target.value)} rows={3} placeholder="Explain the reason for this adjustment…"
+                      <textarea aria-label="Reason for point adjustment" value={adjustNotes} onChange={e => setAdjustNotes(e.target.value)} rows={3} placeholder="Explain the reason for this adjustment…"
                         className="bg-field-bg border border-field-border rounded-field px-3 py-2 text-[13.5px] text-ink focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent placeholder:text-faintest w-full" />
                     </div>
                   </div>
@@ -1347,7 +1365,7 @@ const Admin: React.FC = () => {
             </div>
 
             <div className="mb-6">
-              <input
+              <input aria-label="Filter terms"
                 type="text"
                 placeholder="Filter terms…"
                 value={termFilter}
@@ -1422,7 +1440,7 @@ const Admin: React.FC = () => {
                             <span className="text-ink">{formatTermDate(term.start_date)} – {formatTermDate(term.end_date)}</span>
                           </div>
                           {term.is_active && (
-                            <p className="text-[12px] text-muted pl-5">{progress}% complete · {daysRemaining} day{daysRemaining !== 1 ? 's' : ''} remaining</p>
+                            <p className="text-[12px] text-muted pl-5">{progress}% complete · {daysRemaining} calendar day{daysRemaining !== 1 ? 's' : ''} remaining (including end date)</p>
                           )}
                         </div>
 
@@ -1487,25 +1505,25 @@ const Admin: React.FC = () => {
                     <div className="px-6 py-5 space-y-4 overflow-y-auto max-h-[70vh]">
                       <div>
                         <label className={TLABEL}>Name <span className="text-neg-fg normal-case">*</span></label>
-                        <input type="text" required autoFocus value={termFormData.name} onChange={e => setTermFormData(p => ({ ...p, name: e.target.value }))} className={TFIELD} placeholder="e.g., Fall 2025" />
+                        <input aria-label="Term name" type="text" required autoFocus value={termFormData.name} onChange={e => setTermFormData(p => ({ ...p, name: e.target.value }))} className={TFIELD} placeholder="e.g., Fall 2025" />
                       </div>
                       <div>
                         <label className={TLABEL}>Description</label>
-                        <textarea value={termFormData.description} onChange={e => setTermFormData(p => ({ ...p, description: e.target.value }))} className={TFIELD} rows={2} placeholder="Optional description" />
+                        <textarea aria-label="Term description" value={termFormData.description} onChange={e => setTermFormData(p => ({ ...p, description: e.target.value }))} className={TFIELD} rows={2} placeholder="Optional description" />
                       </div>
                       <div className="grid grid-cols-2 gap-3">
                         <div>
                           <label className={TLABEL}>Start Date <span className="text-neg-fg normal-case">*</span></label>
-                          <input type="date" required value={termFormData.start_date} onChange={e => setTermFormData(p => ({ ...p, start_date: e.target.value }))} className={TFIELD} />
+                          <input aria-label="Term start date" type="date" required value={termFormData.start_date} onChange={e => setTermFormData(p => ({ ...p, start_date: e.target.value }))} className={TFIELD} />
                         </div>
                         <div>
                           <label className={TLABEL}>End Date <span className="text-neg-fg normal-case">*</span></label>
-                          <input type="date" required value={termFormData.end_date} onChange={e => setTermFormData(p => ({ ...p, end_date: e.target.value }))} className={TFIELD} />
+                          <input aria-label="Term end date" type="date" required value={termFormData.end_date} onChange={e => setTermFormData(p => ({ ...p, end_date: e.target.value }))} className={TFIELD} />
                         </div>
                       </div>
                       <div>
                         <label className={TLABEL}>Academic Year <span className="text-neg-fg normal-case">*</span></label>
-                        <input
+                        <input aria-label="Academic year"
                           type="text" required value={termFormData.academic_year}
                           onChange={e => {
                             const v = e.target.value
@@ -1522,7 +1540,7 @@ const Admin: React.FC = () => {
                       </div>
                       <div>
                         <label className={TLABEL}>Term Type</label>
-                        <select value={termFormData.term_type} onChange={e => setTermFormData(p => ({ ...p, term_type: e.target.value as TermCreate['term_type'] }))} className={TFIELD}>
+                        <select aria-label="Term type" value={termFormData.term_type} onChange={e => setTermFormData(p => ({ ...p, term_type: e.target.value as TermCreate['term_type'] }))} className={TFIELD}>
                           <option value="semester">Semester</option>
                           <option value="quarter">Quarter</option>
                           <option value="trimester">Trimester</option>
@@ -1615,17 +1633,17 @@ const Admin: React.FC = () => {
                     <div className="px-6 py-5 space-y-4">
                       <div>
                         <label className={SL}>Name <span className="text-neg-fg normal-case">*</span></label>
-                        <input type="text" required autoFocus value={subjectForm.name} onChange={e => setSubjectForm(p => ({ ...p, name: e.target.value }))} className={SF} placeholder="e.g., Mathematics" />
+                        <input aria-label="Subject name" type="text" required autoFocus value={subjectForm.name} onChange={e => setSubjectForm(p => ({ ...p, name: e.target.value }))} className={SF} placeholder="e.g., Mathematics" />
                       </div>
                       <div>
                         <label className={SL}>Description</label>
-                        <textarea value={subjectForm.description} onChange={e => setSubjectForm(p => ({ ...p, description: e.target.value }))} className={SF} rows={2} placeholder="Optional description" />
+                        <textarea aria-label="Subject description" value={subjectForm.description} onChange={e => setSubjectForm(p => ({ ...p, description: e.target.value }))} className={SF} rows={2} placeholder="Optional description" />
                       </div>
                       <div>
                         <label className={SL}>Color</label>
                         <div className="flex items-center gap-3">
-                          <input type="color" value={subjectForm.color} onChange={e => setSubjectForm(p => ({ ...p, color: e.target.value }))} className="h-9 w-16 rounded-field border border-field-border cursor-pointer bg-field-bg p-0.5" />
-                          <input type="text" value={subjectForm.color} onChange={e => setSubjectForm(p => ({ ...p, color: e.target.value }))} className={SF} placeholder="#3B82F6" />
+                          <input aria-label="Subject color" type="color" value={subjectForm.color} onChange={e => setSubjectForm(p => ({ ...p, color: e.target.value }))} className="h-9 w-16 rounded-field border border-field-border cursor-pointer bg-field-bg p-0.5" />
+                          <input aria-label="Subject color" type="text" value={subjectForm.color} onChange={e => setSubjectForm(p => ({ ...p, color: e.target.value }))} className={SF} placeholder="#3B82F6" />
                         </div>
                       </div>
                       <div>
@@ -1795,6 +1813,7 @@ const Admin: React.FC = () => {
                     <Select label="Status" value={editUser.is_active ? 'active' : 'inactive'} onChange={e => setEditUser(p => ({ ...p, is_active: e.target.value === 'active' }))} options={[{ value: 'active', label: 'Active' }, { value: 'inactive', label: 'Inactive' }]} />
                     {editingUser.role === 'student' && (
                       <>
+                        <Select label="Student task mode" value={editUser.student_ui_mode} options={[{value:'regular',label:'Independent mode'},{value:'simple',label:'Simple mode — large task tiles and read aloud'}]} onChange={e=>setEditUser(p=>({...p,student_ui_mode:e.target.value as 'regular'|'simple'}))} helperText="Choose for this learner. Grade level does not force the mode." />
                         <Input label="Date of Birth" type="date" value={editUser.date_of_birth} onChange={e => setEditUser(p => ({ ...p, date_of_birth: e.target.value }))} />
                         <Select label="Grade Level" value={String(editUser.grade_level)} options={GRADE_LEVEL_OPTIONS} onChange={e => setEditUser(p => ({ ...p, grade_level: Number(e.target.value) }))} />
                       </>
@@ -1906,7 +1925,7 @@ const Admin: React.FC = () => {
                 onClick={() => setShowBackupModal(true)}
                 className="flex items-center gap-2 px-4 py-2 rounded-field text-[13px] font-semibold bg-btn-primary-bg text-btn-primary-fg hover:opacity-90 transition-opacity"
               >
-                <Download size={14} /> Export backup
+                <Download size={14} /> Download backup
               </button>
             </div>
 
@@ -1915,6 +1934,7 @@ const Admin: React.FC = () => {
               <p className="text-[13.5px] font-semibold text-ink mb-1">Restore from backup</p>
               <p className="text-[12px] text-muted mb-4">Import a previously exported file. Choose merge (keeps existing data) or wipe-and-restore (replaces everything). Export first to be safe.</p>
 
+              {lastBackup&&<p className="text-xs text-muted mb-3">Last backup generated from this browser: {new Date(lastBackup.timestamp).toLocaleString()} · {lastBackup.count} records. Check the downloaded file is stored safely.</p>}
               {importStep === 'idle' && (
                 <>
                   {importError && (
@@ -1940,6 +1960,13 @@ const Admin: React.FC = () => {
                     <span>Backed up {new Date(importData.backup_timestamp).toLocaleDateString()}</span>
                     <span className="col-span-2 text-faint">Created by: {importData.created_by}</span>
                   </div>
+                  {previewKey === importKey && importResult?.dry_run && <div className="rounded-card border border-line p-3 text-xs space-y-1" role="status">
+                    <p className="font-semibold">Reviewed impact for these options</p>
+                    {backupCounts(importResult.imported_counts ?? {}).map(([key, count]) => <p key={`add-${key}`}>Would add {backupSectionLabel(key)}: {count}</p>)}
+                    {backupCounts(importResult.updated_counts ?? {}).map(([key, count]) => <p key={`update-${key}`}>Would update {backupSectionLabel(key)}: {count}</p>)}
+                    {backupCounts(importResult.deleted_counts ?? {}).map(([key, count]) => <p key={`delete-${key}`} className="text-neg-fg">Would delete {backupSectionLabel(key)}: {count}</p>)}
+                    {backupCounts(importResult.skipped_counts ?? {}).map(([key, count]) => <p key={`skip-${key}`}>Unchanged/skipped {backupSectionLabel(key)}: {count}</p>)}
+                  </div>}
                   {/* Restore mode */}
                   <div>
                     <p className="text-[11px] font-semibold text-faint uppercase tracking-wide mb-1.5">Restore mode</p>
@@ -1964,9 +1991,10 @@ const Admin: React.FC = () => {
                     )}
                   </div>
                   {/* Options */}
+                  <p className="text-sm text-muted">Preview additions, updates, skips and any deletions before applying this restore. Changing options requires a fresh preview.</p>
                   <div className="space-y-2">
                     {([
-                      { key: 'dry_run' as const, label: 'Dry run (preview only — no changes made)' },
+
                       { key: 'skip_existing_users' as const, label: 'Skip existing users (recommended)' },
                       { key: 'update_existing_data' as const, label: 'Update existing records' },
                     ]).map(({ key, label }) => (
@@ -1991,8 +2019,8 @@ const Admin: React.FC = () => {
                           : 'bg-btn-primary-bg text-btn-primary-fg'
                       }`}
                     >
-                      {importOptions.dry_run
-                        ? 'Preview import'
+                      {importOptions.dry_run || previewKey!==importKey
+                        ? 'Preview record changes'
                         : restoreMode === 'wipe' ? 'Wipe and restore' : 'Import data'}
                     </button>
                   </div>
@@ -2019,17 +2047,19 @@ const Admin: React.FC = () => {
                         <CheckCircle2 size={15} className="text-pos-fg" />
                         {importResult?.dry_run ? 'Preview complete' : 'Import successful'}
                       </div>
+                      {importResult && <p className="text-sm text-ink-2 mb-3" role="status">{backupTotal(importResult.imported_counts)} records to add · {backupTotal(importResult.updated_counts ?? {})} to update · {backupTotal(importResult.skipped_counts)} unchanged/skipped</p>}
                       {importResult && Object.keys(importResult.deleted_counts ?? {}).length > 0 && (
                         <div className="bg-danger-soft border border-danger-line rounded-card p-3 text-[12px] text-ink-2 grid grid-cols-2 gap-1 mb-3">
-                          {Object.entries(importResult.deleted_counts).map(([k, v]) => (
-                            <div key={k}>{importResult.dry_run ? 'Would delete' : 'Deleted'} {k}: {v as number}</div>
+                          {backupCounts(importResult.deleted_counts).map(([k, v]) => (
+                            <div key={k}>{importResult.dry_run ? 'Would delete' : 'Deleted'} {backupSectionLabel(k)}: {v as number}</div>
                           ))}
                         </div>
                       )}
+                      {importResult&&<div className="bg-panel-2 rounded-card p-3 text-xs mb-3">{backupCounts(importResult.updated_counts ?? {}).map(([key,count])=><p key={key}>{importResult.dry_run?'Would update':'Updated'} {backupSectionLabel(key)}: {count}</p>)}{backupCounts(importResult.skipped_counts ?? {}).map(([key,count])=><p key={key}>Unchanged/skipped {backupSectionLabel(key)}: {count}</p>)}</div>}
                       {importResult?.imported_counts && (
                         <div className="bg-panel-2 border border-line rounded-card p-3 text-[12px] text-muted grid grid-cols-2 gap-1 mb-3">
-                          {Object.entries(importResult.imported_counts).map(([k, v]) => (
-                            <div key={k}>{importResult.dry_run ? 'Would import' : 'Imported'} {k}: {v as number}</div>
+                          {backupCounts(importResult.imported_counts).map(([k, v]) => (
+                            <div key={k}>{importResult.dry_run ? 'Would import' : 'Imported'} {backupSectionLabel(k)}: {v as number}</div>
                           ))}
                         </div>
                       )}
@@ -2047,7 +2077,7 @@ const Admin: React.FC = () => {
                     </button>
                     {importResult?.dry_run && !importError && (
                       <button
-                        onClick={() => { setImportOptions(prev => ({ ...prev, dry_run: false })); setImportStep('configure'); setImportResult(null) }}
+                        onClick={() => { setImportOptions(prev => ({ ...prev, dry_run: false })); setImportStep('configure') }}
                         className="h-[34px] px-4 rounded-field text-[13px] font-medium bg-btn-primary-bg text-btn-primary-fg hover:opacity-90 transition-opacity"
                       >
                         Import for real
@@ -2063,7 +2093,7 @@ const Admin: React.FC = () => {
             <SystemBackupModal
               isOpen={showBackupModal}
               onClose={() => setShowBackupModal(false)}
-              onExport={() => backupApi.exportSystemBackup()}
+              onExport={exportBackup}
             />
           )}
 
@@ -2148,6 +2178,7 @@ const Admin: React.FC = () => {
         className="min-w-0 flex-1 overflow-y-auto"
       >
         <div className="mx-auto max-w-[760px] px-4 py-6 pb-[90px] sm:px-7 lg:px-9 lg:py-[30px]">
+          {section==='overview'&&<SetupChecklist alwaysVisible/>}
           {loading && section === 'overview' ? (
             <div className="flex items-center gap-2 text-muted text-[13px] py-12">
               <div className="w-4 h-4 border-2 border-line border-t-accent rounded-full animate-spin" />

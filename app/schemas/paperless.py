@@ -292,11 +292,27 @@ class DocumentTemplateUsage(BaseModel):
     template_name: str
 
 
+class DocumentAssignmentUsage(BaseModel):
+    """One direct attachment to a student's assignment instance."""
+
+    assignment_id: int
+    student_name: str
+    assignment_title: str
+
+
+class PaperlessDocumentAvailability(BaseModel):
+    """Content availability without server identity or credential information."""
+
+    available: bool
+    reason: Optional[str] = None
+
+
 class PaperlessDocumentDetail(PaperlessDocumentItem):
     """Document detail: item fields + where it is used."""
 
     used_in: List[DocumentLessonUsage] = []
     used_in_templates: List[DocumentTemplateUsage] = []
+    used_in_assignments: List[DocumentAssignmentUsage] = []
 
 
 # --- Attachments ---

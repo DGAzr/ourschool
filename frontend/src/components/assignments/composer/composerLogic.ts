@@ -16,6 +16,7 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
+import { todayISO } from '../../../utils/dates'
 import {
   AssignmentComposeRequest,
   AssignmentTemplate,
@@ -48,7 +49,6 @@ export interface ComposerDraft {
   custom_max_points?: number
 }
 
-const todayISO = () => new Date().toISOString().slice(0, 10)
 
 export const initialDraft = (mode: ComposerMode): ComposerDraft => {
   const t = mode.kind === 'create' ? null : mode.template

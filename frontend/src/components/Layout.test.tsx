@@ -36,7 +36,7 @@ const authValue = (user: User): AuthContextType => ({
   trackActivity: vi.fn(),
 })
 
-const renderLayout = (user: User, entry: string) =>
+const renderLayout = (user: User, entry: string, cached = false) =>
   render(
     <AuthContext.Provider value={authValue(user)}>
       <PointsStatusContext.Provider
@@ -51,7 +51,7 @@ const renderLayout = (user: User, entry: string) =>
       >
         <PaperlessStatusContext.Provider
           value={{
-            status: null,
+            status: cached ? { connected: false, cache_available: true } as import('../types/paperless').PaperlessStatus : null,
             connected: false,
             ready: true,
             error: null,
@@ -96,6 +96,11 @@ describe('Layout lesson navigation', () => {
     expect(screen.getByRole('link', { name: 'Lesson Planning' })).not.toHaveClass(
       'bg-nav-active'
     )
+  })
+
+  it('keeps the cached material library reachable while disconnected', () => {
+    renderLayout(admin, '/teach', true)
+    expect(screen.getByRole('link', { name: 'Materials' })).toHaveAttribute('href', '/materials')
   })
 
   it('does not expose Teach navigation to students', () => {

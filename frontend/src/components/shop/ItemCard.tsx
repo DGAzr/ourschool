@@ -25,6 +25,7 @@ import { affordabilityOf } from './shopLogic'
 
 interface ItemCardProps {
   item: ShopItem
+  showPersonalPoints?:boolean
   balance: number
   /** Open the item detail view. */
   onOpen?: (item: ShopItem) => void
@@ -37,6 +38,7 @@ interface ItemCardProps {
 export const ItemCard: React.FC<ItemCardProps> = ({
   item,
   balance,
+  showPersonalPoints=true,
   onOpen,
   onRedeem,
   preview = false,
@@ -88,6 +90,7 @@ export const ItemCard: React.FC<ItemCardProps> = ({
         <button
           type="button"
           onClick={openDetail}
+          aria-label={`View ${item.name || 'reward'}`}
           className={`block w-full ${preview ? 'cursor-default' : ''}`}
           disabled={preview}
         >
@@ -159,6 +162,7 @@ export const ItemCard: React.FC<ItemCardProps> = ({
               </button>
             ) : (
               <span
+                hidden={!showPersonalPoints}
                 className="text-[12px] font-semibold"
                 style={{ color: 'var(--accent)' }}
               >
@@ -168,7 +172,7 @@ export const ItemCard: React.FC<ItemCardProps> = ({
           </div>
 
           {/* Locked progress bar + nudge */}
-          {!affordable && (
+          {!affordable && showPersonalPoints && (
             <>
               <div
                 className="mt-2 h-[5px] rounded-pill overflow-hidden"

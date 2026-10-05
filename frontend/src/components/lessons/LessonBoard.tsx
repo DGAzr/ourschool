@@ -48,11 +48,13 @@ interface LessonBoardProps {
    */
   onReorder: (dateISO: string | null, orderedIds: number[]) => Promise<boolean>
   onSchedule: (lesson: Lesson, dateISO: string) => Promise<boolean>
+  onRestoreTaught: (lesson: Lesson) => Promise<boolean>
   onToggleMaterial: (
     lessonId: number,
     materialId: number,
     isGathered: boolean
   ) => void
+  onBatch?: (lessons: Lesson[], action: 'schedule'|'restore_taught', date?:string) => void
   onAddToDrawer: () => void
 }
 
@@ -69,8 +71,10 @@ const LessonBoard: React.FC<LessonBoardProps> = ({
   onLessonClick,
   onReorder,
   onSchedule,
+  onRestoreTaught,
   onToggleMaterial,
   onAddToDrawer,
+  onBatch,
 }) => {
   const [activeLesson, setActiveLesson] = useState<Lesson | null>(null)
   const [optimisticLessons, setOptimisticLessons] = useState<Lesson[] | null>(null)
@@ -100,7 +104,7 @@ const LessonBoard: React.FC<LessonBoardProps> = ({
     () =>
       displayLessons
         .filter((lesson) => lesson.date === null)
-        .sort((a, b) => a.position - b.position || a.id - b.id),
+        .sort((a, b) => (b.last_scheduled_date??'').localeCompare(a.last_scheduled_date??'') || a.position - b.position || a.id - b.id),
     [displayLessons]
   )
 
@@ -215,7 +219,7 @@ const LessonBoard: React.FC<LessonBoardProps> = ({
             : 'xl:grid-cols-[minmax(0,1fr)_260px]'
         }`}
       >
-        <div className="overflow-x-auto -mx-1 px-1 pb-2">
+        <div className="min-w-0 overflow-x-auto -mx-1 px-1 pb-2">
           <div
             className="grid gap-3 items-start"
             style={{
@@ -243,8 +247,10 @@ const LessonBoard: React.FC<LessonBoardProps> = ({
           collapsed={drawerCollapsed}
           onCollapsedChange={setDrawerCollapsed}
           onAdd={onAddToDrawer}
+          onBatch={onBatch}
           onLessonClick={onLessonClick}
           onSchedule={(lesson, date) => void scheduleLesson(lesson, date)}
+          onRestoreTaught={(lesson) => void onRestoreTaught(lesson)}
           onToggleMaterial={onToggleMaterial}
         />
       </div>

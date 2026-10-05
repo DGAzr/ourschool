@@ -51,6 +51,7 @@ from app.models.shop import ShopCategory, ShopItem
 from app.models.user import User
 from app.schemas.points import StudentPoints as StudentPointsSchema
 from app.schemas.shop import (
+    PickupInstructions,
     RedeemRequest,
     RedeemResponse,
     ReorderRequest,
@@ -339,7 +340,7 @@ def admin_redemptions(
     auth_user: Annotated[AuthUser, Depends(require_admin_or_permission("shop:read"))],
     status: str = Query("pending", pattern="^(pending|ready|history)$"),
 ):
-    """Admin redemption queue (request-type only)."""
+    """Admin redemption queue, including older pending/ready redemptions."""
     _require_shop_enabled(db)
     redemptions = shop_crud.get_admin_redemptions(db, status)
     shop_crud.attach_student_name(db, redemptions)
@@ -353,6 +354,7 @@ def approve_redemption(
     redemption_id: int,
     db: Annotated[Session, Depends(get_db)],
     auth_user: Annotated[AuthUser, Depends(require_admin_or_permission("shop:write"))],
+    payload: Optional[PickupInstructions] = None,
 ):
     """Approve a pending request (-> ready)."""
     _require_shop_enabled(db)
@@ -361,7 +363,9 @@ def approve_redemption(
         raise HTTPException(status_code=404, detail="Redemption not found")
     admin_id = get_user_id_from_auth(auth_user)
     try:
-        return shop_crud.approve_redemption(db, redemption, admin_id)
+        return shop_crud.approve_redemption(
+            db, redemption, admin_id, payload.pickup_instructions if payload else None
+        )
     except ValueError as exc:
         db.rollback()
         raise HTTPException(status_code=409, detail=str(exc))

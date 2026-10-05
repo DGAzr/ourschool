@@ -38,10 +38,15 @@ from app.core.dual_auth import (
     require_student_session,
 )
 from app.enums import LessonStatus
-from app.models.assignment import AssignmentTemplate
+from app.models.assignment import AssignmentTemplate, StudentAssignment
 from app.models.lesson import Lesson, LessonMaterial, LessonResource, LessonTemplate
+from app.models.paperless import LessonPaperlessMaterial
 from app.models.user import User
 from app.schemas.lesson import (
+    LessonAssignmentProgress,
+    LessonImpactInput,
+    LessonBatchInput,
+    AssignmentImpact,
     LessonCreate,
     LessonDeleteResponse,
     LessonMaterialToggle,
@@ -57,7 +62,7 @@ from app.schemas.lesson import (
     StudentLessonResponse,
 )
 from app.routers.validators import validate_students
-from app.services.lesson_assignments import sync_lesson_assignments
+from app.services.lesson_assignments import sync_lesson_assignments, assignment_impact
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -144,6 +149,8 @@ def _apply_template_links(
         lt = existing.get(link.template_id) or LessonTemplate(
             template_id=link.template_id
         )
+        lt.assignment_timing = link.assignment_timing
+        lt.due_offset_days = link.due_offset_days
         lt.custom_due_date = link.custom_due_date
         lt.custom_max_points = link.custom_max_points
         lt.custom_instructions = link.custom_instructions
@@ -232,6 +239,154 @@ def create_lesson(
     return LessonWriteResponse(lesson=lesson, warnings=warnings)
 
 
+@router.post("/batch", response_model=List[LessonWriteResponse])
+def batch_lessons(
+    payload: LessonBatchInput,
+    db: Annotated[Session, Depends(get_db)],
+    auth_user: Annotated[
+        AuthUser, Depends(require_admin_or_permission("lessons:write"))
+    ],
+):
+    """Atomically recover/reschedule a selection or copy planning data to new instances."""
+    rows = (
+        db.query(Lesson)
+        .filter(Lesson.id.in_(payload.lesson_ids))
+        .order_by(Lesson.date, Lesson.position, Lesson.id)
+        .all()
+    )
+    if len(rows) != len(set(payload.lesson_ids)):
+        raise HTTPException(
+            status_code=404, detail="A selected lesson no longer exists"
+        )
+    if payload.action == "restore_taught" and any(
+        not row.last_scheduled_date for row in rows
+    ):
+        raise HTTPException(
+            status_code=400, detail="Every selected lesson needs a former date"
+        )
+    if payload.action == "copy" and (payload.date is None):
+        raise HTTPException(
+            status_code=400, detail="Choose scheduled lessons and a new starting date"
+        )
+    selected_students = (
+        validate_students(db, payload.student_ids)
+        if payload.student_ids is not None
+        else None
+    )
+    result = []
+    first_date = min((row.date for row in rows if row.date), default=payload.date)
+    for source in rows:
+        lesson = source
+        if payload.action == "copy":
+            offset = payload.date - first_date
+            lesson = Lesson(
+                title=source.title,
+                date=source.date + offset if source.date else payload.date,
+                subject_id=source.subject_id,
+                objective=source.objective,
+                duration_minutes=source.duration_minutes,
+                notes=source.notes,
+                status=LessonStatus.PLANNED,
+                created_by=get_user_id_from_auth(auth_user),
+            )
+            lesson.students = (
+                selected_students
+                if selected_students is not None
+                else list(source.students)
+            )
+            _apply_template_links(
+                db,
+                lesson,
+                [
+                    LessonTemplateLinkInput(
+                        template_id=link.template_id,
+                        assignment_timing=link.assignment_timing,
+                        due_offset_days=link.due_offset_days,
+                        custom_due_date=(
+                            link.custom_due_date + offset
+                            if link.custom_due_date
+                            else None
+                        ),
+                        custom_max_points=link.custom_max_points,
+                        custom_instructions=link.custom_instructions,
+                    )
+                    for link in source.templates
+                    if link.template_id is not None
+                ],
+            )
+            lesson.materials = [
+                LessonMaterial(label=m.label, is_gathered=False, position=m.position)
+                for m in source.materials
+            ]
+            lesson.resources = [
+                LessonResource(label=r.label, url=r.url, position=r.position)
+                for r in source.resources
+            ]
+            lesson.paperless_materials = [
+                LessonPaperlessMaterial(
+                    document_id=m.document_id,
+                    title=m.title,
+                    asn=m.asn,
+                    material_kind=m.material_kind,
+                )
+                for m in source.paperless_materials
+            ]
+            lesson.position = _next_position(db, lesson.date)
+            db.add(lesson)
+        else:
+            target = (
+                source.last_scheduled_date
+                if payload.action == "restore_taught"
+                else payload.date
+            )
+            _move_lesson(lesson, target, _next_position(db, target))
+            if payload.action == "restore_taught":
+                lesson.status = LessonStatus.TAUGHT
+        db.flush()
+        warnings = sync_lesson_assignments(
+            db, lesson, assigned_by=get_user_id_from_auth(auth_user)
+        )
+        result.append(LessonWriteResponse(lesson=lesson, warnings=warnings))
+    db.commit()
+    return result
+
+
+@router.post("/impact", response_model=List[AssignmentImpact])
+def preview_assignment_impact(
+    payload: LessonImpactInput,
+    db: Annotated[Session, Depends(get_db)],
+    _auth: Annotated[AuthUser, Depends(require_admin_or_permission("lessons:write"))],
+):
+    """Preview changes without mutating lessons or student records."""
+    lesson = None
+    if payload.lesson_id is not None:
+        lesson = db.query(Lesson).filter(Lesson.id == payload.lesson_id).first()
+        if lesson is None:
+            raise HTTPException(status_code=404, detail="Lesson not found")
+    students = validate_students(db, payload.student_ids)
+    links = [] if payload.deleting else payload.templates
+    template_ids = {link.template_id for link in links}
+    templates = (
+        db.query(AssignmentTemplate)
+        .filter(AssignmentTemplate.id.in_(template_ids))
+        .all()
+    )
+    if template_ids != {t.id for t in templates}:
+        raise HTTPException(status_code=404, detail="Assignment template not found")
+    if len(template_ids) != len(links):
+        raise HTTPException(
+            status_code=400, detail="An activity is linked more than once"
+        )
+    existing = (
+        db.query(StudentAssignment)
+        .filter(StudentAssignment.lesson_id == lesson.id)
+        .all()
+        if lesson
+        else []
+    )
+    return assignment_impact(payload.date, students, links, existing, templates)
+
+
 @router.get("/drawer", response_model=List[LessonResponse])
 def list_drawer_lessons(
     db: Annotated[Session, Depends(get_db)],
@@ -316,7 +471,58 @@ def get_my_lessons(
     )
     if end_date:
         query = query.filter(Lesson.date <= end_date)
-    return query.order_by(Lesson.date, Lesson.position, Lesson.id).all()
+    lessons = query.order_by(Lesson.date, Lesson.position, Lesson.id).all()
+    assignments_by_lesson = {}
+    if lessons:
+        assignments = (
+            db.query(StudentAssignment)
+            .filter(
+                StudentAssignment.lesson_id.in_([lesson.id for lesson in lessons]),
+                StudentAssignment.student_id == student.id,
+            )
+            .order_by(StudentAssignment.id)
+            .all()
+        )
+        for assignment in assignments:
+            assignments_by_lesson.setdefault(assignment.lesson_id, []).append(
+                assignment
+            )
+    return [
+        StudentLessonResponse.model_validate(lesson).model_copy(
+            update={
+                "assignments": [
+                    LessonAssignmentProgress.model_validate(assignment)
+                    for assignment in assignments_by_lesson.get(lesson.id, [])
+                ]
+            }
+        )
+        for lesson in lessons
+    ]
+
+
+@router.get("/assignment-progress", response_model=List[LessonAssignmentProgress])
+def get_lesson_assignment_progress(
+    db: Annotated[Session, Depends(get_db)],
+    _auth: Annotated[
+        AuthUser, Depends(require_admin_or_permission("assignments:read"))
+    ],
+    school_date: date = Query(..., alias="date"),
+):
+    """Work navigation for a teacher's selected day in one query.
+
+    Assignment read permission is required independently of lesson read access.
+    """
+    return (
+        db.query(StudentAssignment)
+        .join(Lesson, StudentAssignment.lesson_id == Lesson.id)
+        .filter(Lesson.date == school_date)
+        .order_by(
+            StudentAssignment.lesson_id,
+            StudentAssignment.template_id,
+            StudentAssignment.id,
+        )
+        .all()
+    )
 
 
 @router.get("/{lesson_id}", response_model=LessonResponse)

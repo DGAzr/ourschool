@@ -1,3 +1,4 @@
+import { useAuth } from '../../contexts/AuthContext'
 /*
  * OurSchool - Homeschool Management System
  * Copyright (C) 2025 Dustan Ashley
@@ -24,18 +25,19 @@
  */
 
 import React, { useEffect, useMemo, useState } from 'react'
-import { useAuth } from '../../contexts/AuthContext'
+import { useNavigate } from 'react-router-dom'
 import { assignmentsApi } from '../../services/assignments'
 import { termsApi } from '../../services/terms'
 import { useAssignments } from '../../hooks/useAssignments'
 import { useAssignmentFilters } from '../../hooks/useAssignmentFilters'
 import StudentAssignmentCard from './StudentAssignmentCard'
 import SubmissionDialog from './SubmissionDialog'
-import AssignmentDetailModal from './AssignmentDetailModal'
 import StudentCreatedAssignmentEditor from './StudentCreatedAssignmentEditor'
 import { useAssignmentTypes } from '../../contexts/AssignmentTypesContext'
 import { StudentAssignment, Term } from '../../types'
 import {
+  assignmentHref,
+  assignmentProgress,
   StudentTab,
   URGENCY_LABELS,
   URGENCY_ORDER,
@@ -58,7 +60,8 @@ const EMPTY_COPY: Record<StudentTab, { title: string; hint: string }> = {
 import PageNavigation from './PageNavigation'
 
 const StudentAssignmentsView: React.FC = () => {
-  const { user } = useAuth()
+  const {user}=useAuth()
+  const navigate = useNavigate()
   const { types: assignmentTypes } = useAssignmentTypes()
 
   const [activeTab, setActiveTab] = useState<StudentTab>('todo')
@@ -75,8 +78,8 @@ const StudentAssignmentsView: React.FC = () => {
     selectedSubject, search: searchTerm, tab: activeTab, termId: selectedTerm, termBasis: 'original_due',
   })
 
+  const [submissionBusy, setSubmissionBusy] = useState(false)
   const [submittingAssignment, setSubmittingAssignment] = useState<StudentAssignment | null>(null)
-  const [detailAssignmentId, setDetailAssignmentId] = useState<number | null>(null)
   const [editingOwn, setEditingOwn] = useState<StudentAssignment | 'new' | null>(null)
 
   useEffect(() => {
@@ -94,18 +97,19 @@ const StudentAssignmentsView: React.FC = () => {
   const handleStart = async (assignmentId: number) => {
     try {
       await assignmentsApi.startAssignment(assignmentId)
-      refetch()
+      navigate(assignmentHref(assignmentId))
     } catch {
       setError('Failed to start assignment')
     }
   }
 
   const handleComplete = (assignment: StudentAssignment) => {
-    if (assignment.status === 'in_progress') setSubmittingAssignment(assignment)
+    if (assignmentProgress(assignment) === 'in_progress') setSubmittingAssignment(assignment)
   }
 
-  const handleSubmit = async (submissionData: { submission_notes?: string; submission_artifacts?: string[] }) => {
-    if (!submittingAssignment) return
+  const handleSubmit = async (submissionData: { submission_method?: 'online' | 'paper'; submission_notes?: string; submission_artifacts?: string[] }) => {
+    if (!submittingAssignment || submissionBusy) return
+    setSubmissionBusy(true)
     try {
       await assignmentsApi.updateStudentAssignment(submittingAssignment.id, {
         status: 'submitted',
@@ -115,6 +119,8 @@ const StudentAssignmentsView: React.FC = () => {
       refetch()
     } catch {
       setError('Failed to submit assignment')
+    } finally {
+      setSubmissionBusy(false)
     }
   }
 
@@ -146,13 +152,14 @@ const StudentAssignmentsView: React.FC = () => {
     <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-4">
       {assignments.map(assignment => (
         <StudentAssignmentCard
+          simple={user?.student_ui_mode==='simple'}
           key={assignment.id}
           assignment={assignment}
           subject={assignment.template?.subject_id ? getSubjectById(assignment.template.subject_id) : undefined}
           isAdmin={false}
           onStart={handleStart}
           onComplete={handleComplete}
-          onView={a => setDetailAssignmentId(a.id)}
+          viewHref={assignmentHref(assignment.id)}
           onEditSelf={openOwnEditor}
         />
       ))}
@@ -197,6 +204,7 @@ const StudentAssignmentsView: React.FC = () => {
           return (
             <button
               key={tab.key}
+              aria-pressed={isActive}
               onClick={() => setActiveTab(tab.key)}
               className={`h-[44px] px-3.5 text-[13px] font-semibold rounded-[8px] flex items-center gap-1.5 transition-colors sm:h-[34px] ${
                 isActive
@@ -287,18 +295,9 @@ const StudentAssignmentsView: React.FC = () => {
         <SubmissionDialog
           assignment={submittingAssignment}
           isOpen={!!submittingAssignment}
-          onClose={() => setSubmittingAssignment(null)}
+          onClose={() => { if (!submissionBusy) setSubmittingAssignment(null) }}
           onSubmit={handleSubmit}
-          loading={false}
-        />
-      )}
-
-      {detailAssignmentId !== null && (
-        <AssignmentDetailModal
-          assignmentId={detailAssignmentId}
-          studentId={user?.id}
-          isOpen={detailAssignmentId !== null}
-          onClose={() => setDetailAssignmentId(null)}
+          loading={submissionBusy}
         />
       )}
 

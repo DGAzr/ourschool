@@ -26,6 +26,7 @@ from .student_assignments import (
     router as student_assignments_router,
 )
 from .templates import router as templates_router
+from .task_help import router as task_help_router
 
 router = APIRouter()
 
@@ -36,3 +37,5 @@ router.include_router(grading_router)
 router.include_router(analytics_router)
 
 __all__ = ["router", "STUDENT_EDITABLE_ASSIGNMENT_FIELDS"]
+
+router.include_router(task_help_router)

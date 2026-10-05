@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
 import {
+  assignmentProgress,
   bucketTab,
   effectiveDueDate,
   inTerm,
@@ -127,5 +128,25 @@ describe('inTerm', () => {
   it('is inclusive of term boundaries', () => {
     expect(inTerm(makeAssignment({ due_date: '2026-07-01' }), term)).toBe(true)
     expect(inTerm(makeAssignment({ due_date: '2026-12-18' }), term)).toBe(true)
+  })
+})
+
+
+describe('deadline urgency does not erase work progress', () => {
+  it('offers a start for overdue work with no recorded activity', () => {
+    expect(assignmentProgress(makeAssignment({ status: 'overdue' }))).toBe('not_started')
+  })
+  it.each([{ started_date: '2026-07-01' }, { time_spent_minutes: 15 }])('continues overdue work with recorded activity %j', activity => {
+    expect(assignmentProgress(makeAssignment({ status: 'overdue', ...activity }))).toBe('in_progress')
+  })
+  it('honors a submission date even if stored urgency is stale', () => {
+    const work = makeAssignment({ status: 'overdue', due_date: '2026-07-01', submitted_date: '2026-07-02' })
+    expect(assignmentProgress(work)).toBe('submitted')
+    expect(bucketTab(work)).toBe('submitted')
+    expect(isOverdue(work, TODAY)).toBe(false)
+  })
+  it('keeps graded and excused work closed despite recorded activity', () => {
+    expect(assignmentProgress(makeAssignment({ status: 'overdue', is_graded: true, started_date: TODAY }))).toBe('graded')
+    expect(assignmentProgress(makeAssignment({ status: 'excused', started_date: TODAY }))).toBe('excused')
   })
 })

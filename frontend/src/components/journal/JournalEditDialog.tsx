@@ -63,16 +63,16 @@ const JournalEditDialog: React.FC<Props> = ({ entry, onClose, onSaved }) => {
     <Modal isOpen onClose={onClose} title="Edit journal entry" subtitle="The entry will be marked as edited." size="lg" footer={<><Button variant="secondary" onClick={onClose}>Cancel</Button><Button onClick={save} loading={saving}>Save changes</Button></>}>
       <div className="space-y-4">
         {error && <div className="px-3 py-2 rounded-field bg-neg-bg text-neg-fg text-[13px]">{error}</div>}
-        <div><label className={LABEL}>Title</label><input className={FIELD} value={form.title} onChange={e => setForm(p => ({ ...p, title: e.target.value }))} /></div>
-        <div><label className={LABEL}>Entry</label><textarea className={FIELD} rows={8} value={form.content} onChange={e => setForm(p => ({ ...p, content: e.target.value }))} /></div>
+        <div><label className={LABEL}>Title</label><input aria-label="Reflection title" className={FIELD} value={form.title} onChange={e => setForm(p => ({ ...p, title: e.target.value }))} /></div>
+        <div><label className={LABEL}>Entry</label><textarea aria-label="Reflection text" className={FIELD} rows={8} value={form.content} onChange={e => setForm(p => ({ ...p, content: e.target.value }))} /></div>
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-          <div><label className={LABEL}>Date</label><input className={FIELD} type="date" value={form.entry_date} onChange={e => setForm(p => ({ ...p, entry_date: e.target.value }))} /></div>
-          <div><label className={LABEL}>Mood</label><select className={FIELD} value={form.mood} onChange={e => setForm(p => ({ ...p, mood: e.target.value }))}><option value="">No mood</option><option value="great">Great</option><option value="good">Good</option><option value="okay">Okay</option><option value="low">Low</option><option value="hard">Hard</option></select></div>
-          <div><label className={LABEL}>Icon name</label><input className={FIELD} value={form.icon} onChange={e => setForm(p => ({ ...p, icon: e.target.value }))} /></div>
+          <div><label className={LABEL}>Date</label><input aria-label="Reflection date" className={FIELD} type="date" value={form.entry_date} onChange={e => setForm(p => ({ ...p, entry_date: e.target.value }))} /></div>
+          <div><label className={LABEL}>Mood</label><select aria-label="Reflection mood" className={FIELD} value={form.mood} onChange={e => setForm(p => ({ ...p, mood: e.target.value }))}><option value="">No mood</option><option value="great">Great</option><option value="good">Good</option><option value="okay">Okay</option><option value="low">Low</option><option value="hard">Hard</option></select></div>
+          <div><label className={LABEL}>Icon name</label><input aria-label="Reflection icon" className={FIELD} value={form.icon} onChange={e => setForm(p => ({ ...p, icon: e.target.value }))} /></div>
         </div>
-        <div><label className={LABEL}>Tags, comma separated</label><input className={FIELD} value={form.tags} onChange={e => setForm(p => ({ ...p, tags: e.target.value }))} /></div>
-        <div><label className={LABEL}>Win of the day</label><input className={FIELD} value={form.win} onChange={e => setForm(p => ({ ...p, win: e.target.value }))} /></div>
-        <div><label className={LABEL}>Goals, one per line</label><textarea className={FIELD} rows={4} value={form.goals} onChange={e => setForm(p => ({ ...p, goals: e.target.value }))} /></div>
+        <div><label className={LABEL}>Tags, comma separated</label><input aria-label="Reflection tags" className={FIELD} value={form.tags} onChange={e => setForm(p => ({ ...p, tags: e.target.value }))} /></div>
+        <div><label className={LABEL}>Win of the day</label><input aria-label="Learning win" className={FIELD} value={form.win} onChange={e => setForm(p => ({ ...p, win: e.target.value }))} /></div>
+        <div><label className={LABEL}>Goals, one per line</label><textarea aria-label="Reflection goals" className={FIELD} rows={4} value={form.goals} onChange={e => setForm(p => ({ ...p, goals: e.target.value }))} /></div>
       </div>
     </Modal>
   )

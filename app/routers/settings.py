@@ -17,15 +17,22 @@
 """APIs for system settings management."""
 
 import json
+import base64
 from typing import Annotated, List
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
-from app.core.dual_auth import AuthUser, require_admin_or_permission
+from app.core.dual_auth import (
+    AuthUser,
+    require_admin_or_permission,
+    require_user_or_permission,
+)
 from app.crud import settings as crud_settings
 from app.schemas.settings import (
+    SchoolIdentity,
+    SchoolNameUpdate,
     AttendanceSettings,
     GradeBand,
     GradeScaleUpdate,
@@ -87,6 +94,123 @@ def get_grouped_settings(
             session_timeout_minutes=session_timeout_minutes,
         ),
     )
+
+
+@router.get("/school/identity", response_model=SchoolIdentity)
+def school_identity(
+    db: Annotated[Session, Depends(get_db)],
+    auth_user: Annotated[
+        AuthUser, Depends(require_user_or_permission("settings:read"))
+    ],
+):
+    return SchoolIdentity(
+        name=crud_settings.get_setting_value(db, "school.name", "OurSchool"),
+        logo=crud_settings.get_setting_value(db, "school.logo", None),
+    )
+
+
+@router.put("/school/identity", response_model=SchoolIdentity)
+def update_school_identity(
+    payload: SchoolNameUpdate,
+    db: Annotated[Session, Depends(get_db)],
+    auth_user: Annotated[
+        AuthUser, Depends(require_admin_or_permission("settings:write"))
+    ],
+):
+    name = payload.name.strip()
+    if not name:
+        raise HTTPException(422, "Enter your school or program name")
+    crud_settings.upsert_setting(
+        db,
+        "school.name",
+        name,
+        "string",
+        "School or program name on printed plans and reports",
+    )
+    return school_identity(db, auth_user)
+
+
+@router.post("/school/logo", response_model=SchoolIdentity)
+async def upload_school_logo(
+    db: Annotated[Session, Depends(get_db)],
+    auth_user: Annotated[
+        AuthUser, Depends(require_admin_or_permission("settings:write"))
+    ],
+    file: UploadFile = File(...),
+):
+    from app.services.school_logo import prepare_school_logo
+
+    raw = await file.read(2 * 1024 * 1024 + 1)
+    if len(raw) > 2 * 1024 * 1024:
+        raise HTTPException(413, "Choose an image under 2 MB")
+    content, _, media = prepare_school_logo(raw, file.filename or "logo")
+    if not media.startswith("image/"):
+        raise HTTPException(415, "Choose a PNG, JPEG or WebP logo")
+    crud_settings.upsert_setting(
+        db,
+        "school.logo",
+        f"data:{media};base64," + base64.b64encode(content).decode("ascii"),
+        "string",
+        "Printable school logo",
+    )
+    return school_identity(db, auth_user)
+
+
+@router.delete("/school/logo", response_model=SchoolIdentity)
+def remove_school_logo(
+    db: Annotated[Session, Depends(get_db)],
+    auth_user: Annotated[
+        AuthUser, Depends(require_admin_or_permission("settings:write"))
+    ],
+):
+    crud_settings.upsert_setting(
+        db, "school.logo", "", "string", "Printable school logo"
+    )
+    return school_identity(db, auth_user)
+
+
+@router.get("/setup/checklist")
+def setup_checklist(
+    db: Annotated[Session, Depends(get_db)],
+    auth_user: Annotated[
+        AuthUser, Depends(require_admin_or_permission("settings:read"))
+    ],
+):
+    from app.models.user import User
+    from app.enums import UserRole
+    from app.models.subject import Subject
+    from app.models.term import Term
+    from app.models.lesson import Lesson
+
+    return {
+        "students": db.query(User.id)
+        .filter(User.role == UserRole.STUDENT, User.is_active)
+        .first()
+        is not None,
+        "subjects": db.query(Subject.id).first() is not None,
+        "term": db.query(Term.id).filter(Term.is_active).first() is not None,
+        "attendance": crud_settings.get_setting_value(
+            db, "setup.attendance_reviewed", False, value_type=bool
+        ),
+        "lesson": db.query(Lesson.id).first() is not None,
+    }
+
+
+@router.post("/setup/attendance-reviewed")
+def attendance_reviewed(
+    db: Annotated[Session, Depends(get_db)],
+    auth_user: Annotated[
+        AuthUser, Depends(require_admin_or_permission("settings:write"))
+    ],
+):
+    crud_settings.upsert_setting(
+        db,
+        "setup.attendance_reviewed",
+        "true",
+        "bool",
+        "Attendance rules reviewed for first-time setup",
+    )
+    return setup_checklist(db, auth_user)
 
 
 @router.get("/{setting_key}", response_model=SystemSetting)

@@ -455,3 +455,21 @@ def test_aggregate_progress_preserves_denominator_and_empty_students(
     assert by_id[empty["id"]]["total_assignments"] == 0
     assert len(sql) < 8
     assert not any("paperless" in statement.lower() for statement in sql)
+
+
+def test_awaiting_submission_count_includes_legacy_overdue_work(
+    client, admin_headers, classroom, student_factory, assign, db_session
+):
+    from app.models.assignment import StudentAssignment
+    from app.enums import AssignmentStatus
+
+    student, _ = student_factory()
+    assignment = assign(
+        classroom["template"]["id"], student["id"], due_date="2026-01-01"
+    )
+    row = db_session.get(StudentAssignment, assignment["id"])
+    row.status = AssignmentStatus.OVERDUE
+    db_session.commit()
+    page = get_page(client, admin_headers, student_id=student["id"], tab="awaiting")
+    assert page["counts"]["awaiting_submission"] == page["counts"]["awaiting"] == 1
+    assert page["total"] == 1

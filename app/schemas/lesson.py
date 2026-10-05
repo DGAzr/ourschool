@@ -17,7 +17,7 @@
 """Lesson planning schemas."""
 
 from datetime import date as date_type, datetime
-from typing import List, Optional
+from typing import List, Optional, Literal
 
 from pydantic import BaseModel, Field
 
@@ -117,6 +117,8 @@ class LessonTemplateLinkInput(BaseModel):
     """One linked template on a lesson, with optional per-link overrides."""
 
     template_id: int
+    assignment_timing: Literal["draft", "on_schedule", "now"] = "on_schedule"
+    due_offset_days: int = Field(default=0, ge=0, le=365)
     custom_due_date: Optional[date_type] = None
     custom_max_points: Optional[int] = Field(default=None, ge=1, le=1000)
     custom_instructions: Optional[str] = None
@@ -127,6 +129,8 @@ class LessonTemplateLinkResponse(BaseModel):
 
     id: int
     template_id: Optional[int] = None
+    assignment_timing: Literal["draft", "on_schedule", "now"] = "on_schedule"
+    due_offset_days: int = Field(default=0, ge=0, le=365)
     custom_due_date: Optional[date_type] = None
     custom_max_points: Optional[int] = None
     custom_instructions: Optional[str] = None
@@ -207,6 +211,22 @@ class LessonRolloverInput(BaseModel):
 
 
 # --- Lesson response ---
+class LessonAssignmentProgress(BaseModel):
+    """Minimal work state for lesson navigation; no notes, grades or artifacts."""
+
+    id: int
+    lesson_id: int
+    template_id: int
+    student_id: int
+    status: str
+    started_date: Optional[date_type] = None
+    submitted_date: Optional[date_type] = None
+    is_graded: bool
+    time_spent_minutes: int
+
+    model_config = {"from_attributes": True}
+
+
 class StudentLessonResponse(BaseModel):
     """Student-safe lesson projection for the "my lessons" schedule view.
 
@@ -226,6 +246,7 @@ class StudentLessonResponse(BaseModel):
     templates: List[LessonTemplateLinkResponse] = []
     resources: List[LessonResourceResponse] = []
     paperless_materials: List[PaperlessMaterialResponse] = []
+    assignments: List[LessonAssignmentProgress] = []
 
     class Config:
         """Pydantic configuration."""
@@ -286,3 +307,27 @@ class LessonDeleteResponse(BaseModel):
 
     message: str
     warnings: List[str] = []
+
+
+class LessonImpactInput(LessonCreate):
+    """Read-only projection of a full lesson edit, or explicit deletion."""
+
+    lesson_id: Optional[int] = None
+    deleting: bool = False
+
+
+class AssignmentImpact(BaseModel):
+    assignment_id: Optional[int] = None
+    student_id: int
+    student_name: str
+    template_name: str
+    action: Literal["create", "reuse", "move", "retain", "unlink", "remove", "draft"]
+    due_date: Optional[date_type] = None
+    explanation: str
+
+
+class LessonBatchInput(BaseModel):
+    student_ids: Optional[List[int]] = Field(default=None, max_length=200)
+    lesson_ids: List[int] = Field(min_length=1, max_length=100)
+    action: Literal["schedule", "restore_taught", "copy"]
+    date: Optional[date_type] = None

@@ -92,6 +92,25 @@ export const generateDays = (
   return days
 }
 
+/** Keep already scheduled weekend work visible inside a school-day window. */
+export const includeScheduledDays = (days: DayInfo[], lessons: Pick<Lesson, 'date'>[]): DayInfo[] => {
+  if (!days.length) return days
+  const byDate = new Map(days.map(day => [day.iso, day]))
+  const first = days[0].iso
+  const last = days[days.length - 1].iso
+  const today = todayISO()
+  for (const lesson of lessons) {
+    const iso = lesson.date
+    if (!iso || iso < first || iso > last || byDate.has(iso)) continue
+    const date = parseISO(iso)
+    byDate.set(iso, {
+      iso, weekdayLabel: WEEKDAY_LABELS[date.getDay()], dayNum: date.getDate(),
+      isWeekend: isWeekendDay(date), isToday: iso === today,
+    })
+  }
+  return [...byDate.values()].sort((a, b) => a.iso.localeCompare(b.iso))
+}
+
 /**
  * Page the visible window by one range-width. ``dir`` +1 advances, -1 retreats.
  *
@@ -146,21 +165,28 @@ const retreatOneDay = (iso: string, skipWeekends: boolean): string => {
 }
 
 export interface Readiness {
-  readyOrTaught: number
+  planned: number
+  prepReady: number
+  taught: number
   total: number
   needMaterials: number
+  gatheredMaterials: number
+  totalMaterials: number
 }
 
-/** Readiness rollup across a set of lessons. */
+/** Prep describes outstanding teaching only; taught lessons are counted separately. */
 export const readiness = (lessons: Lesson[]): Readiness => {
-  let readyOrTaught = 0
-  let needMaterials = 0
-  for (const lesson of lessons) {
-    if (lesson.status === 'ready' || lesson.status === 'taught') readyOrTaught++
-    const ungathered = lesson.materials.filter((m) => !m.is_gathered).length
-    if (ungathered > 0) needMaterials++
+  const pending = lessons.filter(lesson => lesson.status !== 'taught')
+  const materials = pending.flatMap(lesson => lesson.materials)
+  return {
+    planned: pending.length,
+    prepReady: pending.filter(lesson => lesson.materials.every(material => material.is_gathered)).length,
+    taught: lessons.length - pending.length,
+    total: lessons.length,
+    needMaterials: pending.filter(lesson => lesson.materials.some(material => !material.is_gathered)).length,
+    gatheredMaterials: materials.filter(material => material.is_gathered).length,
+    totalMaterials: materials.length,
   }
-  return { readyOrTaught, total: lessons.length, needMaterials }
 }
 
 /** Per-lesson prep label for the meta row. */

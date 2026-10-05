@@ -18,7 +18,8 @@
 
 /** Shared grade-display helpers — ported from the design prototype. */
 
-export function letter(p: number): string {
+export function letter(p: number | null | undefined): string {
+  if (p == null) return 'Not graded yet'
   if (p >= 93) return 'A'
   if (p >= 90) return 'A-'
   if (p >= 87) return 'B+'
@@ -32,14 +33,16 @@ export function letter(p: number): string {
   return 'F'
 }
 
-export function gradeColor(p: number): string {
+export function gradeColor(p: number | null | undefined): string {
+  if (p == null) return 'var(--muted)'
   if (p >= 90) return 'var(--pos-fg)'
   if (p >= 80) return '#4F7CAC'
   if (p >= 70) return 'var(--neutral)'
   return 'var(--neg-fg)'
 }
 
-export function barColor(p: number): string {
+export function barColor(p: number | null | undefined): string {
+  if (p == null) return 'var(--track)'
   if (p < 80) return 'var(--neg-fg)'
   if (p >= 90) return 'var(--pos-fg)'
   return 'var(--accent)'
@@ -51,7 +54,8 @@ export interface TrendInfo {
   text: string
 }
 
-export function trendInfo(t: number): TrendInfo {
+export function trendInfo(t: number | null | undefined): TrendInfo {
+  if (t == null) return { arrow: '', color: 'var(--muted)', text: 'More graded work needed' }
   if (t > 2) return { arrow: '▲', color: 'var(--pos-fg)', text: `+${t}` }
   if (t < -2) return { arrow: '▼', color: 'var(--neg-fg)', text: String(t) }
   return { arrow: '▬', color: 'var(--neutral)', text: 'steady' }
@@ -71,4 +75,8 @@ export function statusStyle(status: string): React.CSSProperties {
     fontWeight: 600,
     ...(styles[status] ?? styles['Steady']),
   }
+}
+
+export function gradeText(value: number | null | undefined): string {
+  return value == null ? 'Not graded yet' : `${Math.round(value)}%`
 }

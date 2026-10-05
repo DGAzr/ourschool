@@ -20,7 +20,12 @@ import React, { useState } from 'react'
 import { gradeColor } from '../../utils/grading'
 import { gradePreview, parsePoints, pointsError } from './gradeFormLogic'
 
+export interface GradeDraft { points: string; feedback: string }
+
 interface GradeFormProps {
+  draft?: GradeDraft
+  onDraftChange?: (draft: GradeDraft) => void
+  work?: React.ReactNode
   maxPoints: number
   initialPoints?: number | null
   initialFeedback?: string
@@ -32,6 +37,9 @@ interface GradeFormProps {
 
 const GradeForm: React.FC<GradeFormProps> = ({
   maxPoints,
+  work,
+  draft,
+  onDraftChange,
   initialPoints,
   initialFeedback,
   hasNext,
@@ -39,10 +47,17 @@ const GradeForm: React.FC<GradeFormProps> = ({
   onSave,
   saving,
 }) => {
-  const [points, setPoints] = useState<string>(
-    initialPoints !== null && initialPoints !== undefined ? String(initialPoints) : ''
-  )
-  const [feedback, setFeedback] = useState<string>(initialFeedback ?? '')
+  const [localDraft, setLocalDraft] = useState<GradeDraft>({
+    points: initialPoints !== null && initialPoints !== undefined ? String(initialPoints) : '',
+    feedback: initialFeedback ?? '',
+  })
+  const { points, feedback } = draft ?? localDraft
+  const updateDraft = (next: GradeDraft) => {
+    if (onDraftChange) onDraftChange(next)
+    else setLocalDraft(next)
+  }
+  const setPoints = (value: string) => updateDraft({ points: value, feedback })
+  const setFeedback = (value: string) => updateDraft({ points, feedback: value })
 
   const preview = gradePreview(points, maxPoints)
   const error = pointsError(points)
@@ -56,7 +71,10 @@ const GradeForm: React.FC<GradeFormProps> = ({
   }
 
   return (
-    <>
+    <div className="@container">
+      <div className={work ? 'grid gap-5 @min-[600px]:grid-cols-[minmax(0,1fr)_280px]' : ''}>
+      {work && <div className="min-w-0 space-y-4">{work}</div>}
+      <div className="min-w-0 space-y-4 @min-[600px]:sticky @min-[600px]:top-0 self-start bg-panel">
       <div className="flex gap-5 flex-wrap items-end">
         <div>
           <label htmlFor="grading-points-earned" className="block text-[11px] font-semibold text-faint uppercase tracking-[.06em] mb-1.5">Points earned</label>
@@ -111,7 +129,7 @@ const GradeForm: React.FC<GradeFormProps> = ({
         />
       </div>
 
-      <div className="flex items-center gap-2.5 pt-1.5 border-t border-line-2">
+      <div className="sticky bottom-0 z-10 bg-panel flex flex-wrap items-center gap-2.5 py-3 border-t border-line-2">
         <button
           onClick={() => submit(true)}
           disabled={!canSave}
@@ -133,7 +151,9 @@ const GradeForm: React.FC<GradeFormProps> = ({
           </span>
         )}
       </div>
-    </>
+      </div>
+      </div>
+    </div>
   )
 }
 

@@ -320,6 +320,7 @@ STUDENT_EDITABLE_ASSIGNMENT_FIELDS = {
     "status",
     "student_notes",
     "submission_notes",
+    "submission_method",
     "submission_artifacts",
 }
 
@@ -1024,6 +1025,8 @@ def complete_assignment(
         if not student:
             raise HTTPException(status_code=404, detail="Student not found")
 
+    if payload:
+        assignment.submission_method = payload.submission_method
     assignment.completed_date = date.today()
     assignment.submitted_date = date.today()
     if submission_notes:

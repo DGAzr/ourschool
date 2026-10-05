@@ -265,11 +265,9 @@ const Layout: React.FC = () => {
   } = usePointsStatus()
   const showShop = pointsReady && pointsEnabled
 
-  // Materials mirrors Paperless-NGX, so its nav item only appears once the
-  // integration is connected. The shared provider fetches once per session
-  // and every connect/disconnect writes back through it, so this updates
-  // immediately without per-navigation polling.
-  const { connected: paperlessConnected } = usePaperlessStatusContext()
+  // Cached metadata and attachments remain useful while the server is disconnected.
+  const { connected: paperlessConnected, status: paperlessStatus } = usePaperlessStatusContext()
+  const showMaterials = paperlessConnected || paperlessStatus?.cache_available === true
 
   const navigation = [
     { name: 'Dashboard', href: '/', icon: Home },
@@ -278,8 +276,8 @@ const Layout: React.FC = () => {
           { name: 'Teach', href: '/teach', icon: Lectern },
           { name: 'Attendance', href: '/attendance', icon: Calendar },
           { name: 'Lesson Planning', href: '/lessons', icon: NotebookPen },
-          // Materials appears only when Paperless-NGX is connected.
-          ...(paperlessConnected
+          // Keep cached libraries reachable.
+          ...(showMaterials
             ? [{ name: 'Materials', href: '/materials', icon: FolderOpen }]
             : []),
           { name: 'Assignments', href: '/assignments', icon: ClipboardList },

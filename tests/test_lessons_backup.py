@@ -82,11 +82,15 @@ def test_lessons_backup_round_trip(client, admin_headers, classroom, student_fac
     r = client.get("/api/backup/export", headers=admin_headers)
     assert r.status_code == 200, r.text
     backup = r.json()
-    assert backup["format_version"] == "2.3"
-    drawer_export = next(l for l in backup["lessons"] if l["title"] == "Drawer Lesson")
+    assert backup["format_version"] == "2.4"
+    drawer_export = next(
+        lesson for lesson in backup["lessons"] if lesson["title"] == "Drawer Lesson"
+    )
     assert drawer_export["date"] is None
     assert drawer_export["last_scheduled_date"] == "2026-03-08"
-    exported = [l for l in backup["lessons"] if l["title"] == "Backup Lesson"]
+    exported = [
+        lesson for lesson in backup["lessons"] if lesson["title"] == "Backup Lesson"
+    ]
     assert len(exported) == 1
     assert exported[0]["subject_name"] == classroom["subject"]["name"]
     assert [s["student_email"] for s in exported[0]["students"]] == [student["email"]]
@@ -114,8 +118,12 @@ def test_lessons_backup_round_trip(client, admin_headers, classroom, student_fac
         headers=admin_headers,
     )
     assert r.status_code == 200, r.text
-    mine = [l for l in r.json() if l["title"] in ("Backup Lesson", "Taught Lesson")]
-    assert [l["title"] for l in mine] == ["Backup Lesson", "Taught Lesson"]
+    mine = [
+        lesson
+        for lesson in r.json()
+        if lesson["title"] in ("Backup Lesson", "Taught Lesson")
+    ]
+    assert [lesson["title"] for lesson in mine] == ["Backup Lesson", "Taught Lesson"]
 
     restored = mine[0]
     assert restored["external_id"] == lesson["external_id"]
@@ -137,6 +145,8 @@ def test_lessons_backup_round_trip(client, admin_headers, classroom, student_fac
 
     drawer = client.get("/api/lessons/drawer", headers=admin_headers)
     assert drawer.status_code == 200
-    restored_drawer = next(l for l in drawer.json() if l["title"] == "Drawer Lesson")
+    restored_drawer = next(
+        lesson for lesson in drawer.json() if lesson["title"] == "Drawer Lesson"
+    )
     assert restored_drawer["date"] is None
     assert restored_drawer["last_scheduled_date"] == "2026-03-08"

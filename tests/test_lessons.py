@@ -10,7 +10,8 @@ from datetime import date, datetime, timezone
 
 import pytest
 
-from app.models.assignment import StudentAssignment
+from app.enums import AssignmentStatus
+from app.models.assignment import AssignmentTimeEntry, StudentAssignment
 
 
 def _grade(client, headers, assignment_id, points, **extra):
@@ -158,9 +159,7 @@ def test_create_with_template_creates_assignments(
     )
     assert r.status_code == 200, r.text
     lesson_assignments = [
-        assignment
-        for assignment in r.json()
-        if assignment["lesson_id"] == lesson_id
+        assignment for assignment in r.json() if assignment["lesson_id"] == lesson_id
     ]
     assert {assignment["id"] for assignment in lesson_assignments} == {
         sa.id for sa in sas
@@ -212,7 +211,7 @@ def test_reschedule_moves_ungraded_but_not_graded(
         f"/api/lessons/{lesson_id}", json={"date": "2026-03-09"}, headers=admin_headers
     )
     assert r.status_code == 200, r.text
-    assert any("graded work" in w for w in r.json()["warnings"])
+    assert any("graded/submitted work" in w for w in r.json()["warnings"])
 
     db_session.expunge_all()
     assert db_session.get(StudentAssignment, ungraded_sa.id).due_date == date(
@@ -245,7 +244,7 @@ def test_deselect_deletes_ungraded_orphans_graded(
         f"/api/lessons/{lesson_id}", json={"student_ids": []}, headers=admin_headers
     )
     assert r.status_code == 200, r.text
-    assert any("Kept graded" in w for w in r.json()["warnings"])
+    assert any("Kept student work" in w for w in r.json()["warnings"])
 
     # Ungraded SA is gone; graded one survives but is orphaned.
     assert _sa_by_id(db_session, ungraded_sa.id) is None
@@ -442,7 +441,7 @@ def test_delete_cascades_children_and_cleans_assignments(
 
     r = client.delete(f"/api/lessons/{lesson_id}", headers=admin_headers)
     assert r.status_code == 200, r.text
-    assert any("Kept graded" in w for w in r.json()["warnings"])
+    assert any("Kept student work" in w for w in r.json()["warnings"])
 
     db_session.expunge_all()
     # Materials cascade-deleted; ungraded SA deleted; graded SA orphaned & alive.
@@ -551,10 +550,12 @@ def test_reorder_within_day(client, admin_headers):
     )
     assert r.status_code == 200, r.text
     body = r.json()
-    assert [l["id"] for l in body["lessons"]] == new_order
-    assert [l["position"] for l in body["lessons"]] == [0, 1, 2]
+    assert [lesson_row["id"] for lesson_row in body["lessons"]] == new_order
+    assert [lesson_row["position"] for lesson_row in body["lessons"]] == [0, 1, 2]
     # Persisted: a fresh list returns the same order.
-    assert [l["id"] for l in _day_lessons(client, admin_headers, day)] == new_order
+    assert [
+        lesson_row["id"] for lesson_row in _day_lessons(client, admin_headers, day)
+    ] == new_order
 
 
 def test_reorder_across_days_moves_and_reschedules(
@@ -584,10 +585,12 @@ def test_reorder_across_days_moves_and_reschedules(
         headers=admin_headers,
     )
     assert r.status_code == 200, r.text
-    assert [l["id"] for l in r.json()["lessons"]] == [mover, existing]
+    assert [lesson_row["id"] for lesson_row in r.json()["lessons"]] == [mover, existing]
 
     # Mover left the source day and its linked assignment due date followed.
-    assert [l["id"] for l in _day_lessons(client, admin_headers, src)] == []
+    assert [
+        lesson_row["id"] for lesson_row in _day_lessons(client, admin_headers, src)
+    ] == []
     db_session.expunge_all()
     assert db_session.get(StudentAssignment, sa_id).due_date == date(2026, 4, 14)
 
@@ -652,7 +655,7 @@ def test_reorder_taught_lesson(client, admin_headers):
     )
     assert r.status_code == 200, r.text
     lessons = _day_lessons(client, admin_headers, day)
-    assert [l["id"] for l in lessons] == [b, a]
+    assert [lesson_row["id"] for lesson_row in lessons] == [b, a]
     assert lessons[1]["status"] == "taught"
 
 
@@ -678,7 +681,11 @@ def test_move_taught_lesson(client, admin_headers, method):
         r = client.put(f"/api/lessons/{a}", json={"date": dst}, headers=admin_headers)
     assert r.status_code == 200, r.text
     assert not _day_lessons(client, admin_headers, src)
-    moved = next(l for l in _day_lessons(client, admin_headers, dst) if l["id"] == a)
+    moved = next(
+        lesson_row
+        for lesson_row in _day_lessons(client, admin_headers, dst)
+        if lesson_row["id"] == a
+    )
     assert moved["status"] == "taught"
 
 
@@ -749,7 +756,7 @@ def test_reorder_with_position_hole_keeps_taught_rank(client, admin_headers):
         headers=admin_headers,
     )
     assert r.status_code == 200, r.text
-    assert [l["position"] for l in r.json()["lessons"]] == [0, 1]
+    assert [lesson_row["position"] for lesson_row in r.json()["lessons"]] == [0, 1]
 
     # The taught lesson can also change visual slots.
     r = client.patch(
@@ -758,7 +765,9 @@ def test_reorder_with_position_hole_keeps_taught_rank(client, admin_headers):
         headers=admin_headers,
     )
     assert r.status_code == 200, r.text
-    assert [l["id"] for l in _day_lessons(client, admin_headers, day)] == [c, a]
+    assert [
+        lesson_row["id"] for lesson_row in _day_lessons(client, admin_headers, day)
+    ] == [c, a]
 
 
 def test_create_appends_to_bottom_of_day(client, admin_headers):
@@ -779,7 +788,9 @@ def test_create_appends_to_bottom_of_day(client, admin_headers):
     c = _create_lesson(client, admin_headers, title="C", date=day).json()["lesson"][
         "id"
     ]
-    assert [l["id"] for l in _day_lessons(client, admin_headers, day)] == [b, a, c]
+    assert [
+        lesson_row["id"] for lesson_row in _day_lessons(client, admin_headers, day)
+    ] == [b, a, c]
 
 
 # --- 11. Lesson Drawer and overdue rollover ---------------------------------
@@ -809,10 +820,12 @@ def test_drawer_create_is_unscheduled_and_hidden_from_calendar(
 
     drawer = client.get("/api/lessons/drawer", headers=admin_headers)
     assert drawer.status_code == 200
-    assert [item["id"] for item in drawer.json()] == [lesson["id"]]
+    # Other tests' scheduled lessons can roll into the drawer after UTC midnight.
+    # Verify this draft once without assuming the shared database is otherwise empty.
+    assert [item["id"] for item in drawer.json()].count(lesson["id"]) == 1
 
 
-def test_stash_withdraws_assignment_and_reschedule_recreates_it(
+def test_stash_preserves_assignment_and_reschedule_reuses_it(
     client, admin_headers, classroom, student_factory, db_session
 ):
     student, _ = student_factory()
@@ -831,7 +844,10 @@ def test_stash_withdraws_assignment_and_reschedule_recreates_it(
     )
     assert r.status_code == 200, r.text
     assert r.json()["lesson"]["last_scheduled_date"] == "2026-08-10"
-    assert _sa_by_id(db_session, original_assignment.id) is None
+    survivor = _sa_by_id(db_session, original_assignment.id)
+    assert survivor.lesson_id == lesson_id
+    assert survivor.due_date == date(2026, 8, 10)
+    assert r.json()["warnings"] == []
 
     r = client.put(
         f"/api/lessons/{lesson_id}",
@@ -840,12 +856,14 @@ def test_stash_withdraws_assignment_and_reschedule_recreates_it(
     )
     assert r.status_code == 200, r.text
     assert r.json()["lesson"]["last_scheduled_date"] is None
+    db_session.expunge_all()
     recreated = _linked_sas(db_session, lesson_id)
     assert len(recreated) == 1
+    assert recreated[0].id == original_assignment.id
     assert recreated[0].due_date == date(2026, 8, 18)
 
 
-def test_stash_orphans_protected_assignment_with_warning(
+def test_stash_keeps_protected_assignment_linked_without_warning(
     client, admin_headers, classroom, student_factory, db_session
 ):
     student, _ = student_factory()
@@ -864,10 +882,10 @@ def test_stash_orphans_protected_assignment_with_warning(
         f"/api/lessons/{lesson_id}", json={"date": None}, headers=admin_headers
     )
     assert r.status_code == 200, r.text
-    assert r.json()["warnings"]
+    assert r.json()["warnings"] == []
     survivor = _sa_by_id(db_session, assignment.id)
     assert survivor is not None
-    assert survivor.lesson_id is None
+    assert survivor.lesson_id == lesson_id
 
 
 def test_rollover_moves_only_past_untaught_lessons_and_is_idempotent(
@@ -976,7 +994,9 @@ def test_drawer_reorder_and_taught_stash(client, admin_headers):
         headers=admin_headers,
     )
     assert r.status_code == 200, r.text
-    moved = next(l for l in r.json()["lessons"] if l["id"] == taught)
+    moved = next(
+        lesson_row for lesson_row in r.json()["lessons"] if lesson_row["id"] == taught
+    )
     assert moved["status"] == "taught"
     assert moved["last_scheduled_date"] is None
 
@@ -1017,7 +1037,7 @@ def test_move_taught_lesson_preserves_student_work(
             headers=admin_headers,
         )
     assert r.status_code == 200, r.text
-    assert len(r.json()["warnings"]) == 2
+    assert len(r.json()["warnings"]) == (2 if destination else 0)
     lesson = client.get(f"/api/lessons/{lesson_id}", headers=admin_headers).json()
     assert lesson["date"] == destination
     assert lesson["status"] == "taught"
@@ -1025,14 +1045,16 @@ def test_move_taught_lesson_preserves_student_work(
         survivor = _sa_by_id(db_session, assignment_id)
         assert survivor is not None
         assert survivor.due_date == date(2026, 3, 3)
-        assert survivor.lesson_id == (lesson_id if destination else None)
+        assert survivor.lesson_id == lesson_id
     assert _sa_by_id(db_session, graded_id).points_earned == 90
     assert _sa_by_id(db_session, submitted_id).submitted_date is not None
     unstarted = _sa_by_id(db_session, unstarted_id)
     if destination:
         assert unstarted.due_date == date(2026, 3, 10)
     else:
-        assert unstarted is None
+        assert unstarted is not None
+        assert unstarted.lesson_id == lesson_id
+        assert unstarted.due_date == date(2026, 3, 3)
 
 
 def test_drawer_lesson_can_retain_taught_status(client, admin_headers):
@@ -1048,3 +1070,395 @@ def test_drawer_lesson_can_retain_taught_status(client, admin_headers):
         assert r.status_code == 200, r.text
         assert r.json()["status"] == status
         assert r.json()["date"] is None
+
+
+@pytest.mark.parametrize("method", ["update", "reorder", "rollover"])
+def test_drawer_round_trip_preserves_every_assignment_and_work(
+    client, admin_headers, classroom, student_factory, db_session, method
+):
+    students = [student_factory()[0] for _ in range(5)]
+    r = _create_lesson(
+        client,
+        admin_headers,
+        date="2026-03-03",
+        status="ready",
+        student_ids=[s["id"] for s in students],
+        templates=[
+            _link(
+                classroom["template"]["id"],
+                custom_max_points=50,
+                custom_instructions="Keep these instructions.",
+            )
+        ],
+    )
+    lesson_id = r.json()["lesson"]["id"]
+    rows = sorted(_linked_sas(db_session, lesson_id), key=lambda sa: sa.student_id)
+    ids = [sa.id for sa in rows]
+    for sa, status in zip(
+        rows,
+        [
+            AssignmentStatus.NOT_STARTED,
+            AssignmentStatus.IN_PROGRESS,
+            AssignmentStatus.SUBMITTED,
+            AssignmentStatus.GRADED,
+            AssignmentStatus.EXCUSED,
+        ],
+    ):
+        sa.status = status
+    progress = rows[1]
+    progress.started_date = date(2026, 3, 3)
+    progress.student_notes = "Don't lose my work."
+    progress.time_spent_minutes = 25
+    progress.extended_due_date = date(2026, 3, 20)
+    db_session.add(
+        AssignmentTimeEntry(
+            assignment_id=progress.id,
+            logged_by=progress.student_id,
+            work_date=date(2026, 3, 3),
+            minutes=25,
+            note="Worked on paper.",
+        )
+    )
+    rows[2].submitted_date = date(2026, 3, 3)
+    rows[2].submission_notes = "Finished independently."
+    rows[2].submission_artifacts = '["https://example.org/work"]'
+    rows[3].is_graded = True
+    rows[3].points_earned = 45
+    rows[3].percentage_grade = 90
+    rows[3].teacher_feedback = "Well done."
+    db_session.commit()
+
+    if method == "rollover":
+        r = client.post(
+            "/api/lessons/rollover",
+            json={"current_date": "2026-03-04"},
+            headers=admin_headers,
+        )
+    elif method == "reorder":
+        drawer_ids = [
+            lesson_row["id"]
+            for lesson_row in client.get(
+                "/api/lessons/drawer", headers=admin_headers
+            ).json()
+        ]
+        r = client.patch(
+            "/api/lessons/reorder",
+            json={"date": None, "lesson_ids": [*drawer_ids, lesson_id]},
+            headers=admin_headers,
+        )
+    else:
+        r = client.put(
+            f"/api/lessons/{lesson_id}", json={"date": None}, headers=admin_headers
+        )
+    assert r.status_code == 200, r.text
+    assert r.json()["warnings"] == []
+    db_session.expunge_all()
+    assert sorted(sa.id for sa in _linked_sas(db_session, lesson_id)) == ids
+    assert all(
+        sa.due_date == date(2026, 3, 3) for sa in _linked_sas(db_session, lesson_id)
+    )
+
+    # Recover the forgotten taught lesson on its actual day, then move it later.
+    r = client.put(
+        f"/api/lessons/{lesson_id}",
+        json={"date": "2026-03-03", "status": "taught"},
+        headers=admin_headers,
+    )
+    assert r.status_code == 200, r.text
+    assert r.json()["warnings"] == []
+    assert r.json()["lesson"]["status"] == "taught"
+    assert r.json()["lesson"]["last_scheduled_date"] is None
+    r = client.put(
+        f"/api/lessons/{lesson_id}", json={"date": "2026-03-10"}, headers=admin_headers
+    )
+    assert r.status_code == 200, r.text
+    db_session.expunge_all()
+    final = sorted(_linked_sas(db_session, lesson_id), key=lambda sa: sa.student_id)
+    assert [sa.id for sa in final] == ids
+    assert [sa.status for sa in final] == [
+        AssignmentStatus.NOT_STARTED,
+        AssignmentStatus.IN_PROGRESS,
+        AssignmentStatus.SUBMITTED,
+        AssignmentStatus.GRADED,
+        AssignmentStatus.EXCUSED,
+    ]
+    assert final[1].student_notes == "Don't lose my work."
+    assert final[1].time_spent_minutes == 25
+    assert final[1].time_entries[0].note == "Worked on paper."
+    assert final[1].extended_due_date == date(2026, 3, 20)
+    assert final[1].due_date == date(2026, 3, 10)
+    assert final[2].due_date == final[3].due_date == date(2026, 3, 3)
+    assert final[2].submission_notes == "Finished independently."
+    assert final[2].submission_artifacts == '["https://example.org/work"]'
+    assert final[3].points_earned == 45
+    assert final[3].teacher_feedback == "Well done."
+    assert all(
+        sa.custom_max_points == 50
+        and sa.custom_instructions == "Keep these instructions."
+        for sa in final
+    )
+
+
+@pytest.mark.parametrize("edit", ["student", "template", "delete"])
+@pytest.mark.parametrize(
+    "work", ["started", "notes", "time", "excused", "extended", "feedback", "artifacts"]
+)
+def test_explicit_lesson_removal_preserves_unsubmitted_work(
+    client, admin_headers, classroom, student_factory, db_session, edit, work
+):
+    student, _ = student_factory()
+    r = _create_lesson(
+        client,
+        admin_headers,
+        student_ids=[student["id"]],
+        templates=[_link(classroom["template"]["id"])],
+    )
+    lesson_id = r.json()["lesson"]["id"]
+    sa = _linked_sas(db_session, lesson_id)[0]
+    sa_id = sa.id
+    if work == "started":
+        sa.status = AssignmentStatus.IN_PROGRESS
+        sa.started_date = date(2026, 2, 10)
+    elif work == "notes":
+        sa.student_notes = "An unfinished answer."
+    elif work == "time":
+        db_session.add(
+            AssignmentTimeEntry(
+                assignment_id=sa_id,
+                logged_by=student["id"],
+                work_date=date(2026, 2, 10),
+                minutes=25,
+                note="Preserve this log.",
+            )
+        )
+    elif work == "extended":
+        sa.extended_due_date = date(2026, 2, 20)
+    elif work == "feedback":
+        sa.teacher_feedback = "Discuss this with me."
+    elif work == "artifacts":
+        sa.submission_artifacts = '["https://example.org/work"]'
+    else:
+        sa.status = AssignmentStatus.EXCUSED
+    db_session.commit()
+    if edit == "delete":
+        r = client.delete(f"/api/lessons/{lesson_id}", headers=admin_headers)
+    else:
+        body = {"student_ids": []} if edit == "student" else {"templates": []}
+        r = client.put(f"/api/lessons/{lesson_id}", json=body, headers=admin_headers)
+    assert r.status_code == 200, r.text
+    assert r.json()["warnings"]
+    survivor = _sa_by_id(db_session, sa_id)
+    assert survivor is not None
+    assert survivor.lesson_id is None
+    if work == "time":
+        assert survivor.time_entries[0].minutes == 25
+    elif work == "notes":
+        assert survivor.student_notes == "An unfinished answer."
+
+
+@pytest.mark.parametrize(
+    "timing,scheduled,count",
+    [
+        ("draft", True, 0),
+        ("draft", False, 0),
+        ("on_schedule", True, 1),
+        ("on_schedule", False, 0),
+        ("now", False, 1),
+    ],
+)
+def test_explicit_assignment_timing(
+    client,
+    admin_headers,
+    classroom,
+    student_factory,
+    db_session,
+    timing,
+    scheduled,
+    count,
+):
+    student, _ = student_factory()
+    body = dict(
+        title="Timing",
+        date="2026-02-10" if scheduled else None,
+        student_ids=[student["id"]],
+        templates=[
+            _link(
+                classroom["template"]["id"], assignment_timing=timing, due_offset_days=3
+            )
+        ],
+    )
+    preview = client.post("/api/lessons/impact", json=body, headers=admin_headers)
+    assert preview.status_code == 200, preview.text
+    assert preview.json()[0]["action"] == ("create" if count else "draft")
+    r = _create_lesson(client, admin_headers, **body)
+    assert r.status_code == 200, r.text
+    rows = _linked_sas(db_session, r.json()["lesson"]["id"])
+    assert len(rows) == count
+    if count:
+        assert rows[0].due_date == (date(2026, 2, 13) if scheduled else None)
+
+
+def test_relative_deadline_preview_is_read_only_and_draft_preserves_published(
+    client, admin_headers, classroom, student_factory, db_session
+):
+    student, _ = student_factory()
+    body = dict(
+        title="Relative deadline",
+        date="2026-02-10",
+        student_ids=[student["id"]],
+        templates=[_link(classroom["template"]["id"], due_offset_days=2)],
+    )
+    r = _create_lesson(client, admin_headers, **body)
+    lesson_id = r.json()["lesson"]["id"]
+    sa = _linked_sas(db_session, lesson_id)[0]
+    assignment_id = sa.id
+    body["date"] = "2026-02-20"
+    preview = client.post(
+        "/api/lessons/impact",
+        json={**body, "lesson_id": lesson_id},
+        headers=admin_headers,
+    )
+    assert preview.status_code == 200, preview.text
+    assert preview.json()[0]["action"] == "move"
+    assert preview.json()[0]["assignment_id"] == assignment_id
+    assert preview.json()[0]["due_date"] == "2026-02-22"
+    assert _sa_by_id(db_session, assignment_id).due_date == date(2026, 2, 12)
+    client.put(f"/api/lessons/{lesson_id}", json=body, headers=admin_headers)
+    assert _sa_by_id(db_session, assignment_id).due_date == date(2026, 2, 22)
+    body["date"] = None
+    body["templates"][0]["assignment_timing"] = "now"
+    client.put(f"/api/lessons/{lesson_id}", json=body, headers=admin_headers)
+    assert _sa_by_id(db_session, assignment_id).due_date == date(2026, 2, 22)
+    body["date"] = "2026-03-01"
+    body["templates"][0]["assignment_timing"] = "draft"
+    client.put(f"/api/lessons/{lesson_id}", json=body, headers=admin_headers)
+    assert _sa_by_id(db_session, assignment_id).due_date == date(2026, 2, 22)
+    sa = _sa_by_id(db_session, assignment_id)
+    sa.student_notes = "Keep my work"
+    db_session.commit()
+    preview = client.post(
+        "/api/lessons/impact",
+        json={"title": "Remove", "lesson_id": lesson_id, "deleting": True},
+        headers=admin_headers,
+    )
+    assert preview.json()[0]["action"] == "unlink"
+    assert _sa_by_id(db_session, assignment_id).lesson_id == lesson_id
+
+
+def test_student_cannot_preview_teacher_assignment_changes(client, student_factory):
+    _, headers = student_factory()
+    assert (
+        client.post(
+            "/api/lessons/impact", json={"title": "Private"}, headers=headers
+        ).status_code
+        == 403
+    )
+
+
+def test_copy_creates_fresh_work_and_bulk_recovery_preserves_ids(
+    client, admin_headers, classroom, student_factory, db_session
+):
+    student, _ = student_factory()
+    original = _create_lesson(
+        client,
+        admin_headers,
+        student_ids=[student["id"]],
+        templates=[_link(classroom["template"]["id"], due_offset_days=2)],
+        status="taught",
+        materials=[{"label": "Workbook", "is_gathered": True}],
+    ).json()["lesson"]
+    sa = _linked_sas(db_session, original["id"])[0]
+    original_sa_id = sa.id
+    sa.student_notes = "Original work"
+    sa.points_earned = 0
+    sa.is_graded = True
+    sa.status = AssignmentStatus.GRADED
+    db_session.commit()
+    r = client.post(
+        "/api/lessons/batch",
+        json={"lesson_ids": [original["id"]], "action": "copy", "date": "2026-02-20"},
+        headers=admin_headers,
+    )
+    assert r.status_code == 200, r.text
+    copied = r.json()[0]["lesson"]
+    assert copied["id"] != original["id"]
+    assert copied["status"] == "planned"
+    assert copied["materials"][0]["is_gathered"] is False
+    fresh = _linked_sas(db_session, copied["id"])[0]
+    assert fresh.id != original_sa_id
+    assert fresh.status == AssignmentStatus.NOT_STARTED
+    assert fresh.points_earned is None and not fresh.student_notes
+    assert fresh.due_date == date(2026, 2, 22)
+    client.put(
+        f'/api/lessons/{original["id"]}', json={"date": None}, headers=admin_headers
+    )
+    r = client.post(
+        "/api/lessons/batch",
+        json={"lesson_ids": [original["id"]], "action": "restore_taught"},
+        headers=admin_headers,
+    )
+    assert r.status_code == 200, r.text
+    assert r.json()[0]["lesson"]["date"] == "2026-02-10"
+    kept = _sa_by_id(db_session, original_sa_id)
+    assert kept.points_earned == 0 and kept.student_notes == "Original work"
+    assert kept.lesson_id == original["id"]
+
+
+def test_bulk_invalid_source_does_not_partially_move(
+    client, admin_headers, classroom, db_session
+):
+    lesson = _create_lesson(client, admin_headers).json()["lesson"]
+    r = client.post(
+        "/api/lessons/batch",
+        json={
+            "lesson_ids": [lesson["id"], 99999999],
+            "action": "schedule",
+            "date": "2026-03-01",
+        },
+        headers=admin_headers,
+    )
+    assert r.status_code == 404
+    assert (
+        client.get(f'/api/lessons/{lesson["id"]}', headers=admin_headers).json()["date"]
+        == "2026-02-10"
+    )
+
+
+def test_copy_drawer_plan_uses_explicit_students_without_changing_original(
+    client, admin_headers, classroom, student_factory, db_session
+):
+    original_student, _ = student_factory()
+    selected_student, _ = student_factory()
+    original = _create_lesson(
+        client,
+        admin_headers,
+        student_ids=[original_student["id"]],
+        templates=[_link(classroom["template"]["id"], due_offset_days=3)],
+    ).json()["lesson"]
+    original_ids = [row.id for row in _linked_sas(db_session, original["id"])]
+    client.put(
+        f"/api/lessons/{original['id']}", json={"date": None}, headers=admin_headers
+    )
+    response = client.post(
+        "/api/lessons/batch",
+        json={
+            "lesson_ids": [original["id"]],
+            "action": "copy",
+            "date": "2026-03-04",
+            "student_ids": [selected_student["id"]],
+        },
+        headers=admin_headers,
+    )
+    assert response.status_code == 200, response.text
+    copy = response.json()[0]["lesson"]
+    assignments = _linked_sas(db_session, copy["id"])
+    assert [(row.student_id, row.due_date) for row in assignments] == [
+        (selected_student["id"], date(2026, 3, 7))
+    ]
+    assert [row.id for row in _linked_sas(db_session, original["id"])] == original_ids
+    assert (
+        client.get(f"/api/lessons/{original['id']}", headers=admin_headers).json()[
+            "date"
+        ]
+        is None
+    )

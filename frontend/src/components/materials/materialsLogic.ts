@@ -22,6 +22,7 @@
  */
 
 import { MaterialKind, PaperlessDocument } from '../../types/paperless'
+import { todayISO } from '../../utils/dates'
 import { Lesson } from '../../types/lesson'
 
 /** Display order of material kinds in facet rails and chip rows. */
@@ -86,7 +87,7 @@ export const documentMeta = (doc: PaperlessDocument): string => {
 /** Usage line under a document card. */
 export const usageLabel = (usedInCount: number): string => {
   if (usedInCount === 0) return 'Not yet used'
-  return usedInCount === 1 ? 'Used in 1 lesson' : `Used in ${usedInCount} lessons`
+  return usedInCount === 1 ? 'Used in 1 attachment' : `Used in ${usedInCount} attachments`
 }
 
 /** Result-count line above the grid, e.g. "14 documents". */
@@ -110,7 +111,7 @@ export interface LessonDateGroup {
  */
 export const groupLessonsByDate = (
   lessons: Lesson[],
-  today: string = new Date().toISOString().slice(0, 10)
+  today: string = todayISO()
 ): LessonDateGroup[] => {
   const sorted = lessons.filter(
     (lesson): lesson is Lesson & { date: string } => lesson.date !== null
@@ -136,7 +137,7 @@ export const groupLessonsByDate = (
 /** "Today · Jul 11" for the current day, otherwise "Mon · Jul 14". */
 export const lessonDateLabel = (
   iso: string,
-  today: string = new Date().toISOString().slice(0, 10)
+  today: string = todayISO()
 ): string => {
   // Parse as local time (append T00:00) to avoid a UTC day-shift.
   const d = new Date(`${iso}T00:00:00`)

@@ -25,8 +25,14 @@ import React from 'react'
 
 import { todayISO } from './dates'
 
-/** The three statuses the P/A/E UI shows ('late' collapses to 'present'). */
-export type AttendanceDisplayStatus = 'present' | 'absent' | 'excused'
+export type AttendanceDisplayStatus = 'present' | 'absent' | 'late' | 'excused'
+
+export const attendanceStatuses: { value: AttendanceDisplayStatus; label: string }[] = [
+  { value: 'present', label: 'Present' },
+  { value: 'absent', label: 'Absent' },
+  { value: 'late', label: 'Late' },
+  { value: 'excused', label: 'Excused' },
+]
 
 export function formatDateShort(iso: string) {
   const [y, m, d] = iso.split('-').map(Number)
@@ -75,6 +81,7 @@ export const cellStyle = (
   if (!status) return { background: 'var(--track)' }
   if (status === 'present') return { background: 'var(--pos-bg)', color: 'var(--pos-fg)' }
   if (status === 'absent')  return { background: 'var(--neg-bg)', color: 'var(--neg-fg)' }
+  if (status === 'late') return { background: 'var(--accent-soft)', color: 'var(--accent)' }
   if (status === 'excused') return { background: 'var(--exc-bg)', color: 'var(--exc-fg)' }
   return {}
 }

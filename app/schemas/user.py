@@ -48,6 +48,10 @@ class UserBase(BaseModel):
     first_name: str
     last_name: str
     role: UserRole
+    student_ui_mode: Literal["regular", "simple"] = "regular"
+    show_points: bool = True
+    show_effort_signals: bool = True
+    celebrate_completion: bool = True
     # Student-specific fields (only required for student users)
     parent_id: Optional[int] = None
     date_of_birth: Optional[date] = None
@@ -74,6 +78,10 @@ class UserUpdate(BaseModel):
     last_name: Optional[str] = None
     is_active: Optional[bool] = None
     theme_preference: Optional[Literal["light", "dark", "system"]] = None
+    student_ui_mode: Optional[Literal["regular", "simple"]] = None
+    show_points: Optional[bool] = None
+    show_effort_signals: Optional[bool] = None
+    celebrate_completion: Optional[bool] = None
     # Student-specific fields
     parent_id: Optional[int] = None
     date_of_birth: Optional[date] = None

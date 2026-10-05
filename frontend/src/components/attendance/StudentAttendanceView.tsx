@@ -89,23 +89,24 @@ const StudentAttendanceView: React.FC = () => {
       .finally(() => setRecordsLoading(false))
   }, [selectedYear, academicYears])
 
-  // 'late' counts as present everywhere in this view.
+  // Preserve Late in the record; it still counts as an instruction day.
   const statusFor = useMemo(() => {
     const m = new Map<string, AttendanceDisplayStatus>()
     for (const r of records) {
-      m.set(r.date, (r.status === 'late' ? 'present' : r.status) as AttendanceDisplayStatus)
+      m.set(r.date, r.status as AttendanceDisplayStatus)
     }
     return m
   }, [records])
 
   const summary = useMemo(() => {
-    let present = 0, absent = 0, excused = 0
+    let present = 0, absent = 0, late = 0, excused = 0
     for (const status of statusFor.values()) {
       if (status === 'present') present++
       else if (status === 'absent') absent++
+      else if (status === 'late') late++
       else if (status === 'excused') excused++
     }
-    return { present, absent, excused }
+    return { present, absent, late, excused }
   }, [statusFor])
 
   // Streak: consecutive most-recent recorded school days marked present.
@@ -117,7 +118,7 @@ const StudentAttendanceView: React.FC = () => {
       .reverse()
     let count = 0
     for (const date of dates) {
-      if (statusFor.get(date) === 'present') count++
+      if (statusFor.get(date) === 'present' || statusFor.get(date) === 'late') count++
       else break
     }
     return count
@@ -142,7 +143,7 @@ const StudentAttendanceView: React.FC = () => {
 
       {/* Academic year selector */}
       {academicYears.length > 0 && (
-        <div className="flex items-center gap-2 mb-6">
+        <div className="flex flex-wrap items-center gap-2 mb-6">
           <label htmlFor="student-attendance-year" className="text-[12px] font-semibold text-faint uppercase tracking-[.06em] whitespace-nowrap">
             Academic year
           </label>
@@ -153,7 +154,7 @@ const StudentAttendanceView: React.FC = () => {
               setRecordsLoading(true)
               setSelectedYear(e.target.value)
             }}
-            className="text-[13px] font-medium text-ink bg-panel border border-line rounded-field px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-accent/30"
+            className="max-w-full text-[13px] font-medium text-ink bg-panel border border-line rounded-field px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-accent/30"
           >
             {academicYears.map(y => (
               <option key={y.academic_year} value={y.academic_year}>
@@ -172,8 +173,9 @@ const StudentAttendanceView: React.FC = () => {
       )}
 
       {/* Summary tiles */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
+      <div className={`grid grid-cols-2 ${summary.late > 0 ? 'lg:grid-cols-5' : 'lg:grid-cols-4'} gap-3 mb-6`}>
         <StatTile label="Days present" value={String(summary.present)} accent={summary.present > 0} />
+        {summary.late > 0 && <StatTile label="Days late" value={String(summary.late)} />}
         <StatTile label="Days absent" value={String(summary.absent)} />
         <StatTile label="Days excused" value={String(summary.excused)} />
         <StatTile label="Current streak" value={streak > 0 ? `${streak} 🔥` : '0'} accent={streak >= 5} />
@@ -188,12 +190,13 @@ const StudentAttendanceView: React.FC = () => {
             const monthLabel = new Date(year, month - 1).toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
             return (
               <div key={`${year}-${month}`} className="bg-panel border border-line rounded-card p-5 overflow-x-auto">
-                <div className="flex items-center justify-between mb-4">
+                <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
                   <p className="text-[15px] font-semibold text-ink">{monthLabel}</p>
                   <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5 text-[11.5px] text-muted">
                     <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm inline-block" style={{ background: 'var(--pos-bg)' }} />Present</span>
                     <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm inline-block" style={{ background: 'var(--exc-bg)' }} />Excused</span>
                     <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm inline-block" style={{ background: 'var(--neg-bg)' }} />Absent</span>
+                    {summary.late > 0 && <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-sm inline-block" style={{ background: 'var(--accent-soft)' }} />Late</span>}
                   </div>
                 </div>
                 <div className="grid grid-cols-7 gap-1 mb-1 min-w-[280px]">

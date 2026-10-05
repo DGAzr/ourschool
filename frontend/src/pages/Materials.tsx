@@ -28,6 +28,7 @@ import { getErrorMessage } from '../services/api'
 import { Subject } from '../types/subject'
 import { MaterialKind, PaperlessDocument } from '../types/paperless'
 import { Button, EmptyState, Spinner, useToast } from '../components/ui'
+import PaperlessConnectionBanner from '../components/materials/PaperlessConnectionBanner'
 import SyncPill from '../components/paperless/SyncPill'
 import FacetRail from '../components/materials/FacetRail'
 import DocumentCard from '../components/materials/DocumentCard'
@@ -142,7 +143,7 @@ const Materials: React.FC = () => {
     // Break out of the page padding so the facet rail can run full height.
     // h-screen (not h-full) fills the viewport: with -m-7, h-full resolves to
     // 100vh minus the Layout padding and leaves a gap at the bottom.
-    <div className="flex h-screen -m-7 min-h-0">
+    <div className="flex flex-col md:flex-row min-h-screen md:h-screen -m-4 md:-m-7 min-h-0">
       <FacetRail
         facets={facets}
         subjects={subjects}
@@ -156,7 +157,7 @@ const Materials: React.FC = () => {
         }
       />
 
-      <div className="flex-1 min-w-0 overflow-y-auto px-8 pt-7 pb-20">
+      <div className="flex-1 min-w-0 overflow-y-auto px-4 sm:px-8 pt-7 pb-20">
         {/* Header */}
         <div className="flex items-start justify-between gap-4 flex-wrap">
           <div>
@@ -164,10 +165,10 @@ const Materials: React.FC = () => {
               Material Library
             </h1>
             <p className="mt-1 text-[13px] text-muted">
-              Everything on your Paperless server, organized for planning.
+              Your synced document library, organized for planning.
             </p>
           </div>
-          <div className="flex items-center gap-2.5 pt-1.5">
+          <div className="flex flex-wrap items-center gap-2.5 pt-1.5">
             <SyncPill
               lastSyncAt={status?.last_sync_at}
               status={status?.last_sync_status}
@@ -177,12 +178,16 @@ const Materials: React.FC = () => {
               size="sm"
               onClick={handleSyncNow}
               loading={syncing}
+              disabled={!connected}
+              title={!connected ? 'Reconnect Paperless to sync new documents' : undefined}
               icon={<RefreshCw className="h-3.5 w-3.5" />}
             >
               Sync now
             </Button>
           </div>
         </div>
+
+        <PaperlessConnectionBanner disconnected={!connected} />
 
         {/* Search */}
         <div className="relative max-w-[420px] mt-5">
@@ -192,6 +197,7 @@ const Materials: React.FC = () => {
           />
           <input
             type="text"
+            aria-label="Search material library"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Search titles, text and curriculum…"

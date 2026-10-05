@@ -30,17 +30,19 @@ import { relativeWhen } from './shopLogic'
 
 interface MyRedemptionsProps {
   redemptions: ShopRedemption[]
+  showPoints?: boolean
   totalSpent: number
 }
 
 export const MyRedemptions: React.FC<MyRedemptionsProps> = ({
   redemptions,
   totalSpent,
+  showPoints=true,
 }) => (
   <div className="bg-panel border border-line rounded-[14px] overflow-hidden">
     <div className="flex items-center justify-between px-[18px] py-3.5 border-b border-line">
       <p className="text-[14px] font-semibold text-ink">My redemptions</p>
-      <span className="text-[12px] text-muted">
+      <span hidden={!showPoints} className="text-[12px] text-muted">
         <span style={{ color: 'var(--accent)' }} aria-hidden>◆</span>{' '}
         {totalSpent.toLocaleString()} spent all-time
       </span>
@@ -60,7 +62,7 @@ export const MyRedemptions: React.FC<MyRedemptionsProps> = ({
           return (
             <div
               key={r.id}
-              className="flex items-center gap-3 px-[18px] py-3.5 border-t first:border-t-0"
+              className="flex flex-wrap items-center gap-3 px-[18px] py-3.5 border-t first:border-t-0"
               style={{ borderColor: 'var(--line-2)' }}
             >
               <div
@@ -80,6 +82,12 @@ export const MyRedemptions: React.FC<MyRedemptionsProps> = ({
                 </p>
               </div>
               <RedemptionStatusPill status={r.status} student />
+              <div className="w-full text-sm text-ink-2 pl-0 sm:pl-[54px]">
+                <p>{r.status==='pending'?'Requested → waiting for teacher approval. Your points are held and already deducted.':r.status==='ready'?'Requested → Approved · Ready for pickup':r.status==='fulfilled'?'Requested → Approved → Fulfilled':r.status==='declined'?'Request declined': 'Reward redeemed'}</p>
+                {r.status==='ready'&&<p className="font-semibold mt-1">{r.pickup_instructions||'Ask your teacher how to collect this reward.'}</p>}
+                {r.status==='declined'&&<p className="mt-1">{r.points_refunded ? `${r.cost_points.toLocaleString()} points were returned to your balance.` : 'Ask your teacher to check the refund for this older request.'}</p>}
+                {r.fulfilled_at&&<p className="text-muted">Collected {new Date(r.fulfilled_at).toLocaleDateString()}</p>}
+              </div>
             </div>
           )
         })}

@@ -1,3 +1,4 @@
+import { Icon } from '../ui'
 /*
  * OurSchool - Homeschool Management System
  * Copyright (C) 2025 Dustan Ashley
@@ -17,23 +18,26 @@
  */
 
 import React from 'react'
+import { Link } from 'react-router-dom'
 import { Archive, Edit2, Trash2 } from 'lucide-react'
 import { StudentAssignment, Subject } from '../../types'
 import { assignmentUtils } from '../../services/assignments'
 import { formatDateOnly } from '../../utils/formatters'
-import { effectiveDueDate, isOverdue } from '../../utils/studentAssignments'
+import { assignmentProgress, effectiveDueDate, isOverdue } from '../../utils/studentAssignments'
 import { letterGrade } from '../../utils/grading'
 import MarkdownRenderer from '../common/MarkdownRenderer'
 
 interface StudentAssignmentCardProps {
   assignment: StudentAssignment
   subject?: Subject
+  simple?:boolean
   isAdmin?: boolean
   onStart?: (assignmentId: number) => void
   onComplete?: (assignment: StudentAssignment) => void
   onArchive?: (assignment: StudentAssignment) => void
   onDelete?: (assignment: StudentAssignment) => void
-  /** When set, the card body is clickable and opens the detail view. */
+  viewHref?: string
+  /** Opens the detail view through a keyboard-accessible button. */
   onView?: (assignment: StudentAssignment) => void
   onEditSelf?: (assignment: StudentAssignment) => void
 }
@@ -59,11 +63,13 @@ const StudentAssignmentCard: React.FC<StudentAssignmentCardProps> = ({
   assignment,
   subject,
   isAdmin = false,
+  simple=false,
   onStart,
   onComplete,
   onArchive,
   onDelete,
   onView,
+  viewHref,
   onEditSelf,
 }) => {
   const template = assignment.template
@@ -71,12 +77,12 @@ const StudentAssignmentCard: React.FC<StudentAssignmentCardProps> = ({
   // Derived from dates: the stored OVERDUE status is only recomputed when the
   // row is touched, so late work can still read "not started".
   const overdue = isOverdue(assignment)
-  const effectiveStatus = overdue ? 'overdue' : assignment.status
+  const progress = assignmentProgress(assignment)
   const dueDate = effectiveDueDate(assignment)
   const maxPts = assignment.custom_max_points ?? template?.max_points ?? 100
 
   const renderActionButton = () => {
-    if (assignment.status === 'not_started' && onStart) {
+    if (progress === 'not_started' && onStart) {
       return (
         <button
           onClick={() => onStart(assignment.id)}
@@ -87,18 +93,18 @@ const StudentAssignmentCard: React.FC<StudentAssignmentCardProps> = ({
       )
     }
 
-    if (assignment.status === 'in_progress' && onComplete) {
+    if (progress === 'in_progress' && onComplete) {
       return (
         <button
           onClick={() => onComplete(assignment)}
           className="flex-1 h-[34px] px-4 rounded-field bg-pos-bg text-pos-fg text-[13px] font-semibold hover:opacity-80 transition-opacity"
         >
-          Submit Assignment
+          I’m finished
         </button>
       )
     }
 
-    if (assignment.status === 'submitted' && !assignment.is_graded) {
+    if (progress === 'submitted' && !assignment.is_graded) {
       return (
         <div className="flex-1 h-[34px] px-4 rounded-field bg-track text-muted text-[13px] font-medium flex items-center justify-center">
           Waiting for Grade
@@ -110,39 +116,27 @@ const StudentAssignmentCard: React.FC<StudentAssignmentCardProps> = ({
   }
 
   return (
-    <div
-      onClick={
-        onView
-          ? e => {
-              // Buttons and links keep their own behavior.
-              if ((e.target as HTMLElement).closest('button, a')) return
-              onView(assignment)
-            }
-          : undefined
-      }
-      className={`bg-panel border border-line rounded-card-lg overflow-hidden hover:border-accent/30 transition-colors ${
-        onView ? 'cursor-pointer' : ''
-      }`}
-    >
+    <div className="bg-panel border border-line rounded-card-lg overflow-hidden hover:border-accent/30 transition-colors">
       {/* Subject color stripe */}
       <div className="h-1" style={{ backgroundColor: subject?.color || 'var(--accent)' }} />
 
       <div className="p-5">
+        {simple&&<div className="mb-3"><Icon name={subject?.icon??'BookOpen'} size={36}/><p className="text-base mt-2">Open this activity. Work on it, then show your teacher.</p></div>}
         {/* Header */}
-        <div className="flex items-start justify-between mb-3">
+        <div className="flex flex-wrap items-start justify-between gap-2 mb-3">
           <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-2 mb-1">
+            <div className="flex flex-wrap items-center gap-2 mb-1">
               <span className="text-base leading-none">
                 {assignmentUtils.getAssignmentTypeIcon(template?.assignment_type || '')}
               </span>
-              <h3 className="text-[15px] font-semibold text-ink truncate">
+              <h3 className={simple?'text-xl font-bold text-ink break-words':'text-[15px] font-semibold text-ink break-words'}>
                 {template?.name}
               </h3>
               {assignment.is_student_created && (
                 <span className="px-2 py-0.5 rounded-pill bg-accent-soft text-accent text-[10px] font-semibold uppercase tracking-wide">Student created</span>
               )}
             </div>
-            <div className="flex items-center gap-2 text-[12.5px] text-muted">
+            <div className="flex flex-wrap items-center gap-2 text-[12.5px] text-muted">
               <span>{subject?.name}</span>
               {dueDate && (
                 <>
@@ -155,10 +149,12 @@ const StudentAssignmentCard: React.FC<StudentAssignmentCardProps> = ({
             </div>
           </div>
 
-          <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold uppercase tracking-wide ${statusBadge(effectiveStatus)}`}>
-            {effectiveStatus.replace('_', ' ')}
+          <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold uppercase tracking-wide ${statusBadge(progress)}`}>
+            {progress.replace('_', ' ')}
           </span>
         </div>
+
+        {overdue && <p className="text-[12px] font-semibold text-neg-fg mb-3">Overdue · You can still finish this work</p>}
 
         {/* Description */}
         {template?.description && (
@@ -168,8 +164,8 @@ const StudentAssignmentCard: React.FC<StudentAssignmentCardProps> = ({
         )}
 
         {/* Meta row */}
-        <div className="flex items-center justify-between text-[12.5px] text-muted mb-4">
-          <div className="flex items-center gap-3">
+        <div className="flex flex-wrap gap-2 items-center justify-between text-[12.5px] text-muted mb-4">
+          <div className="flex flex-wrap items-center gap-3">
             <span>📋 {maxPts} pts</span>
             {template?.estimated_duration_minutes && (
               <span>⏱ {assignmentUtils.formatDuration(template.estimated_duration_minutes)}</span>
@@ -189,7 +185,7 @@ const StudentAssignmentCard: React.FC<StudentAssignmentCardProps> = ({
         </div>
 
         {/* Submission preview */}
-        {(assignment.status === 'submitted' || assignment.is_graded) &&
+        {(progress === 'submitted' || assignment.is_graded) &&
           (assignment.submission_notes || (assignment.submission_artifacts && assignment.submission_artifacts.length > 0)) && (
           <div className="mb-4 px-3 py-2.5 bg-accent/6 border border-accent/15 rounded-field">
             <p className="text-[11.5px] font-semibold text-accent mb-1 uppercase tracking-wide">Your Submission</p>
@@ -214,9 +210,6 @@ const StudentAssignmentCard: React.FC<StudentAssignmentCardProps> = ({
                   ({assignment.letter_grade ?? letterGrade(assignment.points_earned, maxPts)})
                 </span>
               </span>
-              {onView && (
-                <span className="text-[12px] text-accent font-semibold">View details →</span>
-              )}
             </div>
             {assignment.teacher_feedback && (
               <p className="text-[12.5px] text-ink-2 mt-1.5 leading-relaxed line-clamp-3">
@@ -227,9 +220,14 @@ const StudentAssignmentCard: React.FC<StudentAssignmentCardProps> = ({
         )}
 
         {/* Actions */}
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
+          {viewHref ? (
+            <Link to={viewHref} className="min-h-[44px] px-3 inline-flex items-center text-accent font-semibold text-[13px] rounded-field border border-line">Open assignment</Link>
+          ) : onView && (
+            <button type="button" onClick={() => onView(assignment)} className="min-h-[44px] px-3 text-accent font-semibold text-[13px] rounded-field border border-line">Open assignment</button>
+          )}
           {renderActionButton()}
-          {assignment.is_student_created && onEditSelf && !assignment.is_graded && !['submitted', 'graded', 'excused'].includes(assignment.status) && (
+          {assignment.is_student_created && onEditSelf && !assignment.is_graded && !['submitted', 'graded', 'excused'].includes(progress) && (
             <button
               onClick={() => onEditSelf(assignment)}
               className="w-[34px] h-[34px] flex items-center justify-center rounded-field text-faint hover:text-accent hover:bg-accent-soft transition-colors"

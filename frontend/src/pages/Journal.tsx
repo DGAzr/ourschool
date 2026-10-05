@@ -1,3 +1,5 @@
+import { usePointsStatus } from '../contexts/PointsStatusContext'
+import QuickReflection from '../components/journal/QuickReflection'
 /*
  * OurSchool - Homeschool Management System
  * Copyright (C) 2025 Dustan Ashley
@@ -34,12 +36,21 @@ import JournalEditDialog from '../components/journal/JournalEditDialog'
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
-const MOODS = [
+const WRITING_MOODS = [
   { key: 'great', label: 'Great', color: '#22c55e' },
   { key: 'good', label: 'Good', color: '#3b82f6' },
   { key: 'okay', label: 'Okay', color: '#f59e0b' },
   { key: 'low', label: 'Low', color: '#8b5cf6' },
   { key: 'hard', label: 'Hard', color: '#ef4444' },
+]
+
+const MOODS = [...WRITING_MOODS,
+  {key:'happy',label:'Happy',color:'#22c55e'},
+  {key:'proud',label:'Proud',color:'#3b82f6'},
+  {key:'calm',label:'Calm',color:'#14b8a6'},
+  {key:'tired',label:'Tired',color:'#8b5cf6'},
+  {key:'frustrated',label:'Frustrated',color:'#ef4444'},
+  {key:'curious',label:'Curious',color:'#eab308'},
 ]
 
 const SPARKS = [
@@ -83,7 +94,9 @@ interface ComposerProps {
 }
 
 const StudentComposer: React.FC<ComposerProps> = ({ composerData, onSaved }) => {
+  const {user}=useAuth()
   const editorRef = useRef<HTMLDivElement>(null)
+  const [richWriting,setRichWriting]=useState(false)
   const [title, setTitle] = useState('')
   const [mood, setMood] = useState<string | null>(null)
   const [icon, setIcon] = useState<string | null>(null)
@@ -162,9 +175,16 @@ const StudentComposer: React.FC<ComposerProps> = ({ composerData, onSaved }) => 
   }
 
   const subjects = composerData?.subjects ?? []
-  const pointsPerEntry = composerData?.points_per_entry
-  const pointsEarnedToday = composerData?.points_today
+  const pointsPerEntry = user?.show_points===false?null:composerData?.points_per_entry
+  const pointsEarnedToday = user?.show_points===false?null:composerData?.points_today
 
+  return <>
+    <div className="mb-3 flex gap-3 text-sm"><button type="button" aria-pressed={!richWriting} onClick={()=>setRichWriting(false)}>Quick reflection</button><button type="button" aria-pressed={richWriting} onClick={()=>setRichWriting(true)}>More writing</button></div>
+    <div hidden={richWriting}><QuickReflection onSaved={onSaved}/></div>
+    <div hidden={!richWriting}>{renderRichComposer()}</div>
+  </>
+
+  function renderRichComposer() {
   if (!open) {
     return (
       <button
@@ -246,7 +266,7 @@ const StudentComposer: React.FC<ComposerProps> = ({ composerData, onSaved }) => 
       <div className="px-5 pt-4">
         <p className="text-[10.5px] font-semibold text-faint uppercase tracking-[.06em] mb-2">How are you feeling?</p>
         <div className="flex gap-2 flex-wrap">
-          {MOODS.map(m => (
+          {WRITING_MOODS.map(m => (
             <button key={m.key} type="button"
               onClick={() => setMood(mood === m.key ? null : m.key)}
               className={`flex items-center gap-1.5 h-[28px] px-2.5 rounded-pill border text-[12.5px] font-medium transition-colors ${
@@ -362,6 +382,7 @@ const StudentComposer: React.FC<ComposerProps> = ({ composerData, onSaved }) => 
       </div>
     </div>
   )
+  }
 }
 
 // ─── Student Entry Card ───────────────────────────────────────────────────────
@@ -506,6 +527,7 @@ interface AdminEntryPanelProps {
 const AdminEntryPanel: React.FC<AdminEntryPanelProps> = ({ entry, onReacted, onReplied, onDelete, onMarkReviewed, onEdit }) => {
   const [replyDraft, setReplyDraft] = useState('')
   const [sending, setSending] = useState(false)
+  const [responseError, setResponseError] = useState('')
   const mood = MOODS.find(m => m.key === entry.mood)
 
   const toggleReaction = async (reaction: string) => {
@@ -513,32 +535,35 @@ const AdminEntryPanel: React.FC<AdminEntryPanelProps> = ({ entry, onReacted, onR
     const updated = current.includes(reaction)
       ? current.filter(r => r !== reaction)
       : [...current, reaction]
+    setResponseError('')
     try {
       const result = await journalApi.setReactions(entry.id, updated)
       onReacted(result)
-    } catch {}
+    } catch (err) { setResponseError(getErrorMessage(err, 'Could not save your response. Please try again.')) }
   }
 
   const sendReply = async () => {
     if (!replyDraft.trim()) return
     setSending(true)
+    setResponseError('')
     try {
       await journalApi.addReply(entry.id, replyDraft.trim())
       setReplyDraft('')
       // Refresh entry
       const updated = await journalApi.getById(entry.id)
       onReplied(updated)
-    } catch {} finally {
+    } catch (err) { setResponseError(getErrorMessage(err, 'Could not save your response. Please try again.')) } finally {
       setSending(false)
     }
   }
 
   const deleteReply = async (replyId: number) => {
+    setResponseError('')
     try {
       await journalApi.deleteReply(replyId)
       const updated = await journalApi.getById(entry.id)
       onReplied(updated)
-    } catch {}
+    } catch (err) { setResponseError(getErrorMessage(err, 'Could not save your response. Please try again.')) }
   }
 
   return (
@@ -571,7 +596,7 @@ const AdminEntryPanel: React.FC<AdminEntryPanelProps> = ({ entry, onReacted, onR
               {entry.edited_at && <span title={`${entry.edited_by_name ?? 'Unknown'} · ${formatDate(entry.edited_at)}`}>· Edited</span>}
             </div>
           </div>
-          <div className="flex items-center gap-2 flex-none">
+          <div className="flex flex-wrap items-center gap-2 flex-none">
             <button onClick={() => onEdit(entry)} className="h-[28px] px-2.5 text-[12px] font-semibold text-accent border border-line bg-panel rounded-[7px] hover:bg-accent-soft transition-colors">Edit</button>
             {entry.needs_response ? (
               <button
@@ -613,6 +638,7 @@ const AdminEntryPanel: React.FC<AdminEntryPanelProps> = ({ entry, onReacted, onR
         )}
       </div>
 
+      {responseError && <p role="alert" className="px-5 pb-3 text-sm text-danger">{responseError}</p>}
       {/* Reactions */}
       <div className="px-5 pb-3">
         <p className="text-[10.5px] font-semibold text-faint uppercase tracking-[.06em] mb-2">Reactions</p>
@@ -679,6 +705,7 @@ const AdminEntryPanel: React.FC<AdminEntryPanelProps> = ({ entry, onReacted, onR
 // ─── Main Page ────────────────────────────────────────────────────────────────
 
 const Journal: React.FC = () => {
+  const { notifyBalanceChanged } = usePointsStatus()
   const { user } = useAuth()
   const [entries, setEntries] = useState<JournalEntryWithAuthor[]>([])
   const [students, setStudents] = useState<JournalStudent[]>([])
@@ -686,6 +713,9 @@ const Journal: React.FC = () => {
   const [loading, setLoading] = useState(true)
   const [selectedStudentId, setSelectedStudentId] = useState<number | null>(null)
   const [searchTerm, setSearchTerm] = useState('')
+  const [inboxState,setInboxState]=useState('all')
+  const [dateFrom,setDateFrom]=useState('')
+  const [dateTo,setDateTo]=useState('')
   const [error, setError] = useState<string | null>(null)
   const [deletingEntryId, setDeletingEntryId] = useState<number | null>(null)
   const [deleteLoading, setDeleteLoading] = useState(false)
@@ -757,24 +787,27 @@ const Journal: React.FC = () => {
       const updated = await journalApi.markRead(id)
       updateEntry(updated)
     } catch {
+      setError('Could not mark this reflection reviewed. Please try again.')
       // Roll back on error
       setEntries(prev => prev.map(e => e.id === id ? { ...e, needs_response: true } : e))
     }
   }
 
-  const filteredEntries = entries.filter(e => {
-    if (isAdmin && selectedStudentId !== null && e.student_id !== selectedStudentId) return false
-    return (
-      e.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      e.content.toLowerCase().includes(searchTerm.toLowerCase()) ||
-      e.student_name.toLowerCase().includes(searchTerm.toLowerCase())
-    )
+  const scopedEntries = entries.filter(e => {
+    const day=format(parseISO(e.entry_date), 'yyyy-MM-dd')
+    if(dateFrom&&day<dateFrom || dateTo&&day>dateTo)return false
+    if(inboxState==='needs'&&!e.needs_response)return false
+    if(inboxState==='new'&&(e.author_id!==e.student_id||e.replies.some(r=>r.author_role==='admin')))return false
+    if(inboxState==='reviewed'&&e.needs_response)return false
+    const needle=searchTerm.toLowerCase()
+    return [e.title,e.content,e.student_name].some(text=>text.toLowerCase().includes(needle))
   })
+  const filteredEntries=scopedEntries.filter(e=>!isAdmin||selectedStudentId===null||e.student_id===selectedStudentId)
 
   const hour = new Date().getHours()
   const greeting = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening'
   const todayLabel = format(new Date(), 'EEEE, MMMM d')
-  const streak = entries[0]?.streak ?? 0
+  const streak = composerData?.streak ?? 0
 
   if (!user) return null
 
@@ -809,10 +842,10 @@ const Journal: React.FC = () => {
               <p className="mt-1.5 text-muted text-[14px]">{todayLabel} · What's on your mind today?</p>
             </div>
             <div className="flex gap-2.5 flex-none">
-              {streak > 0 && (
+              {user.show_effort_signals !== false && streak > 0 && (
                 <div className="text-center bg-panel border border-line rounded-[11px] px-3.5 py-2.5">
                   <div className="font-mono text-[22px] font-semibold text-[#ff6b6b] leading-none">{streak}</div>
-                  <div className="text-[10.5px] text-muted mt-1 uppercase tracking-[.05em]">day streak</div>
+                  <div className="text-[10.5px] text-muted mt-1 uppercase tracking-[.05em]">reflection days</div><p className="text-xs text-muted max-w-[180px] mt-2">Your own saved reflections. Only recorded Present or Late school days define gaps; unrecorded breaks do not count as misses.</p>
                 </div>
               )}
               <div className="text-center bg-panel border border-line rounded-[11px] px-3.5 py-2.5">
@@ -826,7 +859,9 @@ const Journal: React.FC = () => {
           <StudentComposer
             composerData={composerData}
             onSaved={entry => {
+              notifyBalanceChanged()
               setEntries(prev => [entry, ...prev])
+              void journalApi.getComposerData().then(setComposerData).catch(() => {})
               if (composerData && entry.points_awarded) {
                 setComposerData(prev => prev ? { ...prev, points_today: entry.points_awarded ?? null } : prev)
               }
@@ -864,6 +899,7 @@ const Journal: React.FC = () => {
       {/* ═══════════════════════════
           ADMIN VIEW
       ═══════════════════════════ */}
+      {isAdmin && <div className="flex flex-wrap gap-3 mb-4 items-end"><label className="text-sm">Response status<select className="block bg-panel border border-line rounded-field p-2" value={inboxState} onChange={e=>setInboxState(e.target.value)}><option value="all">All entries</option><option value="needs">Needs response</option><option value="new">New · no teacher reply</option><option value="reviewed">Reviewed · no response needed</option></select></label><label className="text-sm">From<input type="date" className="block bg-panel border border-line rounded-field p-2" value={dateFrom} onChange={e=>setDateFrom(e.target.value)}/></label><label className="text-sm">Through<input type="date" className="block bg-panel border border-line rounded-field p-2" min={dateFrom} value={dateTo} onChange={e=>setDateTo(e.target.value)}/></label><button className="text-sm text-accent" onClick={()=>{setInboxState('all');setDateFrom('');setDateTo('');setSearchTerm('');setSelectedStudentId(null)}}>Clear filters</button><p className="text-xs text-muted">{filteredEntries.length} entries in this scope. Student badges count entries needing a response within these filters.</p></div>}
       {isAdmin && (
         <div className="flex flex-col lg:flex-row flex-1 min-h-0 gap-4">
           {/* Student roster — horizontal chips on mobile, side rail on desktop */}
@@ -894,10 +930,10 @@ const Journal: React.FC = () => {
                 }`}
               >
                 All students
-                <span className="ml-1.5 font-mono text-[11px] text-faint">{entries.length}</span>
+                <span className="ml-1.5 font-mono text-[11px] text-faint">{scopedEntries.length}</span>
               </button>
               {students.map(s => {
-                const studentEntries = entries.filter(e => e.student_id === s.id)
+                const studentEntries = scopedEntries.filter(e => e.student_id === s.id)
                 const awaiting = studentEntries.filter(e => e.needs_response).length
                 const initials = s.name.split(' ').map((n: string) => n[0]).slice(0, 2).join('')
                 return (
@@ -954,10 +990,10 @@ const Journal: React.FC = () => {
                 }`}
               >
                 All
-                <span className="ml-1 font-mono text-[11px] opacity-60">{entries.length}</span>
+                <span className="ml-1 font-mono text-[11px] opacity-60">{scopedEntries.length}</span>
               </button>
               {students.map(s => {
-                const awaiting = entries.filter(e => e.student_id === s.id && e.needs_response).length
+                const awaiting = scopedEntries.filter(e => e.student_id === s.id && e.needs_response).length
                 return (
                   <button
                     key={s.id}

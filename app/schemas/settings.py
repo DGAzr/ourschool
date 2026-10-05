@@ -98,3 +98,12 @@ class SystemSettingsGroup(BaseModel):
     attendance: AttendanceSettings
     grading: GradingSettings
     security: SecuritySettings
+
+
+class SchoolIdentity(BaseModel):
+    name: str = Field(default="OurSchool", min_length=1, max_length=160)
+    logo: Optional[str] = None
+
+
+class SchoolNameUpdate(BaseModel):
+    name: str = Field(min_length=1, max_length=160)

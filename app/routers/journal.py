@@ -16,11 +16,11 @@
 
 """Journal entry router."""
 
-from datetime import date, datetime, timedelta, timezone
+from datetime import datetime, timezone
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from typing import Annotated, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy import desc, func
 from sqlalchemy.orm import Session, joinedload
 
 from app.core.database import get_db
@@ -46,27 +46,21 @@ from app.schemas.journal import (
 )
 from app.crud import points as points_crud
 from app.schemas.points import PointTransactionCreate
+from app.services.reflection_days import reflection_streak, school_day_bounds
 
 router = APIRouter(tags=["journal"])
 
 
+def _school_timezone(zone_name: str = Query("UTC", alias="timezone")) -> str:
+    try:
+        ZoneInfo(zone_name)
+    except (ZoneInfoNotFoundError, ValueError):
+        raise HTTPException(status_code=422, detail="Unknown school timezone")
+    return zone_name
+
+
 def _compute_streak(db: Session, student_id: int) -> int:
-    rows = (
-        db.query(func.date(JournalEntry.entry_date))
-        .filter(JournalEntry.student_id == student_id)
-        .distinct()
-        .order_by(desc(func.date(JournalEntry.entry_date)))
-        .all()
-    )
-    streak = 0
-    today = date.today()
-    for i, (d,) in enumerate(rows):
-        expected = today - timedelta(days=i)
-        if d == expected:
-            streak += 1
-        else:
-            break
-    return streak
+    return reflection_streak(db, student_id)
 
 
 def _entry_to_response(
@@ -203,6 +197,7 @@ async def create_journal_entry(
         AuthUser, Depends(require_user_or_permission("journal:write"))
     ],
     db: Session = Depends(get_db),
+    zone_name: str = Depends(_school_timezone),
 ):
     if is_student_user(auth_user):
         student_id = auth_user.id
@@ -272,15 +267,14 @@ async def create_journal_entry(
 
     # Award points to students on their first journal entry of the day
     if is_student_user(auth_user) and points_crud.is_points_system_enabled(db):
-        today_start = datetime.now(timezone.utc).replace(
-            hour=0, minute=0, second=0, microsecond=0
-        )
+        today_start, tomorrow_start = school_day_bounds(zone_name)
         already_awarded = (
             db.query(JournalEntry)
             .filter(
                 JournalEntry.student_id == student_id,
                 JournalEntry.points_awarded.isnot(None),
                 JournalEntry.created_at >= today_start,
+                JournalEntry.created_at < tomorrow_start,
                 JournalEntry.id != entry.id,
             )
             .first()
@@ -535,6 +529,7 @@ async def delete_reply(
 async def get_composer_data(
     auth_user: Annotated[AuthUser, Depends(require_user_or_permission("journal:read"))],
     db: Session = Depends(get_db),
+    zone_name: str = Depends(_school_timezone),
 ):
     """Return streak, subjects, and today's points status for the journal composer."""
     from app.models.subject import Subject
@@ -544,22 +539,21 @@ async def get_composer_data(
 
     viewer_id = get_user_id_from_auth(auth_user)
     streak = (
-        _compute_streak(db, viewer_id)
+        reflection_streak(db, viewer_id, zone_name)
         if is_student_user(auth_user) and viewer_id is not None
         else 0
     )
 
     points_today = None
     if is_student_user(auth_user) and viewer_id is not None:
-        today_start = datetime.now(timezone.utc).replace(
-            hour=0, minute=0, second=0, microsecond=0
-        )
+        today_start, tomorrow_start = school_day_bounds(zone_name)
         awarded_entry = (
             db.query(JournalEntry)
             .filter(
                 JournalEntry.student_id == viewer_id,
                 JournalEntry.points_awarded.isnot(None),
                 JournalEntry.created_at >= today_start,
+                JournalEntry.created_at < tomorrow_start,
             )
             .first()
         )

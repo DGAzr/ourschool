@@ -216,12 +216,12 @@ const ConnectCard: React.FC<ConnectCardProps> = ({
               Import the entire library, including documents outside selected
               subjects
             </label>
-            <p className="text-[12px] text-muted mb-2">
+            <details className="text-xs text-muted mb-2"><summary>Advanced server details</summary><p>
               Paperless API {tested.api_version ?? 10}
               {tested.server_version
                 ? ` · Server ${tested.server_version}`
                 : ''}
-            </p>
+            </p></details>
             <ScopeChecklist
               tags={tested.tags}
               documentTypes={tested.document_types}
@@ -236,7 +236,7 @@ const ConnectCard: React.FC<ConnectCardProps> = ({
           </div>
         )}
 
-        {libraries.length > 0 && (
+        {libraries.length > 0 && (<details><summary className="cursor-pointer text-sm text-muted">Advanced · reconnect a moved or restored library</summary>
           <label className="block text-[13px] text-muted">
             Library identity
             <select
@@ -256,7 +256,7 @@ const ConnectCard: React.FC<ConnectCardProps> = ({
             move or restore. A different server uses separate documents and
             attachments.
           </label>
-        )}
+        </details>)}
         {error && (
           <div className="flex items-center gap-2 px-3.5 py-2.5 rounded-card text-[13px] text-neg-fg bg-neg-bg border border-neg-fg/20">
             <AlertTriangle className="h-4 w-4 flex-shrink-0" />

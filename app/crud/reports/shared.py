@@ -17,15 +17,21 @@
 
 """Shared cross-cutting helpers for report CRUD modules."""
 
-from datetime import date, timedelta
+from datetime import timedelta
 from typing import List, Optional
 
 from app.models.assignment import AssignmentStatus
 from app.models.journal import JournalEntry
+from app.models.user import User
 from app.models.term import Term  # noqa: F401 — referenced in string annotations
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from app.utils.grading import calculate_letter_grade, compute_weighted_grade
+from app.utils.grading import (
+    calculate_letter_grade,
+    compute_weighted_grade,
+    effective_due_date,
+)
 
 
 def _is_graded(assignment) -> bool:
@@ -35,8 +41,10 @@ def _is_graded(assignment) -> bool:
     status was set to GRADED but the ``is_graded`` flag was never written
     (e.g. backup imports). A score of 0 is a valid grade.
     """
-    return assignment.points_earned is not None and (
-        assignment.is_graded or assignment.status == AssignmentStatus.GRADED
+    return (
+        assignment.status != AssignmentStatus.EXCUSED
+        and assignment.points_earned is not None
+        and (assignment.is_graded or assignment.status == AssignmentStatus.GRADED)
     )
 
 
@@ -78,6 +86,11 @@ def _build_weekly_series(
     def _date(a):
         return getattr(a, "graded_date", None) or a.due_date or a.assigned_date
 
+    graded_assignments = [
+        a
+        for a in graded_assignments
+        if term.start_date <= effective_due_date(a) <= term.end_date
+    ]
     dated = [(a, _date(a)) for a in graded_assignments if _date(a)]
     if not dated:
         return []
@@ -109,46 +122,35 @@ def _build_weekly_series(
 def _journal_summary(
     db: Session, student_id: int, term: Optional["Term"] = None
 ) -> str:
-    """Return a short journal effort summary string for the given student."""
+    """Count student reflections separately from teacher notes without judging breaks."""
+    student = db.get(User, student_id)
+    if not student or not student.show_effort_signals:
+        return ""
     query = db.query(JournalEntry).filter(JournalEntry.student_id == student_id)
     if term:
         query = query.filter(
-            JournalEntry.entry_date >= term.start_date,
-            JournalEntry.entry_date <= term.end_date,
+            func.date(JournalEntry.entry_date) >= term.start_date,
+            func.date(JournalEntry.entry_date) <= term.end_date,
         )
-    entries = query.order_by(JournalEntry.entry_date.desc()).all()
+    entries = query.all()
+    reflections = sum(entry.author_id == student_id for entry in entries)
+    notes = len(entries) - reflections
     if not entries:
-        return "No journal entries this term"
-
-    total = len(entries)
-    # Streak: count consecutive days from most recent
-    dates = sorted(
-        {
-            e.entry_date.date() if hasattr(e.entry_date, "date") else e.entry_date
-            for e in entries
-        },
-        reverse=True,
-    )
-    streak = 1
-    for i in range(1, len(dates)):
-        if (dates[i - 1] - dates[i]).days == 1:
-            streak += 1
-        else:
-            break
-
-    # Check for lapsed journaling (>7 days since last entry)
-    today = date.today()
-    last_date = dates[0]
-    days_since = (today - last_date).days
-    if days_since > 7:
-        return f"No entries in {days_since} days"
-    if streak >= 3:
-        return f"{streak}-day streak, {total} {'entry' if total == 1 else 'entries'}"
-    return f"{total} {'entry' if total == 1 else 'entries'} this term"
+        return ""
+    return f"{reflections} student reflections; {notes} teacher notes in this scope"
 
 
-def _compute_trend_int(series: List[float]) -> int:
+def _compute_trend_int(series: List[float]) -> Optional[int]:
     """Compute signed trend integer from a grade series (last - first)."""
     if len(series) < 2:
-        return 0
+        return None
     return int(round(series[-1] - series[0]))
+
+
+def calculation_note(type_weights, scope):
+    weights = ", ".join(f"{name}: {weight:g}" for name, weight in type_weights.items())
+    return (
+        f"{scope}. Grades use earned/possible points within each assignment type, then configured type weights ({weights}). "
+        "Only types with scored work participate. Excused work is excluded from grades and completion denominators. "
+        "Term membership uses the extended due date, due date, or assigned date. Attendance is (Present + Late + Excused) / recorded days; unrecorded days are excluded."
+    )

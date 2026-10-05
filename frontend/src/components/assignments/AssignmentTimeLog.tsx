@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react'
+import { assignmentProgress } from '../../utils/studentAssignments'
 import { AssignmentTimeEntry, StudentAssignment } from '../../types'
 import { assignmentsApi, assignmentUtils } from '../../services/assignments'
 import { getErrorMessage } from '../../services/api'
@@ -25,7 +26,7 @@ const AssignmentTimeLog: React.FC<Props> = ({ assignment, onTotalChanged }) => {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const isAdmin = user?.role === 'admin'
-  const locked = !isAdmin && (assignment.is_graded || ['submitted', 'graded', 'excused'].includes(assignment.status))
+  const locked = !isAdmin && (assignment.is_graded || ['submitted', 'graded', 'excused'].includes(assignmentProgress(assignment)))
 
   useEffect(() => {
     assignmentsApi.getTimeEntries(assignment.id)
@@ -70,7 +71,7 @@ const AssignmentTimeLog: React.FC<Props> = ({ assignment, onTotalChanged }) => {
 
   return (
     <div className="space-y-3">
-      <div className="flex items-center justify-between"><span className="text-[12.5px] text-muted">Total logged</span><strong className="text-[14px] text-ink">{assignmentUtils.formatDuration(entries.reduce((sum, entry) => sum + entry.minutes, 0))}</strong></div>
+      <div className="flex items-center justify-between"><span className="text-[12.5px] text-muted">Total logged</span><strong className="text-[14px] text-ink">{`${entries.reduce((sum, entry) => sum + entry.minutes, 0)} min logged`}</strong></div>
       {error && <div className="text-[12.5px] text-neg-fg">{error}</div>}
       {!locked && (
         <div className="grid grid-cols-2 sm:grid-cols-[1fr_70px_70px_2fr_auto] gap-2 items-end">

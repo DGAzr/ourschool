@@ -30,7 +30,7 @@ interface TemplateLibraryModalProps {
   onClose: () => void
   subjects: Subject[]
   onAttach: (template: AssignmentTemplate) => void
-  /** When set, only templates for this subject are shown. */
+  /** Initial subject filter inherited from the lesson, visible and clearable. */
   subjectId?: number | null
   /** Template ids already linked to the lesson — hidden from the list. */
   excludeTemplateIds?: number[]
@@ -48,10 +48,12 @@ const TemplateLibraryModal: React.FC<TemplateLibraryModalProps> = ({
   excludeTemplateIds = [],
   onCreateNew,
 }) => {
+  const [subjectOverride, setSubjectOverride] = useState<{ inherited: number | null | undefined; value: number | null } | null>(null)
+  const selectedSubject = subjectOverride && subjectOverride.inherited === subjectId ? subjectOverride.value : subjectId
   const [search, setSearch] = useState('')
   const settledSearch = useDebouncedSearch(search)
   const { items: templates, loading, error, pagination } = usePagedData<AssignmentTemplate>({
-    subject_id: subjectId, search: settledSearch, with_stats: false,
+    subject_id: selectedSubject, search: settledSearch, with_stats: false,
   }, templatePage, isOpen)
 
   const subjectName = (id: number): string =>
@@ -64,11 +66,12 @@ const TemplateLibraryModal: React.FC<TemplateLibraryModalProps> = ({
   )
 
   const controls = (
-    <div className="flex gap-2 mb-3">
+    <div className="flex flex-wrap gap-2 mb-3">
       <Input
         value={search}
         onChange={(e) => setSearch(e.target.value)}
         placeholder="Search templates…"
+        aria-label="Search template library"
       />
       <Button variant="outline" size="sm" onClick={onCreateNew}>
         + New assignment
@@ -80,6 +83,18 @@ const TemplateLibraryModal: React.FC<TemplateLibraryModalProps> = ({
     <Modal isOpen={isOpen} onClose={onClose} title="Template library" size="lg">
       {error && <p role="alert" className="text-neg-fg">{error}</p>}
       {controls}
+      <div className="flex flex-wrap items-center gap-2 text-[12px] mb-3">
+        <label className="flex items-center gap-2 text-muted">Subject filter
+          <select aria-label="Template library subject" value={selectedSubject ?? ''} onChange={e => setSubjectOverride({ inherited: subjectId, value: e.target.value ? Number(e.target.value) : null })} className="max-w-full bg-panel border border-line rounded-field px-2 min-h-10 text-ink">
+            <option value="">All subjects</option>
+            {subjects.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+          </select>
+        </label>
+        {selectedSubject != null && <span className="text-accent">Filtered to {subjectName(selectedSubject)}</span>}
+        {(selectedSubject != null || search) && <button onClick={() => { setSubjectOverride({ inherited: subjectId, value: null }); setSearch('') }} className="min-h-10 text-accent font-semibold">Clear filters</button>}
+        <span className="text-muted">{loading ? 'Loading matches…' : `${pagination.total} matching templates · ${visible.length} available on this page`}</span>
+      </div>
+      {excludeTemplateIds.length > 0 && <p className="text-[12px] text-muted mb-2">Activities already linked to this lesson are hidden.</p>}
       <PageNavigation {...pagination} />
       {loading ? (
         <div className="flex justify-center py-10">
@@ -100,7 +115,7 @@ const TemplateLibraryModal: React.FC<TemplateLibraryModalProps> = ({
               className="flex items-center gap-3 border border-line rounded-[11px] px-3 py-2.5"
             >
               <div className="flex-1 min-w-0">
-                <div className="text-[13.5px] font-semibold text-ink truncate">
+                <div className="text-[13.5px] font-semibold text-ink break-words">
                   {template.name}
                 </div>
                 <div className="text-[11.5px] text-muted flex flex-wrap gap-x-2">
@@ -121,6 +136,7 @@ const TemplateLibraryModal: React.FC<TemplateLibraryModalProps> = ({
                   onAttach(template)
                   onClose()
                 }}
+                aria-label={`Attach ${template.name}`}
               >
                 Attach →
               </Button>

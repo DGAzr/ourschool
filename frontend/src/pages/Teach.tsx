@@ -19,7 +19,7 @@ import { assignmentsApi } from '../services/assignments'
 import { lessonsApi } from '../services/lessons'
 import { subjectsApi } from '../services/subjects'
 import { Subject, User } from '../types'
-import { Lesson } from '../types/lesson'
+import { Lesson, LessonAssignmentProgress } from '../types/lesson'
 import { useLessons } from '../hooks/useLessons'
 import {
   calendarDateHref,
@@ -33,6 +33,8 @@ const TeachRunSheet: React.FC = () => {
   const [selectedDate, setSelectedDate] = useCalendarDateParam()
   const [subjects, setSubjects] = useState<Subject[]>([])
   const [students, setStudents] = useState<User[]>([])
+  const [work, setWork] = useState<LessonAssignmentProgress[] | undefined>(undefined)
+  const [workError, setWorkError] = useState<string | null>(null)
   const [editingLesson, setEditingLesson] = useState<Lesson | null>(null)
   const {
     lessons,
@@ -66,6 +68,16 @@ const TeachRunSheet: React.FC = () => {
       .catch(() => undefined)
   }, [toast])
 
+  useEffect(() => {
+    let cancelled = false
+    lessonsApi.assignmentProgress(selectedDate).then(data => {
+      if (!cancelled) { setWork(data); setWorkError(null) }
+    }).catch(() => {
+      if (!cancelled) { setWork(undefined); setWorkError('Could not load student work. Reload this page to try again.') }
+    })
+    return () => { cancelled = true }
+  }, [selectedDate, lessons])
+
   const handleMarkTaught = useCallback(
     async (lesson: Lesson) => {
       const ok = await markTaught(lesson)
@@ -93,7 +105,9 @@ const TeachRunSheet: React.FC = () => {
 
   return (
     <div>
+      {workError && <p role="alert" className="text-neg-fg mb-3">{workError}</p>}
       <TeachView
+        assignments={work}
         subjects={subjects}
         selectedDate={selectedDate}
         lessons={lessons}

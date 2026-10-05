@@ -46,6 +46,7 @@ const ViewerContent: React.FC<{
   const canvas = useRef<HTMLCanvasElement>(null)
   const downloadController = useRef<AbortController | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [contentUnavailable, setContentUnavailable] = useState(false)
   const [loading, setLoading] = useState(true)
   const [page, setPage] = useState(1)
   const [pages, setPages] = useState(0)
@@ -83,6 +84,7 @@ const ViewerContent: React.FC<{
       .catch((err) => {
         if (cancelled) return
         const status = (err as { status?: number }).status
+        setContentUnavailable([401, 403, 404, 409].includes(status ?? 0))
         setError(
           status === 403
             ? 'You no longer have access to this material.'
@@ -137,6 +139,7 @@ const ViewerContent: React.FC<{
     }
   }, [pdf, page])
   const handleDownload = async () => {
+    if (contentUnavailable || downloading) return
     const controller = new AbortController()
     downloadController.current = controller
     setDownloading(true)
@@ -181,6 +184,8 @@ const ViewerContent: React.FC<{
             variant="secondary"
             onClick={handleDownload}
             loading={downloading}
+            disabled={contentUnavailable}
+            title={contentUnavailable ? error ?? 'Content unavailable' : undefined}
             icon={<Download className="h-4 w-4" />}
           >
             Download {progress}

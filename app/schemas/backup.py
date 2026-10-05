@@ -18,7 +18,7 @@
 
 from datetime import date, datetime
 from typing import Dict, List, Optional, Any
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ConfigDict, field_validator
 
 DateType = date
 
@@ -41,6 +41,10 @@ class UserBackup(BaseModel):
     date_of_birth: Optional[date] = None
     grade_level: Optional[int] = Field(None, ge=0, le=12)
     theme_preference: Optional[str] = None
+    student_ui_mode: str = "regular"
+    show_points: bool = True
+    show_effort_signals: bool = True
+    celebrate_completion: bool = True
     created_at: datetime
     updated_at: datetime
 
@@ -81,6 +85,13 @@ class AssignmentTemplateBackup(BaseModel):
     updated_at: datetime
 
 
+class HelpRequestBackup(BaseModel):
+    note: str
+    created_at: datetime
+    resolved_at: Optional[datetime] = None
+    response: Optional[str] = None
+
+
 class StudentAssignmentBackup(BaseModel):
     """Schema for backing up student assignment data."""
 
@@ -97,6 +108,9 @@ class StudentAssignmentBackup(BaseModel):
     letter_grade: Optional[str] = None
     teacher_feedback: Optional[str] = None
     student_notes: Optional[str] = None
+    submission_method: str = "online"
+    submission_artifacts: Optional[str] = None
+    help_requests: List[HelpRequestBackup] = []
     submission_notes: Optional[str] = None
     custom_instructions: Optional[str] = None
     custom_max_points: Optional[int] = None
@@ -334,6 +348,8 @@ class ShopRedemptionBackup(BaseModel):
     fulfillment_type: str
     status: str
     created_at: datetime
+    pickup_instructions: Optional[str] = None
+    points_refunded: bool = False
     decided_at: Optional[datetime] = None
     fulfilled_at: Optional[datetime] = None
 
@@ -358,6 +374,8 @@ class LessonTemplateLinkBackup(BaseModel):
 
     template_external_id: Optional[str] = None
     template_name: str  # Fallback resolution key
+    assignment_timing: str = "on_schedule"
+    due_offset_days: int = Field(default=0, ge=0, le=365)
     custom_due_date: Optional[date] = None
     custom_max_points: Optional[int] = None
     custom_instructions: Optional[str] = None
@@ -529,7 +547,7 @@ class SystemBackup(BaseModel):
     """Complete system backup schema containing all data."""
 
     # Metadata
-    format_version: str = "2.3"
+    format_version: str = "2.4"
     backup_timestamp: datetime
     created_by: str
     system_info: Dict[str, Any] = {}
@@ -579,6 +597,8 @@ class SystemBackup(BaseModel):
 class SystemBackupImportRequest(BaseModel):
     """Request schema for importing system backup."""
 
+    model_config = ConfigDict(extra="forbid")
+
     backup_data: SystemBackup
     import_options: Dict[str, Any] = Field(
         default_factory=lambda: {
@@ -588,6 +608,25 @@ class SystemBackupImportRequest(BaseModel):
             "dry_run": False,
         }
     )
+
+    @field_validator("import_options")
+    @classmethod
+    def validate_import_options(cls, options):
+        allowed = {
+            "skip_existing_users",
+            "update_existing_data",
+            "preserve_ids",
+            "dry_run",
+            "allow_admin_import",
+            "wipe_before_import",
+        }
+        unknown = options.keys() - allowed
+        if unknown:
+            raise ValueError("Unknown restore options: " + ", ".join(sorted(unknown)))
+        if any(not isinstance(value, bool) for value in options.values()):
+            raise ValueError("Restore options must be true or false")
+        return options
+
     # Required (must equal WIPE_CONFIRMATION_PHRASE) when import_options
     # includes wipe_before_import=true. Kept top-level, not in import_options:
     # it is a safety credential, not a tuning knob.

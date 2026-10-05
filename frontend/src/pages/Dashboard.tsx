@@ -1,3 +1,5 @@
+import RewardChoices from '../components/shop/RewardChoices'
+import SetupChecklist from '../components/dashboard/SetupChecklist'
 /*
  * OurSchool - Homeschool Management System
  * Copyright (C) 2025 Dustan Ashley
@@ -16,6 +18,7 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
+import { termCalendarProgress } from '../utils/dates'
 import React, { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
@@ -49,6 +52,9 @@ interface QuickAwardModalProps {
   onClose: () => void
   onSuccess: () => void
 }
+
+import TeacherTodayPanel from '../components/dashboard/TeacherTodayPanel'
+import LearnerWins from '../components/dashboard/LearnerWins'
 
 const QuickAwardModal: React.FC<QuickAwardModalProps> = ({ onClose, onSuccess }) => {
   const [students, setStudents] = useState<StudentPoints[]>([])
@@ -151,7 +157,7 @@ const QuickAwardModal: React.FC<QuickAwardModalProps> = ({ onClose, onSuccess })
           {loadingStudents ? (
             <div className="h-[38px] bg-track rounded-field animate-pulse" />
           ) : (
-            <select
+            <select aria-label="Student receiving points"
               value={selectedStudentId}
               onChange={e => setSelectedStudentId(e.target.value)}
               className={FIELD}
@@ -182,7 +188,7 @@ const QuickAwardModal: React.FC<QuickAwardModalProps> = ({ onClose, onSuccess })
                   ))}
                 </div>
               )}
-              <input
+              <input aria-label="Points to award"
                 type="number"
                 min="1"
                 value={amount}
@@ -195,7 +201,7 @@ const QuickAwardModal: React.FC<QuickAwardModalProps> = ({ onClose, onSuccess })
 
             <div>
               <label className={LABEL}>Reason <span className="text-neg-fg normal-case">*</span></label>
-              <textarea
+              <textarea aria-label="Reason for award"
                 value={notes}
                 onChange={e => setNotes(e.target.value)}
                 placeholder="Explain why you're awarding these points…"
@@ -239,7 +245,7 @@ const Dashboard: React.FC = () => {
 
   const isAdmin = user?.role === 'admin'
   const { enabled: pointsEnabled, ready: pointsReady } = usePointsStatus()
-  const showPoints = pointsReady && pointsEnabled
+  const showPoints = pointsReady && pointsEnabled && user?.show_points !== false
 
   useEffect(() => {
     if (!showComposer || composerStudents) return
@@ -277,24 +283,6 @@ const Dashboard: React.FC = () => {
   const getSubjectColor = (subjectName: string) => {
     const subject = subjects.find(s => s.name === subjectName)
     return subject?.color || '#6B7280' // Default to gray-500 if not found
-  }
-
-  // Calculate days remaining in active term
-  const calculateDaysRemaining = (term: Term | null) => {
-    if (!term) return null
-    
-    // Use date-only comparison to avoid timezone issues
-    const today = new Date()
-    today.setHours(0, 0, 0, 0) // Reset to start of day
-    
-    const endDate = new Date(term.end_date)
-    endDate.setHours(0, 0, 0, 0) // Reset to start of day
-    
-    // Calculate difference in days using date-only math
-    const timeDiff = endDate.getTime() - today.getTime()
-    const daysDiff = Math.round(timeDiff / (1000 * 3600 * 24))
-    
-    return daysDiff
   }
 
   // Load dashboard data
@@ -400,13 +388,13 @@ const Dashboard: React.FC = () => {
     )
   }
 
-  const daysRemaining = calculateDaysRemaining(activeTerm)
-  const daysLabel = daysRemaining === null ? 'No term' : daysRemaining < 0 ? 'Term ended' : daysRemaining === 0 ? 'Last day' : String(daysRemaining)
+  const daysRemaining = activeTerm ? termCalendarProgress(activeTerm.start_date, activeTerm.end_date).daysRemaining : null
+  const daysLabel = daysRemaining === null ? 'No term' : daysRemaining === 0 ? 'Term ended' : daysRemaining === 1 ? 'Last day' : String(daysRemaining)
 
   // "Needs you today" inputs across the modules.
   const pendingGrades = adminReport?.pending_grades ?? 0
   const materialsToGather = todayLessons.reduce(
-    (sum, lesson) => sum + lesson.materials.filter((m) => !m.is_gathered).length,
+    (sum, lesson) => sum + (lesson.status === 'taught' ? 0 : lesson.materials.filter((m) => !m.is_gathered).length),
     0
   )
   const lessonsToday = todayLessons.filter((l) => l.status !== 'taught').length
@@ -450,14 +438,15 @@ const Dashboard: React.FC = () => {
         </div>
       )}
 
+      {isAdmin && <><SetupChecklist/><TeacherTodayPanel lessons={todayLessons} pendingGrades={adminReport?.pending_grades ?? 0} /></>}
       {/* ── Health tiles ── */}
       {isAdmin && adminReport && (
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 mb-6">
           <StatTile label="Students" value={String(adminReport.total_students ?? 0)} />
           <StatTile label="Active assignments" value={String(adminReport.active_assignments ?? 0)} />
           <StatTile label="Pending grades" value={String(adminReport.pending_grades ?? 0)} accent={(adminReport.pending_grades ?? 0) > 0} />
-          <StatTile label="Avg grade" value={`${adminReport.average_grade ?? 0}%`} accent={(adminReport.average_grade ?? 0) >= 80} />
-          <StatTile label="Days left in term" value={daysLabel} />
+          <StatTile label="Avg grade" value={adminReport.average_grade == null ? 'Not graded yet' : `${Math.round(adminReport.average_grade)}%`} accent={(adminReport.average_grade ?? 0) >= 80} />
+          <StatTile label="Calendar days left (incl. end)" value={daysLabel} />
         </div>
       )}
 
@@ -466,7 +455,7 @@ const Dashboard: React.FC = () => {
           <StatTile label="Assignments" value={String(studentReport.total_assignments ?? 0)} />
           <StatTile label="Completed" value={String(studentReport.completed_assignments ?? 0)} accent />
           <StatTile label="In progress" value={String(studentReport.in_progress_assignments ?? 0)} />
-          <StatTile label="Days left" value={daysLabel} />
+          <StatTile label="Calendar days left (incl. end)" value={daysLabel} />
         </div>
       )}
 
@@ -475,12 +464,7 @@ const Dashboard: React.FC = () => {
         {/* LEFT — Up next (student) + activity feed */}
         <div className="flex flex-col gap-4">
         {!isAdmin && (
-          <UpNextPanel
-            onViewAssignment={id => {
-              setSelectedAssignmentId(id)
-              setShowAssignmentDetailModal(true)
-            }}
-          />
+          <><UpNextPanel /><LearnerWins /></>
         )}
         <div className="bg-panel border border-line rounded-card overflow-hidden">
           <div className="flex items-center justify-between px-5 py-3.5 border-b border-line-2">
@@ -518,14 +502,13 @@ const Dashboard: React.FC = () => {
               return (
                 <div
                   key={i}
-                  onClick={() => clickable && handleActivityClick(activity)}
                   className={`flex items-start gap-3 px-3 py-2.5 rounded-[9px] transition-colors ${
                     clickable ? 'cursor-pointer hover:bg-accent-soft' : 'hover:bg-faintest/40'
                   }`}
                 >
                   <span className={`w-2 h-2 rounded-full flex-none mt-[5px] ${clickable ? 'bg-pos-fg' : 'bg-accent'}`} />
                   <div className="flex-1 min-w-0">
-                    <p className="text-[13.5px] font-semibold text-ink leading-snug">{activity.description}</p>
+                    {clickable ? <button type="button" onClick={() => handleActivityClick(activity)} className="text-left text-[13.5px] font-semibold text-ink leading-snug hover:text-accent">{activity.description}</button> : <p className="text-[13.5px] font-semibold text-ink leading-snug">{activity.description}</p>}
                     <p className="text-[12px] text-faint mt-0.5">
                       {activity.student_name && `${activity.student_name} · `}{activity.time_ago}
                     </p>
@@ -620,7 +603,7 @@ const Dashboard: React.FC = () => {
               <div className="divide-y divide-line-2">
                 {pendingGrades > 0 && (
                   <Link
-                    to="/assignments?view=grading"
+                    to="/grading"
                     className="flex items-center justify-between gap-3 px-5 py-3.5 hover:bg-accent-soft transition-colors"
                   >
                     <div className="flex items-center gap-3">
@@ -706,6 +689,7 @@ const Dashboard: React.FC = () => {
                     </p>
                   </div>
                 )}
+                <RewardChoices points={myPoints} onChanged={setMyPoints}/>
                 <Link
                   to="/shop"
                   className="inline-block mt-3 text-[12.5px] font-semibold text-accent hover:text-ink transition-colors"

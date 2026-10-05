@@ -71,7 +71,9 @@ from app.models.subject import Subject
 from app.models.user import User
 from app.schemas.paperless import (
     DoctypeMapResponse,
+    DocumentAssignmentUsage,
     DocumentLessonUsage,
+    PaperlessDocumentAvailability,
     DocumentTemplateUsage,
     PaperlessAttachRequest,
     PaperlessConnectRequest,
@@ -461,14 +463,21 @@ def get_sync_job(
 # --- Documents ---------------------------------------------------------------
 
 
-def _lesson_usage_counts(db, ids):
+def _attachment_usage_counts(db, ids):
+    if not ids:
+        return {}
+    links = union_all(
+        *[
+            select(model.document_id).where(model.document_id.in_(ids))
+            for model in (
+                LessonPaperlessMaterial,
+                TemplatePaperlessMaterial,
+                StudentAssignmentPaperlessMaterial,
+            )
+        ]
+    ).subquery()
     return dict(
-        db.query(
-            LessonPaperlessMaterial.document_id, func.count(LessonPaperlessMaterial.id)
-        )
-        .filter(LessonPaperlessMaterial.document_id.in_(ids))
-        .group_by(LessonPaperlessMaterial.document_id)
-        .all()
+        db.query(links.c.document_id, func.count()).group_by(links.c.document_id).all()
     )
 
 
@@ -665,7 +674,7 @@ def list_documents(
             .limit(limit)
             .all()
         )
-    usage = _lesson_usage_counts(db, [d.id for d in docs])
+    usage = _attachment_usage_counts(db, [d.id for d in docs])
     items = [
         _document_item(
             d,
@@ -690,7 +699,7 @@ def get_document(
         AuthUser, Depends(require_admin_or_permission("paperless:read"))
     ],
 ):
-    """Document detail + lesson/template usage (detail drawer)."""
+    """Document detail + lesson/template/student-work attachment usage."""
     doc = db.get(PaperlessDocument, document_id)
     if doc is None:
         raise HTTPException(status_code=404, detail="Document not found")
@@ -713,8 +722,31 @@ def get_document(
         .all()
     )
 
+    assignment_links = (
+        db.query(
+            StudentAssignmentPaperlessMaterial,
+            StudentAssignment,
+            User,
+            AssignmentTemplate,
+        )
+        .join(
+            StudentAssignment,
+            StudentAssignmentPaperlessMaterial.student_assignment_id
+            == StudentAssignment.id,
+        )
+        .join(User, StudentAssignment.student_id == User.id)
+        .join(
+            AssignmentTemplate, StudentAssignment.template_id == AssignmentTemplate.id
+        )
+        .filter(StudentAssignmentPaperlessMaterial.document_id == doc.id)
+        .order_by(User.first_name, StudentAssignment.id)
+        .all()
+    )
+
     detail = PaperlessDocumentDetail.model_validate(doc)
-    detail.used_in_count = len(lesson_links)
+    detail.used_in_count = (
+        len(lesson_links) + len(template_links) + len(assignment_links)
+    )
     detail.used_in = [
         DocumentLessonUsage(
             lesson_id=lesson.id,
@@ -727,6 +759,14 @@ def get_document(
     detail.used_in_templates = [
         DocumentTemplateUsage(template_id=template.id, template_name=template.name)
         for _link, template in template_links
+    ]
+    detail.used_in_assignments = [
+        DocumentAssignmentUsage(
+            assignment_id=assignment.id,
+            student_name=f"{student.first_name} {student.last_name}",
+            assignment_title=template.name,
+        )
+        for _link, assignment, student, template in assignment_links
     ]
     return detail
 
@@ -784,6 +824,47 @@ def _authorize_document(db, doc, auth_user):
                     "assignments or lessons"
                 ),
             )
+
+
+@router.get(
+    "/documents/{document_id}/availability",
+    response_model=PaperlessDocumentAvailability,
+)
+def document_availability(
+    document_id: int,
+    db: Annotated[Session, Depends(get_db)],
+    auth_user: Annotated[
+        AuthUser, Depends(require_user_or_permission("paperless:read"))
+    ],
+):
+    """Describe a permitted document's connection state before opening content.
+
+    The same attachment authorization as content access applies. This checks
+    configuration, not upstream reachability, and never exposes server details.
+    """
+    doc = db.get(PaperlessDocument, document_id)
+    if doc is None:
+        raise HTTPException(status_code=404, detail="Document not found")
+    _authorize_document(db, doc, auth_user)
+    if not doc.present:
+        return PaperlessDocumentAvailability(
+            available=False,
+            reason="This document is no longer available in the library.",
+        )
+    conn = paperless_sync.get_connection(db)
+    if conn is None or conn.library_id != doc.library_id or conn.needs_reconnect:
+        return PaperlessDocumentAvailability(
+            available=False,
+            reason="This material's library is disconnected. Reconnect it to open or download the document.",
+        )
+    try:
+        crypto.decrypt_secret(conn.token_encrypted)
+    except crypto.SecretDecryptError:
+        return PaperlessDocumentAvailability(
+            available=False,
+            reason="This material's library needs to be reconnected before opening documents.",
+        )
+    return PaperlessDocumentAvailability(available=True)
 
 
 @router.get("/documents/{external_id}/thumbnail", name="get_paperless_thumbnail")

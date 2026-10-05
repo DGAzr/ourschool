@@ -34,9 +34,11 @@ interface LessonDrawerProps {
   defaultDate: string
   collapsed: boolean
   onCollapsedChange: (collapsed: boolean) => void
+  onBatch?: (lessons: Lesson[], action: 'schedule'|'restore_taught', date?: string) => void
   onAdd: () => void
   onLessonClick: (lesson: Lesson) => void
   onSchedule: (lesson: Lesson, date: string) => void
+  onRestoreTaught: (lesson: Lesson) => void
   onToggleMaterial: (
     lessonId: number,
     materialId: number,
@@ -52,7 +54,7 @@ interface MaterialSummary {
 }
 
 const materialSummary = (lessons: Lesson[]): MaterialSummary => {
-  const materials = lessons.flatMap((lesson) => lesson.materials)
+  const materials = lessons.filter(lesson => lesson.status !== 'taught').flatMap((lesson) => lesson.materials)
   return {
     gathered: materials.filter((material) => material.is_gathered).length,
     total: materials.length,
@@ -74,7 +76,7 @@ const MaterialsPanel: React.FC<MaterialsPanelProps> = ({
   const lessonsWithMaterials = useMemo(
     () =>
       [...lessons]
-        .filter((lesson) => lesson.materials.length > 0)
+        .filter((lesson) => lesson.status !== 'taught' && lesson.materials.length > 0)
         .sort(
           (a, b) =>
             (a.date ?? '').localeCompare(b.date ?? '') ||
@@ -88,7 +90,7 @@ const MaterialsPanel: React.FC<MaterialsPanelProps> = ({
   if (lessonsWithMaterials.length === 0) {
     return (
       <div className="border border-dashed border-btn-border rounded-[10px] px-3 py-7 text-center text-[11.5px] text-faint">
-        No materials are needed for the lessons in view.
+        No materials are needed for the untaught lessons in view.
       </div>
     )
   }
@@ -196,10 +198,16 @@ const LessonDrawer: React.FC<LessonDrawerProps> = ({
   collapsed,
   onCollapsedChange,
   onAdd,
+  onBatch,
   onLessonClick,
   onSchedule,
+  onRestoreTaught,
   onToggleMaterial,
 }) => {
+  const [selected, setSelected] = useState<number[]>([])
+  const [batchDate, setBatchDate] = useState('')
+  const grouped = [...lessons].sort((a,b)=>(b.last_scheduled_date ?? '').localeCompare(a.last_scheduled_date ?? '') || a.position-b.position)
+  const selection = lessons.filter(l=>selected.includes(l.id))
   const [activeTab, setActiveTab] = useState<DrawerTab>('lessons')
   const [dates, setDates] = useState<Record<number, string>>({})
   const { setNodeRef, isOver } = useDroppable({ id: columnId })
@@ -316,14 +324,21 @@ const LessonDrawer: React.FC<LessonDrawerProps> = ({
 
       {activeTab === 'lessons' ? (
         <div className="flex flex-col gap-2.5 min-h-[72px]">
+          <p className="px-1 text-[11px] text-muted">
+            Moving here keeps assigned work and due dates. Forgot to mark a lesson
+            taught? Restore it to its original day below.
+          </p>
+          {onBatch && <div className="space-y-2 border border-line rounded-lg p-2"><p className="text-xs">{selection.length} selected · published work will be kept</p><input aria-label="Bulk lesson date" type="date" value={batchDate || defaultDate} onChange={e=>setBatchDate(e.target.value)} className="w-full min-w-0 bg-field-bg rounded p-1 text-xs" /><div className="flex flex-wrap gap-2"><button type="button" className="text-xs text-accent font-semibold" disabled={!selection.length} onClick={()=>onBatch(selection,'schedule',batchDate || defaultDate)}>Review scheduling</button><button type="button" className="text-xs text-accent font-semibold" disabled={!selection.length || selection.some(l=>!l.last_scheduled_date)} onClick={()=>onBatch(selection,'restore_taught')}>Review marking taught</button></div></div>}
           <SortableContext
-            items={lessons.map((lesson) => lesson.id)}
+            items={grouped.map((lesson) => lesson.id)}
             strategy={verticalListSortingStrategy}
           >
-            {lessons.map((lesson) => {
+            {grouped.map((lesson, index) => {
               const scheduleDate = dates[lesson.id] ?? defaultDate
               return (
                 <div key={lesson.id} className="flex flex-col gap-1.5">
+                  {(index===0 || grouped[index-1].last_scheduled_date !== lesson.last_scheduled_date) && <h3 className="text-xs font-semibold mt-2">{lesson.last_scheduled_date ? `Former day: ${formatDateOnly(lesson.last_scheduled_date)}` : 'Unscheduled drafts'}</h3>}
+                  {onBatch && <label className="text-xs"><input type="checkbox" checked={selected.includes(lesson.id)} onChange={e=>setSelected(ids=>e.target.checked ? [...ids,lesson.id] : ids.filter(id=>id!==lesson.id))} /> Select {lesson.title}</label>}
                   <LessonCard lesson={lesson} onClick={onLessonClick} />
                   {lesson.last_scheduled_date ? (
                     <p className="px-1 text-[10.5px] text-faint">
@@ -332,6 +347,18 @@ const LessonDrawer: React.FC<LessonDrawerProps> = ({
                         day: 'numeric',
                       })}
                     </p>
+                  ) : null}
+                  {lesson.last_scheduled_date && lesson.status !== 'taught' ? (
+                    <button
+                      type="button"
+                      onClick={() => onRestoreTaught(lesson)}
+                      className="rounded-[7px] border border-btn-border px-2 py-2 text-left text-[11px] font-semibold text-accent hover:bg-accent-soft"
+                      aria-label={`Mark ${lesson.title} taught on ${formatDateOnly(lesson.last_scheduled_date, { month: 'short', day: 'numeric' })}`}
+                    >
+                      Mark taught on {formatDateOnly(lesson.last_scheduled_date, {
+                        month: 'short', day: 'numeric',
+                      })}
+                    </button>
                   ) : null}
                   <div className="flex items-center gap-1.5">
                     <input

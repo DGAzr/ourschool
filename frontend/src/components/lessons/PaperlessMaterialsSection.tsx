@@ -20,6 +20,7 @@ import React, { useEffect, useState } from 'react'
 import { Diamond } from 'lucide-react'
 
 import { Spinner, useToast } from '../ui'
+import PaperlessConnectionBanner from '../materials/PaperlessConnectionBanner'
 import DocumentThumb from '../materials/DocumentThumb'
 import PaperlessPickerModal from './PaperlessPickerModal'
 import { paperlessApi } from '../../services/paperless'
@@ -57,8 +58,7 @@ interface PaperlessMaterialsSectionProps {
  * rows, a "Suggested from Paperless" card (top-3 objective-ranked), and the
  * "Pull from Paperless" picker. Two modes — write-through against a saved
  * lesson, or a locally accumulated pending list for the create flow (the
- * caller attaches on save). Renders nothing when the integration isn't
- * connected.
+ * caller attaches on save). Retains attached records while the integration is disconnected.
  */
 const PaperlessMaterialsSection: React.FC<PaperlessMaterialsSectionProps> = ({
   lesson,
@@ -108,7 +108,7 @@ const PaperlessMaterialsSection: React.FC<PaperlessMaterialsSectionProps> = ({
     }
   }, [connected, lessonId, effectiveSubjectId, materials.length])
 
-  if (!connected) return null
+  if (!connected && materials.length === 0 && !status?.cache_available) return null
 
   // The server only computes `attached` for saved lessons; in local mode
   // (and for just-picked docs awaiting a refetch) merge the flags here.
@@ -118,7 +118,7 @@ const PaperlessMaterialsSection: React.FC<PaperlessMaterialsSectionProps> = ({
   )
   const suggestions = topSuggestions(flaggedPool)
   const suggestionTotal = flaggedPool.filter((d) => !d.attached).length
-  const showSuggestions = Boolean(effectiveSubjectId) && suggestions.length > 0
+  const showSuggestions = connected && Boolean(effectiveSubjectId) && suggestions.length > 0
 
   const handleAdd = async (doc: PaperlessDocument) => {
     if (!writeThrough) {
@@ -159,6 +159,7 @@ const PaperlessMaterialsSection: React.FC<PaperlessMaterialsSectionProps> = ({
 
   return (
     <div>
+      <PaperlessConnectionBanner disconnected={status?.connected === false} />
       <div className="flex items-center justify-between mb-1.5">
         <label className="text-[12px] font-semibold text-faint uppercase tracking-wide">
           Materials from Paperless

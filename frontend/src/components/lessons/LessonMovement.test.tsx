@@ -22,7 +22,7 @@ vi.mock('@dnd-kit/core', async (importOriginal) => {
 vi.mock('../../hooks/usePaperlessStatus', () => ({
   usePaperlessStatus: () => ({ status: null, loading: false }),
 }))
-vi.mock('../../services/lessons', () => ({ lessonsApi: { update: vi.fn() } }))
+vi.mock('../../services/lessons', () => ({ lessonsApi: { update: vi.fn(), impact: vi.fn().mockResolvedValue([]) } }))
 vi.mock('../ui', async (importOriginal) => ({
   ...(await importOriginal<typeof import('../ui')>()),
   useToast: () => ({ toast: vi.fn() }),
@@ -71,6 +71,7 @@ const renderBoard = (lessons = [taught, other]) => {
       onLessonClick={vi.fn()}
       onReorder={onReorder}
       onSchedule={vi.fn()}
+      onRestoreTaught={vi.fn()}
       onToggleMaterial={vi.fn()}
       onAddToDrawer={vi.fn()}
     />
@@ -127,7 +128,9 @@ describe('taught lesson movement', () => {
         target: { value: date },
       })
       expect(screen.getByRole('button', { name: 'Taught' })).toBeTruthy()
-      fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+      fireEvent.click(screen.getByRole('button', { name: 'Review changes' }))
+      expect(lessonsApi.update).not.toHaveBeenCalled()
+      fireEvent.click(await screen.findByRole('button', { name: 'Save lesson' }))
       await waitFor(() => expect(onSaved).toHaveBeenCalled())
       expect(lessonsApi.update).toHaveBeenCalledWith(
         7, expect.objectContaining({ date: date || null, status: 'taught' })

@@ -16,7 +16,7 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-import React, { useRef, useState, useEffect, useCallback } from 'react'
+import React, { useRef, useState, useId, useEffect, useCallback } from 'react'
 import { Check, ChevronDown } from 'lucide-react'
 import { INPUT_STYLES } from '../../../constants'
 import Icon from '../Icon/Icon'
@@ -58,6 +58,7 @@ const IconSelect: React.FC<IconSelectProps> = ({
   helperText,
   fullWidth = true,
 }) => {
+  const labelId = useId()
   const [open, setOpen] = useState(false)
   const containerRef = useRef<HTMLDivElement>(null)
 
@@ -103,7 +104,7 @@ const IconSelect: React.FC<IconSelectProps> = ({
   return (
     <div className={`relative ${fullWidth ? 'w-full' : ''}`} ref={containerRef}>
       {label && (
-        <label className="block text-[12px] font-semibold text-faint uppercase tracking-wide mb-1.5">
+        <label id={labelId} className="block text-[12px] font-semibold text-faint uppercase tracking-wide mb-1.5">
           {label}
           {required && <span className="text-danger ml-0.5">*</span>}
         </label>
@@ -112,6 +113,7 @@ const IconSelect: React.FC<IconSelectProps> = ({
       {/* Trigger button */}
       <button
         type="button"
+        aria-labelledby={label ? labelId : undefined}
         className={triggerClasses}
         onClick={() => !disabled && setOpen(o => !o)}
         onKeyDown={handleKeyDown}

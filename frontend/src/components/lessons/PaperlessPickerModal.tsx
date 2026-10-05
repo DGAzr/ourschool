@@ -25,6 +25,7 @@ import DocumentThumb from '../materials/DocumentThumb'
 import SyncPill from '../paperless/SyncPill'
 import { getErrorMessage } from '../../services/api'
 import { usePaperlessDocuments } from '../../hooks/usePaperlessDocuments'
+import PaperlessConnectionBanner from '../materials/PaperlessConnectionBanner'
 import { usePaperlessStatus } from '../../hooks/usePaperlessStatus'
 import {
   MaterialKind,
@@ -190,6 +191,7 @@ const PickerContent: React.FC<PaperlessPickerModalProps> = ({
       }
     >
       <div className="space-y-3.5">
+        <PaperlessConnectionBanner disconnected={status?.connected === false} />
         <div className="flex items-center justify-end">
           <SyncPill
             lastSyncAt={status?.last_sync_at}
@@ -205,6 +207,7 @@ const PickerContent: React.FC<PaperlessPickerModalProps> = ({
           />
           <input
             type="text"
+            aria-label="Search Paperless materials"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder={

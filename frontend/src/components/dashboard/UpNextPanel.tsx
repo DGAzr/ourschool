@@ -18,11 +18,11 @@
 
 /**
  * Student dashboard panel that answers "what should I do right now": overdue
- * work first, then work due today or in the next week, with one-click Start.
+ * work tucked into an expandable group, with current tasks first and one-click Start.
  */
 
 import React, { useCallback, useEffect, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { assignmentsApi, assignmentPage } from '../../services/assignments'
 import { subjectsApi } from '../../services/subjects'
 import { SubjectDot } from '../ui'
@@ -30,15 +30,17 @@ import { StudentAssignment } from '../../types/assignment'
 import { Subject } from '../../types/subject'
 import { formatDateOnly } from '../../utils/formatters'
 import {
+  assignmentHref,
+  assignmentProgress,
   UrgencyGroup,
   bucketTab,
   effectiveDueDate,
   urgencyGroup,
 } from '../../utils/studentAssignments'
 
-interface UpNextPanelProps {
-  onViewAssignment: (assignmentId: number) => void
-}
+import { useAuth } from '../../contexts/AuthContext'
+import { todayISO,addDays } from '../../utils/dates'
+import { Icon } from '../ui'
 
 const MAX_ROWS = 6
 
@@ -48,19 +50,28 @@ const GROUP_META: Partial<Record<UrgencyGroup, { label: string; className: strin
   week: { label: 'Due soon', className: 'text-faint' },
 }
 
-const UpNextPanel: React.FC<UpNextPanelProps> = ({ onViewAssignment }) => {
+const UpNextPanel: React.FC = () => {
+  const navigate = useNavigate()
+  const {user}=useAuth()
+  const simple=user?.student_ui_mode==='simple'
+  const [older,setOlder]=useState<StudentAssignment[]>([])
+  const [olderCount,setOlderCount]=useState(0)
+  const [showOlder,setShowOlder]=useState(false)
+  const [error, setError] = useState<string | null>(null)
   const [assignments, setAssignments] = useState<StudentAssignment[]>([])
   const [subjects, setSubjects] = useState<Subject[]>([])
   const [loading, setLoading] = useState(true)
   const [startingId, setStartingId] = useState<number | null>(null)
 
   const load = useCallback(() => {
-    return Promise.all([assignmentPage({ student_view: true, tab: 'todo', limit: MAX_ROWS }), subjectsApi.getAll()])
-      .then(([assignmentsData, subjectsData]) => {
+    return Promise.all([assignmentPage({ student_view: true, tab: 'todo', due_from:todayISO(),due_to:addDays(todayISO(),6),include_undated:true,limit:MAX_ROWS }), subjectsApi.getAll(),assignmentPage({student_view:true,tab:'todo',due_to:addDays(todayISO(),-1),limit:MAX_ROWS})])
+      .then(([assignmentsData, subjectsData,olderData]) => {
+        setOlder(olderData.items);setOlderCount(olderData.total)
+        setError(null)
         setAssignments(assignmentsData.items)
         setSubjects(subjectsData || [])
       })
-      .catch(() => setAssignments([]))
+      .catch(() => { setAssignments([]); setError('Could not load your next assignments. Open All assignments to try again.') })
       .finally(() => setLoading(false))
   }, [])
 
@@ -69,12 +80,13 @@ const UpNextPanel: React.FC<UpNextPanelProps> = ({ onViewAssignment }) => {
   }, [load])
 
   const handleStart = async (assignmentId: number) => {
+    setError(null)
     setStartingId(assignmentId)
     try {
       await assignmentsApi.startAssignment(assignmentId)
-      await load()
+      navigate(assignmentHref(assignmentId))
     } catch {
-      // Leave the row as-is; the assignments page surfaces errors.
+      setError('Could not start your assignment. Please try again.')
     } finally {
       setStartingId(null)
     }
@@ -82,11 +94,11 @@ const UpNextPanel: React.FC<UpNextPanelProps> = ({ onViewAssignment }) => {
 
   // Actionable work due within the week, most urgent first (API is already
   // due-date ordered, so a stable group sort keeps that ordering).
-  const groups: UrgencyGroup[] = ['overdue', 'today', 'week']
+  const groups: UrgencyGroup[] = ['today', 'week', 'later', 'undated']
   const upNext = groups.flatMap(g =>
     assignments.filter(a => bucketTab(a) === 'todo' && urgencyGroup(a) === g)
   )
-  const rows = upNext.slice(0, MAX_ROWS)
+  const rows = [...upNext.slice(0, MAX_ROWS),...(showOlder ? older : [])]
 
   const subjectFor = (a: StudentAssignment) =>
     subjects.find(s => s.id === a.template?.subject_id)
@@ -100,12 +112,13 @@ const UpNextPanel: React.FC<UpNextPanelProps> = ({ onViewAssignment }) => {
         </Link>
       </div>
 
+      {error && <p role="alert" className="px-5 py-3 text-neg-fg">{error}</p>}
       {loading ? (
         <div className="py-8 text-center text-[13px] text-faint">Loading…</div>
-      ) : rows.length === 0 ? (
+      ) : error ? null : rows.length === 0 ? (
         <div className="py-10 text-center">
           <p className="text-[14px] font-semibold text-ink-2 mb-1">You're all caught up! 🎉</p>
-          <p className="text-[12.5px] text-faint">Nothing is overdue or due this week.</p>
+          <p className="text-[12.5px] text-faint">No current tasks due this week. Older unfinished work is listed below.</p>
         </div>
       ) : (
         <div className="divide-y divide-line-2">
@@ -117,18 +130,16 @@ const UpNextPanel: React.FC<UpNextPanelProps> = ({ onViewAssignment }) => {
             return (
               <div
                 key={assignment.id}
-                onClick={e => {
-                  if ((e.target as HTMLElement).closest('button, a')) return
-                  onViewAssignment(assignment.id)
-                }}
-                className="flex items-center justify-between gap-3 px-5 py-3 hover:bg-accent-soft transition-colors cursor-pointer"
+                className="flex flex-wrap items-center justify-between gap-3 px-5 py-3 hover:bg-accent-soft transition-colors "
               >
                 <div className="flex items-center gap-3 min-w-0">
+                  {simple && <Icon name={subject?.icon ?? 'BookOpen'} size={30} />}
                   <SubjectDot color={subject?.color ?? '#74716A'} size={9} className="flex-none" />
                   <div className="min-w-0">
-                    <p className="text-[13.5px] font-semibold text-ink truncate">
+                    <Link to={assignmentHref(assignment.id)} className={simple ? 'block text-lg font-bold text-ink break-words hover:text-accent' : 'block text-[13.5px] font-semibold text-ink break-words hover:text-accent'}>
                       {assignment.template?.name ?? 'Assignment'}
-                    </p>
+                    </Link>
+                    {simple && <><p className="text-sm text-muted">Open this activity. Work on it, then show your teacher.</p>{'speechSynthesis' in window && <button type="button" className="text-accent text-sm" onClick={()=>{if('speechSynthesis' in window){window.speechSynthesis.cancel();window.speechSynthesis.speak(new SpeechSynthesisUtterance(`${assignment.template?.name ?? 'Activity'}. Open this activity, work on it, then show your teacher.`))}}}>Read aloud</button>}</>}
                     <p className="text-[12px] mt-0.5">
                       {meta && <span className={`font-semibold ${meta.className}`}>{meta.label}</span>}
                       {due && (
@@ -140,7 +151,7 @@ const UpNextPanel: React.FC<UpNextPanelProps> = ({ onViewAssignment }) => {
                     </p>
                   </div>
                 </div>
-                {assignment.status === 'not_started' ? (
+                {assignmentProgress(assignment) === 'not_started' ? (
                   <button
                     onClick={() => handleStart(assignment.id)}
                     disabled={startingId === assignment.id}
@@ -150,7 +161,7 @@ const UpNextPanel: React.FC<UpNextPanelProps> = ({ onViewAssignment }) => {
                   </button>
                 ) : (
                   <Link
-                    to="/assignments"
+                    to={assignmentHref(assignment.id)}
                     className="flex-none text-[12.5px] font-semibold text-accent hover:text-ink transition-colors"
                   >
                     Continue →
@@ -161,6 +172,7 @@ const UpNextPanel: React.FC<UpNextPanelProps> = ({ onViewAssignment }) => {
           })}
         </div>
       )}
+      {olderCount>0 && <div className="border-t border-line p-4"><button className="text-sm font-semibold text-accent" aria-expanded={showOlder} onClick={()=>setShowOlder(!showOlder)}>{showOlder ? 'Hide' : 'Show'} older unfinished work · {olderCount}</button>{showOlder && olderCount>older.length && <Link to="/assignments" className="block text-sm text-accent mt-2">See all older work</Link>}</div>}
     </div>
   )
 }

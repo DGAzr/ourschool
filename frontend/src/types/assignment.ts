@@ -109,6 +109,8 @@ export interface StudentAssignment {
   teacher_feedback?: string
   student_notes?: string
   submission_notes?: string
+  submission_method?: 'online' | 'paper'
+  help_requests?: HelpRequest[]
   submission_artifacts?: string[]
   time_spent_minutes: number
   is_student_created?: boolean
@@ -299,3 +301,5 @@ export interface StudentAssignmentProgressSummary {
   average_grade?: number
   subjects: SubjectProgress[]
 }
+
+export interface HelpRequest { id:number; assignment_id:number; note:string; created_at:string; resolved_at?:string|null; response?:string|null; student_name?:string|null; assignment_name?:string|null }

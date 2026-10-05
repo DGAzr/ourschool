@@ -111,7 +111,7 @@ const ReportsContainer: React.FC = () => {
         <div className="flex items-center gap-2.5 flex-wrap">
           {/* Term filter — shown on all views except attendance/reportcard which have their own controls */}
           {selectedView !== 'attendance' && selectedView !== 'reportcard' && terms.length > 0 && (
-            <select
+            <select aria-label="Report term"
               value={selectedTermId ?? ''}
               onChange={(e) => setSelectedTermId(e.target.value ? Number(e.target.value) : null)}
               className="h-[36px] px-3 bg-field-bg border border-field-border rounded-field text-[13px] text-ink-2 focus:outline-none cursor-pointer"

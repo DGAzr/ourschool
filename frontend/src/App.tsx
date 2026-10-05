@@ -34,6 +34,7 @@ const Login = lazy(() => import('./pages/Login'))
 const Dashboard = lazy(() => import('./pages/Dashboard'))
 const Attendance = lazy(() => import('./pages/Attendance'))
 const Assignments = lazy(() => import('./pages/Assignments'))
+const AssignmentWork = lazy(() => import('./pages/AssignmentWork'))
 const Templates = lazy(() => import('./pages/Templates'))
 const LessonPlanning = lazy(() => import('./pages/LessonPlanning'))
 const Teach = lazy(() => import('./pages/Teach'))
@@ -111,6 +112,7 @@ function AppContent() {
             <Route index element={<Dashboard />} />
             <Route path="attendance" element={<Attendance />} />
             <Route path="assignments" element={<Assignments />} />
+            <Route path="assignments/:assignmentId" element={<AssignmentWork />} />
             <Route path="templates" element={<TemplatesRoute />} />
             <Route path="lessons" element={<LessonPlanning />} />
             <Route path="teach" element={<Teach />} />

@@ -56,6 +56,7 @@ const FacetRow: React.FC<FacetRowProps> = ({
 }) => (
   <button
     onClick={onToggle}
+    aria-pressed={checked}
     className="w-full flex items-center gap-2 px-1.5 py-1 rounded-[7px] text-left hover:bg-track/60 transition-colors"
   >
     <span
@@ -88,7 +89,7 @@ const FacetRail: React.FC<FacetRailProps> = ({
   )
 
   return (
-    <aside className="w-[190px] flex-shrink-0 bg-panel-2 border-r border-line px-3 py-5 space-y-6 overflow-y-auto">
+    <aside className="w-full md:w-[190px] flex flex-wrap md:block gap-4 flex-shrink-0 bg-panel-2 border-b md:border-r border-line px-3 py-4 md:py-5 md:space-y-6 overflow-y-auto">
       <div>
         <p className="px-1.5 mb-1.5 text-[10.5px] font-bold uppercase tracking-[.08em] text-faint">
           Document type

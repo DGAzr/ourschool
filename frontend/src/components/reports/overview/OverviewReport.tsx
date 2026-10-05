@@ -19,7 +19,7 @@
 import { AdminReport, StudentReport, MetricTrend } from '../../../types'
 import Sparkline from '../shared/Sparkline'
 import TrendChart from '../shared/TrendChart'
-import { trendInfo, gradeColor, barColor, statusStyle } from '../shared/gradeColors'
+import { gradeText, trendInfo, gradeColor, barColor, statusStyle } from '../shared/gradeColors'
 
 interface OverviewReportProps {
   data: StudentReport | AdminReport | null
@@ -42,7 +42,7 @@ const OverviewReport: React.FC<OverviewReportProps> = ({
             <div key={i} className="bg-panel border border-line rounded-card p-4 animate-pulse h-24" />
           ))}
         </div>
-        <div className="grid gap-4" style={{ gridTemplateColumns: '1.5fr 1fr' }}>
+        <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1.5fr)_minmax(0,1fr)] gap-4">
           <div className="bg-panel border border-line rounded-card h-52 animate-pulse" />
           <div className="bg-panel border border-line rounded-card h-52 animate-pulse" />
         </div>
@@ -57,6 +57,7 @@ const OverviewReport: React.FC<OverviewReportProps> = ({
 
     return (
       <div className="space-y-4">
+        <p className="text-xs text-muted">{admin.calculation_note} · Excused: {admin.excused_assignments ?? 0}</p>
         {/* KPI cards */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3.5">
           {kpis.length > 0
@@ -92,7 +93,7 @@ const OverviewReport: React.FC<OverviewReportProps> = ({
                     </span>
                     <Sparkline
                       series={k.series}
-                      color={k.delta_positive ? 'var(--pos-fg)' : 'var(--neg-fg)'}
+                      color={k.delta_positive == null ? 'var(--muted)' : k.delta_positive ? 'var(--pos-fg)' : 'var(--neg-fg)'}
                     />
                   </div>
                   <div
@@ -100,7 +101,7 @@ const OverviewReport: React.FC<OverviewReportProps> = ({
                       marginTop: 7,
                       fontSize: 11.5,
                       fontWeight: 600,
-                      color: k.delta_positive ? 'var(--pos-fg)' : 'var(--neg-fg)',
+                      color: k.delta_positive == null ? 'var(--muted)' : k.delta_positive ? 'var(--pos-fg)' : 'var(--neg-fg)',
                     }}
                   >
                     {k.delta}
@@ -112,7 +113,7 @@ const OverviewReport: React.FC<OverviewReportProps> = ({
                 { label: 'Students', value: String(admin.total_students) },
                 { label: 'Active', value: String(admin.active_assignments) },
                 { label: 'Pending grades', value: String(admin.pending_grades) },
-                { label: 'Avg grade', value: `${Math.round(admin.average_grade)}%` },
+                { label: 'Avg grade', value: gradeText(admin.average_grade) },
               ].map((m, i) => (
                 <div key={i} className="bg-panel border border-line rounded-card" style={{ padding: '16px 17px' }}>
                   <div style={{ fontSize: 12, color: 'var(--muted)', fontWeight: 500 }}>{m.label}</div>
@@ -297,7 +298,7 @@ const OverviewReport: React.FC<OverviewReportProps> = ({
                             color: gradeColor(r.grade),
                           }}
                         >
-                          {Math.round(r.grade)}%
+                          {gradeText(r.grade)}
                         </span>{' '}
                         <span style={{ fontSize: 12, color: 'var(--muted)' }}>{r.letter}</span>
                       </td>
@@ -357,17 +358,18 @@ const OverviewReport: React.FC<OverviewReportProps> = ({
 
   // Student view: their own KPIs + trend chart
   const student = data as StudentReport
-  const ti = trendInfo(student.trend ?? 0)
-  const grade = student.current_term_grade ?? student.average_grade ?? 0
+  const ti = trendInfo(student.trend)
+  const grade = student.current_term_grade
 
   return (
     <div className="space-y-4">
+      <p className="text-xs text-muted">{student.calculation_note} · Excused: {student.excused_assignments ?? 0}</p>
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3.5">
         {[
           { label: 'Total Assignments', value: String(student.total_assignments) },
           { label: 'Completed', value: String(student.completed_assignments) },
           { label: 'Pending Grades', value: String(student.pending_grades) },
-          { label: 'Term Grade', value: `${Math.round(grade)}%` },
+          { label: 'Term Grade', value: gradeText(grade) },
         ].map((m, i) => (
           <div key={i} className="bg-panel border border-line rounded-card" style={{ padding: '16px 17px' }}>
             <div style={{ fontSize: 12, color: 'var(--muted)', fontWeight: 500 }}>{m.label}</div>

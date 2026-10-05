@@ -66,6 +66,8 @@ export interface ShopRedemption {
   fulfillment_type: FulfillmentType
   status: RedemptionStatus
   created_at: string
+  pickup_instructions?: string | null
+  points_refunded?: boolean
   decided_at?: string | null
   fulfilled_at?: string | null
   student_name?: string | null

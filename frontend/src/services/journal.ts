@@ -26,10 +26,16 @@ import {
   JournalComposerData,
 } from '../types'
 
+const schoolTimezoneQuery = () => `?timezone=${encodeURIComponent(Intl.DateTimeFormat().resolvedOptions().timeZone)}`
+
 export const journalApi = {
   getAll: async (studentId?: number): Promise<JournalEntryWithAuthor[]> => {
-    const endpoint = studentId ? `/journal/entries?student_id=${studentId}` : '/journal/entries'
-    return await api.get(endpoint)
+    const entries: JournalEntryWithAuthor[]=[]
+    for(let skip=0;;skip+=100){
+      const page=await api.get(`/journal/entries?skip=${skip}&limit=100${studentId?`&student_id=${studentId}`:''}`) as JournalEntryWithAuthor[]
+      entries.push(...page)
+      if(page.length<100)return entries
+    }
   },
 
   getById: async (id: number): Promise<JournalEntryWithAuthor> => {
@@ -37,7 +43,7 @@ export const journalApi = {
   },
 
   create: async (data: JournalEntryCreate): Promise<JournalEntryWithAuthor> => {
-    return await api.post('/journal/entries', data)
+    return await api.post(`/journal/entries${schoolTimezoneQuery()}`, data)
   },
 
   update: async (id: number, data: JournalEntryUpdate): Promise<JournalEntryWithAuthor> => {
@@ -65,7 +71,7 @@ export const journalApi = {
   },
 
   getComposerData: async (): Promise<JournalComposerData> => {
-    return await api.get('/journal/composer-data')
+    return await api.get(`/journal/composer-data${schoolTimezoneQuery()}`)
   },
 
   getStudents: async (): Promise<JournalStudent[]> => {

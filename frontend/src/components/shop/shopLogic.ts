@@ -66,6 +66,6 @@ export function goalItem(
   locked: ShopItem[],
   chosenId: number | null
 ): ShopItem | null {
-  if (locked.length === 0) return null
-  return locked.find((i) => i.id === chosenId) ?? locked[0]
+  if(chosenId!==null)return locked.find(i=>i.id===chosenId)??locked[0]??null
+  return locked.find(i=>i.is_active)??null
 }

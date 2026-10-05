@@ -17,7 +17,7 @@
  */
 
 import React, { useState } from 'react'
-import { Plus, Trash2, ExternalLink, Upload, MessageSquare, Paperclip } from 'lucide-react'
+import { Plus, Trash2, ExternalLink, CheckCircle, MessageSquare, Paperclip } from 'lucide-react'
 import { StudentAssignment } from '../../types'
 import { formatDateOnly } from '../../utils/formatters'
 import Modal from '../ui/Modal'
@@ -28,6 +28,7 @@ interface SubmissionDialogProps {
   isOpen: boolean
   onClose: () => void
   onSubmit: (submissionData: {
+    submission_method?: 'online' | 'paper'
     submission_notes?: string
     submission_artifacts?: string[]
   }) => void
@@ -41,6 +42,7 @@ const SubmissionDialog: React.FC<SubmissionDialogProps> = ({
   onSubmit,
   loading = false
 }) => {
+  const [method,setMethod] = useState<'online'|'paper'>(assignment.submitted_date ? (assignment.submission_method ?? 'paper') : 'paper')
   const [submissionNotes, setSubmissionNotes] = useState('')
   const [artifactLinks, setArtifactLinks] = useState<string[]>([''])
   const [validationErrors, setValidationErrors] = useState<{[key: string]: string}>({})
@@ -94,6 +96,7 @@ const SubmissionDialog: React.FC<SubmissionDialogProps> = ({
       .filter(link => link.length > 0)
 
     const submissionData: {
+      submission_method?: 'online' | 'paper'
       submission_notes?: string
       submission_artifacts?: string[]
     } = {}
@@ -106,7 +109,7 @@ const SubmissionDialog: React.FC<SubmissionDialogProps> = ({
       submissionData.submission_artifacts = validArtifacts
     }
 
-    onSubmit(submissionData)
+    onSubmit({...submissionData,submission_method:method})
   }
 
   const template = assignment.template
@@ -117,21 +120,28 @@ const SubmissionDialog: React.FC<SubmissionDialogProps> = ({
     <Modal
       isOpen={isOpen}
       onClose={onClose}
-      title="Submit Assignment"
+      title="I’m finished"
       subtitle={template?.name}
-      icon={<Upload size={15} />}
+      icon={<CheckCircle size={15} />}
       iconVariant="dark"
       size="md"
       footer={
         <>
           <Button variant="secondary" onClick={onClose} disabled={loading}>Cancel</Button>
           <Button variant="primary" loading={loading} onClick={handleSubmit}>
-            Submit Assignment
+            Ready for my teacher
           </Button>
         </>
       }
     >
       <div className="space-y-5">
+        <fieldset>
+          <legend className="font-semibold mb-2">How did you finish?</legend>
+          <div className="space-y-2">
+            <label className="block"><input type="radio" name="submission-method" disabled={loading} checked={method==='paper'} onChange={()=>setMethod('paper')} /> Finished on paper — I’ll show my teacher</label>
+            <label className="block"><input type="radio" name="submission-method" disabled={loading} checked={method==='online'} onChange={()=>setMethod('online')} /> Finished online</label>
+          </div>
+        </fieldset>
         <div className="bg-panel-2 border border-line rounded-[11px] p-4">
           <p className="text-[11px] font-semibold text-muted uppercase tracking-wide mb-2">Assignment Summary</p>
           <div className="grid grid-cols-2 gap-3 text-[13px]">
@@ -148,10 +158,10 @@ const SubmissionDialog: React.FC<SubmissionDialogProps> = ({
 
         <div>
           <label className="flex items-center text-[11px] font-semibold text-muted uppercase tracking-wide mb-1.5 gap-1.5">
-            <MessageSquare className="h-3.5 w-3.5" />Notes to Admin (Optional)
+            <MessageSquare className="h-3.5 w-3.5" />Notes to teacher (optional)
           </label>
-          <textarea value={submissionNotes} onChange={(e) => setSubmissionNotes(e.target.value)}
-            placeholder="Add any notes, questions, or comments about your assignment submission..."
+          <textarea aria-label="Notes to teacher" value={submissionNotes} onChange={(e) => setSubmissionNotes(e.target.value)}
+            placeholder="Anything you want your teacher to know?"
             rows={4} className={`${FIELD} resize-vertical`} disabled={loading} />
           <p className="mt-1 text-[11px] text-faint">Use this space to explain your work, ask questions, or provide context.</p>
         </div>
@@ -165,7 +175,7 @@ const SubmissionDialog: React.FC<SubmissionDialogProps> = ({
             {artifactLinks.map((link, index) => (
               <div key={index} className="flex items-center gap-2">
                 <div className="flex-1">
-                  <input type="url" value={link}
+                  <input aria-label="Work link" type="url" value={link}
                     onChange={(e) => handleArtifactLinkChange(index, e.target.value)}
                     placeholder="https://example.com/your-work"
                     className={`${FIELD} ${validationErrors[`link_${index}`] ? 'border-neg-fg/50 bg-neg-bg' : ''}`}

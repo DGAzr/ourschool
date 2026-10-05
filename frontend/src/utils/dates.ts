@@ -56,3 +56,16 @@ export const addDays = (iso: string, days: number): string => {
   d.setDate(d.getDate() + days)
   return toISO(d)
 }
+
+
+/** Inclusive calendar days; UTC arithmetic on components avoids DST rounding. */
+export const termCalendarProgress = (start: string, end: string, today = todayISO()): { progress: number; daysRemaining: number } => {
+  if (![start, end, today].every(isValidISODate) || end < start) return { progress: 0, daysRemaining: 0 }
+  const ordinal = (iso: string) => {
+    const [year, month, day] = iso.split('-').map(Number)
+    return Date.UTC(year, month - 1, day) / 86400000
+  }
+  const total = ordinal(end) - ordinal(start) + 1
+  const elapsed = Math.min(total, Math.max(0, ordinal(today) - ordinal(start)))
+  return { progress: Math.round(elapsed / total * 100), daysRemaining: total - elapsed }
+}

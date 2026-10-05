@@ -27,6 +27,7 @@ from sqlalchemy.orm import Session
 from app.enums import UserRole as UserRoleEnum
 from app.models.api_key import APIKey
 from app.models.assignment import (
+    AssignmentHelpRequest,
     AssignmentTemplate,
     AssignmentTimeEntry,
     StudentAssignment,
@@ -57,7 +58,7 @@ from .shared import log_backup_operation, sanitize_import_data, validate_backup_
 logger = logging.getLogger(__name__)
 
 # Backup format versions supported by this importer
-SUPPORTED_VERSIONS = {"1.0", "2.0", "2.1", "2.2", "2.3"}
+SUPPORTED_VERSIONS = {"1.0", "2.0", "2.1", "2.2", "2.3", "2.4"}
 LEGACY_VERSIONS = {"1.0"}  # Versions that lack external_id — name-only fallback
 
 # Typed phrase required in the request body to arm wipe_before_import.
@@ -108,6 +109,7 @@ _WIPE_ORDER = [
     ("lessons_templates", LessonTemplate),
     ("lessons", Lesson),
     ("assignment_time_entries", AssignmentTimeEntry),
+    ("assignment_help_requests", AssignmentHelpRequest),
     ("student_assignments", StudentAssignment),
     ("assignment_templates", AssignmentTemplate),
     ("terms", Term),
@@ -163,7 +165,7 @@ def _wipe_for_restore(
 
     result.deleted_counts = deleted
 
-    verb = "Would delete" if dry_run else "Deleted"
+    verb = "Would delete" if result.dry_run else "Deleted"
     if deleted.get("journal_replies"):
         result.warnings.append(
             f"{verb} {deleted['journal_replies']} journal replies; replies are "
@@ -180,7 +182,7 @@ def _wipe_for_restore(
     log_backup_operation(
         "import",
         current_user.email,
-        f"WIPE-AND-RESTORE ({'dry run' if dry_run else 'executing'}): "
+        f"WIPE-AND-RESTORE ({'dry run' if result.dry_run else 'executing'}): "
         f"{verb.lower()} {total} rows across {tables} tables before import",
     )
     result.import_log.append(
@@ -222,6 +224,7 @@ def import_system_data(
         id_mappings={},
     )
 
+    preview_transaction = None
     try:
         log_backup_operation(
             "import",
@@ -254,6 +257,13 @@ def import_system_data(
         backup_dict = sanitize_import_data(backup_data.model_dump())
         backup_data = SystemBackup(**backup_dict)
 
+        # Preview uses the same dependency resolution and duplicate checks as
+        # import, inside a savepoint that is always rolled back. This also
+        # predicts children of new parents and wipe restores accurately.
+        # Integration jobs are deliberately untouched during preview.
+        if dry_run:
+            preview_transaction = db.begin_nested()
+
         if not dry_run:
             from app.services import paperless_jobs
 
@@ -272,71 +282,61 @@ def import_system_data(
         # deleted first — except the importing admin — for true
         # point-in-time restore semantics.
         if import_options.get("wipe_before_import", False):
-            _wipe_for_restore(db, current_user, result, dry_run)
-            if dry_run:
-                result.warnings.append(
-                    "Dry-run preview simulates a merge against current data; "
-                    "after a real wipe, records reported as skipped-existing "
-                    "will be imported instead."
-                )
+            _wipe_for_restore(db, current_user, result, False)
 
         # Import in dependency order
         _import_users(
-            db, backup_data.users, result, import_options, dry_run, current_user
+            db, backup_data.users, result, import_options, False, current_user
         )
-        _import_subjects(db, backup_data.subjects, result, dry_run)
-        _import_terms(db, backup_data.terms, result, dry_run, current_user.id)
+        _import_subjects(db, backup_data.subjects, result, False)
+        _import_terms(db, backup_data.terms, result, False, current_user.id)
         _import_assignment_templates(
-            db, backup_data.assignment_templates, result, dry_run, current_user.id
+            db, backup_data.assignment_templates, result, False, current_user.id
         )
-        _import_term_subjects(db, backup_data.term_subjects, result, dry_run)
+        _import_term_subjects(db, backup_data.term_subjects, result, False)
         _import_student_assignments(
-            db, backup_data.student_assignments, result, dry_run, current_user.id
+            db, backup_data.student_assignments, result, False, current_user.id
         )
         _import_assignment_time_entries(
-            db, backup_data.assignment_time_entries, result, dry_run
+            db, backup_data.assignment_time_entries, result, False
         )
-        _import_student_term_grades(
-            db, backup_data.student_term_grades, result, dry_run
-        )
-        _import_grade_history(db, backup_data.grade_history, result, dry_run)
-        _import_attendance_records(db, backup_data.attendance_records, result, dry_run)
-        _import_journal_entries(db, backup_data.journal_entries, result, dry_run)
+        _import_student_term_grades(db, backup_data.student_term_grades, result, False)
+        _import_grade_history(db, backup_data.grade_history, result, False)
+        _import_attendance_records(db, backup_data.attendance_records, result, False)
+        _import_journal_entries(db, backup_data.journal_entries, result, False)
         # Shop catalog before student_points: goal_item_external_id resolves
         # through the shop-items id map. (Items only depend on categories;
         # redemptions stay later since they also need nothing beyond users.)
-        _import_shop_categories(db, backup_data.shop_categories, result, dry_run)
-        _import_shop_images(db, backup_data.shop_images, result, dry_run)
-        _import_shop_items(db, backup_data.shop_items, result, dry_run)
-        _import_student_points(db, backup_data.student_points, result, dry_run)
-        _import_point_transactions(db, backup_data.point_transactions, result, dry_run)
-        _import_shop_redemptions(db, backup_data.shop_redemptions, result, dry_run)
+        _import_shop_categories(db, backup_data.shop_categories, result, False)
+        _import_shop_images(db, backup_data.shop_images, result, False)
+        _import_shop_items(db, backup_data.shop_items, result, False)
+        _import_student_points(db, backup_data.student_points, result, False)
+        _import_point_transactions(db, backup_data.point_transactions, result, False)
+        _import_shop_redemptions(db, backup_data.shop_redemptions, result, False)
         # Lessons last among data sections: they remap through the users,
         # subjects, and assignment-template maps built above.
-        _import_lessons(db, backup_data.lessons, result, dry_run)
+        _import_lessons(db, backup_data.lessons, result, False)
         # Paperless after lessons: attachment links resolve through the
         # lessons/templates/users maps plus the document map built here.
-        _import_paperless_libraries(db, backup_data, result, dry_run)
+        _import_paperless_libraries(db, backup_data, result, False)
         _import_paperless_maps(
             db,
             backup_data.paperless_tag_maps,
             backup_data.paperless_doctype_maps,
             result,
-            dry_run,
+            False,
         )
-        _import_paperless_documents(
-            db, backup_data.paperless_documents, result, dry_run
-        )
+        _import_paperless_documents(db, backup_data.paperless_documents, result, False)
         _import_lesson_paperless_materials(
-            db, backup_data.lesson_paperless_materials, result, dry_run
+            db, backup_data.lesson_paperless_materials, result, False
         )
         _import_template_paperless_materials(
-            db, backup_data.template_paperless_materials, result, dry_run
+            db, backup_data.template_paperless_materials, result, False
         )
         _import_student_assignment_paperless_materials(
-            db, backup_data.student_assignment_paperless_materials, result, dry_run
+            db, backup_data.student_assignment_paperless_materials, result, False
         )
-        _import_system_settings(db, backup_data.system_settings, result, dry_run)
+        _import_system_settings(db, backup_data.system_settings, result, False)
 
         if not dry_run:
             db.commit()
@@ -345,6 +345,9 @@ def import_system_data(
                 f"Backup import completed successfully at {datetime.now(timezone.utc).isoformat()}"
             )
         else:
+            db.flush()
+            preview_transaction.rollback()
+            preview_transaction = None
             result.success = True
             result.import_log.append("Dry run completed successfully - no changes made")
 
@@ -357,7 +360,9 @@ def import_system_data(
         return result
 
     except Exception as e:
-        if not dry_run:
+        if preview_transaction is not None:
+            preview_transaction.rollback()
+        elif not dry_run:
             db.rollback()
         logger.error(f"System backup import failed: {str(e)}", exc_info=True)
         result.errors.append("Import failed due to an internal error. See server logs.")
@@ -474,6 +479,10 @@ def _import_users(
                     date_of_birth=user_data.date_of_birth,
                     grade_level=user_data.grade_level,
                     theme_preference=user_data.theme_preference,
+                    student_ui_mode=user_data.student_ui_mode,
+                    show_points=user_data.show_points,
+                    show_effort_signals=user_data.show_effort_signals,
+                    celebrate_completion=user_data.celebrate_completion,
                 )
                 db.add(new_user)
                 db.flush()
@@ -699,7 +708,7 @@ def _import_term_subjects(db: Session, term_subjects_data, result, dry_run):
     terms_by_name = result.id_mappings.get("terms_by_name", {})
     subjects_by_uuid = result.id_mappings.get("subjects_by_uuid", {})
     subjects_by_name = result.id_mappings.get("subjects_by_name", {})
-    imported = 0
+    imported = skipped = 0
 
     for ts_data in term_subjects_data:
         term_id = _resolve(
@@ -748,12 +757,15 @@ def _import_term_subjects(db: Session, term_subjects_data, result, dry_run):
                     f"Created term_subject: {ts_data.term_name}/{ts_data.subject_name}"
                 )
             else:
+                skipped += 1
                 result.import_log.append(
                     f"Skipped existing term_subject: {ts_data.term_name}/{ts_data.subject_name}"
                 )
+                continue
         imported += 1
 
     result.imported_counts["term_subjects"] = imported
+    result.skipped_counts["term_subjects"] = skipped
 
 
 def _import_student_assignments(
@@ -824,12 +836,23 @@ def _import_student_assignments(
                 teacher_feedback=sa_data.teacher_feedback,
                 student_notes=sa_data.student_notes,
                 submission_notes=sa_data.submission_notes,
+                submission_method=sa_data.submission_method,
+                submission_artifacts=sa_data.submission_artifacts,
                 custom_instructions=sa_data.custom_instructions,
                 custom_max_points=sa_data.custom_max_points,
                 time_spent_minutes=getattr(sa_data, "time_spent_minutes", 0) or 0,
                 is_student_created=getattr(sa_data, "is_student_created", False),
                 assigned_by=admin_user_id,
             )
+            new_sa.help_requests = [
+                AssignmentHelpRequest(
+                    note=h.note,
+                    created_at=h.created_at,
+                    resolved_at=h.resolved_at,
+                    response=h.response,
+                )
+                for h in sa_data.help_requests
+            ]
             db.add(new_sa)
             db.flush()
 
@@ -1546,6 +1569,8 @@ def _import_shop_redemptions(db: Session, redemptions_data, result, dry_run):
                 fulfillment_type=r_data.fulfillment_type,
                 status=r_data.status,
                 created_at=r_data.created_at,
+                pickup_instructions=r_data.pickup_instructions,
+                points_refunded=r_data.points_refunded,
                 decided_at=r_data.decided_at,
                 fulfilled_at=r_data.fulfilled_at,
             )
@@ -1670,6 +1695,8 @@ def _import_lessons(db: Session, lessons_data, result, dry_run):
                 links.append(
                     LessonTemplate(
                         template_id=template_id,
+                        assignment_timing=link_data.assignment_timing,
+                        due_offset_days=link_data.due_offset_days,
                         custom_due_date=link_data.custom_due_date,
                         custom_max_points=link_data.custom_max_points,
                         custom_instructions=link_data.custom_instructions,
@@ -1695,6 +1722,7 @@ def _import_lessons(db: Session, lessons_data, result, dry_run):
 
     result.id_mappings["lessons_by_uuid"] = by_uuid
     result.imported_counts["lessons"] = imported
+    result.skipped_counts["lessons"] = skipped
 
 
 def _import_paperless_libraries(db, backup, result, dry_run):
@@ -1735,11 +1763,18 @@ def _import_paperless_libraries(db, backup, result, dry_run):
         libraries.setdefault(item.library_id, None)
     if not libraries:
         return
+    imported = skipped = 0
     for library_id, url in libraries.items():
-        if not dry_run and db.get(PaperlessLibrary, library_id) is None:
+        if db.get(PaperlessLibrary, library_id) is not None:
+            skipped += 1
+            continue
+        if not dry_run:
             db.add(PaperlessLibrary(id=library_id, url=url))
+        imported += 1
     if not dry_run:
         db.flush()
+    result.imported_counts["paperless_libraries"] = imported
+    result.skipped_counts["paperless_libraries"] = skipped
 
 
 def _import_paperless_maps(
@@ -1753,7 +1788,7 @@ def _import_paperless_maps(
     """
     subjects_by_uuid = result.id_mappings.get("subjects_by_uuid", {})
     subjects_by_name = result.id_mappings.get("subjects_by_name", {})
-    imported = 0
+    imported = updated = 0
 
     existing_tags = {
         (m.library_id, m.paperless_tag_id): m for m in db.query(PaperlessTagMap).all()
@@ -1785,9 +1820,11 @@ def _import_paperless_maps(
                     )
                 )
             else:
+                updated += 1
                 row.paperless_tag_name = m_data.paperless_tag_name
                 row.subject_id = subject_id
                 row.auto_matched = m_data.auto_matched
+                continue
         imported += 1
 
     existing_doctypes = {
@@ -1809,13 +1846,16 @@ def _import_paperless_maps(
                     )
                 )
             else:
+                updated += 1
                 row.paperless_doctype_name = m_data.paperless_doctype_name
                 row.material_kind = m_data.material_kind
+                continue
         imported += 1
 
     if not dry_run:
         db.flush()
     result.imported_counts["paperless_maps"] = imported
+    result.updated_counts["paperless_maps"] = updated
 
 
 def _import_paperless_documents(db: Session, documents_data, result, dry_run):
@@ -1883,6 +1923,7 @@ def _import_paperless_documents(db: Session, documents_data, result, dry_run):
 
     result.id_mappings["paperless_docs_by_pid"] = by_pid
     result.imported_counts["paperless_documents"] = imported
+    result.skipped_counts["paperless_documents"] = skipped
 
 
 def _snapshot_kwargs(link_data, subjects_by_uuid, subjects_by_name):
@@ -1947,6 +1988,7 @@ def _import_lesson_paperless_materials(db: Session, links_data, result, dry_run)
         imported += 1
 
     result.imported_counts["lesson_paperless_materials"] = imported
+    result.skipped_counts["lesson_paperless_materials"] = skipped
 
 
 def _import_template_paperless_materials(db: Session, links_data, result, dry_run):
@@ -1996,6 +2038,7 @@ def _import_template_paperless_materials(db: Session, links_data, result, dry_ru
         imported += 1
 
     result.imported_counts["template_paperless_materials"] = imported
+    result.skipped_counts["template_paperless_materials"] = skipped
 
 
 def _import_student_assignment_paperless_materials(
@@ -2079,4 +2122,4 @@ def _import_student_assignment_paperless_materials(
         imported += 1
 
     result.imported_counts["student_assignment_paperless_materials"] = imported
-    result.skipped_counts["lessons"] = skipped
+    result.skipped_counts["student_assignment_paperless_materials"] = skipped

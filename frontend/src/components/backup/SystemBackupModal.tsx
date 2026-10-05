@@ -16,7 +16,7 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Download, AlertTriangle, CheckCircle, Database } from 'lucide-react'
 import Modal from '../ui/Modal'
 import Button from '../ui/Button'
@@ -30,16 +30,20 @@ interface SystemBackupModalProps {
 }
 
 export function SystemBackupModal({ isOpen, onClose, onExport }: SystemBackupModalProps) {
-  const [isLoading, setIsLoading] = useState(false)
+  const [isLoading, setIsLoading] = useState(true)
   const [backupData, setBackupData] = useState<SystemBackupFile | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [done, setDone] = useState(false)
 
+  const triggerDownload = (data:SystemBackupFile) => {
+    const blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'});const url=URL.createObjectURL(blob);const link=document.createElement('a');link.href=url;link.download=`ourschool-backup-${data.backup_timestamp.slice(0,10)}.json`;link.click();setTimeout(()=>URL.revokeObjectURL(url),1000)
+  }
   const handleExport = async () => {
     setIsLoading(true)
     setError(null)
     try {
       const data = await onExport()
+      triggerDownload(data)
       setBackupData(data)
       setDone(true)
     } catch (err) {
@@ -49,20 +53,15 @@ export function SystemBackupModal({ isOpen, onClose, onExport }: SystemBackupMod
     }
   }
 
-  const downloadBackup = () => {
-    if (!backupData) return
-    const blob = new Blob([JSON.stringify(backupData, null, 2)], { type: 'application/json' })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = `ourschool-backup-${new Date().toISOString().split('T')[0]}.json`
-    document.body.appendChild(a)
-    a.click()
-    document.body.removeChild(a)
-    URL.revokeObjectURL(url)
-  }
+  const downloadBackup = () => {if(backupData)triggerDownload(backupData)}
+  useEffect(()=>{
+    let active=true
+    onExport().then(data=>{if(active){triggerDownload(data);setBackupData(data);setDone(true)}}).catch(err=>{if(active)setError(getErrorMessage(err,'Export failed'))}).finally(()=>{if(active)setIsLoading(false)})
+    return()=>{active=false}
+  },[onExport])
 
   const handleClose = () => {
+    if(isLoading)return
     setIsLoading(false)
     setBackupData(null)
     setError(null)
@@ -89,7 +88,7 @@ export function SystemBackupModal({ isOpen, onClose, onExport }: SystemBackupMod
         <Button variant="secondary" onClick={handleClose}>Close</Button>
         <Button variant="primary" onClick={downloadBackup}>
           <Download size={14} />
-          Download Backup File
+          Download again
         </Button>
       </>
     )
@@ -99,7 +98,7 @@ export function SystemBackupModal({ isOpen, onClose, onExport }: SystemBackupMod
     <Modal
       isOpen={isOpen}
       onClose={handleClose}
-      title="Create System Backup"
+      title="Download system backup"
       icon={<Database size={15} />}
       iconVariant="accent"
       size="md"
@@ -138,7 +137,7 @@ export function SystemBackupModal({ isOpen, onClose, onExport }: SystemBackupMod
           <>
             <div className="flex flex-col items-center">
               <CheckCircle size={40} className="text-pos-fg mb-2" />
-              <h3 className="text-[15px] font-semibold text-ink">Backup Created Successfully</h3>
+              <h3 className="text-[15px] font-semibold text-ink">Backup download started</h3>
             </div>
             {backupData?.system_info && (
               <div className="bg-panel-2 border border-line rounded-[11px] p-4 text-[12px] text-muted grid grid-cols-2 gap-1">

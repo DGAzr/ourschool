@@ -154,6 +154,15 @@ const AssignmentFormFields: React.FC<AssignmentFormFieldsProps> = ({
         </div>
       )}
 
+          <TextArea
+            label="Instructions"
+            value={formData.instructions || ''}
+            onChange={(e) => onUpdate('instructions', e.target.value)}
+            rows={4}
+            placeholder="Detailed instructions for students on how to complete this assignment..."
+            disabled={disabled}
+          />
+
       {/* Description Fields */}
       {showAllFields && (
         <>
@@ -163,15 +172,6 @@ const AssignmentFormFields: React.FC<AssignmentFormFieldsProps> = ({
             onChange={(e) => onUpdate('description', e.target.value)}
             rows={3}
             placeholder="Brief description of what this assignment covers..."
-            disabled={disabled}
-          />
-
-          <TextArea
-            label="Instructions"
-            value={formData.instructions || ''}
-            onChange={(e) => onUpdate('instructions', e.target.value)}
-            rows={4}
-            placeholder="Detailed instructions for students on how to complete this assignment..."
             disabled={disabled}
           />
 

@@ -20,13 +20,14 @@ import { CSSProperties, useMemo, useState } from 'react'
 
 import { Button, EmptyState, Spinner } from '../ui'
 import { Subject } from '../../types'
-import { Lesson } from '../../types/lesson'
+import { Lesson, LessonAssignmentProgress } from '../../types/lesson'
 import { subjectTint, todayISO } from '../../utils/lessonPlanning'
 import { parseISO } from '../../utils/dates'
 import StudentAvatars from './StudentAvatars'
 import TeachCard from './TeachCard'
 
 interface TeachViewProps {
+  assignments?: LessonAssignmentProgress[]
   subjects: Subject[]
   selectedDate: string
   lessons: Lesson[]
@@ -46,6 +47,7 @@ interface TeachViewProps {
 /** The Teach run-sheet for one day, with student and subject filters. */
 const TeachView: React.FC<TeachViewProps> = ({
   subjects,
+  assignments,
   selectedDate,
   lessons,
   loading,
@@ -107,7 +109,7 @@ const TeachView: React.FC<TeachViewProps> = ({
     () =>
       lessons.reduce(
         (sum, lesson) =>
-          sum + lesson.materials.filter((m) => !m.is_gathered).length,
+          sum + (lesson.status === 'taught' ? 0 : lesson.materials.filter((m) => !m.is_gathered).length),
         0
       ),
     [lessons]
@@ -146,8 +148,8 @@ const TeachView: React.FC<TeachViewProps> = ({
           </h1>
           <p className="text-[14px] text-muted mt-1">
             {allGathered
-              ? `Materials for ${dayReference} are all set — focus on the teaching.`
-              : `${materialsRemaining} material${materialsRemaining === 1 ? '' : 's'} still to gather before you're set.`}
+              ? `Materials for untaught lessons ${dayReference} are all set. Readiness covers the whole day.`
+              : `${materialsRemaining} material${materialsRemaining === 1 ? '' : 's'} still to gather for untaught lessons across the whole day.`}
           </p>
         </div>
         <div className="flex flex-col items-end gap-2">
@@ -304,6 +306,7 @@ const TeachView: React.FC<TeachViewProps> = ({
                 <TeachCard
                   key={lesson.id}
                   lesson={lesson}
+                  assignments={assignments?.filter(a => a.lesson_id === lesson.id)}
                   onEdit={onEditLesson}
                   onMarkTaught={onMarkTaught}
                   onToggleMaterial={onToggleMaterial}

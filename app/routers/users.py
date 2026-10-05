@@ -101,6 +101,10 @@ async def create_user(
         parent_id=user.parent_id if user.role == UserRole.STUDENT else None,
         date_of_birth=user.date_of_birth if user.role == UserRole.STUDENT else None,
         grade_level=user.grade_level if user.role == UserRole.STUDENT else None,
+        student_ui_mode=user.student_ui_mode,
+        show_points=user.show_points,
+        show_effort_signals=user.show_effort_signals,
+        celebrate_completion=user.celebrate_completion,
     )
     db.add(db_user)
     db.commit()
@@ -188,6 +192,18 @@ def update_me(
 ):
     """Allow users to update their own profile (first name, last name, email)."""
     update_data = user_update.model_dump(exclude_unset=True)
+    if any(
+        key in update_data and update_data[key] is None
+        for key in (
+            "student_ui_mode",
+            "show_points",
+            "show_effort_signals",
+            "celebrate_completion",
+        )
+    ):
+        raise HTTPException(
+            status_code=422, detail="Learning preferences cannot be null"
+        )
     disallowed = set(update_data) - SELF_EDITABLE_FIELDS
     if disallowed:
         raise HTTPException(
@@ -256,6 +272,9 @@ SELF_EDITABLE_FIELDS = {
     "first_name",
     "last_name",
     "theme_preference",
+    "show_points",
+    "show_effort_signals",
+    "celebrate_completion",
 }
 
 
@@ -280,6 +299,18 @@ def update_user(
         raise HTTPException(status_code=403, detail="Access denied")
 
     update_data = user_update.model_dump(exclude_unset=True)
+    if any(
+        key in update_data and update_data[key] is None
+        for key in (
+            "student_ui_mode",
+            "show_points",
+            "show_effort_signals",
+            "celebrate_completion",
+        )
+    ):
+        raise HTTPException(
+            status_code=422, detail="Learning preferences cannot be null"
+        )
 
     if not is_admin:
         disallowed = set(update_data) - SELF_EDITABLE_FIELDS

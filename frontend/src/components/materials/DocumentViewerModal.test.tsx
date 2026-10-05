@@ -74,4 +74,5 @@ it('distinguishes missing documents from disconnected libraries', async () => {
     </ToastProvider>
   )
   expect(await screen.findByRole('alert')).toHaveTextContent('disconnected')
+  expect(screen.getByRole('button', { name: 'Download' })).toBeDisabled()
 })

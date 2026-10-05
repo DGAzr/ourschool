@@ -42,6 +42,7 @@ import { getErrorMessage } from '../../services/api'
 import { useAuth } from '../../contexts/AuthContext'
 import { usePaperlessStatus } from '../../hooks/usePaperlessStatus'
 import DocumentThumb from '../materials/DocumentThumb'
+import MaterialPreviewButton from '../materials/MaterialPreviewButton'
 import DocumentViewerModal from '../materials/DocumentViewerModal'
 import PaperlessPickerModal from '../lessons/PaperlessPickerModal'
 import { kindBadge } from '../materials/materialsLogic'
@@ -49,13 +50,35 @@ import { PaperlessMaterial } from '../../types/paperless'
 import { attachedIds, combinedMaterials } from './assignmentMaterialsLogic'
 import { AssignmentInfo, SubmissionCard } from './AssignmentInfo'
 import AssignmentTimeLog from './AssignmentTimeLog'
+import SubmissionDialog from './SubmissionDialog'
+import { assignmentProgress, effectiveDueDate, isOverdue } from '../../utils/studentAssignments'
+
+import TaskHelp from './TaskHelp'
 
 interface AssignmentDetailModalProps {
   assignmentId: number
   studentId?: number
   isOpen: boolean
   onClose: () => void
+  presentation?: 'modal' | 'page'
 }
+
+const AssignmentDetailShell = ({ presentation, children, ...props }: {
+  presentation?: 'modal' | 'page'
+  isOpen: boolean
+  onClose: () => void
+  title: string
+  subtitle?: string
+  footer: React.ReactNode
+  children: React.ReactNode
+}) => presentation === 'page' ? (
+  <section className="mx-auto w-full min-w-0 max-w-4xl">
+    <button type="button" onClick={props.onClose} className="min-h-[44px] text-accent font-semibold mb-3">← Back to assignments</button>
+    <h1 className="text-2xl font-bold text-ink break-words">{props.subtitle ?? props.title}</h1>
+    <div className="sticky top-0 z-10 my-4 flex flex-wrap gap-2 rounded-card border border-line bg-panel p-3">{props.footer}</div>
+    {children}
+  </section>
+) : <Modal {...props} size="lg">{children}</Modal>
 
 interface DetailedAssignment extends StudentAssignment {
   template: AssignmentTemplate
@@ -98,6 +121,7 @@ const AssignmentDetailModalContent: React.FC<AssignmentDetailModalProps> = ({
   studentId,
   isOpen,
   onClose,
+  presentation,
 }) => {
   const { toast } = useToast()
   const { user } = useAuth()
@@ -113,6 +137,9 @@ const AssignmentDetailModalContent: React.FC<AssignmentDetailModalProps> = ({
   >([])
   const [pickerOpen, setPickerOpen] = useState(false)
   const [busyDocId, setBusyDocId] = useState<number | null>(null)
+  const [actionBusy, setActionBusy] = useState(false)
+  const [submitting, setSubmitting] = useState(false)
+  const [notes, setNotes] = useState('')
 
   useEffect(() => {
     if (!isOpen || !assignmentId) return
@@ -121,6 +148,7 @@ const AssignmentDetailModalContent: React.FC<AssignmentDetailModalProps> = ({
         const data = await assignmentsApi.getStudentAssignment(assignmentId)
         if (data.template) {
           setAssignment(data as DetailedAssignment)
+          setNotes(data.student_notes ?? '')
           setInstanceMaterials(data.paperless_materials ?? [])
           setError(null)
         } else {
@@ -135,7 +163,27 @@ const AssignmentDetailModalContent: React.FC<AssignmentDetailModalProps> = ({
     fetchAssignmentDetails()
   }, [isOpen, assignmentId, studentId])
 
+  const simple=user?.student_ui_mode==='simple'
   const isAdmin = user?.role === 'admin'
+  const canWork = !isAdmin && assignment?.student_id === user?.id
+  const progress = assignment ? assignmentProgress(assignment) : null
+  const workOpen = progress === 'not_started' || progress === 'in_progress'
+
+  const performWorkAction = async (action: () => Promise<unknown>) => {
+    setActionBusy(true)
+    setError(null)
+    try {
+      await action()
+      const updated = await assignmentsApi.getStudentAssignment(assignmentId)
+      setAssignment(updated as DetailedAssignment)
+      setSubmitting(false)
+      toast(updated.submitted_date ? 'Ready for your teacher.' : 'Work saved.')
+    } catch (err) {
+      setError(getErrorMessage(err, 'Could not save your work. Please try again.'))
+    } finally {
+      setActionBusy(false)
+    }
+  }
   const canEditMaterials = isAdmin && paperlessStatus?.connected === true
   const materialRows = combinedMaterials(
     assignment?.template?.paperless_materials ?? [],
@@ -172,16 +220,23 @@ const AssignmentDetailModalContent: React.FC<AssignmentDetailModalProps> = ({
           : 'text-neg-fg'
 
   return (
-    <Modal
+    <AssignmentDetailShell
+      presentation={presentation}
       isOpen={isOpen}
       onClose={onClose}
       title="Assignment Details"
       subtitle={assignment?.template?.name}
-      size="lg"
       footer={
-        <Button variant="secondary" onClick={onClose}>
-          Close
-        </Button>
+        <>
+          {canWork && workOpen && (
+            <>
+              {progress === 'not_started' && <Button loading={actionBusy} disabled={actionBusy} onClick={() => void performWorkAction(() => assignmentsApi.startAssignment(assignmentId))}>Start assignment</Button>}
+              {progress === 'in_progress' && <Button disabled={actionBusy} onClick={() => setSubmitting(true)}>I’m finished</Button>}
+            </>
+          )}
+          {progress === 'submitted' && <p role="status" className="py-2 text-muted">Submitted · Waiting for your teacher</p>}
+          {presentation !== 'page' && <Button variant="secondary" onClick={onClose}>Close</Button>}
+        </>
       }
     >
       <div className="space-y-4">
@@ -202,14 +257,14 @@ const AssignmentDetailModalContent: React.FC<AssignmentDetailModalProps> = ({
           <>
             {/* Hero summary */}
             <div className={SECTION}>
-              <div className="flex items-start justify-between mb-4">
-                <div>
+              <div className="flex flex-wrap items-start justify-between gap-3 mb-4">
+                <div className="min-w-0 flex-1">
                   <h2 className="text-[18px] font-bold text-ink mb-1">
                     {assignment.template?.name}
                   </h2>
                   <div className="flex items-center gap-2">
                     <p className="text-[12.5px] text-muted">
-                      Assignment #{assignment.id}
+                      {effectiveDueDate(assignment) ? `Due ${formatDateOnly(effectiveDueDate(assignment))}` : 'No due date'}
                     </p>
                     {assignment.is_student_created && (
                       <span className="px-2 py-0.5 rounded-pill bg-accent-soft text-accent text-[10px] font-semibold uppercase tracking-wide">
@@ -219,20 +274,21 @@ const AssignmentDetailModalContent: React.FC<AssignmentDetailModalProps> = ({
                   </div>
                 </div>
                 <span
-                  className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-semibold uppercase tracking-wide ${statusBadge(assignment.status)}`}
+                  className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-semibold uppercase tracking-wide ${statusBadge(progress ?? assignment.status)}`}
                 >
-                  {assignment.status.replace('_', ' ')}
+                  {progress?.replace('_', ' ')}
                 </span>
+                {isOverdue(assignment) && <span className="text-neg-fg text-sm font-semibold">Overdue</span>}
               </div>
 
               {/* Metrics grid */}
-              <div className="grid grid-cols-4 gap-2">
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                 {[
                   {
                     value:
                       assignment.points_earned !== null &&
                       assignment.points_earned !== undefined
-                        ? `${assignment.points_earned} / ${assignment.custom_max_points || assignment.template?.max_points || 0}`
+                        ? `${Math.round(assignment.points_earned)} / ${assignment.custom_max_points || assignment.template?.max_points || 0}`
                         : `— / ${assignment.custom_max_points || assignment.template?.max_points || 0}`,
                     label: 'Points',
                   },
@@ -274,6 +330,16 @@ const AssignmentDetailModalContent: React.FC<AssignmentDetailModalProps> = ({
               )}
             </div>
 
+            {canWork && workOpen && (
+              <div className={SECTION}>
+                <label htmlFor={`work-notes-${assignment.id}`} className={SECTION_TITLE}>My working notes</label>
+                <textarea id={`work-notes-${assignment.id}`} value={notes} onChange={e => setNotes(e.target.value)} rows={3} className="w-full rounded-field border border-line bg-field-bg p-3 text-ink" placeholder="Save your thinking or an unfinished answer…" />
+                <Button variant="secondary" disabled={actionBusy || notes === (assignment.student_notes ?? '')} onClick={() => void performWorkAction(() => assignmentsApi.updateStudentAssignment(assignmentId, { student_notes: notes }))}>Save notes</Button>
+              </div>
+            )}
+
+            {!isAdmin && !assignment.is_graded && assignment.status !== 'excused' && <TaskHelp assignmentId={assignment.id} requests={assignment.help_requests ?? []} onRequested={request=>setAssignment(current=>current ? {...current,help_requests:[...(current.help_requests ?? []),request]} : current)} />}
+            {simple&&<div className="bg-accent-soft rounded-card p-4 text-lg"><p>Read or listen to the instructions. Do your activity, then show your teacher.</p>{typeof window.speechSynthesis!=='undefined'&&<button className="text-accent mt-2" onClick={()=>{speechSynthesis.cancel();speechSynthesis.speak(new SpeechSynthesisUtterance(`${assignment.template?.name}. ${assignment.custom_instructions || assignment.template?.instructions || assignment.template?.description || 'Work on this activity, then show your teacher.'}`))}}>Read activity aloud</button>}</div>}
             {/* Description & instructions */}
             {(assignment.template?.description ||
               assignment.template?.instructions ||
@@ -344,13 +410,7 @@ const AssignmentDetailModalContent: React.FC<AssignmentDetailModalProps> = ({
                               Remove
                             </button>
                           ))}
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => setViewingMaterial(material)}
-                        >
-                          View
-                        </Button>
+                        <MaterialPreviewButton material={material} onOpen={() => setViewingMaterial(material)} />
                       </div>
                     )
                   )}
@@ -447,6 +507,8 @@ const AssignmentDetailModalContent: React.FC<AssignmentDetailModalProps> = ({
             </div>
 
             {/* Submission */}
+            {assignment.submission_method === 'paper' && <p className="rounded-lg bg-panel-2 p-3 text-sm">Finished on paper · Show the original work to your teacher.</p>}
+
             {(assignment.submission_notes ||
               (assignment.submission_artifacts &&
                 assignment.submission_artifacts.length > 0)) && (
@@ -539,6 +601,8 @@ const AssignmentDetailModalContent: React.FC<AssignmentDetailModalProps> = ({
         onClose={() => setViewingMaterial(null)}
       />
 
+      {submitting && assignment && <SubmissionDialog assignment={assignment} isOpen onClose={() => setSubmitting(false)} loading={actionBusy} onSubmit={(data) => void performWorkAction(() => assignmentsApi.updateStudentAssignment(assignmentId, { status: 'submitted', ...data }))} />}
+
       {canEditMaterials && assignment && (
         <PaperlessPickerModal
           isOpen={pickerOpen}
@@ -564,7 +628,7 @@ const AssignmentDetailModalContent: React.FC<AssignmentDetailModalProps> = ({
           }
         />
       )}
-    </Modal>
+    </AssignmentDetailShell>
   )
 }
 

@@ -306,7 +306,7 @@ const AdminShop: React.FC = () => {
           readyCount={ready}
           redemptions={redemptions}
           busyId={busyId}
-          onApprove={(r) => runQueueAction(r.id, shopApi.approveRedemption)}
+          onApprove={(r,instructions) => runQueueAction(r.id, id=>shopApi.approveRedemption(id,instructions))}
           onDecline={(r) => runQueueAction(r.id, shopApi.declineRedemption)}
           onFulfill={(r) => runQueueAction(r.id, shopApi.fulfillRedemption)}
         />

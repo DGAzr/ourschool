@@ -182,6 +182,8 @@ class ShopRedemption(BaseModel):
     fulfillment_type: str
     status: str
     created_at: datetime
+    pickup_instructions: Optional[str] = None
+    points_refunded: bool = False
     decided_at: Optional[datetime] = None
     fulfilled_at: Optional[datetime] = None
 
@@ -244,3 +246,7 @@ class ReorderRequest(BaseModel):
     """Body for PUT /shop/items/reorder — the full ordered list of item ids."""
 
     item_ids: List[int]
+
+
+class PickupInstructions(BaseModel):
+    pickup_instructions: Optional[str] = Field(default=None, max_length=1000)

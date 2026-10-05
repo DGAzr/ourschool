@@ -40,7 +40,7 @@ from app.utils.grading import (
 )
 from app.utils.performance import track_query_performance
 
-from app.crud.reports.shared import _grade_item, _is_graded
+from app.crud.reports.shared import _grade_item, _is_graded, calculation_note
 
 
 def get_student_term_grades(
@@ -135,6 +135,7 @@ def _calculate_subject_trend_data(
             StudentAssignment.student_id == student_id,
             AssignmentTemplate.subject_id == subject_id,
             StudentAssignment.is_graded,
+            StudentAssignment.status != AssignmentStatus.EXCUSED,
             StudentAssignment.percentage_grade.isnot(None),
             StudentAssignment.graded_date.isnot(None),
         )
@@ -315,12 +316,15 @@ def get_report_card(db: Session, student_id: int, term_id: int) -> schemas.Repor
                 "subject_color": subject.color,
                 "assignments_completed": 0,
                 "assignments_total": 0,
+                "excused": 0,
                 "graded_items": [],
             }
 
         subject_data = subject_grades[subject.id]
         subject_data["assignments_total"] += 1
         overall_total_assignments += 1
+        if assignment.status == AssignmentStatus.EXCUSED:
+            subject_data["excused"] += 1
 
         # Only graded assignments contribute to the grade — ungraded ones
         # should not count against the student's percentage.
@@ -349,6 +353,7 @@ def get_report_card(db: Session, student_id: int, term_id: int) -> schemas.Repor
                 subject_color=data["subject_color"],
                 assignments_completed=data["assignments_completed"],
                 assignments_total=data["assignments_total"],
+                excused_assignments=data["excused"],
                 points_earned=points_earned,
                 points_possible=points_possible,
                 # No graded work yet → no grade, not an alarming 0%/F.
@@ -364,8 +369,14 @@ def get_report_card(db: Session, student_id: int, term_id: int) -> schemas.Repor
         )
 
     # Calculate overall grade
-    _, _, overall_percentage = compute_weighted_grade(overall_items, type_weights)
-    overall_letter_grade = calculate_letter_grade(overall_percentage, grade_scale)
+    _, overall_possible, overall_percentage = compute_weighted_grade(
+        overall_items, type_weights
+    )
+    overall_letter_grade = (
+        calculate_letter_grade(overall_percentage, grade_scale)
+        if overall_possible > 0
+        else None
+    )
 
     # Get attendance data for the term (attended / recorded days)
     attendance_records = (
@@ -386,7 +397,10 @@ def get_report_card(db: Session, student_id: int, term_id: int) -> schemas.Repor
 
     # Create summary
     summary = schemas.ReportCardSummary(
-        overall_percentage=round(overall_percentage, 2),
+        excused_assignments=sum(data["excused"] for data in subject_grades.values()),
+        overall_percentage=(
+            round(overall_percentage, 2) if overall_possible > 0 else None
+        ),
         overall_letter_grade=overall_letter_grade,
         total_assignments=overall_total_assignments,
         completed_assignments=overall_completed,
@@ -427,6 +441,9 @@ def get_report_card(db: Session, student_id: int, term_id: int) -> schemas.Repor
     )
 
     return schemas.ReportCard(
+        calculation_note=calculation_note(
+            type_weights, "this report term; overall scores pooled across subjects"
+        ),
         student_id=student.id,
         student_name=f"{student.first_name} {student.last_name}",
         student_grade_level=grade_level,

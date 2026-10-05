@@ -1,3 +1,4 @@
+import { api } from '../../../services/api'
 /*
  * OurSchool - Homeschool Management System
  * Copyright (C) 2025 Dustan Ashley
@@ -16,7 +17,7 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-import React, { useState } from 'react'
+import React, { useState, useEffect } from 'react'
 import { ReportCard as ReportCardType, ReportCardSubjectGrade } from '../../../types/reports'
 import { formatGradeLevel } from '../../../utils/formatters'
 
@@ -55,6 +56,8 @@ const ReportCard: React.FC<ReportCardProps> = ({
   generateReportCard,
   isAdmin,
 }) => {
+  const [school,setSchool]=useState<{name:string;logo:string|null}>({name:'OurSchool',logo:null})
+  useEffect(()=>{api.get('/settings/school/identity').then(setSchool).catch(()=>undefined)},[])
   const rc = reportCard
   const [teacherComments, setTeacherComments] = useState('')
 
@@ -97,7 +100,7 @@ const ReportCard: React.FC<ReportCardProps> = ({
             >
               Student
             </label>
-            <select
+            <select aria-label="Report card student"
               value={reportCardStudentId}
               onChange={(e) => setReportCardStudentId(e.target.value)}
               style={{
@@ -137,7 +140,7 @@ const ReportCard: React.FC<ReportCardProps> = ({
           >
             Term
           </label>
-          <select
+          <select aria-label="Report card term"
             value={reportCardTermId}
             onChange={(e) => setReportCardTermId(e.target.value)}
             style={{
@@ -269,7 +272,7 @@ const ReportCard: React.FC<ReportCardProps> = ({
               background: '#fff',
               color: '#1c1c1c',
               boxShadow: '0 4px 24px rgba(0,0,0,.16)',
-              padding: '48px 52px',
+              padding: 'clamp(16px, 4vw, 48px) clamp(16px, 4vw, 52px)',
               fontFamily: "'Newsreader', Georgia, serif",
             }}
           >
@@ -291,7 +294,8 @@ const ReportCard: React.FC<ReportCardProps> = ({
                   fontFamily: "'Hanken Grotesk', sans-serif",
                 }}
               >
-                OurSchool Academy
+                {school.logo&&<img src={school.logo} alt={`${school.name} logo`} style={{maxHeight:60,maxWidth:180,margin:'0 auto 8px'}}/>}
+                {school.name}
               </div>
               <div
                 style={{ fontSize: 27, fontWeight: 700, marginTop: 6, letterSpacing: '.01em' }}
@@ -342,7 +346,7 @@ const ReportCard: React.FC<ReportCardProps> = ({
 
             {/* Grade table */}
             <div className="overflow-x-auto no-print:overflow-x-auto print:overflow-visible">
-            <table
+            <div className="overflow-x-auto print:overflow-visible"><table
               style={{
                 width: '100%',
                 borderCollapse: 'collapse',
@@ -410,7 +414,8 @@ const ReportCard: React.FC<ReportCardProps> = ({
                   </tr>
                 ))}
               </tbody>
-            </table>
+            </table></div>
+            <p style={{fontSize:10,color:'#555',lineHeight:1.5}}>Total work: {rc.summary.total_assignments}, including {rc.summary.excused_assignments??0} excused. Graded: {rc.summary.completed_assignments}. {rc.calculation_note}</p>
             </div>
 
             {/* Summary boxes */}
@@ -440,11 +445,11 @@ const ReportCard: React.FC<ReportCardProps> = ({
                     Overall grade
                   </div>
                   <div style={{ fontSize: 13, color: '#6b6b6b', marginTop: 2 }}>
-                    {rc.summary.overall_percentage.toFixed(1)}% overall
+                    {rc.summary.overall_percentage == null ? 'Not graded yet' : `${rc.summary.overall_percentage.toFixed(1)}% overall`}
                   </div>
                 </div>
                 <div style={{ fontSize: 38, fontWeight: 700, lineHeight: 1 }}>
-                  {rc.summary.overall_letter_grade}
+                  {rc.summary.overall_letter_grade ?? '—'}
                 </div>
               </div>
 

@@ -35,6 +35,9 @@ import { getErrorMessage } from '../../../services/api'
 import { AssignmentComposeResponse, Subject, User } from '../../../types'
 import { PaperlessMaterial } from '../../../types/paperless'
 
+import { useRecoverableDraft } from '../../../hooks/useRecoverableDraft'
+import DraftRecovery from '../../ui/DraftRecovery'
+
 interface AssignmentComposerProps {
   mode: ComposerMode
   subjects: Subject[]
@@ -65,8 +68,13 @@ const AssignmentComposer: React.FC<AssignmentComposerProps> = ({
   // Create mode: Paperless picks buffered until the template exists.
   const [pendingMaterials, setPendingMaterials] = useState<PaperlessMaterial[]>([])
 
+  const [intent, setIntent] = useState<'template' | 'assign'>(mode.kind === 'create' && !mode.showAssign ? 'template' : 'assign')
+  const [advanced, setAdvanced] = useState(false)
+  const effectiveMode: ComposerMode = mode.kind === 'create' ? {...mode, showAssign: intent === 'assign'} : mode
+  const recoverable = useRecoverableDraft(`assignment.${mode.kind}.${mode.kind === 'create' ? 'new' : mode.template.id}`, {draft,pendingMaterials,intent}, saved => { setDraft(saved.draft); setPendingMaterials(saved.pendingMaterials); setIntent(saved.intent) })
+  const closeComposer = () => recoverable.close(onClose)
   const showTemplateFields = mode.kind !== 'assign'
-  const showAssign = mode.kind === 'assign' || (mode.kind === 'create' && mode.showAssign)
+  const showAssign = mode.kind === 'assign' || (mode.kind === 'create' && intent === 'assign')
   const showLibraryToggle = mode.kind === 'create'
   const editTemplate = mode.kind === 'edit' ? mode.template : undefined
 
@@ -79,14 +87,16 @@ const AssignmentComposer: React.FC<AssignmentComposerProps> = ({
       : [...draft.student_ids, id])
 
   const handleSave = async () => {
-    const problem = validateDraft(draft, mode)
+    const problem = validateDraft(draft, effectiveMode)
     if (problem) { setError(problem); return }
     setSaving(true)
     setError(null)
     try {
+      const submittedDraft = mode.kind === 'create' && intent === 'template' ? {...draft, student_ids: [], save_to_library: true} : draft
       if (mode.kind === 'edit') {
         await assignmentsApi.update(mode.template.id, buildTemplateUpdate(draft))
         toast('Template updated.')
+        recoverable.clear()
         onSuccess()
       } else if (mode.kind === 'assign') {
         await assignmentsApi.assignToStudents({
@@ -94,9 +104,10 @@ const AssignmentComposer: React.FC<AssignmentComposerProps> = ({
           paperless_document_ids: pendingMaterials.map(m => m.document_id),
         })
         toast(`Assigned to ${draft.student_ids.length} student${draft.student_ids.length !== 1 ? 's' : ''}.`)
+        recoverable.clear()
         onSuccess()
       } else {
-        const result = await assignmentsApi.compose(buildComposePayload(draft))
+        const result = await assignmentsApi.compose(buildComposePayload(submittedDraft))
         const failed: string[] = []
         for (const material of pendingMaterials) {
           try {
@@ -110,6 +121,7 @@ const AssignmentComposer: React.FC<AssignmentComposerProps> = ({
         } else {
           toast(result.created_assignment_ids.length > 0 ? 'Assignment created.' : 'Template created.')
         }
+        recoverable.clear()
         onSuccess(result)
       }
     } catch (err) {
@@ -124,22 +136,24 @@ const AssignmentComposer: React.FC<AssignmentComposerProps> = ({
     <Drawer
       isOpen
       wide
-      onClose={onClose}
-      title={TITLES[mode.kind]}
+      onClose={closeComposer}
+      title={mode.kind === 'create' && intent === 'template' ? 'Create reusable template' : TITLES[mode.kind]}
       subtitle={mode.kind === 'assign' ? `"${mode.template.name}"` : undefined}
       footer={
         <>
-          <Button variant="outline" size="sm" onClick={onClose} disabled={saving}>Cancel</Button>
+          <Button variant="outline" size="sm" onClick={closeComposer} disabled={saving}>Cancel</Button>
           <Button variant="primary" size="sm" onClick={handleSave} loading={saving}>
             {mode.kind === 'edit' ? 'Save changes'
-              : draft.student_ids.length > 0
+              : showAssign && draft.student_ids.length > 0
                 ? `Assign to ${draft.student_ids.length} student${draft.student_ids.length !== 1 ? 's' : ''}`
-                : 'Save'}
+                : mode.kind === 'create' && intent === 'template' ? 'Save template' : 'Create assignment'}
           </Button>
         </>
       }
     >
       <div className="flex flex-col gap-6">
+        <DraftRecovery closing={recoverable.pendingClose !== null} onConfirmClose={recoverable.confirmClose} onCancelClose={recoverable.cancelClose} available={recoverable.recovery !== null} dirty={recoverable.dirty} storageError={recoverable.storageError} onResume={recoverable.resume} onDiscard={recoverable.discard} />
+        {mode.kind === 'create' && mode.showAssign && <fieldset><legend className="font-semibold mb-2">What do you want to do?</legend><div className="flex flex-wrap gap-3"><label><input type="radio" name="assignment-intent" checked={intent === 'assign'} onChange={() => setIntent('assign')} /> Assign work to students</label><label><input type="radio" name="assignment-intent" checked={intent === 'template'} onChange={() => setIntent('template')} /> Create a reusable template</label></div><p className="text-xs text-muted mt-1">{intent === 'template' ? 'Save for later. No student work is created.' : 'Students receive their own assignment when you save.'}</p></fieldset>}
         <AssignmentFormError error={error} />
 
         {showTemplateFields ? (
@@ -147,7 +161,7 @@ const AssignmentComposer: React.FC<AssignmentComposerProps> = ({
             formData={draft}
             subjects={subjects}
             onUpdate={(field, value) => set(field as keyof typeof draft, value as never)}
-            showAllFields={true}
+            showAllFields={advanced}
             disabled={saving}
           />
         ) : (
@@ -165,6 +179,7 @@ const AssignmentComposer: React.FC<AssignmentComposerProps> = ({
           </div>
         )}
 
+        {showTemplateFields && <button type="button" className="text-accent text-sm text-left" aria-expanded={advanced} onClick={() => setAdvanced(!advanced)}>{advanced ? 'Hide optional template details' : 'Show optional template details'}</button>}
         <PaperlessMaterialsPicker
           template={editTemplate}
           pendingMaterials={editTemplate ? undefined : pendingMaterials}

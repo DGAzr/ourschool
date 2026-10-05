@@ -20,7 +20,7 @@ import React, { useState } from 'react'
 import { StudentProgress } from '../../../types'
 import { Term } from '../../../types/term'
 import TrendChart from '../shared/TrendChart'
-import { trendInfo, gradeColor, barColor, letter } from '../shared/gradeColors'
+import { gradeText, trendInfo, gradeColor, barColor, letter } from '../shared/gradeColors'
 import { formatGradeLevel } from '../../../utils/formatters'
 
 interface StudentsReportProps {
@@ -74,11 +74,9 @@ const StudentsReport: React.FC<StudentsReportProps> = ({
       .slice(0, 2)
       .join('')
 
-  const grade = sel
-    ? Math.round(sel.overall_grade ?? sel.average_grade ?? 0)
-    : 0
+  const grade = sel?.overall_grade ?? sel?.average_grade ?? null
   const subjects = sel ? (sel.subjects ?? []) : []
-  const ti = trendInfo(sel?.trend ?? 0)
+  const ti = trendInfo(sel?.trend)
 
   return (
     <div className="flex flex-col lg:flex-row gap-[18px] items-start">
@@ -87,8 +85,8 @@ const StudentsReport: React.FC<StudentsReportProps> = ({
         {studentProgress.map((p) => {
           const isSelected = p.student_id === (sel?.student_id ?? -1)
           const name = displayName(p)
-          const ptGrade = Math.round(p.overall_grade ?? p.average_grade ?? 0)
-          const pTi = trendInfo(p.trend ?? 0)
+          const ptGrade = p.overall_grade ?? p.average_grade ?? null
+          const pTi = trendInfo(p.trend)
           return (
             <button
               key={p.student_id}
@@ -148,7 +146,7 @@ const StudentsReport: React.FC<StudentsReportProps> = ({
                     color: 'var(--ink-2)',
                   }}
                 >
-                  {ptGrade}%
+                  {gradeText(ptGrade)}
                 </span>
                 <span style={{ color: pTi.color, fontSize: 12 }}>{pTi.arrow}</span>
               </span>
@@ -159,7 +157,7 @@ const StudentsReport: React.FC<StudentsReportProps> = ({
 
       {/* Detail panel */}
       {sel ? (
-        <div className="flex-1 min-w-0">
+        <div className="flex-1 min-w-0"><p className="text-xs text-muted mb-3">{sel.calculation_note} · Excused: {sel.excused_assignments ?? 0}</p>
           {/* Student header */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginBottom: 18 }}>
             <span
@@ -206,10 +204,10 @@ const StudentsReport: React.FC<StudentsReportProps> = ({
                   lineHeight: 1,
                 }}
               >
-                {grade}%
+                {gradeText(grade)}
               </div>
               <div style={{ fontSize: 12, color: ti.color, fontWeight: 600, marginTop: 3 }}>
-                {ti.arrow} {ti.text === 'steady' ? 'steady' : `${ti.text} pts`}
+                {ti.arrow} {sel.trend == null ? ti.text : ti.text === 'steady' ? 'steady' : `${ti.text} pts`}
               </div>
             </div>
           </div>
@@ -225,7 +223,7 @@ const StudentsReport: React.FC<StudentsReportProps> = ({
               },
               { value: letter(grade), label: 'Letter grade', color: gradeColor(grade) },
               {
-                value: (sel.trend ?? 0) > 0 ? `+${sel.trend}` : String(sel.trend ?? 0),
+                value: sel.trend == null ? 'More data needed' : sel.trend > 0 ? `+${sel.trend}` : String(sel.trend),
                 label: 'Trend (pts)',
                 color: ti.color,
               },
@@ -311,7 +309,7 @@ const StudentsReport: React.FC<StudentsReportProps> = ({
                         height: '100%',
                         borderRadius: '9999px',
                         width: `${Math.min(100, b.average_percentage ?? 0)}%`,
-                        background: barColor(b.average_percentage ?? 0),
+                        background: barColor(b.average_percentage),
                       }}
                     />
                   </div>

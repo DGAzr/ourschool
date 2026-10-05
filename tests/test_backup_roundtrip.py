@@ -357,3 +357,124 @@ def test_student_cannot_wipe(client, classroom, student_factory, admin_headers):
         headers=student_headers,
     )
     assert r.status_code == 403
+
+
+def test_restore_rejects_misspelled_preview_options_before_writes(
+    client, admin_headers, db_session
+):
+    from app.models.user import User
+
+    backup = _export(client, admin_headers)
+    count = db_session.query(User).count()
+    for body in [
+        {"backup_data": backup, "options": {"dry_run": True}},
+        {"backup_data": backup, "import_options": {"dryrun": True}},
+        {"backup_data": backup, "import_options": {"dry_run": "false"}},
+    ]:
+        response = client.post("/api/backup/import", json=body, headers=admin_headers)
+        assert response.status_code == 422, response.text
+        assert db_session.query(User).count() == count
+
+
+def _preview(client, admin_headers, backup, options=None):
+    response = client.post(
+        "/api/backup/import",
+        json={
+            "backup_data": backup,
+            "import_options": {"dry_run": True, **(options or {})},
+            "wipe_confirmation": "WIPE ALL DATA",
+        },
+        headers=admin_headers,
+    )
+    assert response.status_code == 200, response.text
+    result = response.json()
+    assert result["success"] is True, result
+    assert not result["errors"], result
+    return result
+
+
+def test_merge_preview_counts_existing_records_as_skips(
+    client, admin_headers, classroom, student_factory, assign, db_session
+):
+    from app.models.paperless import PaperlessLibrary
+
+    student, _ = student_factory()
+    assign(classroom["template"]["id"], student["id"], due_date="2026-04-01")
+    _add_attendance(client, admin_headers, student["id"], "2026-04-01")
+    lesson = client.post(
+        "/api/lessons/",
+        json={"title": "Preview retains this lesson"},
+        headers=admin_headers,
+    )
+    assert lesson.status_code == 200, lesson.text
+    db_session.add(
+        PaperlessLibrary(id="preview-library", url="https://example.invalid")
+    )
+    db_session.commit()
+    before = _export(client, admin_headers)
+    result = _preview(client, admin_headers, before)
+    for section in (
+        "term_subjects",
+        "student_assignments",
+        "attendance_records",
+        "lessons",
+        "paperless_libraries",
+    ):
+        assert result["imported_counts"][section] == 0, result
+        assert result["skipped_counts"][section] == len(before[section]), result
+    after = _export(client, admin_headers)
+    assert {k: v for k, v in before.items() if isinstance(v, list)} == {
+        k: v for k, v in after.items() if isinstance(v, list)
+    }
+
+
+def test_preview_resolves_new_parent_records_without_persisting_them(
+    client, admin_headers, classroom, student_factory, assign
+):
+    import uuid
+
+    student, _ = student_factory()
+    assign(classroom["template"]["id"], student["id"])
+    backup = _export(client, admin_headers)
+    new_student = next(u for u in backup["users"] if u["email"] == student["email"])
+    new_assignment = next(
+        a
+        for a in backup["student_assignments"]
+        if a["student_email"] == student["email"]
+    )
+    new_email = f"preview-{uuid.uuid4()}@test.local"
+    new_student.update(
+        email=new_email,
+        username=f"preview-{uuid.uuid4()}",
+        external_id=str(uuid.uuid4()),
+    )
+    new_assignment.update(
+        student_email=new_email, student_external_id=new_student["external_id"]
+    )
+    backup["users"] = [new_student]
+    backup["student_assignments"] = [new_assignment]
+    before = _export(client, admin_headers)
+    result = _preview(client, admin_headers, backup)
+    assert result["imported_counts"]["users"] == 1, result
+    assert result["imported_counts"]["student_assignments"] == 1, result
+    after = _export(client, admin_headers)
+    assert {k: v for k, v in before.items() if isinstance(v, list)} == {
+        k: v for k, v in after.items() if isinstance(v, list)
+    }
+
+
+def test_wipe_preview_matches_restore_counts_and_rolls_back(
+    client, admin_headers, classroom, student_factory, assign
+):
+    student, _ = student_factory()
+    assign(classroom["template"]["id"], student["id"])
+    backup = _export(client, admin_headers)
+    result = _preview(client, admin_headers, backup, {"wipe_before_import": True})
+    assert result["imported_counts"]["student_assignments"] == len(
+        backup["student_assignments"]
+    ), result
+    assert result["skipped_counts"]["student_assignments"] == 0, result
+    after = _export(client, admin_headers)
+    assert {k: v for k, v in backup.items() if isinstance(v, list)} == {
+        k: v for k, v in after.items() if isinstance(v, list)
+    }

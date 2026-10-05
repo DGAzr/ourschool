@@ -25,6 +25,7 @@ import { affordabilityOf } from './shopLogic'
 
 interface ItemDetailProps {
   item: ShopItem
+  showPersonalPoints?:boolean
   balance: number
   /** True when this item is already the student's chosen goal. */
   isGoal: boolean
@@ -36,6 +37,7 @@ interface ItemDetailProps {
 export const ItemDetail: React.FC<ItemDetailProps> = ({
   item,
   balance,
+  showPersonalPoints=true,
   isGoal,
   onBack,
   onRedeem,
@@ -154,7 +156,7 @@ export const ItemDetail: React.FC<ItemDetailProps> = ({
               >
                 Redeem for ◆ {cost.toLocaleString()}
               </button>
-              <p className="mt-2 text-center text-[12px] text-muted">
+              <p hidden={!showPersonalPoints} className="mt-2 text-center text-[12px] text-muted">
                 You'll have{' '}
                 <span className="font-semibold text-ink">
                   ◆ {balanceAfter.toLocaleString()}
@@ -177,7 +179,7 @@ export const ItemDetail: React.FC<ItemDetailProps> = ({
                 borderColor: 'var(--accent-line)',
               }}
             >
-              <p className="text-[13px] font-semibold text-ink">
+              <p hidden={!showPersonalPoints} className="text-[13px] font-semibold text-ink">
                 Earn ◆ {remaining.toLocaleString()} more to unlock this
                 <span className="text-muted font-normal">
                   {' '}
@@ -185,6 +187,7 @@ export const ItemDetail: React.FC<ItemDetailProps> = ({
                 </span>
               </p>
               <div
+                hidden={!showPersonalPoints}
                 className="mt-2.5 h-2 rounded-pill overflow-hidden"
                 style={{ background: 'var(--track)' }}
               >
@@ -196,7 +199,7 @@ export const ItemDetail: React.FC<ItemDetailProps> = ({
               <p className="mt-2 text-[12px] text-muted">
                 Keep completing assignments to earn more points!
               </p>
-              <button
+              <button hidden={!showPersonalPoints}
                 onClick={() => onSetGoal(item.id)}
                 disabled={isGoal}
                 className="mt-3 w-full h-9 rounded-field border text-[13px] font-medium text-ink-2 hover:bg-panel-2 transition-colors disabled:opacity-60 disabled:hover:bg-transparent"

@@ -81,8 +81,8 @@ export const shopApi = {
   getMyRedemptions: (): Promise<ShopRedemption[]> => api.get('/shop/my-redemptions'),
   getRedemptions: (status: 'pending' | 'ready' | 'history'): Promise<ShopRedemption[]> =>
     api.get(`/shop/redemptions?status=${status}`),
-  approveRedemption: (id: number): Promise<ShopRedemption> =>
-    api.post(`/shop/redemptions/${id}/approve`, {}),
+  approveRedemption: (id: number, pickupInstructions?:string): Promise<ShopRedemption> =>
+    api.post(`/shop/redemptions/${id}/approve`, {pickup_instructions:pickupInstructions}),
   declineRedemption: (id: number): Promise<ShopRedemption> =>
     api.post(`/shop/redemptions/${id}/decline`, {}),
   fulfillRedemption: (id: number): Promise<ShopRedemption> =>

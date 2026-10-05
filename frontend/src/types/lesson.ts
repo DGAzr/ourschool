@@ -16,7 +16,10 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
+import { StudentAssignment } from './assignment'
 import { PaperlessMaterial } from './paperless'
+
+export type LessonAssignmentProgress = Pick<StudentAssignment, 'id' | 'lesson_id' | 'template_id' | 'student_id' | 'status' | 'started_date' | 'submitted_date' | 'is_graded' | 'time_spent_minutes'>
 
 export type LessonStatus = 'planned' | 'ready' | 'taught'
 
@@ -62,6 +65,8 @@ export interface LessonTemplateSummary {
 export interface LessonTemplateLink {
   id: number
   template_id?: number | null
+  assignment_timing?: 'draft' | 'on_schedule' | 'now'
+  due_offset_days?: number
   custom_due_date?: string | null
   custom_max_points?: number | null
   custom_instructions?: string | null
@@ -96,6 +101,7 @@ export interface Lesson {
 // Student-safe lesson projection returned by /lessons/my-lessons. Excludes
 // teacher-private fields (notes, roster, gather list).
 export interface StudentLesson {
+  assignments?: LessonAssignmentProgress[]
   id: number
   position: number
   title: string
@@ -122,6 +128,8 @@ export interface LessonResourceInput {
 
 export interface LessonTemplateLinkInput {
   template_id: number
+  assignment_timing?: 'draft' | 'on_schedule' | 'now'
+  due_offset_days?: number
   custom_due_date?: string | null
   custom_max_points?: number | null
   custom_instructions?: string | null
@@ -163,4 +171,14 @@ export interface LessonRolloverResponse {
 export interface LessonDeleteResponse {
   message: string
   warnings: string[]
+}
+
+export interface AssignmentImpact {
+  assignment_id: number | null
+  student_id: number
+  student_name: string
+  template_name: string
+  action: 'create' | 'reuse' | 'move' | 'retain' | 'unlink' | 'remove' | 'draft'
+  due_date: string | null
+  explanation: string
 }

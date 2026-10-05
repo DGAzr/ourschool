@@ -136,6 +136,9 @@ class StudentAssignment(Base):
     __tablename__ = "student_assignments"
 
     __table_args__ = (
+        CheckConstraint(
+            "submission_method IN ('online', 'paper')", name="ck_submission_method"
+        ),
         Index(
             "idx_student_assignments_student_assigned_date",
             "student_id",
@@ -191,6 +194,9 @@ class StudentAssignment(Base):
     teacher_feedback = Column(Text)
     student_notes = Column(Text)  # Student's own notes
     submission_notes = Column(Text)  # Notes when submitting
+    submission_method = Column(
+        String(10), nullable=False, default="online", server_default="online"
+    )
     submission_artifacts = Column(Text)  # JSON array of artifact links
 
     # Time tracking
@@ -239,6 +245,14 @@ class StudentAssignment(Base):
         order_by="StudentAssignmentPaperlessMaterial.id",
         lazy="selectin",
     )
+    help_requests = relationship(
+        "AssignmentHelpRequest",
+        back_populates="assignment",
+        cascade="all, delete-orphan",
+        lazy="selectin",
+        order_by="AssignmentHelpRequest.created_at",
+    )
+
     time_entries = relationship(
         "AssignmentTimeEntry",
         back_populates="assignment",
@@ -393,6 +407,7 @@ class StudentAssignment(Base):
                 StudentAssignment.student_id == self.student_id,
                 AssignmentTemplate.subject_id == self.template.subject_id,
                 term_membership_filter(target_term),
+                StudentAssignment.status != AssignmentStatus.EXCUSED,
             )
             .all()
         )
@@ -503,3 +518,25 @@ Index(
 )
 # Template trigram indexes, like Paperless search indexes, live in the migration
 # because metadata-only schemas cannot assume the pg_trgm extension is installed.
+
+
+class AssignmentHelpRequest(Base):
+    """A task-specific request with its teacher resolution retained."""
+
+    __tablename__ = "assignment_help_requests"
+    id = Column(Integer, primary_key=True)
+    assignment_id = Column(
+        Integer,
+        ForeignKey("student_assignments.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    note = Column(Text, nullable=False)
+    created_at = Column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=lambda: datetime.now(timezone.utc),
+    )
+    resolved_at = Column(DateTime(timezone=True))
+    response = Column(Text)
+    assignment = relationship("StudentAssignment", back_populates="help_requests")

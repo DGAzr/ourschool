@@ -55,7 +55,7 @@ const ConnectedStatusCard: React.FC<ConnectedStatusCardProps> = ({
 
   return (
     <div className="bg-panel border border-line rounded-card overflow-hidden">
-      <div className="p-6 flex items-start gap-4">
+      <div className="p-6 flex flex-wrap items-start gap-4">
         <div className="w-[38px] h-[38px] rounded-[10px] flex items-center justify-center bg-pos-bg text-pos-fg flex-shrink-0">
           <Check size={18} />
         </div>
@@ -111,6 +111,7 @@ const ConnectedStatusCard: React.FC<ConnectedStatusCardProps> = ({
         </Button>
       </div>
 
+      <details className="px-6 py-3.5 bg-panel-2 border-t border-line"><summary className="cursor-pointer text-sm text-muted">Advanced connection details</summary>
       <div className="px-6 py-3.5 bg-panel-2 border-t border-line flex items-center justify-between gap-4">
         <span className="font-mono text-[12px] text-faint">
           API token {status.token_masked}
@@ -131,6 +132,7 @@ const ConnectedStatusCard: React.FC<ConnectedStatusCardProps> = ({
         </div>
       </div>
 
+      </details>
       <ConfirmDialog
         isOpen={confirmOpen}
         onClose={() => setConfirmOpen(false)}

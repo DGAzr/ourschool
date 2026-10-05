@@ -27,6 +27,7 @@ import {
 import { affordabilityOf } from './shopLogic'
 
 interface GoalCardProps {
+  chosen?:boolean
   goal: ShopItem
   balance: number
   /** Locked items the student can choose between (cheapest first). */
@@ -42,6 +43,7 @@ interface GoalCardProps {
  */
 export const GoalCard: React.FC<GoalCardProps> = ({
   goal,
+  chosen=true,
   balance,
   lockedItems,
   onSelect,
@@ -72,20 +74,21 @@ export const GoalCard: React.FC<GoalCardProps> = ({
               className="text-[10.5px] font-semibold uppercase"
               style={{ color: 'var(--accent)', letterSpacing: '.04em' }}
             >
-              Saving toward
+              {chosen?'Saving toward':'Choose your reward goal'}
             </p>
             <p className="text-[14px] font-semibold text-ink truncate">{goal.name}</p>
           </div>
         </div>
-        {lockedItems.length > 1 && (
+        {lockedItems.length > 0 && (
           <div className="relative flex-shrink-0">
             <select
-              value={goal.id}
+              value={chosen?goal.id:''}
               onChange={(e) => onSelect(Number(e.target.value))}
               aria-label="Choose the reward you're saving toward"
               className="appearance-none h-7 pl-2.5 pr-7 rounded-pill border text-[12px] text-ink-2 bg-panel hover:bg-panel-2 transition-colors cursor-pointer max-w-[160px] truncate"
               style={{ borderColor: 'var(--btn-border)' }}
             >
+              {!chosen&&<option value="" disabled>Choose a goal</option>}
               {lockedItems.map((item) => (
                 <option key={item.id} value={item.id}>
                   {item.name} — ◆ {item.cost_points.toLocaleString()}
@@ -106,7 +109,7 @@ export const GoalCard: React.FC<GoalCardProps> = ({
         style={{ background: 'var(--track)' }}
       >
         <div
-          className="h-full animate-shimmer"
+          className="h-full"
           style={{
             width: `${pct}%`,
             background:

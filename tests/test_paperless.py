@@ -1460,3 +1460,76 @@ def test_documents_list_pagination_window(client, admin_headers, paperless_env):
     assert not {i["id"] for i in first["items"]} & {i["id"] for i in second["items"]}
     # Facets always describe the whole present library, not the page.
     assert sum(second["facets"]["kinds"].values()) == 4
+
+
+def test_usage_counts_include_templates_and_student_work(
+    client, admin_headers, db_session, paperless_env, classroom, student_factory, assign
+):
+    template = classroom["template"]
+    student, _ = student_factory()
+    assignment = assign(template["id"], student["id"])
+    doc = _doc_pk(db_session, paperless_env["library"]["documents"][0]["id"])
+    work_url = f"{BASE}/student-assignments/{assignment['id']}/materials"
+    assert (
+        client.post(
+            work_url, json={"document_id": doc.id}, headers=admin_headers
+        ).status_code
+        == 201
+    )
+    listed = client.get(f"{BASE}/documents", headers=admin_headers).json()
+    assert (
+        next(item for item in listed["items"] if item["id"] == doc.id)["used_in_count"]
+        == 1
+    )
+    detail = client.get(f"{BASE}/documents/{doc.id}", headers=admin_headers).json()
+    assert detail["used_in_count"] == 1
+    assert detail["used_in"] == []
+    assert detail["used_in_assignments"][0]["assignment_id"] == assignment["id"]
+    assert (
+        client.post(
+            f"{BASE}/templates/{template['id']}/materials",
+            json={"document_id": doc.id},
+            headers=admin_headers,
+        ).status_code
+        == 201
+    )
+    detail = client.get(f"{BASE}/documents/{doc.id}", headers=admin_headers).json()
+    assert detail["used_in_count"] == 2
+    listed = client.get(f"{BASE}/documents", headers=admin_headers).json()
+    assert (
+        next(item for item in listed["items"] if item["id"] == doc.id)["used_in_count"]
+        == 2
+    )
+
+
+def test_material_availability_preserves_student_scope_and_hides_server_details(
+    client, admin_headers, db_session, paperless_env, classroom, student_factory, assign
+):
+    student, owner_headers = student_factory()
+    _, outsider_headers = student_factory()
+    assignment = assign(classroom["template"]["id"], student["id"])
+    doc = _doc_pk(db_session, paperless_env["library"]["documents"][0]["id"])
+    assert (
+        client.post(
+            f"{BASE}/student-assignments/{assignment['id']}/materials",
+            json={"document_id": doc.id},
+            headers=admin_headers,
+        ).status_code
+        == 201
+    )
+    url = f"{BASE}/documents/{doc.id}/availability"
+    assert client.get(url).status_code == 401
+    assert client.get(url, headers=outsider_headers).status_code == 403
+    response = client.get(url, headers=owner_headers)
+    assert response.status_code == 200
+    assert response.json() == {"available": True, "reason": None}
+    assert client.delete(f"{BASE}/connection", headers=admin_headers).status_code == 204
+    response = client.get(url, headers=owner_headers)
+    assert response.status_code == 200
+    assert response.json()["available"] is False
+    assert "disconnected" in response.json()["reason"]
+    assert set(response.json()) == {"available", "reason"}
+    assert client.get(url, headers=outsider_headers).status_code == 403
+    # Metadata and attachment history remain, including the direct work link.
+    detail = client.get(f"{BASE}/documents/{doc.id}", headers=admin_headers).json()
+    assert detail["used_in_assignments"][0]["assignment_id"] == assignment["id"]

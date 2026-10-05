@@ -38,7 +38,7 @@ function SegmentedControl<T extends string>({
 }: SegmentedControlProps<T>) {
   return (
     <div
-      className={`inline-flex items-center gap-0.5 bg-track p-[3px] rounded-[10px] ${className}`}
+      className={`inline-flex flex-wrap items-center gap-0.5 bg-track p-[3px] rounded-[10px] ${className}`}
     >
       {segments.map((seg) => {
         const active = seg.value === value
@@ -46,6 +46,7 @@ function SegmentedControl<T extends string>({
           <button
             key={seg.value}
             onClick={() => onChange(seg.value)}
+            aria-pressed={active}
             className={[
               'px-3 py-1.5 rounded-[8px] text-[12.5px] font-semibold transition-all duration-150 select-none',
               active

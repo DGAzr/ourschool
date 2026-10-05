@@ -79,7 +79,7 @@ const IconPicker: React.FC<IconPickerProps> = ({
     >
       {/* Search bar */}
       <div className="sticky top-0 z-10 pb-3 -mt-1 bg-panel">
-        <input
+        <input aria-label="Search icons"
           type="text"
           value={query}
           onChange={e => setQuery(e.target.value)}

@@ -38,7 +38,7 @@ import { ItemGrid } from '../components/shop/ItemGrid'
 import { ItemDetail } from '../components/shop/ItemDetail'
 import { MyRedemptions } from '../components/shop/MyRedemptions'
 import { RedeemModal } from '../components/shop/RedeemModal'
-import { goalItem, lockedItems } from '../components/shop/shopLogic'
+import { goalItem } from '../components/shop/shopLogic'
 
 type Tab = 'shop' | 'orders'
 
@@ -56,7 +56,7 @@ const Shop: React.FC = () => {
 
   const [tab, setTab] = useState<Tab>('shop')
   const [selectedCategoryId, setSelectedCategoryId] = useState<number | null>(null)
-  const [selectedItemId, setSelectedItemId] = useState<number | null>(null)
+  const [selectedItemId, setSelectedItemId] = useState<number | null>(()=>{const id=Number(new URLSearchParams(window.location.search).get('item'));return Number.isSafeInteger(id)&&id>0?id:null})
   const [goalItemId, setGoalItemId] = useState<number | null>(null)
   const [confirmItem, setConfirmItem] = useState<ShopItem | null>(null)
 
@@ -88,7 +88,7 @@ const Shop: React.FC = () => {
   const balance = points?.current_balance ?? 0
 
   // Active items only (backend already filters for students, but be defensive).
-  const activeItems = useMemo(() => items.filter((i) => i.is_active), [items])
+  const activeItems = useMemo(() => items.filter((i) => i.is_active && (i.quantity_available===null || i.quantity_available>0)), [items])
 
   // Category active-item counts.
   const counts = useMemo(() => {
@@ -107,22 +107,18 @@ const Shop: React.FC = () => {
     [activeItems, selectedCategoryId]
   )
 
-  // Locked items, cheapest first — for the goal card.
-  const locked = useMemo(
-    () => lockedItems(activeItems, balance),
-    [activeItems, balance]
-  )
-
-  // Goal = the chosen locked item if still locked, else the cheapest locked one.
-  const goal = useMemo(() => goalItem(locked, goalItemId), [locked, goalItemId])
-
-  // Explicitly choose a goal item; persist optimistically and revert on failure.
-  const setGoal = useCallback((itemId: number) => {
-    setGoalItemId((prev) => {
-      shopApi.setMyGoal(itemId).catch(() => setGoalItemId(prev))
-      return itemId
-    })
-  }, [])
+  const goal = useMemo(() => goalItem(activeItems, goalItemId), [activeItems, goalItemId])
+  const showPoints=user?.show_points!==false
+  const setGoal = useCallback(async(itemId:number)=>{
+    const previous=goalItemId
+    setGoalItemId(itemId)
+    try{await shopApi.setMyGoal(itemId);notifyBalanceChanged()}
+    catch(err){setGoalItemId(previous);setError(getErrorMessage(err,'Could not save your goal.'))}
+  },[goalItemId,notifyBalanceChanged])
+  const rewardGoal=showPoints&&<div className="mb-5 space-y-3">
+    {goal&&<GoalCard chosen={goalItemId!==null && goal.id===goalItemId} goal={goal} balance={balance} lockedItems={activeItems} onSelect={id=>void setGoal(id)}/>}
+    <p className="text-sm text-muted">Affordable alternatives: {activeItems.filter(i=>i.cost_points<=balance&&i.id!==goal?.id).slice(0,3).map(i=><button key={i.id} className="text-accent underline mr-3" onClick={()=>setSelectedItemId(i.id)}>{i.name}</button>)}</p>
+  </div>
 
   const selectedItem = useMemo(
     () => activeItems.find((i) => i.id === selectedItemId) ?? null,
@@ -199,7 +195,7 @@ const Shop: React.FC = () => {
   return (
     <div>
       {/* Header */}
-      <div className="flex items-end justify-between mb-6">
+      <div className="flex flex-wrap gap-3 items-end justify-between mb-6">
         <div>
           <h1 className="text-[27px] font-bold text-ink tracking-[-0.02em]">
             Points Shop
@@ -236,13 +232,16 @@ const Shop: React.FC = () => {
         </div>
       </div>
 
+      {tab!=='orders' && rewardGoal}
       {tab === 'orders' ? (
         <MyRedemptions
           redemptions={redemptions}
+          showPoints={showPoints}
           totalSpent={points?.total_spent ?? 0}
         />
       ) : selectedItem ? (
         <ItemDetail
+          showPersonalPoints={showPoints}
           item={selectedItem}
           balance={balance}
           isGoal={goal?.id === selectedItem.id}
@@ -252,32 +251,12 @@ const Shop: React.FC = () => {
         />
       ) : (
         <>
-          {/* Balance + Goal */}
-          <div className="grid grid-cols-1 md:grid-cols-[1fr_1.2fr] gap-4 mb-6">
-            {points && <BalanceCard points={points} />}
-            {goal ? (
-              <GoalCard
-                goal={goal}
-                balance={balance}
-                lockedItems={locked}
-                onSelect={setGoal}
-              />
-            ) : (
-              <div
-                className="rounded-card-lg bg-panel border flex items-center justify-center text-center p-5"
-                style={{ borderColor: 'var(--accent-line)' }}
-              >
-                <p className="text-[13px] text-muted">
-                  🎉 You can afford everything in the shop right now!
-                </p>
-              </div>
-            )}
-          </div>
+          {showPoints&&points&&<div className="mb-5"><BalanceCard points={points}/></div>}
 
           {/* Category chips */}
           <div className="mb-[18px]">
             <CategoryChips
-              categories={categories}
+              categories={categories.filter(c=>(counts[c.id]??0)>0)}
               counts={counts}
               totalCount={activeItems.length}
               selectedCategoryId={selectedCategoryId}
@@ -286,7 +265,7 @@ const Shop: React.FC = () => {
           </div>
 
           {/* Item grid */}
-          <ItemGrid
+          <ItemGrid showPersonalPoints={showPoints}
             items={visibleItems}
             balance={balance}
             onOpen={(item) => setSelectedItemId(item.id)}
@@ -295,7 +274,7 @@ const Shop: React.FC = () => {
         </>
       )}
 
-      <RedeemModal
+      <RedeemModal showPersonalPoints={showPoints}
         item={confirmItem}
         balance={balance}
         onClose={() => setConfirmItem(null)}

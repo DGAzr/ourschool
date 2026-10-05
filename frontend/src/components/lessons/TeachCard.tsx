@@ -16,14 +16,18 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
+import { Link } from 'react-router-dom'
+import { assignmentHref, assignmentProgress } from '../../utils/studentAssignments'
 import { CSSProperties, useState } from 'react'
 import { ArrowUpRight, FileText, Pencil } from 'lucide-react'
 
 import { Button } from '../ui'
 import MarkdownRenderer from '../common/MarkdownRenderer'
+import MaterialPreviewButton from '../materials/MaterialPreviewButton'
 import DocumentViewerModal from '../materials/DocumentViewerModal'
 import {
   Lesson,
+  LessonAssignmentProgress,
   LessonMaterial,
   LessonResource,
   LessonTemplateLink,
@@ -35,6 +39,7 @@ import LessonTemplateDetailModal from './LessonTemplateDetailModal'
 import StudentAvatars from './StudentAvatars'
 
 interface TeachCardProps {
+  assignments?: LessonAssignmentProgress[]
   lesson: Lesson
   onEdit: (lesson: Lesson) => void
   onMarkTaught: (lesson: Lesson) => void
@@ -48,6 +53,7 @@ interface TeachCardProps {
 /** A single card in the Teach run-sheet. */
 const TeachCard: React.FC<TeachCardProps> = ({
   lesson,
+  assignments,
   onEdit,
   onMarkTaught,
   onToggleMaterial,
@@ -66,9 +72,7 @@ const TeachCard: React.FC<TeachCardProps> = ({
   return (
     <div
       style={tint}
-      className={`bg-panel border border-line rounded-[14px] px-5 py-[18px] ${
-        taught ? 'opacity-60' : ''
-      }`}
+      className="bg-panel border border-line rounded-[14px] px-5 py-[18px]"
     >
       {/* Header */}
       <div className="flex flex-wrap items-start gap-3">
@@ -119,6 +123,7 @@ const TeachCard: React.FC<TeachCardProps> = ({
         </p>
       )}
 
+      {taught && assignments && <p className="text-[12px] text-muted mt-2">Taught · {assignments.filter(a => ['not_started', 'in_progress'].includes(assignmentProgress(a))).length} student activities still to finish</p>}
       {/* Two-column body */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-[18px] mt-3">
         {/* Materials */}
@@ -165,20 +170,11 @@ const TeachCard: React.FC<TeachCardProps> = ({
               </div>
               <div className="flex flex-col gap-1">
                 {paperlessDocs.map((doc) => (
-                  <button
-                    key={doc.id}
-                    type="button"
-                    onClick={() => setViewingMaterial(doc)}
-                    className="text-left text-[13px] text-info-fg inline-flex items-center gap-1.5 hover:underline"
-                  >
-                    <FileText size={13} className="flex-shrink-0" />
-                    <span className="truncate">{doc.title}</span>
-                    {doc.page_count ? (
-                      <span className="text-faint text-[11px] flex-shrink-0">
-                        {doc.page_count} pp
-                      </span>
-                    ) : null}
-                  </button>
+                  <div key={doc.document_id} className="flex flex-wrap items-center gap-2 text-[13px] text-ink">
+                    <FileText size={13} aria-hidden="true" />
+                    <span className="break-words">{doc.title}</span>
+                    <MaterialPreviewButton material={doc} onOpen={() => setViewingMaterial(doc)} />
+                  </div>
                 ))}
               </div>
             </div>
@@ -196,8 +192,8 @@ const TeachCard: React.FC<TeachCardProps> = ({
                 {templateLinks.map((link: LessonTemplateLink) => {
                   const summary = link.template as LessonTemplateSummary
                   return (
+                    <div key={link.id}>
                     <button
-                      key={link.id}
                       type="button"
                       onClick={() => setViewingTemplateLink(link)}
                       className="inline-flex items-center gap-1.5 rounded-[7px] px-2 py-1 w-fit cursor-pointer hover:ring-1 hover:ring-[var(--subject-ink)] focus-visible:ring-1 focus-visible:ring-[var(--subject-ink)] outline-none transition-shadow"
@@ -216,6 +212,16 @@ const TeachCard: React.FC<TeachCardProps> = ({
                         {summary.name}
                       </span>
                     </button>
+                    {assignments?.filter(a => a.template_id === link.template_id).map(a => {
+                      const student = lesson.students.find(s => s.id === a.student_id)
+                      const progress = assignmentProgress(a)
+                      return <div key={a.id} className="flex flex-wrap gap-2 items-center text-[12px] mt-1 ml-2">
+                        <Link to={assignmentHref(a.id)} className="text-accent hover:underline min-h-[32px] inline-flex items-center">{student?.first_name ?? 'Student'} · {progress.replace('_', ' ')}</Link>
+                        {progress === 'submitted' && <Link to={`/grading?assignmentId=${a.id}&queue=needs`} className="text-accent font-semibold hover:underline">Grade work →</Link>}
+                      </div>
+                    })}
+                    {assignments && !assignments.some(a => a.template_id === link.template_id) && <p className="text-[12px] text-muted ml-2">Not assigned yet</p>}
+                    </div>
                   )
                 })}
               </div>

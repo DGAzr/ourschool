@@ -22,6 +22,7 @@ from datetime import datetime, timezone
 from sqlalchemy import (
     Boolean,
     Column,
+    CheckConstraint,
     Date,
     DateTime,
     Enum,
@@ -39,6 +40,11 @@ class User(Base):
     """User model."""
 
     __tablename__ = "users"
+    __table_args__ = (
+        CheckConstraint(
+            "student_ui_mode IN ('regular', 'simple')", name="ck_student_ui_mode"
+        ),
+    )
 
     id = Column(Integer, primary_key=True, index=True)
     external_id = Column(
@@ -67,6 +73,16 @@ class User(Base):
     # UI theme preference ("light" | "dark" | "system"); NULL means the
     # client falls back to its locally stored preference.
     theme_preference = Column(String(10), nullable=True)
+    student_ui_mode = Column(
+        String(10), nullable=False, default="regular", server_default="regular"
+    )
+    show_points = Column(Boolean, nullable=False, default=True, server_default="true")
+    show_effort_signals = Column(
+        Boolean, nullable=False, default=True, server_default="true"
+    )
+    celebrate_completion = Column(
+        Boolean, nullable=False, default=True, server_default="true"
+    )
 
     created_at = Column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)

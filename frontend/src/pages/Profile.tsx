@@ -36,6 +36,7 @@ const Profile: React.FC = () => {
   const [error, setError] = useState<string | null>(null)
   const [success, setSuccess] = useState<string | null>(null)
   const [passwordLoading, setPasswordLoading] = useState(false)
+  const [preferenceBusy,setPreferenceBusy]=useState(false)
   const [profileLoading, setProfileLoading] = useState(false)
 
   // ProtectedRoute guarantees `user` is loaded before this page renders, so
@@ -53,7 +54,7 @@ const Profile: React.FC = () => {
     try {
       setProfileLoading(true)
       const response = await usersApi.updateMe(profileData)
-      updateUser(response.data)
+      updateUser(response)
       setSuccess('Profile updated successfully')
     } catch (err) {
       setError(getErrorMessage(err, 'Failed to update profile'))
@@ -119,6 +120,11 @@ const Profile: React.FC = () => {
         <div className="bg-pos-bg text-pos-fg px-4 py-3 rounded-field text-[13px]">{success}</div>
       )}
 
+      {user.role==='student' && <section className="bg-panel border border-line rounded-card p-6 space-y-3"><h2 className="font-semibold">Learning preferences</h2><p className="text-sm text-muted">Your teacher chooses {user.student_ui_mode==='simple' ? 'simple' : 'independent'} task mode. These choices are yours:</p>{[
+        {key:'show_points' as const,label:'Show points and reward goals'},
+        {key:'show_effort_signals' as const,label:'Show reflection streaks and recorded effort'},
+        {key:'celebrate_completion' as const,label:'Celebrate finishing today’s work'},
+      ].map(preference=><label key={preference.key} className="block text-sm"><input type="checkbox" disabled={preferenceBusy} checked={user[preference.key]!==false} onChange={async e=>{setPreferenceBusy(true);setError(null);try{const updated=await usersApi.updateMe({[preference.key]:e.target.checked});updateUser(updated)}catch{setError('Could not save your learning preference.')}finally{setPreferenceBusy(false)}}} /> {preference.label}</label>)}<p className="text-xs text-muted">Streaks count your own reflections on recorded school days. Unrecorded breaks do not count as missed reflections.</p></section>}
       {/* Profile information */}
       <form onSubmit={handleProfileUpdate} className="bg-panel border border-line rounded-card p-6 space-y-5">
         <h2 className="text-[15px] font-semibold text-ink">Profile Information</h2>

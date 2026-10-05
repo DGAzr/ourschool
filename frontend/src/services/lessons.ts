@@ -18,7 +18,9 @@
 
 import { api } from './api'
 import {
+  AssignmentImpact,
   Lesson,
+  LessonAssignmentProgress,
   LessonCreate,
   LessonDeleteResponse,
   LessonReorderResponse,
@@ -44,8 +46,14 @@ const rangeQuery = (range?: DateRange): string => {
 }
 
 export const lessonsApi = {
+  batch: (lesson_ids: number[], action: 'schedule' | 'restore_taught' | 'copy', date?: string | null,student_ids?:number[]): Promise<LessonWriteResponse[]> => api.post('/lessons/batch', {lesson_ids,action,date,student_ids}),
+  impact: (data: LessonCreate & { lesson_id?: number; deleting?: boolean }): Promise<AssignmentImpact[]> => api.post('/lessons/impact', data),
+
   list: (range?: DateRange): Promise<Lesson[]> =>
     api.get(`/lessons/${rangeQuery(range)}`),
+
+  assignmentProgress: (date: string): Promise<LessonAssignmentProgress[]> =>
+    api.get(`/lessons/assignment-progress?date=${encodeURIComponent(date)}`),
 
   drawer: (): Promise<Lesson[]> => api.get('/lessons/drawer'),
 

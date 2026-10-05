@@ -337,7 +337,7 @@ const AttendanceReport: React.FC<AttendanceReportProps> = ({
             </label>
             {!useCustomDates && (
               <div className="ml-6">
-                <select
+                <select aria-label="Academic year"
                   value={selectedAcademicYear}
                   onChange={e => setSelectedAcademicYear(e.target.value)}
                   className="w-full bg-field-bg border border-field-border rounded-field px-3 py-2 text-[13.5px] text-ink focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent"
@@ -360,7 +360,7 @@ const AttendanceReport: React.FC<AttendanceReportProps> = ({
               <div className="ml-6 grid grid-cols-2 gap-3">
                 <div>
                   <label className="block text-[11px] font-semibold text-faint uppercase tracking-wide mb-1">Start Date</label>
-                  <input
+                  <input aria-label="Attendance start date"
                     type="date"
                     value={customStartDate}
                     onChange={e => setCustomStartDate(e.target.value)}
@@ -369,7 +369,7 @@ const AttendanceReport: React.FC<AttendanceReportProps> = ({
                 </div>
                 <div>
                   <label className="block text-[11px] font-semibold text-faint uppercase tracking-wide mb-1">End Date</label>
-                  <input
+                  <input aria-label="Attendance end date"
                     type="date"
                     value={customEndDate}
                     onChange={e => setCustomEndDate(e.target.value)}
@@ -424,7 +424,7 @@ const AttendanceReport: React.FC<AttendanceReportProps> = ({
                   <h3 style={{ margin: 0, fontSize: 15, fontWeight: 600, color: 'var(--ink)' }}>Daily calendar</h3>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                     <label style={{ fontSize: 12, color: 'var(--muted)', fontWeight: 600 }}>Student</label>
-                    <select
+                    <select aria-label="Attendance calendar student"
                       value={calendarStudentId ?? ''}
                       onChange={e => handleCalendarStudentChange(Number(e.target.value))}
                       className="bg-field-bg border border-field-border rounded-field px-2.5 py-1.5 text-[13px] text-ink focus:outline-none focus:ring-2 focus:ring-accent/30"
@@ -485,7 +485,7 @@ const AttendanceReport: React.FC<AttendanceReportProps> = ({
               </div>
 
               {/* Full-year calendar + daily log */}
-              <div className="grid gap-4" style={{ gridTemplateColumns: '1.4fr 1fr' }}>
+              <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)] gap-4">
                 <div className="bg-panel border border-line rounded-card p-5">
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14, flexWrap: 'wrap', gap: 8 }}>
                     <h3 style={{ margin: 0, fontSize: 15, fontWeight: 600, color: 'var(--ink)' }}>

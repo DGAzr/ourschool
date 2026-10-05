@@ -32,8 +32,12 @@ export interface User {
   must_change_password?: boolean
   // Student-specific fields (only populated for student users)
   parent_id?: number
-  date_of_birth?: string
+  date_of_birth?: string | null
   grade_level?: number
+  student_ui_mode?: 'regular' | 'simple'
+  show_points?: boolean
+  show_effort_signals?: boolean
+  celebrate_completion?: boolean
   // Theme preference
   theme_preference?: 'light' | 'dark' | 'system'
   created_at: string

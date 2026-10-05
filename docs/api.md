@@ -226,6 +226,11 @@ The complete API surface as of `v1.1-beta`. Set `ENABLE_API_DOCS=true` for the i
 | `GET /api/journal/students` | Students available for journal filters (admin) |
 | `GET /api/journal/composer-data` | Prefill data for the entry composer |
 
+Journal creation and composer data accept an optional `timezone` IANA name
+(default `UTC`). The web client sends its local timezone so reflection days and
+the first-reflection point award use the same school day as the journal display.
+Unknown names return 422 before an entry is created. Day bounds include daylight-saving changes.
+
 ### Points
 
 | Endpoint | Description |
@@ -273,7 +278,7 @@ All shop operations except the image capability URL require the points system to
 
 ### Lesson planning
 
-Lesson writes synchronize assignments generated from the lesson's linked templates. A nullable lesson `date` places the lesson in the Lesson Drawer; `last_scheduled_date` retains its former placement. Stashing or deleting a lesson removes ungraded generated work and preserves graded/submitted work as orphaned assignments.
+Lesson writes synchronize assignments generated from the lesson's linked templates. A nullable lesson `date` places the lesson in the Lesson Drawer; `last_scheduled_date` retains its former placement. Stashing and automatic rollover preserve existing assignments, lesson links, due dates, notes, work logs, submissions, and grades. Rescheduling reuses those assignment IDs; submitted/graded deadlines stay fixed. Each lesson-template link has `assignment_timing`: `draft` (no new assignments), `on_schedule` (the default; create when dated), or `now` (create even in the drawer). Existing work is retained regardless of publication policy. `due_offset_days` (0–365, default 0) sets a relative deadline; `custom_due_date` overrides it. Undated retained work keeps its recorded deadline. To recover a forgotten taught lesson, update its date to `last_scheduled_date` and status to `taught` together. Explicitly removing a student/template or deleting a lesson removes untouched generated assignments, but preserves assignments containing progress or work as unlinked records with warnings.
 
 | Endpoint | Description |
 |----------|-------------|
@@ -281,13 +286,36 @@ Lesson writes synchronize assignments generated from the lesson's linked templat
 | `GET /api/lessons/drawer` | List unscheduled lessons in drawer order (`lessons:read`) |
 | `POST /api/lessons/rollover` | Move lessons before the supplied browser-local date into the drawer unless taught (`lessons:write`) |
 | `POST /api/lessons/` | Create a scheduled or drawer lesson with students, templates, materials, and resources (`lessons:write`) |
-| `GET /api/lessons/my-lessons` | Current student's upcoming lessons; supports date filters (student session only) |
+| `GET /api/lessons/my-lessons` | Current student's upcoming lessons with links/progress for only their own assignments; supports date filters (student session only) |
+| `GET /api/lessons/assignment-progress?date=YYYY-MM-DD` | Minimal student assignment progress/IDs for the selected school date (`assignments:read`, separate from lesson permissions) |
 | `GET /api/lessons/{lesson_id}` | Get one lesson (`lessons:read`) |
 | `PUT /api/lessons/{lesson_id}` | Update a lesson and synchronize generated assignments (`lessons:write`) |
-| `DELETE /api/lessons/{lesson_id}` | Delete a lesson while preserving graded work (`lessons:write`) |
+| `DELETE /api/lessons/{lesson_id}` | Delete a lesson while preserving assignments with progress or work (`lessons:write`) |
 | `PATCH /api/lessons/{lesson_id}/materials/{material_id}` | Toggle a prep material's gathered state (`lessons:write`) |
 | `PATCH /api/lessons/reorder` | Reorder lessons or move them between dates/the drawer using a nullable destination date; including taught lessons without changing their status (`lessons:write`) |
 | `PATCH /api/lessons/{lesson_id}/status` | Set a lesson's planning/taught status (`lessons:write`) |
+
+### Lesson impact and repeat planning
+
+`POST /api/lessons/impact` accepts a prospective lesson plan plus optional `lesson_id` and `deleting`. It returns student/activity actions (`create`, `reuse`, `move`, `retain`, `unlink`, `remove`, `draft`), assignment IDs, deadlines and explanations without writing records. Permission: `lessons:write` or administrator.
+
+`POST /api/lessons/batch` accepts `lesson_ids` (1–100) and `action` (`schedule`, `restore_taught`, `copy`). Copy requires a target `date`; schedule accepts a target date or a null/omitted date to stash lessons in the drawer. Copies optionally accept `student_ids`; omission keeps each source roster. All sources and students are validated before writes. Restore uses each former date; copying preserves date offsets and planning/material snapshots, resets preparation, and creates new work without grades, submissions or logs.
+
+### Paper completion, help and preferences
+
+Student-assignment updates accept `submission_method: online | paper`. Students can mark work ready for teacher review with optional text notes and existing external links. Paper work is reviewed together in person. Assignment file uploads are not supported.
+
+`POST /api/assignments/student-assignments/{id}/help` creates an open help request with `note` (1–2000 characters). Teachers read the bounded inbox at `GET /api/assignments/help-requests` and resolve with `POST /api/assignments/help-requests/{id}/resolve`, optionally including `response` (up to 2000 characters). The student sees the response on the exact task. Another student's requests are forbidden.
+
+`PUT /api/users/me` accepts `show_points`, `show_effort_signals` and `celebrate_completion`. Administrators can set `student_ui_mode` to `regular` or `simple` through user editing; age does not select a mode automatically. Assignment-page queries additionally accept `due_from`, `due_to`, `include_undated` and `sort=recent` with cursor pagination.
+
+Reflections contain text and optional mood; photo uploads are not supported. Reflection-day signals count student-authored entries and use recorded Present/Late school days for gaps; teacher notes and unrecorded breaks do not manufacture a streak or failure. The student's effort preference suppresses these signals.
+
+### School setup and reward pickup
+
+Authenticated `GET /api/settings/school/identity` returns the program name and optional logo. Administrators update the name with `PUT` and upload/remove a raster logo with `POST`/`DELETE /api/settings/school/logo` (up to 2 MB). Logos retain transparency and are resized to at most 512 pixels. Teacher-only `GET /api/settings/setup/checklist` and `POST /api/settings/setup/attendance-reviewed` support the first-school checklist.
+
+Shop approval accepts optional `pickup_instructions` (up to 1000 characters). Redemptions expose these instructions and `points_refunded`, so clients distinguish requested/held, ready, fulfilled and declined/refunded states accurately.
 
 ### Reports
 
@@ -319,6 +347,8 @@ Lesson writes synchronize assignments generated from the lesson's linked templat
 | `PUT /api/settings/grading/scale` | Letter-grade scale |
 
 ### Backup & restore (admin)
+
+Format **2.4** adds publication policies, learner preferences, paper completion, task help history and pickup/refund metadata. Versions 1.0–2.3 remain accepted. Shop images and the school logo remain the approved image exceptions and are included in the JSON export. Assignment work and reflections do not store files. Send restore flags under `import_options`; unknown body fields/options and non-boolean flags return `422` before writes. Dry-run imports return additions, updates, skips and, for wipe mode, deletion counts without persisting records. Preview executes dependency resolution and duplicate checks in a savepoint that is rolled back; integration jobs remain untouched. Wipe previews use the post-wipe state, and newly created parents are included when predicting dependent records. The UI requires a preview matching the current file/options before applying a restore; wipe still requires the typed confirmation phrase.
 
 | Endpoint | Description |
 |----------|-------------|
@@ -400,13 +430,22 @@ filtered library, with stable score/title/ID ordering. `match_reasons` replaces
 `match_pct`; an empty list means there is no matching evidence. OCR keywords
 are excluded from browsing projections.
 
+`GET /api/integrations/paperless/documents/{id}/availability` returns
+`{ "available": true, "reason": null }` or a connection/missing-content explanation.
+It uses the same student attachment authorization as content access, exposes no
+server or credential details, and checks connection configuration rather than
+upstream reachability. Unknown documents return `404`; unassigned students `403`.
+Document `used_in_count` counts all lesson, template and direct student-work
+attachments. Detail includes `used_in`, `used_in_templates`, and
+`used_in_assignments` (assignment ID, student name and assignment title).
+
 Atomic batch attachment routes: `POST /api/integrations/paperless/{target}/{id}/materials/batch`,
 where target is `lessons`, `templates`, or `student-assignments`. Send
 `{"document_ids": [1, 2]}` (1–100 IDs). All IDs must be selectable; validation
 failure writes nothing. Existing links are returned without duplication.
 
 Backups include library identities/URLs and namespace all documents, mappings,
-and attachment references in format 2.3. Credentials and worker jobs are excluded.
+and attachment references since format 2.3. Credentials and worker jobs are excluded.
 Older backups without library identity restore into an isolated legacy namespace;
 explicitly select that library when reconnecting its source. Restoring a backup
 cancels active jobs and invalidates published cache counts.

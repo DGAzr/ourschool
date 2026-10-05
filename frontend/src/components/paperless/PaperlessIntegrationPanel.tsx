@@ -175,6 +175,8 @@ const PaperlessIntegrationPanel: React.FC = () => {
 
   if (!status?.connected) {
     return (
+      <div className="space-y-4">
+        <div className="rounded-card border border-line bg-panel-2 p-4"><h3 className="font-semibold text-ink">Disconnected</h3><p className="mt-1 text-sm text-muted">Cached materials and attachment history remain available. Connect the source library to open its documents and resume sync.</p></div>
       <ConnectCard
         libraries={status?.libraries}
         needsReconnect={status?.needs_reconnect}
@@ -188,6 +190,7 @@ const PaperlessIntegrationPanel: React.FC = () => {
         }
         onConnect={handleConnect}
       />
+      </div>
     )
   }
 

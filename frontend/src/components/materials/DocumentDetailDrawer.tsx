@@ -17,9 +17,14 @@
  */
 
 import React, { useEffect, useRef, useState } from 'react'
+import { Link } from 'react-router-dom'
 import { Plus } from 'lucide-react'
 
 import { Button, Drawer, Pill, Spinner, SubjectDot, useToast } from '../ui'
+import MaterialPreviewButton from './MaterialPreviewButton'
+import PaperlessConnectionBanner from './PaperlessConnectionBanner'
+import { usePaperlessStatusContext } from '../../contexts/PaperlessStatusContext'
+import { todayISO } from '../../utils/dates'
 import DocumentThumb from './DocumentThumb'
 import DocumentViewerModal from './DocumentViewerModal'
 import { paperlessApi } from '../../services/paperless'
@@ -45,8 +50,6 @@ interface DocumentDetailDrawerProps {
   onAttached: () => void
 }
 
-const todayISO = () => new Date().toISOString().slice(0, 10)
-
 /**
  * Right drawer opened from a Materials card: large preview, metadata grid,
  * "Attached to lessons" list, and an "Add to a lesson" popover listing
@@ -71,6 +74,7 @@ const DrawerContent: React.FC<DrawerContentProps> = ({
   onAttached,
 }) => {
   const { toast } = useToast()
+  const { status } = usePaperlessStatusContext()
   const [detail, setDetail] = useState<PaperlessDocumentDetail | null>(null)
   const [menuOpen, setMenuOpen] = useState(false)
   const [previewOpen, setPreviewOpen] = useState(false)
@@ -194,6 +198,7 @@ const DrawerContent: React.FC<DrawerContentProps> = ({
         }
       >
         <div className="space-y-5">
+          <PaperlessConnectionBanner disconnected={status?.connected === false} />
           {/* Large preview */}
           <div className="flex justify-center pt-1">
             <DocumentThumb
@@ -205,13 +210,7 @@ const DrawerContent: React.FC<DrawerContentProps> = ({
             />
           </div>
 
-          <Button
-            fullWidth
-            variant="secondary"
-            onClick={() => setPreviewOpen(true)}
-          >
-            Preview document
-          </Button>
+          <MaterialPreviewButton material={{ ...doc, id: 0, document_id: doc.id }} onOpen={() => setPreviewOpen(true)} label="Preview document" />
 
           <div>
             <h2 className="text-[18px] font-bold text-ink leading-snug">
@@ -266,7 +265,7 @@ const DrawerContent: React.FC<DrawerContentProps> = ({
               </p>
               <p className="text-ink-2">
                 {detail
-                  ? `${detail.used_in.length} lesson${detail.used_in.length === 1 ? '' : 's'}`
+                  ? `${detail.used_in_count} attachment${detail.used_in_count === 1 ? '' : 's'}`
                   : '…'}
               </p>
             </div>
@@ -309,7 +308,7 @@ const DrawerContent: React.FC<DrawerContentProps> = ({
           {detail && detail.used_in_templates.length > 0 && (
             <div>
               <p className="text-[11px] font-semibold uppercase tracking-[.06em] text-faint mb-2">
-                Attached to assignments
+                Attached to assignment templates
               </p>
               <div className="space-y-1.5">
                 {detail.used_in_templates.map((usage) => (
@@ -323,6 +322,16 @@ const DrawerContent: React.FC<DrawerContentProps> = ({
                   </div>
                 ))}
               </div>
+            </div>
+          )}
+          {detail && (detail.used_in_assignments?.length ?? 0) > 0 && (
+            <div>
+              <p className="text-[11px] font-semibold uppercase tracking-[.06em] text-faint mb-2">Attached to student work</p>
+              <div className="space-y-1.5">{detail.used_in_assignments!.map(usage => (
+                <Link key={usage.assignment_id} to={`/assignments/${usage.assignment_id}`} className="block px-3 py-2 bg-panel-2 rounded-field text-[13px] text-accent">
+                  {usage.student_name} · {usage.assignment_title}
+                </Link>
+              ))}</div>
             </div>
           )}
         </div>

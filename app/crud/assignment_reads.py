@@ -178,7 +178,7 @@ def tab_predicates():
         "needs": submitted & A.is_graded.is_(False),
         "overdue": overdue & ~graded,
         "awaiting": unfinished & ~graded,
-        "awaiting_submission": awaiting,
+        "awaiting_submission": unfinished & ~graded,
         "queue_all": A.status != Status.EXCUSED,
     }
 

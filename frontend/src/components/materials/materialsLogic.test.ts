@@ -70,8 +70,8 @@ describe('labels', () => {
 
   it('usageLabel pluralizes correctly', () => {
     expect(usageLabel(0)).toBe('Not yet used')
-    expect(usageLabel(1)).toBe('Used in 1 lesson')
-    expect(usageLabel(3)).toBe('Used in 3 lessons')
+    expect(usageLabel(1)).toBe('Used in 1 attachment')
+    expect(usageLabel(3)).toBe('Used in 3 attachments')
   })
 
   it('resultCountLabel pluralizes correctly', () => {

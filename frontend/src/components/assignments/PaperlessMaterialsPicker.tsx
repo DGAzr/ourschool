@@ -19,6 +19,7 @@
 import React, { useState } from 'react'
 
 import { Spinner, useToast } from '../ui'
+import PaperlessConnectionBanner from '../materials/PaperlessConnectionBanner'
 import DocumentThumb from '../materials/DocumentThumb'
 import PaperlessPickerModal from '../lessons/PaperlessPickerModal'
 import { paperlessApi } from '../../services/paperless'
@@ -58,8 +59,8 @@ interface PaperlessMaterialsPickerProps {
  * "Materials from Paperless" block: attached-material rows + the pull-from-
  * Paperless picker. Two modes — write-through against an existing template,
  * or a locally accumulated pending list for flows where the target is only
- * created on submit (new template, assign batch). Renders nothing when
- * Paperless isn't connected.
+ * created on submit (new template, assign batch). Cached attachments remain
+ * visible when Paperless is disconnected.
  */
 const PaperlessMaterialsPicker: React.FC<PaperlessMaterialsPickerProps> = ({
   template,
@@ -79,10 +80,9 @@ const PaperlessMaterialsPicker: React.FC<PaperlessMaterialsPickerProps> = ({
   const [pickerOpen, setPickerOpen] = useState(false)
   const [busyDocId, setBusyDocId] = useState<number | null>(null)
 
-  if (status?.connected !== true) return null
-
   const writeThrough = template !== undefined
   const materials = writeThrough ? ownMaterials : (pendingMaterials ?? [])
+  if (status?.connected !== true && materials.length === 0 && !status?.cache_available) return null
 
   const handleRemove = async (material: PaperlessMaterial) => {
     if (!writeThrough) {
@@ -105,6 +105,7 @@ const PaperlessMaterialsPicker: React.FC<PaperlessMaterialsPickerProps> = ({
 
   return (
     <div>
+      <PaperlessConnectionBanner disconnected={status?.connected === false} />
       <label className="block text-[11px] font-semibold text-muted uppercase tracking-wide mb-1.5">
         Materials from Paperless{' '}
         <span className="font-normal normal-case text-faint">({hint})</span>

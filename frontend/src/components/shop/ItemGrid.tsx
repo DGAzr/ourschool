@@ -24,6 +24,7 @@ import { ItemCard } from './ItemCard'
 
 interface ItemGridProps {
   items: ShopItem[]
+  showPersonalPoints?:boolean
   balance: number
   onOpen: (item: ShopItem) => void
   onRedeem: (item: ShopItem) => void
@@ -32,6 +33,7 @@ interface ItemGridProps {
 export const ItemGrid: React.FC<ItemGridProps> = ({
   items,
   balance,
+  showPersonalPoints=true,
   onOpen,
   onRedeem,
 }) => {
@@ -49,6 +51,7 @@ export const ItemGrid: React.FC<ItemGridProps> = ({
       {items.map((item) => (
         <ItemCard
           key={item.id}
+          showPersonalPoints={showPersonalPoints}
           item={item}
           balance={balance}
           onOpen={onOpen}

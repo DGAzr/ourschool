@@ -93,6 +93,10 @@ def export_users(db: Session) -> List[UserBackup]:
                 date_of_birth=user.date_of_birth,
                 grade_level=user.grade_level,
                 theme_preference=user.theme_preference,
+                student_ui_mode=user.student_ui_mode,
+                show_points=user.show_points,
+                show_effort_signals=user.show_effort_signals,
+                celebrate_completion=user.celebrate_completion,
                 created_at=user.created_at,
                 updated_at=user.updated_at,
             )
@@ -212,6 +216,17 @@ def export_student_assignments(db: Session) -> List[StudentAssignmentBackup]:
                 teacher_feedback=sa.teacher_feedback,
                 student_notes=sa.student_notes,
                 submission_notes=sa.submission_notes,
+                submission_method=sa.submission_method,
+                submission_artifacts=sa.submission_artifacts,
+                help_requests=[
+                    dict(
+                        note=h.note,
+                        created_at=h.created_at,
+                        resolved_at=h.resolved_at,
+                        response=h.response,
+                    )
+                    for h in sa.help_requests
+                ],
                 custom_instructions=sa.custom_instructions,
                 custom_max_points=sa.custom_max_points,
                 time_spent_minutes=sa.time_spent_minutes or 0,
@@ -524,6 +539,8 @@ def export_shop_redemptions(db: Session) -> List[ShopRedemptionBackup]:
                 fulfillment_type=r.fulfillment_type,
                 status=r.status,
                 created_at=r.created_at,
+                pickup_instructions=r.pickup_instructions,
+                points_refunded=r.points_refunded,
                 decided_at=r.decided_at,
                 fulfilled_at=r.fulfilled_at,
             )
@@ -580,6 +597,8 @@ def export_lessons(db: Session) -> List[LessonBackup]:
                         template_name=(
                             link.template.name if link.template else "Unknown"
                         ),
+                        assignment_timing=link.assignment_timing,
+                        due_offset_days=link.due_offset_days,
                         custom_due_date=link.custom_due_date,
                         custom_max_points=link.custom_max_points,
                         custom_instructions=link.custom_instructions,

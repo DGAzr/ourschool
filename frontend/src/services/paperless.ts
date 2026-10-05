@@ -76,6 +76,9 @@ export const paperlessApi = {
       library_id: libraryId,
     }),
 
+  documentAvailability: (documentId: number): Promise<{ available: boolean; reason: string | null }> =>
+    api.get(`${BASE}/documents/${documentId}/availability`),
+
   getStatus: (): Promise<PaperlessStatus> => api.get(`${BASE}/status`),
 
   // Live tag/doctype lists (with counts) for editing the sync scope.

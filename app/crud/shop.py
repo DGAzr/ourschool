@@ -200,11 +200,17 @@ def redeem_item(
 
 
 def approve_redemption(
-    db: Session, redemption: ShopRedemption, admin_id: Optional[int]
+    db: Session,
+    redemption: ShopRedemption,
+    admin_id: Optional[int],
+    instructions: Optional[str] = None,
 ) -> ShopRedemption:
     """pending -> ready. Commits."""
     if redemption.status != "pending":
         raise ValueError(f"Cannot approve a redemption in '{redemption.status}' status")
+    redemption.pickup_instructions = (instructions or "").strip() or (
+        "Ask your teacher to collect this reward."
+    )
     redemption.status = "ready"
     redemption.decided_at = _utcnow()
     redemption.decided_by = admin_id
@@ -279,6 +285,7 @@ def decline_redemption(
 
     db.flush()  # get refund_txn.id
 
+    redemption.points_refunded = True
     redemption.status = "declined"
     redemption.decided_at = _utcnow()
     redemption.decided_by = admin_id
@@ -306,19 +313,18 @@ def get_admin_redemptions(db: Session, status_group: str) -> List[ShopRedemption
 
     ``status_group`` is one of ``pending`` | ``ready`` | ``history``.
 
-    - ``pending`` / ``ready`` are request-type only (the approval workflow).
+    - ``pending`` / ``ready`` include all records awaiting approval or pickup,
+      including legacy records with inconsistent fulfillment metadata.
     - ``history`` = fulfilled + declined request-type redemptions **and**
       instant ``redeemed`` ones, so auto-fulfilled purchases show up too.
     """
     query = db.query(ShopRedemption).options(joinedload(ShopRedemption.item))
     if status_group == "pending":
         query = query.filter(
-            ShopRedemption.fulfillment_type == "request",
             ShopRedemption.status == "pending",
         )
     elif status_group == "ready":
         query = query.filter(
-            ShopRedemption.fulfillment_type == "request",
             ShopRedemption.status == "ready",
         )
     elif status_group == "history":

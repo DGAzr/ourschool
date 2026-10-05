@@ -104,7 +104,7 @@ export const CategoryChipPicker: React.FC<CategoryChipPickerProps> = ({
 
         {adding && (
           <div className="inline-flex items-center gap-1.5">
-            <input
+            <input aria-label="New reward category name"
               autoFocus
               value={name}
               onChange={(e) => setName(e.target.value)}

@@ -1,3 +1,5 @@
+import { lessonDraft } from '../../utils/lessonChanges'
+import { addDays } from '../../utils/dates'
 /*
  * OurSchool - Homeschool Management System
  * Copyright (C) 2025 Dustan Ashley
@@ -22,6 +24,7 @@ import { Plus, SlidersHorizontal, Trash2, X } from 'lucide-react'
 import { Button, Drawer, Input, SegmentedControl, TextArea, useToast } from '../ui'
 import { AssignmentTemplate, Subject, User } from '../../types'
 import {
+  AssignmentImpact,
   Lesson,
   LessonCreate,
   LessonMaterialInput,
@@ -35,6 +38,9 @@ import { paperlessApi } from '../../services/paperless'
 import { getErrorMessage } from '../../services/api'
 import { PaperlessMaterial } from '../../types/paperless'
 import { subjectTint, todayISO } from '../../utils/lessonPlanning'
+import Modal from '../ui/Modal/Modal'
+import { useRecoverableDraft } from '../../hooks/useRecoverableDraft'
+import DraftRecovery from '../ui/DraftRecovery'
 import StudentAvatars from './StudentAvatars'
 import AssignmentComposer from '../assignments/composer/AssignmentComposer'
 import TemplateLibraryModal from './TemplateLibraryModal'
@@ -105,6 +111,8 @@ const LessonEditor: React.FC<LessonEditorProps> = ({
               name: l.template.name,
               assignment_type: l.template.assignment_type,
               max_points: l.template.max_points,
+              assignment_timing: l.assignment_timing ?? 'on_schedule',
+              due_offset_days: l.due_offset_days ?? 0,
               custom_due_date: l.custom_due_date ?? null,
               custom_max_points: l.custom_max_points ?? null,
               custom_instructions: l.custom_instructions ?? null,
@@ -134,7 +142,13 @@ const LessonEditor: React.FC<LessonEditorProps> = ({
   const [libraryOpen, setLibraryOpen] = useState(false)
   const [composerOpen, setComposerOpen] = useState(false)
   const [customizingIndex, setCustomizingIndex] = useState<number | null>(null)
+  const [review, setReview] = useState<{payload: LessonCreate; impacts: AssignmentImpact[]; deleting: boolean} | null>(null)
   const [saving, setSaving] = useState(false)
+
+  const recoverable = useRecoverableDraft(`lesson.${lesson?.id ?? `new.${initialDate ?? 'drawer'}`}`, {date,title,subjectId,objective,durationMinutes,status,studentIds,links,materials,resources,notes,pendingPaperless}, saved => {
+    setDate(saved.date); setTitle(saved.title); setSubjectId(saved.subjectId); setObjective(saved.objective); setDurationMinutes(saved.durationMinutes); setStatus(saved.status); setStudentIds(saved.studentIds); setLinks(saved.links); setMaterials(saved.materials); setResources(saved.resources); setNotes(saved.notes); setPendingPaperless(saved.pendingPaperless)
+  })
+  const closeEditor = () => recoverable.close(onClose)
 
   const toggleStudent = (id: number) => {
     setStudentIds((prev) =>
@@ -219,6 +233,8 @@ const LessonEditor: React.FC<LessonEditorProps> = ({
       templates: links.map(
         (l): LessonTemplateLinkInput => ({
           template_id: l.template_id,
+          assignment_timing: l.assignment_timing ?? 'on_schedule',
+          due_offset_days: l.due_offset_days ?? 0,
           custom_due_date: l.custom_due_date ?? null,
           custom_max_points: l.custom_max_points ?? null,
           custom_instructions: l.custom_instructions ?? null,
@@ -237,6 +253,19 @@ const LessonEditor: React.FC<LessonEditorProps> = ({
         })
       ),
     }
+    try {
+      const impacts = await lessonsApi.impact({...payload, lesson_id: lesson?.id})
+      setReview({payload, impacts, deleting: false})
+    } catch (err) {
+      toast(getErrorMessage(err, 'Could not review the assignment changes.'), 'danger')
+    } finally { setSaving(false) }
+  }
+
+  const confirmSave = async () => {
+    if (!review) return
+    if (review.deleting) { await handleDelete(true); return }
+    setSaving(true)
+    const payload = review.payload
     try {
       const result: LessonWriteResponse =
         isEdit && lesson
@@ -258,6 +287,7 @@ const LessonEditor: React.FC<LessonEditorProps> = ({
         isEdit ? 'Lesson updated.' : date ? 'Lesson planned.' : 'Lesson saved to the drawer.',
         'default'
       )
+      recoverable.clear()
       onSaved(warnings)
     } catch (err) {
       toast(getErrorMessage(err, 'Could not save the lesson.'), 'danger')
@@ -265,12 +295,20 @@ const LessonEditor: React.FC<LessonEditorProps> = ({
     }
   }
 
-  const handleDelete = async () => {
+  const handleDelete = async (confirmed = false) => {
     if (!lesson) return
     setSaving(true)
     try {
+      if (!confirmed) {
+        const payload: LessonCreate = {title: lesson.title, date: lesson.date}
+        const impacts = await lessonsApi.impact({...payload, lesson_id: lesson.id, deleting: true})
+        setReview({payload, impacts, deleting: true})
+        setSaving(false)
+        return
+      }
       const result = await lessonsApi.remove(lesson.id)
       toast('Lesson deleted.', 'default')
+      recoverable.clear()
       onDeleted(result.warnings)
     } catch (err) {
       toast(getErrorMessage(err, 'Could not delete the lesson.'), 'danger')
@@ -278,6 +316,9 @@ const LessonEditor: React.FC<LessonEditorProps> = ({
     }
   }
 
+  const [duplicateDate,setDuplicateDate]=useState<string|null>(null)
+  const [duplicateImpact,setDuplicateImpact]=useState<AssignmentImpact[]|null>(null)
+  const duplicate=async()=>{if(!lesson||!duplicateDate)return;setSaving(true);try{const result=await lessonsApi.batch([lesson.id],'copy',duplicateDate,studentIds);recoverable.clear();onSaved(result.flatMap(r=>r.warnings));toast('Lesson copied to new work. Existing submissions, grades and logs were kept with the original.')}catch(err){toast(getErrorMessage(err,'Could not copy the lesson.'),'danger')}finally{setSaving(false)}}
   const chipBase =
     'px-3 py-1.5 rounded-full text-[12.5px] font-semibold border transition-colors'
 
@@ -285,7 +326,7 @@ const LessonEditor: React.FC<LessonEditorProps> = ({
     <Drawer
       isOpen
       wide
-      onClose={onClose}
+      onClose={closeEditor}
       title={isEdit ? 'Edit lesson' : date ? 'Plan a lesson' : 'Add to Lesson Drawer'}
       footer={
         <>
@@ -293,7 +334,7 @@ const LessonEditor: React.FC<LessonEditorProps> = ({
             <Button
               variant="danger"
               size="sm"
-              onClick={handleDelete}
+              onClick={() => void handleDelete()}
               disabled={saving}
               icon={<Trash2 size={14} />}
               className="mr-auto"
@@ -301,15 +342,23 @@ const LessonEditor: React.FC<LessonEditorProps> = ({
               Delete
             </Button>
           )}
-          <Button variant="outline" size="sm" onClick={onClose} disabled={saving}>
+          {lesson&&<Button variant="outline" size="sm" disabled={saving} onClick={()=>{setDuplicateDate(addDays(lesson.date??todayISO(),7));setDuplicateImpact(null)}}>Duplicate lesson</Button>}
+          <Button variant="outline" size="sm" onClick={closeEditor} disabled={saving}>
             Cancel
           </Button>
           <Button variant="primary" size="sm" onClick={handleSave} loading={saving}>
-            Save
+            Review changes
           </Button>
         </>
       }
     >
+      {duplicateDate&&lesson&&<Modal isOpen title="Duplicate lesson" onClose={()=>setDuplicateDate(null)} footer={<Button loading={saving} onClick={async()=>{if(duplicateImpact){await duplicate();return}setSaving(true);try{const offset=Math.round((Date.parse(duplicateDate)-Date.parse(lesson.date??duplicateDate))/86400000);setDuplicateImpact(await lessonsApi.impact({...lessonDraft(lesson,duplicateDate,offset),student_ids:studentIds}))}catch(err){toast(getErrorMessage(err,'Could not review the copy.'),'danger')}finally{setSaving(false)}}}>{duplicateImpact?'Create new lesson and work':'Review new assignments'}</Button>}><Input label="New lesson date" type="date" value={duplicateDate} onChange={e=>{setDuplicateDate(e.target.value);setDuplicateImpact(null)}}/><p className="text-sm mt-3">Uses the students selected in this editor. Copies the saved lesson plan; unsaved edits, grades, submissions and logs are excluded. The original work stays intact.</p>{duplicateImpact&&<ul className="text-sm mt-3 space-y-2">{duplicateImpact.map((impact,index)=><li key={index}>{impact.student_name}: {impact.action} · {impact.explanation}</li>)}</ul>}</Modal>}
+      {review && <Modal isOpen onClose={() => setReview(null)} title={review.deleting ? 'Review lesson deletion' : 'Review assignment changes'} footer={<><Button variant="outline" onClick={() => setReview(null)} disabled={saving}>Back to editing</Button><Button variant={review.deleting ? 'danger' : 'primary'} onClick={confirmSave} loading={saving}>{review.deleting ? 'Delete lesson' : 'Save lesson'}</Button></>}>
+        <p className="text-sm text-muted mb-3">{review.deleting ? 'The lesson will be removed.' : 'The lesson and its activities will be saved.'} Published work survives drawer moves. Changes reflect the records currently saved.</p>
+        {review.impacts.length === 0 && <p>No student assignments affected.</p>}
+        <ul className="space-y-3">{review.impacts.map((impact, i) => <li key={i} className="border border-line rounded-lg p-3 text-sm"><strong className="capitalize">{impact.action}</strong> · {impact.student_name} · {impact.template_name}<div>{impact.due_date ? `Due ${formatScheduled(impact.due_date)}` : 'No deadline'} · {impact.explanation}</div></li>)}</ul>
+      </Modal>}
+      <DraftRecovery closing={recoverable.pendingClose !== null} onConfirmClose={recoverable.confirmClose} onCancelClose={recoverable.cancelClose} available={recoverable.recovery !== null} dirty={recoverable.dirty} storageError={recoverable.storageError} onResume={recoverable.resume} onDiscard={recoverable.discard} />
       <div className="flex flex-col gap-5">
         <div className="grid grid-cols-2 gap-3 items-end">
           <Input
@@ -455,11 +504,11 @@ const LessonEditor: React.FC<LessonEditorProps> = ({
                 className="flex items-center gap-2 border border-line rounded-[10px] px-3 py-2"
               >
                 <div className="flex-1 min-w-0">
-                  <div className="text-[13px] font-semibold text-ink truncate">
+                  <div className="text-[13px] font-semibold text-ink break-words">
                     {link.name}
                   </div>
                   <div className="text-[11.5px] text-muted">
-                    <span className="uppercase">{link.assignment_type}</span> ·{' '}
+                    <span>{link.assignment_timing === 'draft' ? 'Draft' : link.assignment_timing === 'now' ? 'Assign now' : 'Assign when scheduled'}</span> · <span className="uppercase">{link.assignment_type}</span> ·{' '}
                     {link.custom_max_points ?? link.max_points} pts
                     {link.custom_due_date ? (
                       <span> · due {link.custom_due_date}</span>
@@ -498,8 +547,9 @@ const LessonEditor: React.FC<LessonEditorProps> = ({
           </div>
           {links.length > 0 && (
             <p className="text-[11.5px] text-muted mt-1.5">
-              Saving creates an assignment per selected student for each linked
-              template, due on the lesson date (or a link's custom due date).
+              {date
+                ? "Published activities create or reuse assignments for the selected students. Draft activities wait. Due dates follow each activity’s policy; submitted and graded work keeps its dates."
+                : "Draft activities wait in the drawer. Activities set to Assign now are available immediately, with no deadline unless customized. Previously assigned work keeps its due dates."}
             </p>
           )}
         </div>
@@ -538,6 +588,7 @@ const LessonEditor: React.FC<LessonEditorProps> = ({
               <div key={idx} className="flex items-center gap-2">
                 <input
                   type="checkbox"
+                  aria-label={`Gathered ${material.label}`}
                   checked={material.is_gathered}
                   onChange={(e) =>
                     setMaterials((prev) =>
@@ -572,6 +623,7 @@ const LessonEditor: React.FC<LessonEditorProps> = ({
           </div>
           <div className="flex gap-2 mt-2">
             <Input
+              label="New material"
               value={newMaterial}
               onChange={(e) => setNewMaterial(e.target.value)}
               onKeyDown={(e) => {
@@ -617,12 +669,14 @@ const LessonEditor: React.FC<LessonEditorProps> = ({
           </div>
           <div className="flex flex-col gap-2 mt-2">
             <Input
+              label="Resource name"
               value={newResourceLabel}
               onChange={(e) => setNewResourceLabel(e.target.value)}
               placeholder="Resource label"
             />
             <div className="flex gap-2">
               <Input
+                label="Resource URL"
                 value={newResourceUrl}
                 onChange={(e) => setNewResourceUrl(e.target.value)}
                 placeholder="https://…"
@@ -686,7 +740,7 @@ const LessonEditor: React.FC<LessonEditorProps> = ({
       {customizingIndex !== null && links[customizingIndex] && (
         <LessonLinkCustomizeModal
           link={links[customizingIndex]}
-          lessonDate={date || initialDate || todayISO()}
+          lessonDate={date}
           onClose={() => setCustomizingIndex(null)}
           onSave={(patch) => applyCustomize(customizingIndex, patch)}
         />

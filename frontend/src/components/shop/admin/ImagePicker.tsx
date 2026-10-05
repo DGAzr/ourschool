@@ -99,7 +99,7 @@ export const ImagePicker: React.FC<ImagePickerProps> = ({ imageIds, onChange }) 
           )}
         </button>
 
-        <input
+        <input aria-label="Upload reward images"
           ref={fileInput}
           type="file"
           accept="image/*"

@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest'
 import {
   clampDaysShown,
   generateDays,
+  includeScheduledDays,
   prepLabel,
   rangeLabel,
   readiness,
@@ -27,6 +28,13 @@ const makeLesson = (over: Partial<Lesson>): Lesson => ({
   created_at: '',
   updated_at: '',
   ...over,
+})
+
+it('keeps weekend lessons visible without extending the fetched school-day window', () => {
+  const weekdays = generateDays('2026-10-04', 7, true)
+  const days = includeScheduledDays(weekdays, [{date:'2026-10-11'}, {date:'2026-10-11'}, {date:'2026-10-18'}, {date:null}])
+  expect(days.map(day => day.iso)).toEqual(['2026-10-04','2026-10-05','2026-10-06','2026-10-07','2026-10-08','2026-10-09','2026-10-11','2026-10-12'])
+  expect(days.find(day => day.iso === '2026-10-11')?.isWeekend).toBe(true)
 })
 
 describe('generateDays', () => {
@@ -113,17 +121,25 @@ describe('clampDaysShown', () => {
 })
 
 describe('readiness', () => {
-  it('counts ready/taught and material gaps', () => {
+  it('separates taught lessons from material readiness', () => {
     const lessons = [
       makeLesson({ status: 'ready', materials: [{ id: 1, label: 'a', is_gathered: true, position: 0 }] }),
       makeLesson({ status: 'taught' }),
       makeLesson({ status: 'planned', materials: [{ id: 2, label: 'b', is_gathered: false, position: 0 }] }),
     ]
-    expect(readiness(lessons)).toEqual({ readyOrTaught: 2, total: 3, needMaterials: 1 })
+    expect(readiness(lessons)).toEqual({ planned: 2, prepReady: 1, taught: 1, total: 3, needMaterials: 1, gatheredMaterials: 1, totalMaterials: 2 })
+  })
+
+  it('does not call a ready-marked lesson prepared when its materials are missing', () => {
+    const missing = [{ id: 1, label: 'Paper', is_gathered: false, position: 0 }]
+    const result = readiness([makeLesson({ status: 'ready', materials: missing }), makeLesson({ status: 'taught', materials: missing })])
+    expect(result.prepReady).toBe(0)
+    expect(result.needMaterials).toBe(1)
+    expect(result.totalMaterials).toBe(1)
   })
 
   it('is empty for no lessons', () => {
-    expect(readiness([])).toEqual({ readyOrTaught: 0, total: 0, needMaterials: 0 })
+    expect(readiness([])).toEqual({ planned: 0, prepReady: 0, taught: 0, total: 0, needMaterials: 0, gatheredMaterials: 0, totalMaterials: 0 })
   })
 })
 

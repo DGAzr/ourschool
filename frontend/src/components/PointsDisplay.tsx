@@ -20,6 +20,7 @@ import React, { useState, useEffect } from 'react'
 import { useAuth } from '../contexts/AuthContext'
 import { usePointsStatus } from '../contexts/PointsStatusContext'
 import { pointsApi, type StudentPoints } from '../services/points'
+import { usersApi } from '../services/users'
 import { Coins, Eye, EyeOff } from 'lucide-react'
 
 interface PointsDisplayProps {
@@ -28,10 +29,11 @@ interface PointsDisplayProps {
 }
 
 const PointsDisplay: React.FC<PointsDisplayProps> = ({ compact = false, className = '' }) => {
-  const { user } = useAuth()
+  const { user, updateUser } = useAuth()
   const { enabled: systemEnabled, ready, balanceVersion } = usePointsStatus()
   const [points, setPoints] = useState<StudentPoints | null>(null)
-  const [isVisible, setIsVisible] = useState(true)
+  const isVisible = user?.show_points !== false
+  const [visibilityBusy, setVisibilityBusy] = useState(false)
 
   useEffect(() => {
     if (!user || user.role !== 'student' || !ready || !systemEnabled) {
@@ -47,7 +49,13 @@ const PointsDisplay: React.FC<PointsDisplayProps> = ({ compact = false, classNam
     return null
   }
 
-  const toggleVisibility = () => setIsVisible(v => !v)
+  const toggleVisibility = async () => {
+    if (!user || visibilityBusy) return
+    setVisibilityBusy(true)
+    try {const updated=await usersApi.updateMe({show_points:!isVisible});updateUser(updated)}
+    catch { /* Keep the last saved preference when offline. */ }
+    finally {setVisibilityBusy(false)}
+  }
 
   if (compact) {
     return (
@@ -57,7 +65,7 @@ const PointsDisplay: React.FC<PointsDisplayProps> = ({ compact = false, classNam
           <span className="font-mono">{isVisible ? points.current_balance.toLocaleString() : '•••'}</span>
         </div>
         <button
-          onClick={toggleVisibility}
+          onClick={()=>void toggleVisibility()} disabled={visibilityBusy}
           className="p-1 rounded text-muted hover:text-ink transition-colors"
           title={isVisible ? 'Hide points' : 'Show points'}
           aria-label={isVisible ? 'Hide points' : 'Show points'}
@@ -83,7 +91,7 @@ const PointsDisplay: React.FC<PointsDisplayProps> = ({ compact = false, classNam
           </div>
         </div>
         <button
-          onClick={toggleVisibility}
+          onClick={()=>void toggleVisibility()} disabled={visibilityBusy}
           className="p-1.5 rounded-field text-muted hover:text-ink hover:bg-panel-2 transition-colors"
           title={isVisible ? 'Hide points' : 'Show points'}
           aria-label={isVisible ? 'Hide points' : 'Show points'}

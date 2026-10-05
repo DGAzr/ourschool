@@ -148,3 +148,11 @@ describe('relativeWhen', () => {
     expect(relativeWhen(at(10 * 86_400_000), now)).toMatch(/Jun/)
   })
 })
+
+describe('affordable chosen goals',()=>{
+  it('keeps the explicitly chosen reward after it becomes affordable',()=>{
+    const catalog=[item(1,10),item(2,100)]
+    expect(goalItem(catalog,1)?.id).toBe(1)
+    expect(affordabilityOf(goalItem(catalog,1)!.cost_points,50).remaining).toBe(0)
+  })
+})

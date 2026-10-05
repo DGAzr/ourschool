@@ -184,13 +184,13 @@ export function ImportAssignmentModal({
             <p className="text-[13px] text-muted">Import an assignment template shared by another homeschool family.</p>
             <div>
               <label className={LABEL}>Upload from file</label>
-              <input ref={fileInputRef} type="file" accept=".json" onChange={handleFileUpload}
+              <input aria-label="Import backup file" ref={fileInputRef} type="file" accept=".json" onChange={handleFileUpload}
                 className="block w-full text-[13px] text-muted file:mr-3 file:py-1.5 file:px-3 file:rounded-field file:border file:border-btn-border file:text-[12px] file:font-medium file:bg-panel file:text-ink hover:file:bg-track" />
             </div>
             <div className="text-center text-[12px] text-faintest">— or —</div>
             <div>
               <label className={LABEL}>Paste assignment data</label>
-              <textarea rows={6} placeholder="Paste the assignment template export JSON data here..."
+              <textarea aria-label="Assignment template JSON" rows={6} placeholder="Paste the assignment template export JSON data here..."
                 className={`${FIELD} font-mono text-[12px]`}
                 onChange={(e) => e.target.value && handleTextImport(e.target.value)} />
             </div>
@@ -214,7 +214,7 @@ export function ImportAssignmentModal({
             </div>
             <div>
               <label className={LABEL}>Subject</label>
-              <select value={targetSubjectId || ''} onChange={(e) => setTargetSubjectId(e.target.value ? Number(e.target.value) : undefined)} className={FIELD} required>
+              <select aria-label="Import into subject" value={targetSubjectId || ''} onChange={(e) => setTargetSubjectId(e.target.value ? Number(e.target.value) : undefined)} className={FIELD} required>
                 <option value="">Select or create subject</option>
                 {subjects.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
               </select>

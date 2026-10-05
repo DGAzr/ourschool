@@ -64,9 +64,7 @@ def test_default_range_is_today_forward(client, admin_headers, student_factory):
     _create_lesson(
         client, admin_headers, title="Past", date=yesterday, student_ids=[student["id"]]
     )
-    _create_lesson(
-        client, admin_headers, title="Today", student_ids=[student["id"]]
-    )
+    _create_lesson(client, admin_headers, title="Today", student_ids=[student["id"]])
     _create_lesson(
         client,
         admin_headers,
@@ -92,3 +90,68 @@ def test_default_range_is_today_forward(client, admin_headers, student_factory):
 def test_admin_session_rejected(client, admin_headers):
     r = client.get("/api/lessons/my-lessons", headers=admin_headers)
     assert r.status_code == 403, r.text
+
+
+def test_student_work_links_only_include_own_records(
+    client, admin_headers, student_factory, classroom
+):
+    first, first_headers = student_factory()
+    second, second_headers = student_factory()
+    lesson = _create_lesson(
+        client,
+        admin_headers,
+        student_ids=[first["id"], second["id"]],
+        templates=[{"template_id": classroom["template"]["id"]}],
+    )
+    [first_lesson] = _my_lessons(client, first_headers)
+    [second_lesson] = _my_lessons(client, second_headers)
+    assert len(first_lesson["assignments"]) == len(second_lesson["assignments"]) == 1
+    first_work = first_lesson["assignments"][0]
+    second_work = second_lesson["assignments"][0]
+    assert first_work["id"] != second_work["id"]
+    assert first_work["student_id"] == first["id"]
+    assert second_work["student_id"] == second["id"]
+    assert first_work["lesson_id"] == lesson["id"]
+    assert "teacher_feedback" not in first_work
+    assert "points_earned" not in first_work
+    forbidden = client.get(
+        f"/api/assignments/student-assignments/{second_work['id']}",
+        headers=first_headers,
+    )
+    assert forbidden.status_code == 403
+
+
+def test_teacher_work_progress_is_day_scoped_and_student_inaccessible(
+    client, admin_headers, student_factory, classroom
+):
+    student, student_headers = student_factory()
+    today = _create_lesson(
+        client,
+        admin_headers,
+        student_ids=[student["id"]],
+        templates=[{"template_id": classroom["template"]["id"]}],
+    )
+    future = _create_lesson(
+        client,
+        admin_headers,
+        date=(TODAY + timedelta(days=1)).isoformat(),
+        student_ids=[student["id"]],
+        templates=[{"template_id": classroom["template"]["id"]}],
+    )
+    response = client.get(
+        "/api/lessons/assignment-progress",
+        params={"date": TODAY.isoformat()},
+        headers=admin_headers,
+    )
+    assert response.status_code == 200, response.text
+    lesson_ids = [row["lesson_id"] for row in response.json()]
+    assert today["id"] in lesson_ids
+    assert future["id"] not in lesson_ids
+    assert (
+        client.get(
+            "/api/lessons/assignment-progress",
+            params={"date": TODAY.isoformat()},
+            headers=student_headers,
+        ).status_code
+        == 403
+    )

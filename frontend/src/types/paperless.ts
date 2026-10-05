@@ -160,6 +160,7 @@ interface DocumentTemplateUsage {
 export interface PaperlessDocumentDetail extends PaperlessDocument {
   used_in: DocumentLessonUsage[]
   used_in_templates: DocumentTemplateUsage[]
+  used_in_assignments?: { assignment_id: number; student_name: string; assignment_title: string }[]
 }
 
 // An attached document link (on a lesson or an assignment template) with

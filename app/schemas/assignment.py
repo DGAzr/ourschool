@@ -17,7 +17,7 @@
 """Assignment schemas."""
 
 from datetime import date, datetime
-from typing import TYPE_CHECKING, List, Optional
+from typing import Literal, TYPE_CHECKING, List, Optional
 import json
 
 from pydantic import BaseModel, Field, validator
@@ -179,11 +179,18 @@ class StudentAssignmentUpdate(BaseModel):
     status: Optional[AssignmentStatus] = None
     custom_instructions: Optional[str] = None
     custom_max_points: Optional[int] = Field(None, ge=1, le=1000)
+    submission_method: Optional[Literal["online", "paper"]] = None
     student_notes: Optional[str] = None
     submission_notes: Optional[str] = None
     submission_artifacts: Optional[List[str]] = Field(
         None, description="List of external artifact links"
     )
+
+    @validator("submission_method")
+    def validate_submission_method(cls, value):
+        if value is None:
+            raise ValueError("Choose paper or online submission")
+        return value
 
     @validator("submission_artifacts")
     def validate_artifact_urls(cls, v):
@@ -248,6 +255,7 @@ class AssignmentTimeEntryResponse(BaseModel):
 class StudentAssignmentCompleteRequest(BaseModel):
     """Request body for marking a student assignment completed/submitted."""
 
+    submission_method: Literal["online", "paper"] = "online"
     submission_notes: Optional[str] = None
     submission_artifacts: Optional[List[str]] = Field(
         None, description="List of external artifact links"
@@ -282,6 +290,28 @@ class BulkGradeResult(BaseModel):
     error: Optional[str] = None
 
 
+class AssignmentHelpResponse(BaseModel):
+    id: int
+    assignment_id: int
+    note: str
+    created_at: datetime
+    resolved_at: Optional[datetime] = None
+    response: Optional[str] = None
+    student_name: Optional[str] = None
+    assignment_name: Optional[str] = None
+
+    class Config:
+        from_attributes = True
+
+
+class AssignmentHelpInput(BaseModel):
+    note: str = Field(min_length=1, max_length=2000)
+
+
+class AssignmentHelpResolution(BaseModel):
+    response: Optional[str] = Field(default=None, max_length=2000)
+
+
 class StudentAssignmentResponse(StudentAssignmentBase):
     """Schema for responding with student assignments."""
 
@@ -302,6 +332,8 @@ class StudentAssignmentResponse(StudentAssignmentBase):
     graded_by: Optional[int] = None
     teacher_feedback: Optional[str] = None
     student_notes: Optional[str] = None
+    submission_method: Literal["online", "paper"] = "online"
+    help_requests: List[AssignmentHelpResponse] = []
     submission_notes: Optional[str] = None
     submission_artifacts: Optional[List[str]] = None
     time_spent_minutes: int = 0
@@ -415,3 +447,8 @@ class AssignmentTemplateImport(BaseModel):
 
     assignment_data: AssignmentTemplateExport
     target_subject_id: Optional[int] = None  # Override subject
+
+
+class AssignmentHelpPage(BaseModel):
+    items: List[AssignmentHelpResponse]
+    total: int

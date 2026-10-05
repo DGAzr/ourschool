@@ -37,7 +37,7 @@ interface RedemptionQueueProps {
   pendingCount: number
   readyCount: number
   redemptions: ShopRedemption[]
-  onApprove: (r: ShopRedemption) => void
+  onApprove: (r: ShopRedemption, instructions?:string) => void
   onDecline: (r: ShopRedemption) => void
   onFulfill: (r: ShopRedemption) => void
   busyId: number | null
@@ -82,6 +82,7 @@ export const RedemptionQueue: React.FC<RedemptionQueueProps> = ({
   busyId,
 }) => {
   const [declining, setDeclining] = useState<ShopRedemption | null>(null)
+  const [instructions,setInstructions]=useState<Record<number,string>>({})
   const empty = EMPTY[queueTab]
 
   return (
@@ -120,7 +121,7 @@ export const RedemptionQueue: React.FC<RedemptionQueueProps> = ({
               return (
                 <div
                   key={r.id}
-                  className="flex items-center gap-3 px-[18px] py-[15px]"
+                  className="flex flex-wrap items-center gap-3 px-[18px] py-[15px]"
                 >
                   <div
                     className="w-[42px] h-[42px] rounded-field flex items-center justify-center flex-shrink-0 text-[19px]"
@@ -146,6 +147,8 @@ export const RedemptionQueue: React.FC<RedemptionQueueProps> = ({
                     </p>
                   </div>
 
+                  {queueTab === 'ready' && r.pickup_instructions && <p className="w-full text-sm text-muted break-words">Pickup: {r.pickup_instructions}</p>}
+                  {queueTab==='pending'&&<label className="w-full text-sm">Pickup instructions for {name}<input className="block w-full mt-1 p-2 border border-line bg-panel rounded-field" maxLength={1000} placeholder="Ask me after school to collect your reward." value={instructions[r.id]??''} onChange={e=>setInstructions(prev=>({...prev,[r.id]:e.target.value}))}/></label>}
                   {queueTab === 'history' ? (
                     <RedemptionStatusPill status={r.status} />
                   ) : queueTab === 'ready' ? (
@@ -168,7 +171,7 @@ export const RedemptionQueue: React.FC<RedemptionQueueProps> = ({
                         Decline
                       </button>
                       <button
-                        onClick={() => onApprove(r)}
+                        onClick={() => onApprove(r,instructions[r.id])}
                         disabled={busy}
                         className="h-8 px-3.5 rounded-field text-white text-[13px] font-medium disabled:opacity-50"
                         style={{ background: 'var(--accent)' }}

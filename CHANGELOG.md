@@ -6,6 +6,70 @@ All notable changes to OurSchool are documented here.
 
 ## [Unreleased]
 
+### Lesson drawer preserves student work
+
+- Moving lessons into the drawer, including automatic rollover, keeps all
+  existing assignments and their lesson links. Rescheduling reuses the same
+  records rather than duplicating submitted or graded work.
+- Drawer lessons offer a “Mark taught on” action to restore a forgotten lesson
+  to its original day. Publication can remain a draft, happen when scheduled, or happen immediately, including in the drawer.
+- Removing a lesson, template link, or student now also preserves started work,
+  notes, logged time, and excused assignments instead of silently deleting them.
+
+### Assignment workflow and preparation
+
+- Start and Continue open the exact assignment at a stable URL, with instructions,
+  materials, working notes, time logs and submission controls. Overdue urgency
+  no longer hides progress or prevents starting and submitting work.
+- Student lessons link to their own assignments. Teach shows each student's
+  progress beside activities and opens the correct record for grading.
+- Preparation totals separate planned, prepared and taught lessons and count
+  gathered materials independently. Taught lessons remain readable.
+- Grading puts submitted work beside feedback and keeps empty work logs collapsed.
+  Empty logs show zero minutes rather than “No estimate.”
+- Assignment dates use school-date formatting, and dashboard/settings term counts
+  share inclusive calendar-day calculations.
+
+### Attendance and material discovery
+
+- Attendance has a direct school-date picker, student/date filters for history,
+  keyboard-accessible calendar days, and readable status choices. Late is an
+  optional choice for scheduled classes, while existing Late records stay visible.
+- Cached material libraries remain in navigation while disconnected. Connection
+  guidance explains unavailable previews, downloads and sync before opening content.
+- Material usage counts include lesson, template and direct student-work attachments.
+- The template picker exposes its inherited subject filter, matching counts and a
+  Clear filters action, making activities from other subjects discoverable.
+
+### Planning, recovery and family routines
+
+- Preview assignment changes before saving or moving a lesson; recover carryover
+  lessons in batches. Copy lessons, days or weeks to a new date and selected children.
+- Filter plans by child and subject, recover local lesson/template/grading drafts,
+  and print the selected day/week with the family school name and optional logo.
+- Scheduled weekend lessons stay visible inside a school-day board, including
+  copied lessons, even when empty weekend columns are skipped.
+- Teacher Today brings attendance, preparation, grading and task help together.
+  Student Today prioritizes current work and keeps older unfinished work expandable.
+- Students can show work finished on paper, ask for help, choose simple task mode
+  with read-aloud, and save a short text or mood reflection.
+- Reflection inbox filters preserve their scope after replies. Learning wins and
+  completion acknowledgments use actual work and respect optional points/effort.
+- Reflection days and daily point awards follow the learner's local school day,
+  including evening entries and daylight-saving changes. Saved reflections refresh
+  the points balance immediately.
+- Restore previews report actual new, changed and skipped records without persisting
+  changes. Nested draft dialogs keep their controls accessible, student mode changes
+  work with a blank birth date, and older pending rewards remain in the pickup queue.
+- Personal reward goals stay visible beside points and shopping. Empty catalog
+  categories disappear; pickup instructions and returned points explain each stage.
+- Reports distinguish missing grades from genuine zeroes, exclude excused work from
+  grade/completion denominators, explain weighting, and suppress empty-period deltas.
+- New-school setup links directly to each missing step. Backup downloads in one
+  action, retains a summary, validates formats, and previews restore impact. Format
+  2.4 preserves paper completion, help requests, preferences and planning policies.
+- Responsive controls wrap and form inputs have meaningful accessible names.
+
 ### Paperless-NGX release readiness
 
 - Paperless libraries now have persistent identities. Changing servers keeps

@@ -170,7 +170,9 @@ def get_assignment_report(
 
     # Calculate summary statistics
     total_assignments = len(assignments)
-    graded_assignments = sum(1 for a in assignments if a.is_graded)
+    graded_assignments = sum(
+        1 for a in assignments if a.is_graded and a.status != "excused"
+    )
     pending_assignments = sum(
         1 for a in assignments if a.status == AssignmentStatus.SUBMITTED.value
     )
@@ -192,7 +194,9 @@ def get_assignment_report(
 
     # Calculate average grade
     graded_with_scores = [
-        a for a in assignments if a.is_graded and a.percentage_grade is not None
+        a
+        for a in assignments
+        if a.is_graded and a.status != "excused" and a.percentage_grade is not None
     ]
     average_grade = (
         sum(a.percentage_grade for a in graded_with_scores) / len(graded_with_scores)
@@ -205,11 +209,13 @@ def get_assignment_report(
     students_count = len({a.student_id for a in assignments})
 
     summary = schemas.AssignmentReportSummary(
+        excused_assignments=sum(a.status == "excused" for a in assignments),
+        calculation_note="Mean of recorded task percentages in the selected report filters; excused work excluded.",
         total_assignments=total_assignments,
         graded_assignments=graded_assignments,
         pending_assignments=pending_assignments,
         overdue_assignments=overdue_assignments,
-        average_grade=round(average_grade, 2) if average_grade else None,
+        average_grade=round(average_grade, 2) if average_grade is not None else None,
         subjects_count=subjects_count,
         students_count=students_count,
     )

@@ -50,3 +50,28 @@ describe('Modal keyboard behavior', () => {
     expect(container).not.toHaveAttribute('aria-hidden')
   })
 })
+
+
+it('keeps a nested confirmation accessible and closes only the top dialog', async () => {
+  const user = userEvent.setup()
+  function NestedHarness() {
+    const [confirm, setConfirm] = useState(false)
+    const [parent, setParent] = useState(true)
+    return <Modal isOpen={parent} title="Lesson draft" onClose={() => setParent(false)}>
+      <button onClick={() => setConfirm(true)}>Leave draft</button>
+      {confirm && <Modal isOpen title="Leave form?" onClose={() => setConfirm(false)}>
+        <button onClick={() => setConfirm(false)}>Keep editing</button>
+      </Modal>}
+    </Modal>
+  }
+  render(<NestedHarness />)
+  await user.click(screen.getByRole('button', {name:'Leave draft'}))
+  const confirmation = screen.getByRole('dialog', {name:'Leave form?'})
+  expect(confirmation.closest('[aria-hidden="true"]')).toBeNull()
+  await user.click(screen.getByRole('button', {name:'Keep editing'}))
+  expect(screen.getByRole('dialog', {name:'Lesson draft'})).toBeVisible()
+  await user.click(screen.getByRole('button', {name:'Leave draft'}))
+  await user.keyboard('{Escape}')
+  expect(screen.queryByRole('dialog', {name:'Leave form?'})).toBeNull()
+  expect(screen.getByRole('dialog', {name:'Lesson draft'})).toBeVisible()
+})

@@ -128,7 +128,7 @@ class SystemSettings(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     setting_key = Column(String(100), unique=True, nullable=False, index=True)
-    setting_value = Column(String(500), nullable=False)
+    setting_value = Column(Text, nullable=False)
     setting_type = Column(
         String(50), nullable=False
     )  # 'boolean', 'string', 'integer', 'json'

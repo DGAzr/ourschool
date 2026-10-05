@@ -31,7 +31,7 @@ export const usersApi = {
     last_name: string
     role: 'admin' | 'student'
     parent_id?: number
-    date_of_birth?: string
+    date_of_birth?: string | null
     grade_level?: number
   }) => api.post('/users/', data),
   
@@ -40,8 +40,9 @@ export const usersApi = {
     username?: string
     first_name?: string
     last_name?: string
+    student_ui_mode?: 'regular' | 'simple'
     is_active?: boolean
-    date_of_birth?: string
+    date_of_birth?: string | null
     grade_level?: number
   }) => api.put(`/users/${id}`, data),
   
@@ -53,6 +54,9 @@ export const usersApi = {
     first_name?: string
     last_name?: string
     email?: string
+    show_points?: boolean
+    show_effort_signals?: boolean
+    celebrate_completion?: boolean
     theme_preference?: 'light' | 'dark' | 'system'
   }) => api.put('/users/me', data),
 
