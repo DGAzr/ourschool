@@ -2,7 +2,7 @@ import { useRef, useState } from 'react'
 import { ArrowRight } from 'lucide-react'
 import { Button, Select } from '../ui'
 
-export interface MappingRow {
+interface MappingRow {
   id: number
   name: string
   target: string
