@@ -32,6 +32,8 @@ from app.models.paperless import (
     LessonPaperlessMaterial,
     PaperlessDocument,
     PaperlessLibrary,
+    PaperlessTagMap,
+    PaperlessDoctypeMap,
 )
 from test_paperless import BASE, FakePaperlessClient, make_library, _connect_and_wait
 
@@ -77,6 +79,81 @@ def _doc_by_pid(client, admin_headers, paperless_id):
         if item["paperless_id"] == paperless_id:
             return item
     raise AssertionError(f"document {paperless_id} not in cache")
+
+
+@pytest.mark.parametrize("version", ["2.4", "2.5"])
+def test_mapping_configuration_restore_legacy_and_explicit(
+    client, admin_headers, connected, db_session, version
+):
+    backup = client.get("/api/backup/export", headers=admin_headers).json()
+    backup["format_version"] = version
+    tag_ids = [tag["id"] for tag in connected["library"]["tags"]]
+    type_ids = [dtype["id"] for dtype in connected["library"]["doctypes"]]
+    tags = {row["paperless_tag_id"]: row for row in backup["paperless_tag_maps"]}
+    types = {
+        row["paperless_doctype_id"]: row for row in backup["paperless_doctype_maps"]
+    }
+    # Manual unmapped tags must remain explicit even without a subject.
+    tags[tag_ids[1]].update(
+        auto_matched=False, configured=True, subject_external_id=None, subject_name=None
+    )
+    # 2.5 distinguishes an explicit default from a legacy inferred default.
+    types[type_ids[0]].update(material_kind="worksheet", configured=True)
+    types[type_ids[1]].update(material_kind="worksheet", configured=False)
+    if version == "2.4":
+        for row in backup["paperless_tag_maps"] + backup["paperless_doctype_maps"]:
+            row.pop("configured", None)
+    response = client.post(
+        "/api/backup/import",
+        json={"backup_data": backup, "import_options": {}},
+        headers=admin_headers,
+    )
+    assert response.status_code == 200, response.text
+    assert response.json()["success"], response.json()["errors"]
+    db_session.expire_all()
+    restored_tags = {
+        row.paperless_tag_id: row
+        for row in db_session.query(PaperlessTagMap)
+        if row.paperless_tag_id in tag_ids
+    }
+    restored_types = {
+        row.paperless_doctype_id: row
+        for row in db_session.query(PaperlessDoctypeMap)
+        if row.paperless_doctype_id in type_ids
+    }
+    assert not restored_tags[tag_ids[0]].configured
+    assert restored_tags[tag_ids[1]].configured
+    assert restored_tags[tag_ids[1]].subject_id is None
+    assert restored_types[type_ids[0]].configured == (version == "2.5")
+    assert restored_types[type_ids[1]].configured == (version == "2.4")
+    assert restored_types[type_ids[1]].material_kind == "worksheet"
+    assert not restored_types[type_ids[2]].configured
+    assert all(not row.in_scope for row in restored_tags.values())
+    assert not client.get(f"{BASE}/status", headers=admin_headers).json()[
+        "mapping_options_ready"
+    ]
+    # Reconnecting rebuilds availability without changing saved classifications.
+    refreshed = _connect_and_wait(
+        client,
+        json={
+            "scope_mode": "all",
+            "url": "http://paperless.fake:8000",
+            "token": "restored-test",
+        },
+        headers=admin_headers,
+    ).json()
+    assert refreshed["mapping_options_ready"]
+    assert next(
+        row for row in refreshed["tag_maps"] if row["paperless_tag_id"] == tag_ids[1]
+    )["configured"]
+    assert (
+        next(
+            row
+            for row in refreshed["doctype_maps"]
+            if row["paperless_doctype_id"] == type_ids[1]
+        )["material_kind"]
+        == "worksheet"
+    )
 
 
 def test_paperless_backup_round_trip(
@@ -167,6 +244,7 @@ def test_paperless_backup_round_trip(
     r = client.get("/api/backup/export", headers=admin_headers)
     assert r.status_code == 200, r.text
     backup = r.json()
+    assert backup["format_version"] == "2.5"
     our_pids = {d["id"] for d in library["documents"]}
     exported_docs = [
         d
@@ -180,6 +258,7 @@ def test_paperless_backup_round_trip(
         if m["paperless_tag_id"] == unrelated_tag["id"]
     ]
     assert exported_tag[0]["auto_matched"] is False
+    assert exported_tag[0]["configured"] is True
     assert exported_tag[0]["subject_name"] == connected["sci"]["name"]
     assert any(
         link["lesson_external_id"] == lesson["external_id"]
@@ -219,6 +298,8 @@ def test_paperless_backup_round_trip(
         m for m in status["tag_maps"] if m["paperless_tag_id"] == unrelated_tag["id"]
     ]
     assert restored_tag[0]["auto_matched"] is False
+    assert restored_tag[0]["configured"] is True
+    assert status["mapping_options_ready"] is False
     assert restored_tag[0]["subject_id"] is not None
 
     # Documents restored with their authenticated thumbnail identifiers intact.

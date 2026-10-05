@@ -655,7 +655,7 @@ def test_connect_with_scope_imports_subset(
     returned_doctypes = {
         m["paperless_doctype_id"] for m in status["doctype_maps"]
     } & lib_doctype_ids
-    assert returned_doctypes == lib_doctype_ids
+    assert returned_doctypes == {d["id"] for d in lib["doctypes"][:2]}
 
     # All map rows stay in the DB (manual mappings must survive scope changes).
     db_rows = (

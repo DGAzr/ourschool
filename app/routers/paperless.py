@@ -39,7 +39,7 @@ from fastapi import (
 )
 from fastapi.responses import StreamingResponse
 from starlette.background import BackgroundTask
-from sqlalchemy import func, case, literal, String, select, union_all, text
+from sqlalchemy import func, case, literal, String, select, union_all, text, or_
 from sqlalchemy.dialects.postgresql import array, aggregate_order_by
 from sqlalchemy.orm import defer, noload
 from sqlalchemy.orm import Session
@@ -147,15 +147,28 @@ def _status_response(db: Session) -> PaperlessStatusResponse:
         token_masked = _mask_token(crypto.decrypt_secret(conn.token_encrypted))
     except crypto.SecretDecryptError:
         needs_reconnect = True
+    options_ready = paperless_sync.mapping_options_ready(conn)
     tags = (
         db.query(PaperlessTagMap)
         .filter_by(library_id=conn.library_id)
+        .filter(
+            or_(
+                PaperlessTagMap.configured.is_(True),
+                PaperlessTagMap.in_scope.is_(True) if options_ready else False,
+            )
+        )
         .order_by(PaperlessTagMap.paperless_tag_name)
         .all()
     )
     doctypes = (
         db.query(PaperlessDoctypeMap)
         .filter_by(library_id=conn.library_id)
+        .filter(
+            or_(
+                PaperlessDoctypeMap.configured.is_(True),
+                PaperlessDoctypeMap.in_scope.is_(True) if options_ready else False,
+            )
+        )
         .order_by(PaperlessDoctypeMap.paperless_doctype_name)
         .all()
     )
@@ -185,10 +198,15 @@ def _status_response(db: Session) -> PaperlessStatusResponse:
         tag_count=conn.tag_count,
         doctype_count=conn.doctype_count,
         mapped_subject_count=len(
-            {t.subject_id for t in tags if t.subject_id is not None}
+            {
+                t.subject_id
+                for t in tags
+                if options_ready and t.in_scope and t.subject_id is not None
+            }
         ),
         scope_tag_ids=conn.scope_tag_ids or [],
         scope_doctype_ids=conn.scope_doctype_ids or [],
+        mapping_options_ready=options_ready,
         tag_maps=[TagMapResponse.model_validate(t) for t in tags],
         doctype_maps=[DoctypeMapResponse.model_validate(d) for d in doctypes],
     )
@@ -274,6 +292,7 @@ def connect(
     conn.api_version = counts.get("api_version", 10)
     conn.scope_tag_ids = _normalize_scope(credentials.scope_tag_ids)
     conn.scope_doctype_ids = _normalize_scope(credentials.scope_doctype_ids)
+    conn.mapping_scope_tag_ids = conn.mapping_scope_doctype_ids = None
     conn.needs_reconnect = False
     conn.last_sync_status, conn.last_sync_error = None, None
     db.flush()
@@ -356,6 +375,12 @@ def update_settings(
         conn.scope_doctype_ids = _normalize_scope(update.scope_doctype_ids)
 
     mappings_changed = False
+    if (
+        update.tag_maps or update.doctype_maps
+    ) and not paperless_sync.mapping_options_ready(conn):
+        raise HTTPException(
+            status_code=409, detail="Sync the current scope before editing mappings."
+        )
     if update.tag_maps:
         rows = {
             m.paperless_tag_id: m
@@ -373,8 +398,13 @@ def update_settings(
                     status_code=404,
                     detail=f"Subject {change.subject_id} not found",
                 )
+            if not row.in_scope:
+                raise HTTPException(
+                    status_code=409, detail="This tag is outside Sync Scope."
+                )
             row.subject_id = change.subject_id
             row.auto_matched = False
+            row.configured = True
             mappings_changed = True
 
     if update.doctype_maps:
@@ -392,8 +422,46 @@ def update_settings(
                         f"{change.paperless_doctype_id}"
                     ),
                 )
+            if not row.in_scope:
+                raise HTTPException(
+                    status_code=409, detail="This document type is outside Sync Scope."
+                )
             row.material_kind = change.material_kind
+            row.configured = True
             mappings_changed = True
+
+    subjects = (
+        {s.name.strip().lower(): s.id for s in db.query(Subject)}
+        if update.remove_tag_map_ids
+        else {}
+    )
+    for tag_id in update.remove_tag_map_ids:
+        row = (
+            db.query(PaperlessTagMap)
+            .filter_by(library_id=conn.library_id, paperless_tag_id=tag_id)
+            .first()
+        )
+        if row is None:
+            raise HTTPException(
+                status_code=404, detail=f"Unknown Paperless tag id {tag_id}"
+            )
+        row.subject_id = subjects.get(row.paperless_tag_name.strip().lower())
+        row.auto_matched, row.configured = True, False
+        mappings_changed = True
+    for doctype_id in update.remove_doctype_map_ids:
+        row = (
+            db.query(PaperlessDoctypeMap)
+            .filter_by(library_id=conn.library_id, paperless_doctype_id=doctype_id)
+            .first()
+        )
+        if row is None:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Unknown Paperless document type id {doctype_id}",
+            )
+        row.material_kind = paperless_sync._default_kind(row.paperless_doctype_name)
+        row.configured = False
+        mappings_changed = True
 
     if mappings_changed:
         paperless_sync.rederive_documents(db)

@@ -638,6 +638,7 @@ def export_paperless_tag_maps(db: Session) -> List[PaperlessTagMapBackup]:
             subject_external_id=m.subject.external_id if m.subject else None,
             subject_name=m.subject.name if m.subject else None,
             auto_matched=m.auto_matched,
+            configured=m.configured,
         )
         for m in db.query(PaperlessTagMap).all()
     ]
@@ -651,6 +652,7 @@ def export_paperless_doctype_maps(db: Session) -> List[PaperlessDoctypeMapBackup
             paperless_doctype_id=m.paperless_doctype_id,
             paperless_doctype_name=m.paperless_doctype_name,
             material_kind=m.material_kind,
+            configured=m.configured,
         )
         for m in db.query(PaperlessDoctypeMap).all()
     ]

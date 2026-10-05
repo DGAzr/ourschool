@@ -16,7 +16,7 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useRef, useState } from 'react'
 import { AlertTriangle } from 'lucide-react'
 
 import { usePaperlessStatus } from '../../hooks/usePaperlessStatus'
@@ -53,6 +53,8 @@ const PaperlessIntegrationPanel: React.FC = () => {
   } = usePaperlessStatus()
   const [subjects, setSubjects] = useState<Subject[]>([])
   const [editing, setEditing] = useState(false)
+  const [mappingSaving, setMappingSaving] = useState(false)
+  const mappingSaveLock = useRef(false)
 
   useEffect(() => {
     subjectsApi
@@ -124,13 +126,28 @@ const PaperlessIntegrationPanel: React.FC = () => {
     }
   }
 
+  const handleMappingUpdate = async (update: Parameters<typeof updateSettings>[0]) => {
+    if (mappingSaveLock.current) throw new Error('A mapping is already being saved.')
+    mappingSaveLock.current = true
+    setMappingSaving(true)
+    try {
+      await updateSettings(update)
+    } catch (err) {
+      toast(getErrorMessage(err, 'Could not save mapping'), 'danger')
+      throw err
+    } finally {
+      mappingSaveLock.current = false
+      setMappingSaving(false)
+    }
+  }
+
   const handleTagRemap = (paperlessTagId: number, subjectId: number | null) =>
-    handleToggle({
+    handleMappingUpdate({
       tag_maps: [{ paperless_tag_id: paperlessTagId, subject_id: subjectId }],
     })
 
   const handleDoctypeRemap = (paperlessDoctypeId: number, kind: MaterialKind) =>
-    handleToggle({
+    handleMappingUpdate({
       doctype_maps: [
         { paperless_doctype_id: paperlessDoctypeId, material_kind: kind },
       ],
@@ -203,15 +220,23 @@ const PaperlessIntegrationPanel: React.FC = () => {
         onEdit={() => setEditing(true)}
         onDisconnect={handleDisconnect}
       />
-      <ScopeCard status={status} syncing={syncing} onSave={handleScopeSave} />
+      <ScopeCard status={status} syncing={syncing || mappingSaving} onSave={handleScopeSave} />
       <TagMapCard
         tagMaps={status.tag_maps}
         subjects={subjects}
         onRemap={handleTagRemap}
+        onRemove={id => handleMappingUpdate({remove_tag_map_ids: [id]})}
+        optionsReady={status.mapping_options_ready}
+        disabled={syncing || mappingSaving}
+        scopeError={status.last_sync_error}
       />
       <DoctypeMapCard
         doctypeMaps={status.doctype_maps}
         onRemap={handleDoctypeRemap}
+        onRemove={id => handleMappingUpdate({remove_doctype_map_ids: [id]})}
+        optionsReady={status.mapping_options_ready}
+        disabled={syncing || mappingSaving}
+        scopeError={status.last_sync_error}
       />
       <SyncOptionsCard status={status} onUpdate={handleToggle} />
       <p className="text-[12px] text-faint text-center pb-1">

@@ -118,6 +118,8 @@ class TagMapResponse(BaseModel):
     paperless_tag_name: str
     subject_id: Optional[int] = None
     auto_matched: bool
+    configured: bool
+    in_scope: bool
 
     class Config:
         """Pydantic configuration."""
@@ -131,6 +133,8 @@ class DoctypeMapResponse(BaseModel):
     paperless_doctype_id: int
     paperless_doctype_name: str
     material_kind: str
+    configured: bool
+    in_scope: bool
 
     class Config:
         """Pydantic configuration."""
@@ -189,8 +193,8 @@ class PaperlessStatusResponse(BaseModel):
     mapped_subject_count: int = 0
     scope_tag_ids: List[int] = []
     scope_doctype_ids: List[int] = []
-    # All library mappings remain visible, including imported-document tags
-    # outside the selected scope roots.
+    mapping_options_ready: bool = False
+    # Scoped candidates plus explicitly configured, possibly inactive rows.
     tag_maps: List[TagMapResponse] = []
     doctype_maps: List[DoctypeMapResponse] = []
 
@@ -228,6 +232,25 @@ class PaperlessSettingsUpdate(BaseModel):
     scope_doctype_ids: Optional[List[int]] = None
     tag_maps: Optional[List[TagMapUpdate]] = None
     doctype_maps: Optional[List[DoctypeMapUpdate]] = None
+    remove_tag_map_ids: List[int] = []
+    remove_doctype_map_ids: List[int] = []
+
+    @model_validator(mode="after")
+    def validate_mapping_changes(self):
+        for changes, removals, identity in (
+            (self.tag_maps or [], self.remove_tag_map_ids, "paperless_tag_id"),
+            (
+                self.doctype_maps or [],
+                self.remove_doctype_map_ids,
+                "paperless_doctype_id",
+            ),
+        ):
+            ids = [getattr(change, identity) for change in changes]
+            if len(ids) != len(set(ids)) or len(removals) != len(set(removals)):
+                raise ValueError("Mapping IDs must not be duplicated")
+            if set(ids) & set(removals):
+                raise ValueError("A mapping cannot be edited and removed together")
+        return self
 
 
 class PaperlessConnectResponse(BaseModel):

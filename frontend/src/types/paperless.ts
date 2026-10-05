@@ -24,12 +24,16 @@ export interface PaperlessTagMap {
   paperless_tag_name: string
   subject_id?: number | null
   auto_matched: boolean
+  configured: boolean
+  in_scope: boolean
 }
 
 export interface PaperlessDoctypeMap {
   paperless_doctype_id: number
   paperless_doctype_name: string
   material_kind: MaterialKind
+  configured: boolean
+  in_scope: boolean
 }
 
 // One Paperless tag or document type offered in the sync-scope pickers.
@@ -70,10 +74,10 @@ export interface PaperlessStatus {
   doctype_count: number
   mapped_subject_count: number
   // Sync scope (union semantics: any scoped tag OR a scoped doctype).
-  // Empty on both axes = explicit whole-library scope; mappings include
-  // tags outside roots carried by imported documents.
+  // Empty on both axes = explicit whole-library scope.
   scope_tag_ids: number[]
   scope_doctype_ids: number[]
+  mapping_options_ready: boolean
   tag_maps: PaperlessTagMap[]
   doctype_maps: PaperlessDoctypeMap[]
 }
@@ -113,6 +117,8 @@ export interface PaperlessSettingsUpdate {
   scope_doctype_ids?: number[]
   tag_maps?: { paperless_tag_id: number; subject_id: number | null }[]
   doctype_maps?: { paperless_doctype_id: number; material_kind: MaterialKind }[]
+  remove_tag_map_ids?: number[]
+  remove_doctype_map_ids?: number[]
 }
 
 export interface PaperlessDocument {

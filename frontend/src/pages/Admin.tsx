@@ -265,7 +265,7 @@ const Admin: React.FC = () => {
         setImportError(null)
         setImportStep('configure')
       } catch {
-        setImportError("Unsupported or incomplete backup. Choose an OurSchool JSON backup in format 1.0, 2.0, 2.1, 2.2, 2.3 or 2.4.")
+        setImportError("Unsupported or incomplete backup. Choose an OurSchool JSON backup in format 1.0, 2.0, 2.1, 2.2, 2.3, 2.4 or 2.5.")
       }
     }
     reader.readAsText(file)

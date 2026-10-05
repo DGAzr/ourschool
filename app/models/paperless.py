@@ -154,6 +154,10 @@ class PaperlessConnection(Base):
     # whole library. Always assign fresh lists (plain JSON, no MutableList).
     scope_tag_ids = Column(JSON, nullable=True)
     scope_doctype_ids = Column(JSON, nullable=True)
+    # Scope whose complete inventory last published mapping availability.
+    # NULL means choices need rebuilding, including after restore/reconnect.
+    mapping_scope_tag_ids = Column(JSON, nullable=True)
+    mapping_scope_doctype_ids = Column(JSON, nullable=True)
 
     last_sync_at = Column(DateTime(timezone=True))
     last_sync_status = Column(String(20))  # "ok" | "error"
@@ -193,6 +197,8 @@ class PaperlessTagMap(Base):
         Integer, ForeignKey("subjects.id", ondelete="SET NULL"), nullable=True
     )
     auto_matched = Column(Boolean, default=True, nullable=False)
+    configured = Column(Boolean, default=False, nullable=False)
+    in_scope = Column(Boolean, default=False, nullable=False)
 
     subject = relationship("Subject", lazy="selectin")
 
@@ -216,6 +222,8 @@ class PaperlessDoctypeMap(Base):
     # Stored as a plain string (MaterialKind.value) like other runtime-flexible
     # keys; see app.enums.MaterialKind for the valid set.
     material_kind = Column(String(20), default=MaterialKind.OTHER.value, nullable=False)
+    configured = Column(Boolean, default=False, nullable=False)
+    in_scope = Column(Boolean, default=False, nullable=False)
 
 
 class PaperlessDocument(Base):

@@ -52,13 +52,14 @@ from app.models.subject import Subject
 from app.models.term import GradeHistory, StudentTermGrade, Term, TermSubject
 from app.models.user import User
 from app.schemas.backup import SystemBackup, SystemBackupImportResult
+from app.services.paperless_sync import _default_kind
 
 from .shared import log_backup_operation, sanitize_import_data, validate_backup_data
 
 logger = logging.getLogger(__name__)
 
 # Backup format versions supported by this importer
-SUPPORTED_VERSIONS = {"1.0", "2.0", "2.1", "2.2", "2.3", "2.4"}
+SUPPORTED_VERSIONS = {"1.0", "2.0", "2.1", "2.2", "2.3", "2.4", "2.5"}
 LEGACY_VERSIONS = {"1.0"}  # Versions that lack external_id — name-only fallback
 
 # Typed phrase required in the request body to arm wipe_before_import.
@@ -1794,6 +1795,11 @@ def _import_paperless_maps(
         (m.library_id, m.paperless_tag_id): m for m in db.query(PaperlessTagMap).all()
     }
     for m_data in tag_maps_data:
+        configured = (
+            m_data.configured
+            if m_data.configured is not None
+            else not m_data.auto_matched
+        )
         subject_id = None
         if m_data.subject_external_id or m_data.subject_name:
             subject_id = _resolve(
@@ -1817,6 +1823,7 @@ def _import_paperless_maps(
                         paperless_tag_name=m_data.paperless_tag_name,
                         subject_id=subject_id,
                         auto_matched=m_data.auto_matched,
+                        configured=configured,
                     )
                 )
             else:
@@ -1824,6 +1831,8 @@ def _import_paperless_maps(
                 row.paperless_tag_name = m_data.paperless_tag_name
                 row.subject_id = subject_id
                 row.auto_matched = m_data.auto_matched
+                row.configured = configured
+                row.in_scope = False
                 continue
         imported += 1
 
@@ -1832,6 +1841,11 @@ def _import_paperless_maps(
         for m in db.query(PaperlessDoctypeMap).all()
     }
     for m_data in doctype_maps_data:
+        configured = (
+            m_data.configured
+            if m_data.configured is not None
+            else m_data.material_kind != _default_kind(m_data.paperless_doctype_name)
+        )
         if not dry_run:
             row = existing_doctypes.get(
                 (m_data.library_id, m_data.paperless_doctype_id)
@@ -1843,16 +1857,22 @@ def _import_paperless_maps(
                         paperless_doctype_id=m_data.paperless_doctype_id,
                         paperless_doctype_name=m_data.paperless_doctype_name,
                         material_kind=m_data.material_kind,
+                        configured=configured,
                     )
                 )
             else:
                 updated += 1
                 row.paperless_doctype_name = m_data.paperless_doctype_name
                 row.material_kind = m_data.material_kind
+                row.configured = configured
+                row.in_scope = False
                 continue
         imported += 1
 
     if not dry_run:
+        conn = db.get(PaperlessConnection, 1)
+        if conn is not None:
+            conn.mapping_scope_tag_ids = conn.mapping_scope_doctype_ids = None
         db.flush()
     result.imported_counts["paperless_maps"] = imported
     result.updated_counts["paperless_maps"] = updated

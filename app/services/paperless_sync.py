@@ -81,6 +81,15 @@ def get_connection(db: Session):
     return db.get(PaperlessConnection, 1)
 
 
+def mapping_options_ready(conn):
+    return (
+        conn.mapping_scope_tag_ids is not None
+        and conn.mapping_scope_doctype_ids is not None
+        and sorted(set(conn.scope_tag_ids or [])) == conn.mapping_scope_tag_ids
+        and sorted(set(conn.scope_doctype_ids or [])) == conn.mapping_scope_doctype_ids
+    )
+
+
 def client_for(conn):
     client = paperless_client.create_client(
         conn.url, crypto.decrypt_secret(conn.token_encrypted)
@@ -231,7 +240,13 @@ def sync_all(db, conn, client, job_id, owner):
     stream = iter(_iter_scoped_documents(client, config))
     processed = 0
     ocr_count = 0
+    scoped_tag_ids, scoped_doctype_ids = set(), set()
     while batch := list(islice(stream, BATCH_SIZE)):
+        # Availability comes from Sync Scope, not the mapped-only import subset.
+        for payload in batch:
+            scoped_tag_ids.update(payload.get("tags") or [])
+            if payload.get("document_type") is not None:
+                scoped_doctype_ids.add(payload["document_type"])
         ids = [p["id"] for p in batch]
         old = {
             r.paperless_id: r
@@ -387,6 +402,10 @@ def sync_all(db, conn, client, job_id, owner):
             "Paperless inventory exceeded the page limit. Narrow the scope; no cached documents were removed."
         )
     # Promotion contains no network I/O. Mapping edits and disconnects serialize here.
+    for model in (PaperlessTagMap, PaperlessDoctypeMap):
+        db.query(model).filter_by(library_id=config.library_id).update(
+            {"in_scope": False}, synchronize_session="fetch"
+        )
     for kind, model, identity, columns in (
         ("tags", PaperlessTagMap, "paperless_tag_id", ("subject_id", "auto_matched")),
         ("doctypes", PaperlessDoctypeMap, "paperless_doctype_id", ("material_kind",)),
@@ -402,6 +421,9 @@ def sync_all(db, conn, client, job_id, owner):
                 row = model(library_id=config.library_id, **{identity: p["id"]})
                 db.add(row)
             setattr(row, identity.replace("_id", "_name"), p["name"])
+            row.in_scope = p["id"] in (
+                scoped_tag_ids if kind == "tags" else scoped_doctype_ids
+            )
             for key in columns:
                 setattr(row, key, p[key])
     last_id = 0
@@ -494,6 +516,8 @@ def sync_all(db, conn, client, job_id, owner):
     now = _utcnow()
     conn.last_sync_at = conn.last_success_at = now
     conn.last_sync_status, conn.last_sync_error = "ok", None
+    conn.mapping_scope_tag_ids = sorted(set(config.scope_tag_ids or []))
+    conn.mapping_scope_doctype_ids = sorted(set(config.scope_doctype_ids or []))
     conn.needs_reconnect = False
     conn.document_count, conn.tag_count, conn.doctype_count = (
         processed,

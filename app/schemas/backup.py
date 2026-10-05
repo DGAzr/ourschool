@@ -452,6 +452,7 @@ class PaperlessTagMapBackup(BaseModel):
     subject_external_id: Optional[str] = None
     subject_name: Optional[str] = None  # Fallback resolution key
     auto_matched: bool = True
+    configured: Optional[bool] = None
 
 
 class PaperlessDoctypeMapBackup(BaseModel):
@@ -462,6 +463,7 @@ class PaperlessDoctypeMapBackup(BaseModel):
     paperless_doctype_id: int
     paperless_doctype_name: str
     material_kind: str
+    configured: Optional[bool] = None
 
 
 class PaperlessDocumentBackup(BaseModel):
@@ -547,7 +549,7 @@ class SystemBackup(BaseModel):
     """Complete system backup schema containing all data."""
 
     # Metadata
-    format_version: str = "2.4"
+    format_version: str = "2.5"
     backup_timestamp: datetime
     created_by: str
     system_info: Dict[str, Any] = {}
