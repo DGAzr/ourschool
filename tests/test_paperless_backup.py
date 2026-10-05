@@ -83,7 +83,7 @@ def _doc_by_pid(client, admin_headers, paperless_id):
 
 @pytest.mark.parametrize("version", ["2.4", "2.5"])
 def test_mapping_configuration_restore_legacy_and_explicit(
-    client, admin_headers, connected, db_session, version
+    reauthenticate, client, admin_headers, connected, db_session, version
 ):
     backup = client.get("/api/backup/export", headers=admin_headers).json()
     backup["format_version"] = version
@@ -129,6 +129,7 @@ def test_mapping_configuration_restore_legacy_and_explicit(
     assert restored_types[type_ids[1]].material_kind == "worksheet"
     assert not restored_types[type_ids[2]].configured
     assert all(not row.in_scope for row in restored_tags.values())
+    reauthenticate(admin_headers)
     assert not client.get(f"{BASE}/status", headers=admin_headers).json()[
         "mapping_options_ready"
     ]
@@ -157,7 +158,14 @@ def test_mapping_configuration_restore_legacy_and_explicit(
 
 
 def test_paperless_backup_round_trip(
-    client, admin_headers, classroom, student_factory, assign, connected, db_session
+    reauthenticate,
+    client,
+    admin_headers,
+    classroom,
+    student_factory,
+    assign,
+    connected,
+    db_session,
 ):
     library = connected["library"]
     doc_lesson = _doc_by_pid(client, admin_headers, library["documents"][0]["id"])
@@ -288,6 +296,8 @@ def test_paperless_backup_round_trip(
     body = r.json()
     assert body["success"] is True, body
     assert body["errors"] == [], body["errors"]
+
+    reauthenticate(admin_headers)
 
     # The connection is not backup-scoped and must survive the wipe.
     r = client.get(f"{BASE}/status", headers=admin_headers)

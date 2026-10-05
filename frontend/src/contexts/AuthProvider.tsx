@@ -1,327 +1,222 @@
-/*
- * OurSchool - Homeschool Management System
- * Copyright (C) 2025 Dustan Ashley
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Affero General Public License as published by
- * the Free Software Foundation, either version 3 of the License, or
- * (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU Affero General Public License for more details.
- *
- * You should have received a copy of the GNU Affero General Public License
- * along with this program.  If not, see <https://www.gnu.org/licenses/>.
- */
-
-import React, { useState, useEffect, ReactNode, useCallback, useRef } from 'react'
+import React, { useState, useEffect, useCallback, useRef, type ReactNode } from 'react'
+import { useQueryClient } from '@tanstack/react-query'
 import { AuthContext } from './AuthContext'
 import { User } from '../types'
+import { SessionState, SessionToken } from '../types/session'
 import {
-  isTokenExpired,
-  isTokenNearExpiry,
-  isValidTokenFormat,
-  getTokenTimeRemaining,
-  getTokenLifetime,
-  formatTimeRemaining
+  isTokenExpired, isValidTokenFormat, isTokenNearExpiry, getTokenTimeRemaining,
+  getTokenLifetime, formatTimeRemaining,
 } from '../utils/auth'
 import { config } from '../config/env'
-import { api, UNAUTHORIZED_EVENT } from '../services/api'
+import {
+  api, ApiError, UNAUTHORIZED_EVENT, credentialIdentity,
+  clearProtectedRequests, beginSessionTransition, endSessionTransition,
+} from '../services/api'
 import { AUTH_TIMEOUTS, STORAGE_KEYS } from '../constants'
 
-interface AuthProviderProps {
-  children: ReactNode
-}
-
-/** Hydrate the stored session synchronously; returns null on any problem. */
-const readStoredUser = (): User | null => {
-  const token = localStorage.getItem(STORAGE_KEYS.TOKEN)
-  const userData = localStorage.getItem(STORAGE_KEYS.USER)
-  if (!token || !userData) return null
-  if (!isValidTokenFormat(token) || isTokenExpired(token)) return null
-  try {
-    return JSON.parse(userData) as User
-  } catch {
-    return null
-  }
-}
-
-export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
-  const [user, setUser] = useState<User | null>(() => readStoredUser())
-  // Hydration happens synchronously in the useState initializer above, so
-  // auth state is never "loading"; kept in the context API for consumers.
-  const isLoading = false
-  const [isTokenValid, setIsTokenValid] = useState(false)
+export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
+  // Stored user data is a convenience cache, never proof of authenticated identity.
+  const [session, setSession] = useState<SessionState | null>(null)
+  const [isLoading, setIsLoading] = useState(true)
+  const [isTransitioning, setIsTransitioning] = useState(false)
   const [timeRemaining, setTimeRemaining] = useState('')
   const [showExpiryWarning, setShowExpiryWarning] = useState(false)
+  const queryClient = useQueryClient()
+  const lastActivity = useRef(0)
+  const transition = useRef(false)
+  const renewing = useRef(false)
+  const identity = useRef<string | null>(null)
+  const verification = useRef(0)
 
-  // Use refs to avoid stale closures in intervals
-  const tokenCheckInterval = useRef<ReturnType<typeof setInterval> | null>(null)
-  const warningShown = useRef(false)
-  const lastActivity = useRef<number>(0)
-  const activityCheckInterval = useRef<ReturnType<typeof setInterval> | null>(null)
+  const clearViews = useCallback(() => {
+    clearProtectedRequests()
+    void queryClient.cancelQueries()
+    queryClient.clear()
+    if ('speechSynthesis' in window) window.speechSynthesis.cancel()
+  }, [queryClient])
 
-  // Token validation function
-  const validateToken = useCallback((token: string): boolean => {
-    if (!isValidTokenFormat(token)) {
-      return false
-    }
-
-    if (isTokenExpired(token)) {
-      return false
-    }
-
-    return true
-  }, [])
-
-  // Forward declare startTokenMonitoring for use in extendSession
-  const startTokenMonitoringRef = useRef<((token: string, recordActivity?: boolean) => void) | null>(null)
-
-  // Logout function with reason tracking
-  const logout = useCallback((reason?: string) => {
-    // Clear intervals
-    if (tokenCheckInterval.current) {
-      clearInterval(tokenCheckInterval.current)
-      tokenCheckInterval.current = null
-    }
-    if (activityCheckInterval.current) {
-      clearInterval(activityCheckInterval.current)
-      activityCheckInterval.current = null
-    }
-
-    // Clear localStorage
+  const clearLocal = useCallback(() => {
+    verification.current += 1
+    identity.current = null
+    clearViews()
     localStorage.removeItem(STORAGE_KEYS.TOKEN)
     localStorage.removeItem(STORAGE_KEYS.USER)
-
-    // Reset state
-    setUser(null)
-    setIsTokenValid(false)
+    localStorage.removeItem(STORAGE_KEYS.TRANSITION)
+    setSession(null)
+    setIsLoading(false)
     setTimeRemaining('')
     setShowExpiryWarning(false)
-    warningShown.current = false
+  }, [clearViews])
 
-    // Log the logout reason for debugging (only in development)
-    if (config.dev.debugMode && reason) {
-      console.log(`User logged out: ${reason}`)
-    }
-  }, [])
-
-  // Extend session function
-  const extendSession = useCallback(async () => {
-    try {
-      const result = await api.extendSession()
-      const newToken = result.access_token
-
-      // Validate the returned token before trusting/storing it.
-      if (!newToken || !isValidTokenFormat(newToken)) {
-        logout('Invalid token returned from session extension')
-        return
-      }
-
-      // Update token in localStorage
-      localStorage.setItem(STORAGE_KEYS.TOKEN, newToken)
-
-      // Reset warning state
-      setShowExpiryWarning(false)
-      warningShown.current = false
-
-      // Restart token monitoring with new token
-      if (startTokenMonitoringRef.current) {
-        startTokenMonitoringRef.current(newToken, false)
-      }
-
-      if (config.dev.debugMode) {
-        console.log('Session extended successfully')
-      }
-    } catch (error) {
-      console.error('Failed to extend session:', error)
-      // If extension fails, log the user out
-      logout('Session extension failed')
-    }
-  }, [logout])
-
-  // Track user activity
-  const trackActivity = useCallback(() => {
-    lastActivity.current = Date.now()
-  }, [])
-
-  // Start token monitoring
-  const startTokenMonitoring = useCallback((token: string, recordActivity = true) => {
-    if (recordActivity) {
-      lastActivity.current = Date.now()
-    }
-
-    // Clear any existing intervals
-    if (tokenCheckInterval.current) {
-      clearInterval(tokenCheckInterval.current)
-    }
-    if (activityCheckInterval.current) {
-      clearInterval(activityCheckInterval.current)
-    }
-
-    const checkToken = () => {
-      const currentToken = localStorage.getItem(STORAGE_KEYS.TOKEN)
-
-      if (!currentToken || currentToken !== token) {
-        logout('Token removed from storage')
-        return
-      }
-
-      if (isTokenExpired(currentToken)) {
-        logout('Token expired')
-        return
-      }
-
-      const remaining = getTokenTimeRemaining(currentToken)
-      setTimeRemaining(formatTimeRemaining(remaining))
-      setIsTokenValid(true)
-
-      // Check if we should show expiry warning
-      const shouldShowWarning = isTokenNearExpiry(currentToken)
-      setShowExpiryWarning(shouldShowWarning)
-
-      // Show warning once when token is near expiry
-      if (shouldShowWarning && !warningShown.current) {
-        warningShown.current = true
-        if (config.dev.debugMode) {
-          console.warn('Token expiring soon!')
-        }
-      }
-    }
-
-    // Auto-extend session based on activity
-    const checkActivity = async () => {
-      const currentToken = localStorage.getItem(STORAGE_KEYS.TOKEN)
-      if (!currentToken) return
-
-      const timeSinceActivity = Date.now() - lastActivity.current
-      const remaining = getTokenTimeRemaining(currentToken)
-      const lifetime = getTokenLifetime(currentToken)
-      const extensionThreshold = Math.min(AUTH_TIMEOUTS.INACTIVITY_WARNING, lifetime / 2)
-      const activityWindow = Math.min(AUTH_TIMEOUTS.INACTIVITY_WARNING / 2, lifetime)
-
-      if (timeSinceActivity < activityWindow && remaining <= extensionThreshold && remaining > 0) {
-        try {
-          await extendSession()
-        } catch (error) {
-          // Error handling is done in extendSession
-          console.error('Auto-extend failed:', error)
-        }
-      }
-    }
-
-    // Check immediately
-    checkToken()
-
-    // Set up interval to check token every 30 seconds
-    tokenCheckInterval.current = setInterval(checkToken, AUTH_TIMEOUTS.REFRESH_INTERVAL)
-
-    // Short sessions need a proportionally faster renewal check.
-    const tokenLifetime = getTokenLifetime(token)
-    const activityCheckMs = Math.min(
-      AUTH_TIMEOUTS.REFRESH_INTERVAL * 4,
-      Math.max(5_000, tokenLifetime / 4),
-    )
-    activityCheckInterval.current = setInterval(checkActivity, activityCheckMs)
-  }, [logout, extendSession])
-
-  // Keep the ref pointing at the latest startTokenMonitoring (latest-ref
-  // pattern; refs must not be written during render).
-  useEffect(() => {
-    startTokenMonitoringRef.current = startTokenMonitoring
-  })
-
-  // Refresh token check function
-  const refreshTokenCheck = useCallback(() => {
+  const logout = useCallback((_reason?: string) => {
     const token = localStorage.getItem(STORAGE_KEYS.TOKEN)
-    if (token) {
-      startTokenMonitoring(token)
-    }
-  }, [startTokenMonitoring])
+    // Use captured credentials; logout's late response must not affect a new login.
+    if (token) void fetch(`${config.api.baseUrl}/auth/logout`, {
+      method: 'POST', headers: { Authorization: `Bearer ${token}` },
+    }).catch(() => undefined)
+    clearLocal()
+  }, [clearLocal])
 
-  // Bootstrap side effects for the session hydrated in the useState
-  // initializer: start monitoring a valid session (deferred so the initial
-  // token check's state updates don't run synchronously inside the effect),
-  // or clear stale storage. State is already null for invalid sessions.
-  useEffect(() => {
-    const token = localStorage.getItem(STORAGE_KEYS.TOKEN)
-    const userData = localStorage.getItem(STORAGE_KEYS.USER)
-    if (!token && !userData) return
-
-    if (token && userData && validateToken(token) && readStoredUser() !== null) {
-      const timer = setTimeout(() => startTokenMonitoring(token), 0)
-      return () => clearTimeout(timer)
-    }
-
-    // Invalid or expired session left in storage — remove it.
-    localStorage.removeItem(STORAGE_KEYS.TOKEN)
-    localStorage.removeItem(STORAGE_KEYS.USER)
-    if (config.dev.debugMode) {
-      console.log('Cleared invalid or expired session on startup')
-    }
-  }, [validateToken, startTokenMonitoring])
-
-  // React to a server-side 401 surfaced by the API layer: clear local state.
-  useEffect(() => {
-    const onUnauthorized = () => logout('Server rejected the session (401)')
-    window.addEventListener(UNAUTHORIZED_EVENT, onUnauthorized)
-    return () => window.removeEventListener(UNAUTHORIZED_EVENT, onUnauthorized)
-  }, [logout])
-
-  // Cleanup on unmount
-  useEffect(() => {
-    return () => {
-      if (tokenCheckInterval.current) {
-        clearInterval(tokenCheckInterval.current)
-      }
-    }
-  }, [])
-
-  const updateUser = useCallback((userData: User) => {
-    setUser(userData)
-    localStorage.setItem(STORAGE_KEYS.USER, JSON.stringify(userData))
-  }, [])
-
-  // Enhanced login function with token validation
-  const login = useCallback((token: string, userData: User) => {
-    // Validate token before storing
-    if (!isValidTokenFormat(token)) {
-      throw new Error('Invalid token format provided')
-    }
-
-    // Store token and user data
+  const accept = useCallback((token: string, next: SessionState) => {
+    if (!isValidTokenFormat(token) || isTokenExpired(token)) throw new Error('Invalid or expired session returned.')
+    const nextIdentity = credentialIdentity(token)
+    if (identity.current !== nextIdentity) clearViews()
+    identity.current = nextIdentity
+    localStorage.setItem(STORAGE_KEYS.USER, JSON.stringify(next.user))
+    // Write credentials last so other tabs see a complete identity change.
     localStorage.setItem(STORAGE_KEYS.TOKEN, token)
-    localStorage.setItem(STORAGE_KEYS.USER, JSON.stringify(userData))
+    setSession(next)
+    setIsLoading(false)
+    setTimeRemaining(formatTimeRemaining(getTokenTimeRemaining(token)))
+    setShowExpiryWarning(isTokenNearExpiry(token))
+  }, [clearViews])
 
-    // Update state
-    setUser(userData)
+  const verifySession = useCallback(async () => {
+    if (transition.current) return
+    if (localStorage.getItem(STORAGE_KEYS.TRANSITION)) { setIsLoading(true); return }
+    const token = localStorage.getItem(STORAGE_KEYS.TOKEN)
+    const sequence = ++verification.current
+    setIsLoading(true)
+    if (!token || isTokenExpired(token)) {
+      logout()
+      return
+    }
+    if (identity.current !== credentialIdentity(token)) { clearViews(); setSession(null) }
+    try {
+      const next: SessionState = await api.get('/auth/session')
+      if (sequence === verification.current && localStorage.getItem(STORAGE_KEYS.TOKEN) === token) accept(token, next)
+    } catch {
+      if (sequence !== verification.current || localStorage.getItem(STORAGE_KEYS.TOKEN) !== token) return
+      // Validation failure cannot reveal cached pages. Keep transient failures
+      // recoverable through login, without pretending that the old role is valid.
+      setSession(null)
+      setIsLoading(false)
+      clearViews()
+    }
+  }, [accept, logout, clearViews])
 
-    // Start monitoring the new token
-    startTokenMonitoring(token)
+  useEffect(() => {
+    const bootstrap = window.setTimeout(() => { lastActivity.current = Date.now(); pauseOrValidate() }, 0)
+    let recovery: number | undefined
+    const pauseOrValidate = () => {
+      window.clearTimeout(recovery)
+      const marker = localStorage.getItem(STORAGE_KEYS.TRANSITION)
+      if (marker) {
+        clearViews()
+        setSession(null)
+        setIsLoading(true)
+        let started = 0
+        try { started = JSON.parse(marker).started } catch { /* Fail closed. */ }
+        recovery = window.setTimeout(() => {
+          if (localStorage.getItem(STORAGE_KEYS.TRANSITION) === marker) logout('Interrupted account switch')
+        }, Math.max(0, Math.min(30_000, Number(started) + 30_000 - Date.now()) || 0))
+      } else void verifySession()
+    }
+    const onStorage = (event: StorageEvent) => {
+      if (event.key !== STORAGE_KEYS.TOKEN && event.key !== STORAGE_KEYS.TRANSITION && event.key !== null) return
+      if (event.key === STORAGE_KEYS.TRANSITION || localStorage.getItem(STORAGE_KEYS.TRANSITION)) { pauseOrValidate(); return }
+      if (identity.current !== credentialIdentity(localStorage.getItem(STORAGE_KEYS.TOKEN))) clearViews()
+      void verifySession()
+    }
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') pauseOrValidate()
+    }
+    const onUnauthorized = () => clearLocal()
+    window.addEventListener('storage', onStorage)
+    window.addEventListener('focus', pauseOrValidate)
+    window.addEventListener('pageshow', pauseOrValidate)
+    document.addEventListener('visibilitychange', onVisible)
+    window.addEventListener(UNAUTHORIZED_EVENT, onUnauthorized)
+    return () => {
+      window.clearTimeout(bootstrap)
+      window.clearTimeout(recovery)
+      verification.current += 1
+      window.removeEventListener('storage', onStorage)
+      window.removeEventListener('focus', pauseOrValidate)
+      window.removeEventListener('pageshow', pauseOrValidate)
+      document.removeEventListener('visibilitychange', onVisible)
+      window.removeEventListener(UNAUTHORIZED_EVENT, onUnauthorized)
+    }
+  }, [verifySession, clearLocal, clearViews, logout])
 
-    // Reset warning state
-    warningShown.current = false
-  }, [startTokenMonitoring])
+  const extendSession = useCallback(async () => {
+    if (transition.current || renewing.current) return
+    const token = localStorage.getItem(STORAGE_KEYS.TOKEN)
+    if (!token) return
+    renewing.current = true
+    try {
+      const result: SessionToken = await api.extendSession()
+      if (localStorage.getItem(STORAGE_KEYS.TOKEN) === token && !transition.current) accept(result.access_token, result.session)
+    } catch (error) {
+      if (localStorage.getItem(STORAGE_KEYS.TOKEN) === token && error instanceof ApiError && error.status === 401) clearLocal()
+    } finally { renewing.current = false }
+  }, [accept, clearLocal])
 
-  const value = {
-    user,
-    login,
-    logout,
-    updateUser,
-    isLoading,
-    isTokenValid,
-    timeRemaining,
-    showExpiryWarning,
-    refreshTokenCheck,
-    extendSession,
-    trackActivity
-  }
+  useEffect(() => {
+    const check = () => {
+      const token = localStorage.getItem(STORAGE_KEYS.TOKEN)
+      if (!token || !session || transition.current) return
+      if (isTokenExpired(token)) { logout(); return }
+      setTimeRemaining(formatTimeRemaining(getTokenTimeRemaining(token)))
+      setShowExpiryWarning(isTokenNearExpiry(token))
+      const lifetime = getTokenLifetime(token)
+      const remaining = getTokenTimeRemaining(token)
+      if (Date.now() - lastActivity.current < Math.min(AUTH_TIMEOUTS.INACTIVITY_WARNING / 2, lifetime)
+          && remaining <= Math.min(AUTH_TIMEOUTS.INACTIVITY_WARNING, lifetime / 2)) void extendSession()
+    }
+    const timer = window.setInterval(check, 5_000)
+    return () => window.clearInterval(timer)
+  }, [session, logout, extendSession])
 
-  return (
-    <AuthContext.Provider value={value}>
-      {children}
-    </AuthContext.Provider>
-  )
+  const changeIdentity = useCallback(async (endpoint: string, data: unknown) => {
+    if (transition.current) throw new Error('An account switch is already in progress.')
+    transition.current = true
+    verification.current += 1
+    setIsTransitioning(true)
+    const token = localStorage.getItem(STORAGE_KEYS.TOKEN)
+    try {
+      await beginSessionTransition()
+      if (token !== localStorage.getItem(STORAGE_KEYS.TOKEN)) throw new Error('The account changed. Sign in again.')
+      const result: SessionToken = await api.post(endpoint, data, AbortSignal.timeout(30_000))
+      if (token !== localStorage.getItem(STORAGE_KEYS.TOKEN)) throw new Error('The account changed. Sign in again.')
+      accept(result.access_token, result.session)
+      lastActivity.current = Date.now()
+    } catch (error) {
+      // A transport failure leaves the transition outcome unknown. Never recover
+      // parent authority using an earlier token or a cached user record.
+      if (!(error instanceof ApiError) && token === localStorage.getItem(STORAGE_KEYS.TOKEN)) {
+        logout()
+        throw new Error('The account switch could not be confirmed. Please sign in again.')
+      }
+      throw error
+    } finally {
+      endSessionTransition()
+      transition.current = false
+      setIsTransitioning(false)
+    }
+  }, [accept, logout])
+
+  const login = useCallback((token: string, _user: User, next?: SessionState) => {
+    verification.current += 1
+    if (next) accept(token, next)
+    else {
+      localStorage.setItem(STORAGE_KEYS.TOKEN, token)
+      void verifySession()
+    }
+    lastActivity.current = Date.now()
+  }, [accept, verifySession])
+  const updateUser = useCallback((user: User) => {
+    setSession(current => current ? { ...current, user } : null)
+    localStorage.setItem(STORAGE_KEYS.USER, JSON.stringify(user))
+  }, [])
+
+  return <AuthContext.Provider value={{
+    user: session?.user ?? null, session, login, logout, updateUser,
+    isLoading, isTransitioning, isTokenValid: !!session && !isLoading,
+    timeRemaining, showExpiryWarning, extendSession,
+    refreshTokenCheck: () => { void verifySession() },
+    trackActivity: () => { lastActivity.current = Date.now() },
+    switchToStudent: (studentId, pin) => changeIdentity('/auth/switch-to-student', { student_id: studentId, pin }),
+    returnToAdmin: pin => changeIdentity('/auth/return-to-admin', { pin }),
+  }}>{children}</AuthContext.Provider>
 }

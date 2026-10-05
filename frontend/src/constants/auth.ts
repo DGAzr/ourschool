@@ -34,6 +34,7 @@ export const AUTH_TIMEOUTS = {
 export const STORAGE_KEYS = {
   TOKEN: 'token',
   USER: 'user',
+  TRANSITION: 'ourschool_account_transition',
   THEME: 'ourschool_theme',
   LAST_ACTIVITY: 'ourschool_last_activity',
   SESSION_EXTENDED: 'ourschool_session_extended'

@@ -6,6 +6,20 @@ All notable changes to OurSchool are documented here.
 
 ## [Unreleased]
 
+### PIN-protected student switching
+
+- Administrators can choose **Switch to Student** from their account-name menu,
+  select an active student, and set a temporary six-digit PIN for returning.
+  All tabs sharing that browser session switch together; student work is saved
+  normally, including simple-mode learners with temporary passwords.
+- Browser sessions are now revocable on the server. Switching replaces old
+  credentials; five incorrect PINs trigger a five-minute cooldown. Signing out
+  remains available without the PIN. Password changes and successful backup
+  restores require a fresh login.
+- **Upgrade:** deploy frontend and backend together and apply migrations normally.
+  Everyone must sign in once after upgrading because legacy tokens are rejected.
+  Sessions and PIN secrets are transient and excluded from JSON school backups.
+
 ### Docker Compose defaults (#41)
 
 - Bundled PostgreSQL now starts without a profile. Production publishes only

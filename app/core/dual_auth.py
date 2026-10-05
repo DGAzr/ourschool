@@ -40,40 +40,29 @@ def get_current_user_optional(
     Returns None if no valid Bearer token is provided.
     """
     from fastapi.security.utils import get_authorization_scheme_param
-    from app.routers.auth import _PASSWORD_CHANGE_ALLOWED_PATHS, get_user_by_username
-    from app.core.security import verify_token
+    from app.routers.auth import _PASSWORD_CHANGE_ALLOWED_PATHS
+    from app.core.browser_sessions import resolve_browser_session
 
-    # Extract authorization header
     authorization = request.headers.get("Authorization")
     if not authorization:
         return None
-
     scheme, token = get_authorization_scheme_param(authorization)
     if scheme.lower() != "bearer":
         return None
-
-    user: Optional[User] = None
-    try:
-        username = verify_token(token)
-        if username:
-            candidate = get_user_by_username(db, username)
-            if candidate and candidate.is_active:
-                user = candidate
-    except HTTPException:
-        # Invalid/expired token just means "not authenticated" here;
-        # the API-key fallback in get_current_user_or_api_key may still apply.
-        pass
-
-    # Mirror get_current_active_user: a user with a forced password change
-    # pending is locked out everywhere except the rotation endpoints.
+    # A supplied invalid browser credential cannot fall back to API-key authority.
+    session, user = resolve_browser_session(
+        token, db, lock=request.method not in {"GET", "HEAD", "OPTIONS"}
+    )
+    request.state.browser_session = session
     if (
-        user is not None
-        and user.must_change_password
+        user.must_change_password
+        and not session.is_guided
         and request.url.path not in _PASSWORD_CHANGE_ALLOWED_PATHS
     ):
+        raise HTTPException(403, "Password change required")
+    if session.is_guided and request.url.path == "/api/users/me/change-password":
         raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Password change required",
+            403, "Password changes are unavailable during a student session."
         )
 
     return user

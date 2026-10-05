@@ -34,6 +34,8 @@ const authValue = (user: User): AuthContextType => ({
   refreshTokenCheck: vi.fn(),
   extendSession: vi.fn(),
   trackActivity: vi.fn(),
+  switchToStudent: vi.fn(),
+  returnToAdmin: vi.fn(),
 })
 
 const renderLayout = (user: User, entry: string, cached = false) =>

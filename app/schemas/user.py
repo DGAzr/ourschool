@@ -104,11 +104,29 @@ class User(UserBase):
         from_attributes = True
 
 
+class SessionState(BaseModel):
+    user: User
+    is_guided: bool
+    return_account_name: Optional[str] = None
+    generation: int
+    expires_at: Optional[datetime] = None
+
+
+class SwitchToStudent(BaseModel):
+    student_id: int = Field(gt=0)
+    pin: str = Field(min_length=6, max_length=6, pattern=r"^[0-9]{6}$")
+
+
+class ReturnToAdmin(BaseModel):
+    pin: str = Field(min_length=6, max_length=6, pattern=r"^[0-9]{6}$")
+
+
 class Token(BaseModel):
     """Schema for tokens."""
 
     access_token: str
     token_type: str
+    session: SessionState
 
 
 class TokenData(BaseModel):

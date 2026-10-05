@@ -141,6 +141,10 @@ async def limit_body_size(request: Request, call_next):
 async def security_headers(request: Request, call_next):
     """Attach standard security headers to every response."""
     response = await call_next(request)
+    if request.url.path.startswith("/api/auth/"):
+        # Credentials and authority snapshots must always reach the server;
+        # browser caches cannot establish or restore authenticated access.
+        response.headers["Cache-Control"] = "no-store"
     response.headers.setdefault("X-Content-Type-Options", "nosniff")
     response.headers.setdefault("X-Frame-Options", "DENY")
     response.headers.setdefault("Referrer-Policy", "no-referrer")

@@ -1,13 +1,13 @@
 """Tests for the forced-password-change (must_change_password) flow."""
 
 
-def test_admin_reset_forces_password_change(client, admin_headers, student_factory):
+def test_admin_reset_forces_password_change(
+    reauthenticate, client, admin_headers, student_factory
+):
     student, _ = student_factory()
 
     # Admin issues a temporary password.
-    r = client.post(
-        f"/api/users/{student['id']}/reset-password", headers=admin_headers
-    )
+    r = client.post(f"/api/users/{student['id']}/reset-password", headers=admin_headers)
     assert r.status_code == 200, r.text
     temp_password = r.json()["temporary_password"]
 
@@ -36,6 +36,8 @@ def test_admin_reset_forces_password_change(client, admin_headers, student_facto
         headers=headers,
     )
     assert r.status_code == 200, r.text
+
+    reauthenticate(headers, student["username"], "brandnew456pass")
 
     # The flag clears and access is restored.
     r = client.get("/api/users/me", headers=headers)

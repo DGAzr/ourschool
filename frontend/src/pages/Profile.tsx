@@ -18,6 +18,7 @@
 
 import React, { useState } from 'react'
 import { Lock, Eye, EyeOff, Save } from 'lucide-react'
+import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { usersApi } from '../services/users'
 import { getErrorMessage } from '../services/api'
@@ -28,7 +29,8 @@ const FIELD_DISABLED = 'w-full bg-panel-2 border border-field-border rounded-fie
 const LABEL = 'block text-[12px] font-semibold text-muted uppercase tracking-wide mb-1.5'
 
 const Profile: React.FC = () => {
-  const { user, updateUser } = useAuth()
+  const { user, updateUser, session, logout } = useAuth()
+  const navigate = useNavigate()
   const [showPasswordForm, setShowPasswordForm] = useState(false)
   const [showCurrentPassword, setShowCurrentPassword] = useState(false)
   const [showNewPassword, setShowNewPassword] = useState(false)
@@ -79,8 +81,8 @@ const Profile: React.FC = () => {
       return
     }
 
-    if (passwordData.new_password.length < 6) {
-      setError('New password must be at least 6 characters long')
+    if (passwordData.new_password.length < 10) {
+      setError('New password must be at least 10 characters long')
       return
     }
 
@@ -90,7 +92,8 @@ const Profile: React.FC = () => {
         current_password: passwordData.current_password,
         new_password: passwordData.new_password,
       })
-      setSuccess('Password changed successfully')
+      logout('Password changed')
+      navigate('/login', { replace: true, state: { message: 'Password changed. Sign in with your new password.' } })
       setPasswordData({ current_password: '', new_password: '', confirm_password: '' })
       setShowPasswordForm(false)
     } catch (err) {
@@ -196,6 +199,7 @@ const Profile: React.FC = () => {
       </form>
 
       {/* Password */}
+      {!session?.is_guided && <>
       <div className="bg-panel border border-line rounded-card p-6">
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-[15px] font-semibold text-ink flex items-center gap-2">
@@ -261,7 +265,7 @@ const Profile: React.FC = () => {
                   {showNewPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                 </button>
               </div>
-              <p className="mt-1.5 text-[12px] text-faint">Must be at least 6 characters</p>
+              <p className="mt-1.5 text-[12px] text-faint">Must be at least 10 characters</p>
             </div>
 
             <div>
@@ -315,6 +319,7 @@ const Profile: React.FC = () => {
           <p className="text-[13px] text-muted">Click "Change Password" to update your password.</p>
         )}
       </div>
+      </>}
     </div>
   )
 }

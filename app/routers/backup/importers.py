@@ -340,6 +340,9 @@ def import_system_data(
         _import_system_settings(db, backup_data.system_settings, result, False)
 
         if not dry_run:
+            from app.core.browser_sessions import revoke_browser_sessions
+
+            revoke_browser_sessions(db)
             db.commit()
             result.success = True
             result.import_log.append(

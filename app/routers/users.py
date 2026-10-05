@@ -20,7 +20,7 @@ import secrets
 import string
 from typing import Annotated, List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, status, Query
+from fastapi import APIRouter, Depends, HTTPException, status, Query, Request
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.orm import Session
 
@@ -30,7 +30,8 @@ from app.core.dual_auth import AuthUser, require_admin_or_permission
 from app.models.assignment import StudentAssignment
 from app.models.attendance import AttendanceRecord
 from app.models.user import User, UserRole
-from app.routers.auth import get_current_active_user, get_current_user
+from app.routers.auth import get_current_active_user
+from app.core.browser_sessions import resolve_browser_session, revoke_browser_sessions
 from app.schemas.user import User as UserSchema
 from app.schemas.user import UserCreate, UserUpdate, validate_password_strength
 
@@ -42,6 +43,7 @@ optional_auth = HTTPBearer(auto_error=False)
 
 async def get_current_user_optional(
     db: Annotated[Session, Depends(get_db)],
+    request: Request,
     token: Optional[HTTPAuthorizationCredentials] = Depends(optional_auth),
 ) -> Optional[User]:
     """Get current user if authenticated, None if not."""
@@ -49,7 +51,11 @@ async def get_current_user_optional(
         return None
 
     try:
-        return await get_current_user(token.credentials, db)
+        session, user = resolve_browser_session(token.credentials, db, lock=True)
+        request.state.browser_session = session
+        if user.must_change_password and not session.is_guided:
+            return None
+        return user
     except HTTPException:
         return None
 
@@ -171,6 +177,7 @@ def delete_user(
         ).delete()
 
     # Now safe to delete the user
+    revoke_browser_sessions(db, user_id)
     db.delete(db_user)
     db.commit()
     return {"message": "User deleted successfully"}
@@ -320,6 +327,8 @@ def update_user(
                 detail=f"You may not modify: {', '.join(sorted(disallowed))}",
             )
 
+    if update_data.get("is_active") is False:
+        revoke_browser_sessions(db, db_user.id)
     for field, value in update_data.items():
         setattr(db_user, field, value)
 
@@ -370,6 +379,7 @@ def reset_user_password(
     # by the user on their next login.
     target_user.hashed_password = get_password_hash(temp_password)
     target_user.must_change_password = True
+    revoke_browser_sessions(db, target_user.id)
 
     db.commit()
     db.refresh(target_user)
@@ -426,6 +436,7 @@ def change_my_password(
     # Update password
     current_user.hashed_password = get_password_hash(new_password)
     current_user.must_change_password = False
+    revoke_browser_sessions(db, current_user.id)
     db.commit()
     db.refresh(current_user)
 

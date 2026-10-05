@@ -4,6 +4,7 @@ import userEvent from '@testing-library/user-event'
 import { describe, expect, it } from 'vitest'
 
 import Modal from './Modal'
+import { AuthContext, type AuthContextType } from '../../../contexts/AuthContext'
 
 const Harness = () => {
   const [open, setOpen] = useState(false)
@@ -74,4 +75,24 @@ it('keeps a nested confirmation accessible and closes only the top dialog', asyn
   await user.keyboard('{Escape}')
   expect(screen.queryByRole('dialog', {name:'Leave form?'})).toBeNull()
   expect(screen.getByRole('dialog', {name:'Lesson draft'})).toBeVisible()
+})
+
+it('conceals the portal while validating a session and preserves its draft', async () => {
+  const auth = { isLoading: false } as AuthContextType
+  const form = (value: AuthContextType) => <AuthContext.Provider value={value}>
+    <Modal isOpen title="Private draft" onClose={() => undefined}>
+      <textarea aria-label="Draft notes" defaultValue="Saved locally" />
+    </Modal>
+  </AuthContext.Provider>
+  const { rerender } = render(form(auth))
+  const draft = screen.getByLabelText('Draft notes')
+  await userEvent.type(draft, ' updated')
+  rerender(form({ ...auth, isLoading: true }))
+  expect(screen.queryByRole('dialog')).toBeNull()
+  expect(draft).not.toBeVisible()
+  expect(draft.closest('[inert]')).not.toBeNull()
+  rerender(form(auth))
+  expect(screen.getByRole('dialog', { name: 'Private draft' })).toBeVisible()
+  expect(screen.getByLabelText('Draft notes')).toBe(draft)
+  expect(draft).toHaveValue('Saved locally updated')
 })

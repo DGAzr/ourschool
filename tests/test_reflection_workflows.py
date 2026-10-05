@@ -85,7 +85,7 @@ def test_unknown_journal_timezone_rejected_before_creating_an_entry(
 
 
 def test_text_and_mood_reflection_is_owned_and_json_restorable(
-    client, admin_headers, student_factory, db_session
+    reauthenticate, client, admin_headers, student_factory, db_session
 ):
     student, headers = student_factory()
     _, other_headers = student_factory()
@@ -116,6 +116,7 @@ def test_text_and_mood_reflection_is_owned_and_json_restorable(
         "/api/backup/import", json={"backup_data": backup}, headers=admin_headers
     )
     assert imported.status_code == 200 and imported.json()["success"], imported.text
+    reauthenticate(headers, student["username"], "studentpass123")
     restored = next(
         e
         for e in client.get("/api/journal/entries", headers=headers).json()
@@ -201,12 +202,12 @@ def test_school_identity_and_setup_are_role_scoped(
 
 
 def test_school_logo_larger_than_a_small_setting_is_saved_and_readable(
-    client, admin_headers, student_factory, db_session
+    reauthenticate, client, admin_headers, student_factory, db_session
 ):
     import base64
     from app.schemas.points import SystemSetting
 
-    _, student_headers = student_factory()
+    student, student_headers = student_factory()
     image = Image.new("RGB", (640, 480))
     image.putdata(
         [(x % 256, y % 256, (x * y) % 256) for y in range(480) for x in range(640)]
@@ -254,6 +255,7 @@ def test_school_logo_larger_than_a_small_setting_is_saved_and_readable(
         "/api/backup/import", json={"backup_data": backup}, headers=admin_headers
     )
     assert restored.status_code == 200 and restored.json()["success"], restored.text
+    reauthenticate(student_headers, student["username"], "studentpass123")
     assert (
         client.get("/api/settings/school/identity", headers=student_headers).json()[
             "logo"

@@ -17,7 +17,7 @@
  */
 
 import React, { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useLocation } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { Eye, EyeOff, GraduationCap } from 'lucide-react'
 import { config } from '../config/env'
@@ -31,6 +31,7 @@ const Login: React.FC = () => {
 
   const { login } = useAuth()
   const navigate = useNavigate()
+  const location = useLocation()
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -49,16 +50,8 @@ const Login: React.FC = () => {
 
       if (response.ok) {
         const data = await response.json()
-        const userResponse = await fetch(`${config.api.baseUrl}/users/me`, {
-          headers: { Authorization: `Bearer ${data.access_token}` },
-        })
-        if (userResponse.ok) {
-          const userData = await userResponse.json()
-          login(data.access_token, userData)
-          navigate('/')
-        } else {
-          setError('Failed to get user information')
-        }
+        login(data.access_token, data.session.user, data.session)
+        navigate('/', { replace: true })
       } else {
         const errorData = await response.json()
         setError(errorData.detail || 'Login failed')
@@ -85,6 +78,7 @@ const Login: React.FC = () => {
           <p className="mt-1 text-[13px] text-muted">Homeschool Management System</p>
         </div>
 
+        {location.state?.message && <p role="status" className="mb-4 text-sm text-muted">{location.state.message}</p>}
         <form onSubmit={handleSubmit} className="space-y-4">
           {error && (
             <div className="px-4 py-3 rounded-card text-[13px] text-neg-fg bg-neg-bg border border-neg-fg/20">

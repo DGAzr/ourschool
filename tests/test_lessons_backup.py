@@ -17,7 +17,9 @@
 """Backup export → wipe → import round-trip for Lesson Planner data."""
 
 
-def test_lessons_backup_round_trip(client, admin_headers, classroom, student_factory):
+def test_lessons_backup_round_trip(
+    reauthenticate, client, admin_headers, classroom, student_factory
+):
     student, _ = student_factory()
 
     r = client.post(
@@ -110,6 +112,8 @@ def test_lessons_backup_round_trip(client, admin_headers, classroom, student_fac
     body = r.json()
     assert body["success"] is True, body
     assert body["errors"] == [], body["errors"]
+
+    reauthenticate(admin_headers)
 
     # Both lessons restored on their day, in relative order (other tests may
     # have left unrelated lessons on the same date).

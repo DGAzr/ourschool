@@ -18,10 +18,11 @@
 
 import { createContext, useContext } from 'react'
 import { User } from '../types'
+import { SessionState } from '../types/session'
 
 export interface AuthContextType {
   user: User | null
-  login: (token: string, userData: User) => void
+  login: (token: string, userData: User, session?: SessionState) => void
   logout: (reason?: string) => void
   updateUser: (userData: User) => void
   isLoading: boolean
@@ -31,6 +32,10 @@ export interface AuthContextType {
   refreshTokenCheck: () => void
   extendSession: () => Promise<void>
   trackActivity: () => void
+  session?: SessionState | null
+  isTransitioning?: boolean
+  switchToStudent: (studentId: number, pin: string) => Promise<void>
+  returnToAdmin: (pin: string) => Promise<void>
 }
 
 /** Raw context — consumed by AuthProvider; use useAuth() everywhere else. */

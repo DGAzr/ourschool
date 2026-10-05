@@ -102,6 +102,21 @@ def admin_headers(admin_token):
 
 
 @pytest.fixture()
+def reauthenticate(client):
+    """Explicitly prove revocation, then log in after restore/password changes."""
+
+    def login_again(headers, username="admin", password="adminpass123"):
+        assert client.get("/api/auth/session", headers=headers).status_code == 401
+        response = client.post(
+            "/api/auth/login", data={"username": username, "password": password}
+        )
+        assert response.status_code == 200, response.text
+        headers["Authorization"] = f"Bearer {response.json()['access_token']}"
+
+    return login_again
+
+
+@pytest.fixture()
 def student_factory(client, admin_headers):
     """Create a student (as admin) and log them in.
 

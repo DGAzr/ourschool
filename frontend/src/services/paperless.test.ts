@@ -28,8 +28,9 @@ it('downloads with authorization, progress, and the original filename', async ()
   expect(fetchMock).toHaveBeenCalledWith(
     expect.stringContaining('/42/content?disposition=attachment'),
     {
+      cache: 'no-store',
       headers: { Authorization: 'Bearer test-token' },
-      signal: controller.signal,
+      signal: expect.any(AbortSignal),
     }
   )
   expect(result.filename).toBe('original name.pdf')

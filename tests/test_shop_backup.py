@@ -29,7 +29,9 @@ def _png_bytes():
     return buf.getvalue()
 
 
-def test_shop_backup_round_trip(client, admin_headers, student_factory, db_session):
+def test_shop_backup_round_trip(
+    reauthenticate, client, admin_headers, student_factory, db_session
+):
     points_crud.update_system_setting(db_session, "points_system_enabled", "true")
 
     # Category.
@@ -133,6 +135,9 @@ def test_shop_backup_round_trip(client, admin_headers, student_factory, db_sessi
     assert body["success"] is True, body
     assert body["errors"] == [], body["errors"]
 
+    reauthenticate(admin_headers)
+    assert client.get("/api/auth/session", headers=student_headers).status_code == 401
+
     # Category restored.
     r = client.get("/api/shop/categories", headers=admin_headers)
     assert r.status_code == 200, r.text
@@ -154,6 +159,17 @@ def test_shop_backup_round_trip(client, admin_headers, student_factory, db_sessi
     assert names == ["BackupItem2", "BackupItem"]
 
     # Saving-toward goal restored, remapped to the restored item.
+    # Wiped users are restored with a password-reset requirement. A new guided
+    # session can check their restored work without reinstating old credentials.
+    students = client.get("/api/users/students", headers=admin_headers).json()
+    restored_student = next(s for s in students if s["email"] == student["email"])
+    switched = client.post(
+        "/api/auth/switch-to-student",
+        headers=admin_headers,
+        json={"student_id": restored_student["id"], "pin": "012345"},
+    )
+    assert switched.status_code == 200, switched.text
+    student_headers = {"Authorization": f"Bearer {switched.json()['access_token']}"}
     r = client.get("/api/points/my-balance", headers=student_headers)
     assert r.status_code == 200, r.text
     restored_item2 = next(i for i in all_items if i["name"] == "BackupItem2")

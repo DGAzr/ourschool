@@ -64,8 +64,8 @@ const PageLoadingSpinner = () => (
  * dedicated screen instead of the app.
  */
 const RequirePasswordChange = ({ children }: { children: React.ReactNode }) => {
-  const { user } = useAuth()
-  if (user?.must_change_password) {
+  const { user, session } = useAuth()
+  if (user?.must_change_password && !session?.is_guided) {
     return <ChangePasswordRequired />
   }
   return <>{children}</>
@@ -74,6 +74,11 @@ const RequirePasswordChange = ({ children }: { children: React.ReactNode }) => {
 const TemplatesRoute = () => {
   const { user } = useAuth()
   return user?.role === 'admin' ? <Templates /> : <Navigate to="/assignments" replace />
+}
+
+const AdminRoute = ({ children }: { children: React.ReactNode }) => {
+  const { user } = useAuth()
+  return user?.role === 'admin' ? <>{children}</> : <Navigate to="/" replace />
 }
 
 function AppContent() {
@@ -114,18 +119,18 @@ function AppContent() {
             <Route path="assignments" element={<Assignments />} />
             <Route path="assignments/:assignmentId" element={<AssignmentWork />} />
             <Route path="templates" element={<TemplatesRoute />} />
-            <Route path="lessons" element={<LessonPlanning />} />
-            <Route path="teach" element={<Teach />} />
+            <Route path="lessons" element={<AdminRoute><LessonPlanning /></AdminRoute>} />
+            <Route path="teach" element={<AdminRoute><Teach /></AdminRoute>} />
             <Route path="my-lessons" element={<MyLessons />} />
-            <Route path="materials" element={<Materials />} />
-            <Route path="grading" element={<Grading />} />
+            <Route path="materials" element={<AdminRoute><Materials /></AdminRoute>} />
+            <Route path="grading" element={<AdminRoute><Grading /></AdminRoute>} />
             <Route path="reports" element={<Reports />} />
             <Route path="journal" element={<Journal />} />
             <Route path="profile" element={<Profile />} />
-            <Route path="admin" element={<Admin />} />
+            <Route path="admin" element={<AdminRoute><Admin /></AdminRoute>} />
             <Route path="admin/settings" element={<Navigate to="/admin" replace />} />
-            <Route path="admin/settings/paperless" element={<PaperlessSettings />} />
-            <Route path="admin/shop" element={<AdminShop />} />
+            <Route path="admin/settings/paperless" element={<AdminRoute><PaperlessSettings /></AdminRoute>} />
+            <Route path="admin/shop" element={<AdminRoute><AdminShop /></AdminRoute>} />
             <Route path="my-points" element={<MyPoints />} />
             <Route path="shop" element={<Shop />} />
             <Route path="*" element={<NotFound />} />
@@ -141,10 +146,15 @@ function AppContent() {
   )
 }
 
+function SessionContent() {
+  const { user, session } = useAuth()
+  return <AppContent key={`${user?.id ?? 'signed-out'}:${session?.generation ?? 0}`} />
+}
+
 function App() {
   return (
     <AuthProvider>
-      <AppContent />
+      <SessionContent />
     </AuthProvider>
   )
 }

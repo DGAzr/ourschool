@@ -69,6 +69,8 @@ const authValue = (user: User): AuthContextType => ({
   refreshTokenCheck: vi.fn(),
   extendSession: vi.fn(),
   trackActivity: vi.fn(),
+  switchToStudent: vi.fn(),
+  returnToAdmin: vi.fn(),
 })
 
 const Location = () => {

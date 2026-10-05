@@ -124,7 +124,7 @@ function gradeColor(pct: number) {
 
 // ── Main component ─────────────────────────────────────────────────────────
 const Admin: React.FC = () => {
-  const { user, extendSession } = useAuth()
+  const { user, extendSession, logout } = useAuth()
   const { toast } = useToast()
   const navigate = useNavigate()
   const { refresh: refreshAssignmentTypes } = useAssignmentTypes()
@@ -283,6 +283,13 @@ const Admin: React.FC = () => {
         import_options: { ...importOptions, dry_run:previewOnly || importOptions.dry_run, wipe_before_import: wipe },
         ...(wipe ? { wipe_confirmation: WIPE_CONFIRMATION_PHRASE } : {}),
       })
+      if (result.success && !result.dry_run) {
+        logout()
+        navigate('/login', { replace: true, state: {
+          message: `Backup restored successfully${result.warnings.length ? ` with ${result.warnings.length} warning(s)` : ''}. Sign in again to continue.`,
+        } })
+        return
+      }
       setImportResult(result)
       if(result.success&&result.dry_run)setPreviewKey(importKey)
       else if(!result.success)setImportError(result.errors.join(' · ')||'Import could not be completed.')

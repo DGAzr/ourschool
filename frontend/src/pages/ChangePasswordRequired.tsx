@@ -39,7 +39,7 @@ const ChangePasswordRequired: React.FC = () => {
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState('')
 
-  const { updateUser, logout } = useAuth()
+  const { logout } = useAuth()
   const navigate = useNavigate()
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -57,9 +57,8 @@ const ChangePasswordRequired: React.FC = () => {
         current_password: currentPassword,
         new_password: newPassword,
       })
-      const freshUser = await api.get('/users/me')
-      updateUser(freshUser)
-      navigate('/')
+      logout('Password changed')
+      navigate('/login', { replace: true, state: { message: 'Password changed. Sign in with your new password.' } })
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Password change failed.')
     } finally {
@@ -120,13 +119,13 @@ const ChangePasswordRequired: React.FC = () => {
               type="password"
               autoComplete="new-password"
               required
-              minLength={8}
+              minLength={10}
               value={newPassword}
               onChange={(e) => setNewPassword(e.target.value)}
               className={inputClasses}
             />
             <p className="mt-1 text-[12px] text-faint">
-              At least 8 characters, with letters and numbers.
+              At least 10 characters, with letters and numbers.
             </p>
           </div>
 

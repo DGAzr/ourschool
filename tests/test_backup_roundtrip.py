@@ -39,7 +39,7 @@ def test_dry_run_reports_success_without_changes(
 
 
 def test_deleted_records_are_restored_by_import(
-    client, admin_headers, classroom, student_factory, assign
+    reauthenticate, client, admin_headers, classroom, student_factory, assign
 ):
     student, _ = student_factory()
     sa = assign(classroom["template"]["id"], student["id"], due_date="2026-04-01")
@@ -85,6 +85,8 @@ def test_deleted_records_are_restored_by_import(
     body = r.json()
     assert body["success"] is True, body
     assert body["errors"] == [], body["errors"]
+
+    reauthenticate(admin_headers)
 
     # Attendance record is back with the same content.
     r = client.get(
@@ -206,7 +208,7 @@ def test_wipe_dry_run_counts_without_deleting(
 
 
 def test_wipe_and_restore_replaces_data_and_preserves_admin(
-    client, admin_headers, classroom, student_factory, db_session
+    reauthenticate, client, admin_headers, classroom, student_factory, db_session
 ):
     from app.models.assignment_type import AssignmentTypeConfig
     from app.models.user import User
@@ -235,6 +237,8 @@ def test_wipe_and_restore_replaces_data_and_preserves_admin(
     assert body["success"] is True, body
     assert body["errors"] == [], body["errors"]
     assert body["deleted_counts"]["attendance_records"] >= 2
+
+    reauthenticate(admin_headers)
 
     # Users were recreated from the backup; find the restored student by email.
     r = client.get("/api/users/students", headers=admin_headers)
@@ -265,7 +269,7 @@ def test_wipe_and_restore_replaces_data_and_preserves_admin(
 
 
 def test_wipe_restore_preserves_point_transaction_dates(
-    client, admin_headers, student_factory, db_session
+    reauthenticate, client, admin_headers, student_factory, db_session
 ):
     from app.models.points import PointTransaction
 
@@ -294,6 +298,8 @@ def test_wipe_restore_preserves_point_transaction_dates(
     )
     assert r.status_code == 200, r.text
     assert r.json()["success"] is True, r.json()
+
+    reauthenticate(admin_headers)
 
     r = client.get("/api/users/students", headers=admin_headers)
     assert r.status_code == 200, r.text

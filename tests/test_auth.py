@@ -120,7 +120,7 @@ def test_student_cannot_edit_other_user(client, admin_token):
         "/api/users/",
         json={
             "email": "stu@test.local",
-            "username": "student1",
+            "username": "auth-edit-student",
             "first_name": "S",
             "last_name": "T",
             "role": "student",
@@ -133,7 +133,7 @@ def test_student_cannot_edit_other_user(client, admin_token):
 
     login = client.post(
         "/api/auth/login",
-        data={"username": "student1", "password": "studentpass1"},
+        data={"username": "auth-edit-student", "password": "studentpass1"},
     )
     stu = _auth(login.json()["access_token"])
 

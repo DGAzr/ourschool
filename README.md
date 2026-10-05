@@ -26,6 +26,22 @@ OurSchool is a self-hosted homeschool management system for families who take at
 - **Integration API** — REST API with Bearer token and API key (`os_` prefix) auth. MCP-ready: `GET /api/meta` for enum/permission discovery. Full endpoint reference below.
 
 
+### Sharing a device with a student
+
+Click your account name at the bottom of the sidebar and choose **Switch to
+Student**. Choose an active student, then enter and confirm a six-digit PIN.
+The student can use their normal account and save real work. Every OurSchool
+tab sharing that browser session switches together; other devices stay separate.
+
+Use **Return to Parent/Teacher** and enter that PIN to return to your account.
+Five incorrect attempts pause PIN entry for five minutes. If you forget the PIN,
+sign out and log in normally. Session expiry also signs out; it never unlocks
+parent access automatically. This feature controls OurSchool, not the device.
+
+Browser-session upgrades require everyone to log in once. Password changes and
+successful backup restores also revoke browser sessions. Sessions and PINs are
+excluded from JSON backups; all school work keeps its existing backup support.
+
 ## 🚀 Quick Start (Docker — recommended)
 
 Requires Docker Compose 2.20 or later. Pull the official images from GHCR.

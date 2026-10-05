@@ -20,24 +20,25 @@ import threading
 import time
 from collections import defaultdict, deque
 from datetime import datetime, timedelta, timezone
+import math
 from typing import Annotated, Deque, Dict, Tuple
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
+from sqlalchemy import or_
 
-from app.core.config import settings
 from app.core.database import get_db
 from app.core.logging import get_logger, log_authentication_event
-from app.core.security import (
-    create_access_token,
-    decode_token,
-    verify_password,
-    verify_token,
+from app.core.security import get_password_hash, verify_password
+from app.core.browser_sessions import (
+    resolve_browser_session,
+    session_state,
+    issue_session_token,
 )
-from app.crud import settings as crud_settings
+from app.models.browser_session import BrowserSession
 from app.models.user import User, UserRole
-from app.schemas.user import Token
+from app.schemas.user import Token, SessionState, SwitchToStudent, ReturnToAdmin
 
 logger = get_logger("auth")
 
@@ -104,23 +105,15 @@ def authenticate_user(db: Session, username: str, password: str):
     return user
 
 
-async def get_current_user(
+def get_current_user(
     token: Annotated[str, Depends(oauth2_scheme)],
     db: Annotated[Session, Depends(get_db)],
+    request: Request,
 ):
-    """Get the current user."""
-    credentials_exception = HTTPException(
-        status_code=status.HTTP_401_UNAUTHORIZED,
-        detail="Could not validate credentials",
-        headers={"WWW-Authenticate": "Bearer"},
+    session, user = resolve_browser_session(
+        token, db, lock=request.method not in {"GET", "HEAD", "OPTIONS"}
     )
-
-    username = verify_token(token)
-    user = get_user_by_username(db, username=username)
-    if user is None:
-        raise credentials_exception
-    if not user.is_active:
-        raise HTTPException(status_code=400, detail="Inactive user")
+    request.state.browser_session = session
     return user
 
 
@@ -130,6 +123,8 @@ async def get_current_user(
 _PASSWORD_CHANGE_ALLOWED_PATHS = {
     "/api/users/me",
     "/api/users/me/change-password",
+    "/api/auth/session",
+    "/api/auth/logout",
 }
 
 
@@ -142,11 +137,19 @@ async def get_current_active_user(
         raise HTTPException(status_code=400, detail="Inactive user")
     if (
         current_user.must_change_password
+        and not request.state.browser_session.is_guided
         and request.url.path not in _PASSWORD_CHANGE_ALLOWED_PATHS
     ):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Password change required",
+        )
+    if (
+        request.state.browser_session.is_guided
+        and request.url.path == "/api/users/me/change-password"
+    ):
+        raise HTTPException(
+            403, "Password changes are unavailable during a student session."
         )
     return current_user
 
@@ -210,48 +213,158 @@ async def login_for_access_token(
         user.must_change_password = True
         db.commit()
 
-    session_timeout = crud_settings.get_session_timeout_minutes(
-        db, default_value=settings.access_token_expire_minutes
+    # Opportunistic cleanup keeps expired session secrets out of the database.
+    db.query(BrowserSession).filter(
+        or_(
+            BrowserSession.expires_at <= datetime.now(timezone.utc),
+            BrowserSession.revoked_at.isnot(None),
+        )
+    ).delete(synchronize_session=False)
+    session = BrowserSession(
+        original_user_id=user.id,
+        effective_user_id=user.id,
+        original_role=user.role.value,
+        generation=0,
+        started_at=datetime.now(timezone.utc),
     )
-    access_token = create_access_token(
-        data={"sub": user.username},
-        expires_delta=(
-            timedelta(minutes=session_timeout) if session_timeout > 0 else None
-        ),
-        never_expires=session_timeout == 0,
-    )
+    db.add(session)
+    db.flush()
+    result = issue_session_token(db, session, user)
 
     log_authentication_event(
         "login", user_id=str(user.id), username=user.username, success=True
     )
 
-    return {"access_token": access_token, "token_type": "bearer"}
+    return result
 
 
 @router.post("/extend-session", response_model=Token)
-async def extend_session(
-    token: Annotated[str, Depends(oauth2_scheme)],
+def extend_session(
+    request: Request,
     current_user: Annotated[User, Depends(get_current_active_user)],
     db: Annotated[Session, Depends(get_db)],
 ):
-    """Extend the current user's session using the configured rolling timeout."""
-    payload = decode_token(token)
-    session_start_ts = payload.get("sst")
-    session_start = (
-        datetime.fromtimestamp(session_start_ts, tz=timezone.utc)
-        if session_start_ts
-        else datetime.now(timezone.utc)
-    )
+    return issue_session_token(db, request.state.browser_session, current_user)
 
-    session_timeout = crud_settings.get_session_timeout_minutes(
-        db, default_value=settings.access_token_expire_minutes
+
+@router.get("/session", response_model=SessionState)
+def read_session(
+    request: Request,
+    current_user: Annotated[User, Depends(get_current_active_user)],
+    db: Annotated[Session, Depends(get_db)],
+):
+    return session_state(db, request.state.browser_session, current_user)
+
+
+@router.post("/switch-to-student", response_model=Token)
+def switch_to_student(
+    data: SwitchToStudent,
+    request: Request,
+    current_user: Annotated[User, Depends(get_current_admin_user)],
+    db: Annotated[Session, Depends(get_db)],
+):
+    session = request.state.browser_session
+    if session.is_guided:
+        raise HTTPException(403, "Return to your account before switching again.")
+    student = (
+        db.query(User)
+        .filter(
+            User.id == data.student_id, User.role == UserRole.STUDENT, User.is_active
+        )
+        .first()
     )
-    access_token = create_access_token(
-        data={"sub": current_user.username},
-        expires_delta=(
-            timedelta(minutes=session_timeout) if session_timeout > 0 else None
-        ),
-        session_start=session_start,
-        never_expires=session_timeout == 0,
+    if not student:
+        raise HTTPException(404, "Active student not found.")
+    session.effective_user_id = student.id
+    session.pin_hash = get_password_hash(data.pin)
+    session.pin_failures = 0
+    session.pin_blocked_until = None
+    session.generation += 1
+    result = issue_session_token(db, session, student)
+    logger.info(
+        "Student session started",
+        extra={
+            "event": "auth_switch_to_student",
+            "administrator_id": current_user.id,
+            "student_id": student.id,
+        },
     )
-    return {"access_token": access_token, "token_type": "bearer"}
+    return result
+
+
+@router.post("/return-to-admin", response_model=Token)
+def return_to_admin(
+    data: ReturnToAdmin,
+    request: Request,
+    current_user: Annotated[User, Depends(get_current_active_user)],
+    db: Annotated[Session, Depends(get_db)],
+):
+    session = request.state.browser_session
+    if not session.is_guided:
+        raise HTTPException(403, "This is not a parent-started student session.")
+    now = datetime.now(timezone.utc)
+    if session.pin_blocked_until and session.pin_blocked_until > now:
+        retry = max(1, math.ceil((session.pin_blocked_until - now).total_seconds()))
+        raise HTTPException(
+            429,
+            "Too many incorrect PINs. Try again later.",
+            headers={"Retry-After": str(retry)},
+        )
+    if session.pin_blocked_until:
+        session.pin_failures = 0
+        session.pin_blocked_until = None
+    if not verify_password(data.pin, session.pin_hash):
+        session.pin_failures += 1
+        blocked = session.pin_failures >= 5
+        if blocked:
+            session.pin_blocked_until = now + timedelta(minutes=5)
+        db.commit()
+        logger.warning(
+            "Student session return failed",
+            extra={
+                "event": "auth_return_to_admin_failed",
+                "administrator_id": session.original_user_id,
+                "student_id": current_user.id,
+                "reason": "incorrect_pin",
+            },
+        )
+        raise HTTPException(
+            429 if blocked else 403,
+            (
+                "Too many incorrect PINs. Try again in 5 minutes."
+                if blocked
+                else "Incorrect PIN."
+            ),
+            headers={"Retry-After": "300"} if blocked else None,
+        )
+    administrator = db.get(User, session.original_user_id)
+    student_id = current_user.id
+    session.effective_user_id = administrator.id
+    session.pin_hash = None
+    session.pin_failures = 0
+    session.pin_blocked_until = None
+    session.generation += 1
+    result = issue_session_token(db, session, administrator)
+    logger.info(
+        "Student session ended",
+        extra={
+            "event": "auth_return_to_admin",
+            "administrator_id": administrator.id,
+            "student_id": student_id,
+        },
+    )
+    return result
+
+
+@router.post("/logout", status_code=204)
+def logout_session(
+    request: Request,
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[Session, Depends(get_db)],
+):
+    session = request.state.browser_session
+    session.revoked_at = datetime.now(timezone.utc)
+    session.pin_hash = None
+    session.pin_failures = 0
+    session.pin_blocked_until = None
+    db.commit()

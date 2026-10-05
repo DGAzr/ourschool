@@ -16,7 +16,7 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-import { api, getAuthOnlyHeaders } from './api'
+import { api, authenticatedFetch } from './api'
 import { config } from '../config/env'
 import {
   MaterialKind,
@@ -165,9 +165,9 @@ export const paperlessApi = {
     signal: AbortSignal,
     progress: (loaded: number, total: number) => void
   ): Promise<{ blob: Blob; filename: string }> => {
-    const response = await fetch(
-      `${config.api.baseUrl}${BASE}/documents/${documentId}/content?disposition=attachment`,
-      { headers: getAuthOnlyHeaders(), signal }
+    const response = await authenticatedFetch(
+      `${BASE}/documents/${documentId}/content?disposition=attachment`,
+      { signal }, false
     )
     if (!response.ok) {
       const body = await response.json().catch(() => null)

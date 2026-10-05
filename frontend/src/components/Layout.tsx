@@ -23,6 +23,8 @@ import { usePointsStatus } from '../contexts/PointsStatusContext'
 import { usePaperlessStatusContext } from '../contexts/PaperlessStatusContext'
 import { useTheme } from '../contexts/ThemeContext'
 import PointsDisplay from './PointsDisplay'
+import AccountMenu from './AccountMenu'
+import StudentSessionDialog from './StudentSessionDialog'
 import { User } from '../types'
 import { type LucideIcon,
   Home,
@@ -93,6 +95,10 @@ interface SidebarContentProps {
   user: User | null
   onNavigate: () => void
   onLogout: () => void
+  isGuided: boolean
+  onProfile: () => void
+  onSwitch: () => void
+  onReturn: () => void
 }
 
 const SidebarContent: React.FC<SidebarContentProps> = ({
@@ -103,6 +109,7 @@ const SidebarContent: React.FC<SidebarContentProps> = ({
   user,
   onNavigate,
   onLogout,
+  isGuided, onProfile, onSwitch, onReturn,
 }) => (
   <div className="flex flex-col h-full">
     {/* Brand */}
@@ -165,19 +172,8 @@ const SidebarContent: React.FC<SidebarContentProps> = ({
         </div>
       )}
       <div className="flex items-center gap-2 px-2 py-1.5">
-        <Link to="/profile" onClick={onNavigate} className="flex min-h-[44px] items-center gap-2 flex-1 min-w-0 group">
-          <div className="w-7 h-7 rounded-full bg-track flex items-center justify-center flex-shrink-0">
-            <span className="text-[11px] font-semibold text-ink-2 font-mono">{initials}</span>
-          </div>
-          <div className="min-w-0">
-            <p className="text-[13px] font-medium text-ink truncate leading-tight group-hover:text-accent transition-colors">
-              {user?.first_name} {user?.last_name}
-            </p>
-            <p className="text-[11px] text-faint leading-tight">
-              {isAdmin ? 'Teacher' : 'Student'}
-            </p>
-          </div>
-        </Link>
+        <AccountMenu user={user} initials={initials} isGuided={isGuided}
+          onProfile={onProfile} onSwitch={onSwitch} onReturn={onReturn} />
         <ThemeCycler />
         <button
           onClick={onLogout}
@@ -193,9 +189,10 @@ const SidebarContent: React.FC<SidebarContentProps> = ({
 )
 
 const Layout: React.FC = () => {
-  const { user, logout } = useAuth()
+  const { user, logout, session } = useAuth()
   const navigate = useNavigate()
   const location = useLocation()
+  const [sessionDialog, setSessionDialog] = useState<'switch' | 'return' | null>(null)
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const sidebarRef = useRef<HTMLElement>(null)
   const mainShellRef = useRef<HTMLDivElement>(null)
@@ -317,10 +314,15 @@ const Layout: React.FC = () => {
     user,
     onNavigate: () => setSidebarOpen(false),
     onLogout: handleLogout,
+    isGuided: session?.is_guided === true,
+    onProfile: () => { setSidebarOpen(false); navigate('/profile') },
+    onSwitch: () => { setSidebarOpen(false); window.setTimeout(() => setSessionDialog('switch'), 0) },
+    onReturn: () => { setSidebarOpen(false); window.setTimeout(() => setSessionDialog('return'), 0) },
   }
 
   return (
     <div className="flex h-screen bg-bg">
+      {sessionDialog && <StudentSessionDialog returning={sessionDialog === 'return'} onClose={() => setSessionDialog(null)} />}
       {/* Mobile overlay */}
       {sidebarOpen && (
         <div
@@ -375,6 +377,10 @@ const Layout: React.FC = () => {
         </div>
 
         <main className="flex-1 overflow-y-auto p-4 sm:p-7 min-w-0">
+          {session?.is_guided && <div role="status" className="mb-4 flex items-center justify-between gap-3 rounded-field bg-accent-soft px-4 py-2 text-sm">
+            <span>Student session · {user?.first_name} {user?.last_name}</span>
+            <button type="button" className="min-h-[44px] font-semibold text-accent" onClick={() => setSessionDialog('return')}>Return to Parent/Teacher</button>
+          </div>}
           {pointsStatusError && (
             <div role="status" className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-field border border-warn-line bg-warn-soft px-4 py-3 text-[13px] text-warn">
               <span>{pointsStatusError} Points features may be temporarily hidden.</span>

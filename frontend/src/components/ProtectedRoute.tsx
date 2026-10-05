@@ -27,19 +27,16 @@ interface ProtectedRouteProps {
 const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children }) => {
   const { user, isLoading } = useAuth()
 
-  if (isLoading) {
-    return (
-      <div className="min-h-screen flex items-center justify-center bg-white dark:bg-gray-900">
-        <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-blue-500 dark:border-blue-400"></div>
-      </div>
-    )
-  }
+  if (!user && !isLoading) return <Navigate to="/login" replace />
 
-  if (!user) {
-    return <Navigate to="/login" replace />
-  }
-
-  return <>{children}</>
+  // Keep drafts mounted during same-account focus validation, but hide and
+  // isolate protected content until the server has confirmed the session.
+  return <>
+    {isLoading && <div role="status" aria-label="Validating session" className="flex min-h-screen items-center justify-center bg-bg">
+      <div className="w-8 h-8 border-2 border-line border-t-accent rounded-full animate-spin" />
+    </div>}
+    <div hidden={isLoading} inert={isLoading}>{user ? children : null}</div>
+  </>
 }
 
 export default ProtectedRoute

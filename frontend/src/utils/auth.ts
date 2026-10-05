@@ -68,7 +68,7 @@ export const isTokenExpired = (token: string): boolean => {
 
     // If token has an exp claim, use it
     if (payload.exp) {
-      return payload.exp * 1000 < Date.now()
+      return payload.exp * 1000 <= Date.now()
     }
 
     return false
@@ -187,8 +187,7 @@ export const isValidTokenFormat = (token: string): boolean => {
 
   // Try to decode the payload to ensure it's valid base64
   try {
-    decodeToken(token)
-    return true
+    return decodeToken(token) !== null
   } catch {
     return false
   }

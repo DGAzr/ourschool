@@ -6,7 +6,7 @@ import LessonPlanning from './LessonPlanning'
 import type { Lesson } from '../types/lesson'
 
 const mocks = vi.hoisted(() => ({ list: vi.fn(), impact: vi.fn(), batch: vi.fn(), toast: vi.fn() }))
-vi.mock('../contexts/AuthContext', () => ({ useAuth: () => ({user:{id:1,role:'admin'}}) }))
+vi.mock('../contexts/AuthContext', async original => ({ ...await original<typeof import('../contexts/AuthContext')>(), useAuth: () => ({user:{id:1,role:'admin'}}) }))
 vi.mock('../components/ui', async original => ({...await original<typeof import('../components/ui')>(), useToast:()=>({toast:mocks.toast})}))
 vi.mock('../components/lessons/LessonBoard', () => ({ default:()=>null }))
 vi.mock('../components/lessons/PlannerHeader', () => ({ default:()=>null }))

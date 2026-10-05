@@ -44,16 +44,64 @@ export const getAuthOnlyHeaders = (): Record<string, string> => {
 }
 
 let redirecting = false
+let epoch = 0
+let transitioning = false
+let ownedTransition: string | null = null
+const activeReads = new Set<AbortController>()
+const pendingWrites = new Set<Promise<void>>()
 
-/**
- * Central handler for an authentication failure (401). Clears the stored
- * session and redirects to the login page so a stale/revoked token never
- * leaves the user in a half-logged-in state. Guarded so concurrent failed
- * requests trigger a single redirect.
- */
-const handleUnauthorized = () => {
+export class ApiError extends Error {
+  constructor(message: string, public status: number, public retryAfter = 0) {
+    super(message)
+  }
+}
+
+export const credentialIdentity = (token: string | null): string | null => {
+  if (!token) return null
+  try {
+    const payload = JSON.parse(atob(token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')))
+    return payload.sid ? `${payload.sid}:${payload.gen}` : token
+  } catch { return token }
+}
+
+/** Cancel protected reads and discard responses belonging to an earlier identity. */
+export const clearProtectedRequests = () => {
+  epoch += 1
+  activeReads.forEach(controller => controller.abort())
+  activeReads.clear()
+}
+
+export const beginSessionTransition = async () => {
+  if (transitioning) throw new ApiError('An account switch is already in progress.', 409)
+  transitioning = true
+  if (localStorage.getItem(STORAGE_KEYS.TRANSITION)) {
+    transitioning = false
+    throw new ApiError('An account switch is already in progress in another tab.', 409)
+  }
+  await Promise.all([...pendingWrites])
+  // Pause every tab before the server rotates credentials, preventing an old
+  // request's 401 from clearing storage before the replacement token arrives.
+  if (localStorage.getItem(STORAGE_KEYS.TRANSITION)) throw new ApiError('An account switch is already in progress in another tab.', 409)
+  ownedTransition = crypto.randomUUID()
+  localStorage.setItem(STORAGE_KEYS.TRANSITION, JSON.stringify({ started: Date.now(), owner: ownedTransition }))
+}
+export const endSessionTransition = () => {
+  transitioning = false
+  const marker = localStorage.getItem(STORAGE_KEYS.TRANSITION)
+  try {
+    if (marker && JSON.parse(marker).owner === ownedTransition) localStorage.removeItem(STORAGE_KEYS.TRANSITION)
+  } catch {
+    // A malformed marker is handled by session validation; do not mask the
+    // transition result or retain this tab's local transition lock.
+  } finally { ownedTransition = null }
+}
+
+const handleUnauthorized = (token: string | null) => {
+  // A late rejection of older credentials must never clear a replacement session.
+  if (localStorage.getItem(STORAGE_KEYS.TOKEN) !== token) return
   localStorage.removeItem(STORAGE_KEYS.TOKEN)
   localStorage.removeItem(STORAGE_KEYS.USER)
+  clearProtectedRequests()
   window.dispatchEvent(new CustomEvent(UNAUTHORIZED_EVENT))
   if (!redirecting && window.location.pathname !== '/login') {
     redirecting = true
@@ -80,30 +128,80 @@ const parseError = async (response: Response): Promise<string> => {
   return message
 }
 
-/** Single code path for every request: auth headers, 401 handling, errors. */
+/** Shared transport, including streamed responses and generation-aware failures. */
+export const authenticatedFetch = async (endpoint: string, init: RequestInit = {}, jsonHeaders = true): Promise<Response> => {
+  const isAuth = endpoint.startsWith('/auth/')
+  if ((transitioning || localStorage.getItem(STORAGE_KEYS.TRANSITION)) && (!isAuth || endpoint === '/auth/extend-session')) throw new Error('An account switch is in progress.')
+  const capturedToken = localStorage.getItem(STORAGE_KEYS.TOKEN)
+  const capturedEpoch = epoch
+  const controller = new AbortController()
+  const write = !['GET', 'HEAD'].includes(init.method ?? 'GET') && !isAuth
+  let finishWrite: (() => void) | undefined
+  if (write) {
+    const completed = new Promise<void>(resolve => { finishWrite = resolve })
+    pendingWrites.add(completed)
+    void completed.then(() => pendingWrites.delete(completed))
+  } else {
+    activeReads.add(controller)
+  }
+  const abort = () => controller.abort()
+  init.signal?.addEventListener('abort', abort, { once: true })
+  if (init.signal?.aborted) controller.abort()
+  const release = () => {
+    activeReads.delete(controller)
+    init.signal?.removeEventListener('abort', abort)
+    finishWrite?.()
+  }
+  const guard = () => {
+    if (controller.signal.aborted || capturedEpoch !== epoch || credentialIdentity(capturedToken) !== credentialIdentity(localStorage.getItem(STORAGE_KEYS.TOKEN))) {
+      throw new DOMException('The account changed or the request was cancelled.', 'AbortError')
+    }
+  }
+  const headers = init.body instanceof FormData || !jsonHeaders ? getAuthOnlyHeaders() : getAuthHeaders()
+  try {
+    const response = await fetch(`${API_BASE}${endpoint}`, {
+      ...init, cache: 'no-store', signal: controller.signal,
+      headers: { ...headers, ...(init.headers || {}) },
+    })
+    guard()
+    if (response.status === 401) {
+      handleUnauthorized(capturedToken)
+      throw new ApiError('Your session has expired. Please log in again.', 401)
+    }
+    if (!response.ok) {
+      throw new ApiError(await parseError(response), response.status, Number(response.headers.get('Retry-After') ?? 0))
+    }
+    if (!response.body) { release(); return response }
+    // Keep cancellation and identity checks alive through the last response chunk.
+    // This also preserves progress reporting for large Paperless downloads.
+    const reader = response.body.getReader()
+    const stream = new ReadableStream({
+      async pull(output) {
+        try {
+          guard()
+          const { done, value } = await reader.read()
+          guard()
+          if (done) { output.close(); release(); reader.releaseLock() }
+          else output.enqueue(value)
+        } catch (error) {
+          output.error(error)
+          void reader.cancel().catch(() => undefined)
+          release()
+        }
+      },
+      cancel() {
+        controller.abort()
+        release()
+        return reader.cancel()
+      },
+    })
+    return new Response(stream, { status: response.status, statusText: response.statusText, headers: response.headers })
+  } catch (error) { release(); throw error }
+}
+
 const request = async (endpoint: string, init: RequestInit = {}) => {
-  // FormData bodies must NOT carry a JSON Content-Type — the browser sets the
-  // multipart boundary itself. Send auth-only headers in that case.
-  const baseHeaders =
-    init.body instanceof FormData ? getAuthOnlyHeaders() : getAuthHeaders()
-  const response = await fetch(`${API_BASE}${endpoint}`, {
-    ...init,
-    headers: { ...baseHeaders, ...(init.headers || {}) },
-  })
-
-  if (response.status === 401) {
-    handleUnauthorized()
-    throw new Error('Your session has expired. Please log in again.')
-  }
-
-  if (!response.ok) {
-    throw new Error(await parseError(response))
-  }
-
-  if (response.status === 204) {
-    return null
-  }
-  // Some endpoints (rare) return empty bodies on 200.
+  const response = await authenticatedFetch(endpoint, init)
+  if (response.status === 204) return null
   const text = await response.text()
   return text ? JSON.parse(text) : null
 }
@@ -123,8 +221,8 @@ export const api = {
   get: (endpoint: string, signal?: AbortSignal) =>
     request(endpoint, { method: 'GET', signal }),
 
-  post: (endpoint: string, data?: unknown) =>
-    request(endpoint, { method: 'POST', body: JSON.stringify(data ?? {}) }),
+  post: (endpoint: string, data?: unknown, signal?: AbortSignal) =>
+    request(endpoint, { method: 'POST', body: JSON.stringify(data ?? {}), signal }),
 
   put: (endpoint: string, data?: unknown) =>
     request(endpoint, { method: 'PUT', body: JSON.stringify(data ?? {}) }),
@@ -141,34 +239,8 @@ export const api = {
 
   // Authenticated binary fetch (e.g. streamed document content). Returns a
   // Blob; callers turn it into an object URL for inline viewing/downloads.
-  getBlob: async (endpoint: string, signal?: AbortSignal): Promise<Blob> => {
-    const response = await fetch(`${API_BASE}${endpoint}`, {
-      method: 'GET',
-      signal,
-      headers: getAuthOnlyHeaders(),
-    })
-    if (response.status === 401) {
-      handleUnauthorized()
-      throw new Error('Your session has expired. Please log in again.')
-    }
-    if (!response.ok) {
-      throw new Error(await parseError(response))
-    }
-    return response.blob()
-  },
+  getBlob: async (endpoint: string, signal?: AbortSignal): Promise<Blob> =>
+    (await authenticatedFetch(endpoint, { method: 'GET', signal }, false)).blob(),
 
-  // Authentication-specific methods
-  extendSession: async () => {
-    const response = await fetch(`${API_BASE}/auth/extend-session`, {
-      method: 'POST',
-      headers: getAuthHeaders(),
-    })
-    if (!response.ok) {
-      // Don't force-redirect here; the caller (AuthProvider) decides.
-      throw new Error(
-        `Session extension failed: ${response.status} ${response.statusText}`
-      )
-    }
-    return response.json()
-  },
+  extendSession: () => request('/auth/extend-session', { method: 'POST' }),
 }

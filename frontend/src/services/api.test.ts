@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { api, UNAUTHORIZED_EVENT } from './api'
+import { api, UNAUTHORIZED_EVENT, beginSessionTransition, endSessionTransition, clearProtectedRequests } from './api'
 import { STORAGE_KEYS } from '../constants/auth'
 
 const fetchMock = vi.fn()
@@ -17,8 +17,49 @@ beforeEach(() => {
 })
 
 afterEach(() => {
+  endSessionTransition()
+  clearProtectedRequests()
   vi.unstubAllGlobals()
   fetchMock.mockReset()
+})
+
+it('does not let a stale 401 erase replacement credentials', async () => {
+  localStorage.setItem(STORAGE_KEYS.TOKEN, 'old')
+  let respond!: (response: Response) => void
+  fetchMock.mockReturnValue(new Promise<Response>(resolve => { respond = resolve }))
+  const pending = api.get('/users/me')
+  localStorage.setItem(STORAGE_KEYS.TOKEN, 'new')
+  respond(jsonResponse(401, { detail: 'old token' }))
+  await expect(pending).rejects.toThrow(/account changed/i)
+  expect(localStorage.getItem(STORAGE_KEYS.TOKEN)).toBe('new')
+})
+
+it('waits for pending writes and blocks new writes during switching', async () => {
+  let respond!: (response: Response) => void
+  fetchMock.mockReturnValue(new Promise<Response>(resolve => { respond = resolve }))
+  const write = api.put('/users/me', { first_name: 'Saved' })
+  let ready = false
+  const transition = beginSessionTransition().then(() => { ready = true })
+  await Promise.resolve()
+  expect(ready).toBe(false)
+  await expect(api.post('/assignments', {})).rejects.toThrow(/switch is in progress/i)
+  respond(jsonResponse(200, { saved: true }))
+  await write
+  await transition
+  expect(ready).toBe(true)
+})
+
+it('discards a late streamed response after an identity change', async () => {
+  localStorage.setItem(STORAGE_KEYS.TOKEN, 'parent')
+  let output!: ReadableStreamDefaultController<Uint8Array>
+  fetchMock.mockResolvedValue(new Response(new ReadableStream({ start(controller) { output = controller } })))
+  const pending = api.getBlob('/private-document')
+  // Let fetch return its headers before changing identities.
+  await Promise.resolve()
+  localStorage.setItem(STORAGE_KEYS.TOKEN, 'student')
+  clearProtectedRequests()
+  output.enqueue(new TextEncoder().encode('private'))
+  await expect(pending).rejects.toThrow(/account changed/i)
 })
 
 describe('api request wrapper', () => {

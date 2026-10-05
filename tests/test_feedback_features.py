@@ -32,7 +32,7 @@ def test_kindergarten_grade_zero_survives_user_and_backup_apis(
 
 
 def test_student_creates_and_edits_private_assignment(
-    client, classroom, student_factory, db_session, admin_headers
+    reauthenticate, client, classroom, student_factory, db_session, admin_headers
 ):
     from app.models.assignment import AssignmentTemplate, StudentAssignment
 
@@ -102,6 +102,7 @@ def test_student_creates_and_edits_private_assignment(
         headers=admin_headers,
     )
     assert response.status_code == 200, response.text
+    reauthenticate(headers, student["username"], "studentpass123")
     response = client.get("/api/assignments/my-assignments", headers=headers)
     restored = next(
         item
@@ -223,7 +224,7 @@ def test_time_entry_rejects_future_dates(client, classroom, student_factory, ass
 
 
 def test_journal_edits_are_explicit_and_moderation_does_not_mark_them(
-    client, student_factory, admin_headers
+    reauthenticate, client, student_factory, admin_headers
 ):
     student, headers = student_factory()
     response = client.post(
@@ -281,6 +282,7 @@ def test_journal_edits_are_explicit_and_moderation_does_not_mark_them(
         headers=admin_headers,
     )
     assert response.status_code == 200, response.text
+    reauthenticate(headers, student["username"], "studentpass123")
     restored = client.get("/api/journal/entries", headers=headers).json()
     restored_entry = next(item for item in restored if item["title"] == "Day one")
     assert restored_entry["edited_at"] is not None

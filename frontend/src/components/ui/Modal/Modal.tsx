@@ -16,10 +16,11 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-import React, { ReactNode, useId, useRef } from 'react'
+import React, { ReactNode, useContext, useId, useRef } from 'react'
 import { createPortal } from 'react-dom'
 import { X } from 'lucide-react'
 import { useOverlayFocus } from '../useOverlayFocus'
+import { AuthContext } from '../../../contexts/AuthContext'
 
 /**
  * The single modal size scale. sm 420 / md 520 / lg 640.
@@ -88,9 +89,11 @@ const Modal: React.FC<ModalProps> = ({
   showCloseButton = true,
   closeOnOverlayClick = true,
 }) => {
+  const auth = useContext(AuthContext)
+  const validating = auth?.isLoading === true
   const panelRef = useRef<HTMLDivElement>(null)
   const titleId = useId()
-  useOverlayFocus(isOpen, panelRef, onClose)
+  useOverlayFocus(isOpen && !validating, panelRef, onClose)
 
   if (!isOpen) return null
 
@@ -104,9 +107,12 @@ const Modal: React.FC<ModalProps> = ({
     <div
       className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-overlay backdrop-blur-[2px]"
       onClick={handleScrim}
+      style={{ display: validating ? 'none' : undefined }}
     >
       <div
         ref={panelRef}
+        inert={validating}
+        aria-hidden={validating || undefined}
         role="dialog"
         aria-modal="true"
         aria-labelledby={title ? titleId : undefined}

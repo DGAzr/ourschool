@@ -53,7 +53,13 @@ excluded; release-facing metadata must agree on the new version.
 - [ ] External PostgreSQL: select the external override and verify no bundled
       database container starts. Development: explicitly select the dev preset
       and verify loopback ports and Vite HMR.
-- [ ] Login as the seeded admin forces a password change; app works after.
+- [ ] Login as the seeded admin forces a password change; sign in with the new
+      password and verify the app works.
+- [ ] Browser-session upgrades ship frontend and backend together. Verify legacy
+      tokens are rejected and the changelog explains the one-time login.
+      With two tabs open, switch to a student, reload, submit work, and return
+      using the PIN. Verify old tokens fail, another device stays independent,
+      and backup restore requires login without restoring sessions or PINs.
 
 ## 4. Tag
 
