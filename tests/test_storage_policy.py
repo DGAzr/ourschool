@@ -26,7 +26,8 @@ def test_school_work_contracts_do_not_export_or_serve_file_metadata(client):
     assert "work_attachments" not in StudentAssignmentBackup.model_fields
     assert "photos" not in JournalEntryResponse.model_fields
     assert "photos" not in JournalEntryBackup.model_fields
-    routes = set(client.get("/openapi.json").json()["paths"])
+    # Inspect the contract even when the public documentation endpoint is disabled.
+    routes = set(client.app.openapi()["paths"])
     assert (
         "/api/assignments/student-assignments/{assignment_id}/attachments" not in routes
     )
