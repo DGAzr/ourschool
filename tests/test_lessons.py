@@ -1153,7 +1153,7 @@ def test_drawer_round_trip_preserves_every_assignment_and_work(
     assert r.status_code == 200, r.text
     assert r.json()["warnings"] == []
     db_session.expunge_all()
-    assert sorted(sa.id for sa in _linked_sas(db_session, lesson_id)) == ids
+    assert sorted(sa.id for sa in _linked_sas(db_session, lesson_id)) == sorted(ids)
     assert all(
         sa.due_date == date(2026, 3, 3) for sa in _linked_sas(db_session, lesson_id)
     )
