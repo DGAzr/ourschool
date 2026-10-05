@@ -2,11 +2,13 @@
 
 OurSchool has a REST API for external integrations — handy for AI tools, automation, or a second screen that shows grades without navigating the UI.
 
+Docker deployments serve the API through the frontend at `http://localhost:4173/api/...` (or your HTTPS domain). Direct `http://localhost:8000` access is available only in native development or with the explicit Docker development preset; production does not publish that port.
+
 ## Authentication
 
 **User session (Bearer token)**
 ```bash
-curl -X POST http://localhost:8000/api/auth/login \
+curl -X POST http://localhost:4173/api/auth/login \
   -H "Content-Type: application/x-www-form-urlencoded" \
   -d "username=admin&password=admin123"
 # Returns a JWT — use as: Authorization: Bearer <token>
@@ -15,7 +17,7 @@ curl -X POST http://localhost:8000/api/auth/login \
 **API key** (create under Admin → API Keys)
 ```bash
 curl -H "X-API-Key: os_YOUR_KEY_HERE" \
-  http://localhost:8000/api/points/admin/overview
+  http://localhost:4173/api/points/admin/overview
 ```
 
 Every authenticated endpoint accepts a Bearer token. Most admin automation endpoints also accept an API key carrying the matching permission listed below. User self-service, student-only operations, authentication, user creation/management, and API-key mutation remain session-only. Shop image capability URLs, health checks, and the first-user bootstrap are intentionally unauthenticated.
@@ -70,7 +72,7 @@ Returns all active assignment types, assignment status enum values, and availabl
 ## Quick example — grade an assignment
 
 ```bash
-curl -X POST "http://localhost:8000/api/integrations/assignments/123/grade" \
+curl -X POST "http://localhost:4173/api/integrations/assignments/123/grade" \
   -H "X-API-Key: os_YOUR_KEY_HERE" \
   -H "Content-Type: application/json" \
   -d '{"points_earned": 85.0, "teacher_feedback": "Nice work!", "letter_grade": "B+"}'
@@ -84,7 +86,7 @@ import requests, os
 API_KEY = os.getenv("OURSCHOOL_API_KEY")
 headers = {"X-API-Key": API_KEY}
 
-r = requests.get("http://localhost:8000/api/points/admin/overview", headers=headers)
+r = requests.get("http://localhost:4173/api/points/admin/overview", headers=headers)
 for student in r.json()["student_points"]:
     print(f"{student['student_name']}: {student['current_balance']} pts")
 ```

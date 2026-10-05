@@ -28,7 +28,7 @@ OurSchool is a self-hosted homeschool management system for families who take at
 
 ## 🚀 Quick Start (Docker — recommended)
 
-The fastest path. Just yoink the official images from GHCR.
+Requires Docker Compose 2.20 or later. Pull the official images from GHCR.
 
 ```bash
 # 1. Grab the compose file and sample env
@@ -41,7 +41,7 @@ cp env.EXAMPLE .env
 #   openssl rand -hex 32
 
 # 3. Launch (includes a bundled PostgreSQL container)
-docker compose -f docker-compose.ghcr.yml --profile local-db up -d
+docker compose -f docker-compose.ghcr.yml up -d
 
 # 4. Open the app
 open http://localhost:4173
@@ -51,7 +51,7 @@ That's it. The backend runs migrations and seeds an admin account automatically 
 
 > ⚠️ **Default credentials:** Admin login is `admin` / `admin123` — these are public knowledge and exist only to get you in the door. The app requires you to choose a new password on first login.
 
-> 📌 **External database?** Skip `--profile local-db` and set `DATABASE_URL` in `.env` instead.
+> 📌 **External database?** Set `DATABASE_URL` (or `DATABASE_*`) in `.env`, download `docker-compose.external-db.yml`, and add `-f docker-compose.external-db.yml` to every Compose command. Do not enable the `local-db` profile. See the [deployment guide](docs/deployment.md#using-an-external-database).
 
 > 🏷️ **Image tag:** The compose file defaults to `v1.1-beta`. Change `IMAGE_TAG` in `.env` to pin a different release. All published tags: [ghcr.io/dgazr/ourschool-backend](https://github.com/DGAzr/ourschool/pkgs/container/ourschool-backend).
 
@@ -120,7 +120,7 @@ pip install -r requirements.txt
 
 # Configure environment
 cp env.EXAMPLE .env
-# Edit .env — set DATABASE_URL (or POSTGRES_* vars) and SECRET_KEY
+# Edit .env — set DATABASE_URL (or DATABASE_* vars) and SECRET_KEY
 # Generate a strong SECRET_KEY: openssl rand -hex 32
 
 # Run migrations
@@ -204,11 +204,11 @@ npm run knip        # unused exports / dead code
 
 Contributors can build and run locally using the base compose file:
 ```bash
-# Dev mode (live-reload via docker-compose.override.yml, auto-merged):
-docker compose up --build
+# Production defaults: bundled PostgreSQL, only frontend host port 4173
+docker compose up --build -d
 
-# Production-style build (ignores the dev override):
-docker compose -f docker-compose.yml up --build -d
+# Development: source mounts, Vite HMR, localhost API/database ports
+docker compose -f docker-compose.yml -f docker-compose.dev.yml up --build
 ```
 
 
@@ -239,9 +239,11 @@ docker compose -f docker-compose.yml up --build -d
 
 ## 🐳 Deployment
 
-**End users:** Use `docker-compose.ghcr.yml` (pulls pre-built images from GHCR) as shown in Quick Start above. The `--profile local-db` flag adds a bundled Postgres container; omit it and set `DATABASE_URL` for an external database.
+**End users:** Use `docker-compose.ghcr.yml` (pulls pre-built images from GHCR) as shown in Quick Start above. PostgreSQL starts by default. For external PostgreSQL, also select `docker-compose.external-db.yml` and configure its connection in `.env`.
 
-**Contributors:** Use `docker-compose.yml` (builds from local Dockerfiles). The `docker-compose.override.yml` is merged automatically for live-reload dev mode.
+**Contributors:** Use `docker-compose.yml` (builds from local Dockerfiles). Select `docker-compose.dev.yml` explicitly for development. A user-owned `docker-compose.override.yml` still loads automatically with bare Compose commands; review or move it aside when adopting these presets. Explicit `-f` commands ignore it.
+
+**Networking:** Production publishes only frontend port `${FRONTEND_PORT:-4173}`. Reach the API at `http://localhost:4173/api/...`; route a PaaS such as Coolify to frontend container port 80. Database/API host ports are available only with the development preset and bind to loopback.
 
 **Security checklist before going live:**
 - Generate a real `SECRET_KEY` (`openssl rand -hex 32`). The app refuses to start without it.
@@ -249,7 +251,7 @@ docker compose -f docker-compose.yml up --build -d
 - Set strong DB credentials; the default `postgres`/`postgres` is for local dev only.
 - Restrict `ALLOWED_ORIGINS` to your actual domain.
 - Put a TLS-terminating reverse proxy (nginx, Caddy, Traefik) in front; the bundled frontend doesn't do TLS or rate limiting beyond nginx's static-file defaults.
-- Set `BACKEND_BIND=0.0.0.0` only when behind such a proxy (default is loopback).
+- Route public traffic through the frontend and TLS proxy; production does not publish backend or database host ports.
 - Disable API docs in production if desired: `ENABLE_API_DOCS=false`.
 
 

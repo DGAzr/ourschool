@@ -4,8 +4,11 @@ OurSchool uses [Alembic](https://alembic.sqlalchemy.org/) for schema migrations.
 
 **Migrations run automatically.** On every container start, `start.sh` waits
 for the database and runs `alembic upgrade head` before starting the API — a
-normal upgrade (new `IMAGE_TAG`, `docker compose pull`, `up -d`) migrates the
-database without any manual steps.
+normal upgrade (new `IMAGE_TAG`, `docker compose -f docker-compose.ghcr.yml pull`,
+then `up -d` with the same files) migrates the database without any manual steps.
+External database deployments must also select `docker-compose.external-db.yml`
+in every Compose command; the bundled `exec db` backup examples below do not
+apply to external PostgreSQL.
 
 The `v1.0.0` release retains the full migration chain from the alpha and beta
 releases. A beta installation can upgrade directly to 1.0 through the normal
@@ -60,7 +63,7 @@ python -m alembic downgrade -1
 
 > ℹ️ **PostgreSQL extensions.** The Paperless-integration search migration
 > (`paperless_performance`) runs `CREATE EXTENSION IF NOT EXISTS pg_trgm`.
-> The bundled `local-db` container allows this out of the box, but on an
+> The bundled PostgreSQL container allows this out of the box, but on an
 > external/managed database the connecting role may lack the privilege — if
 > that migration fails, have your DBA run
 > `CREATE EXTENSION pg_trgm;` on the OurSchool database once, then restart.

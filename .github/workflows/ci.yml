@@ -51,6 +51,11 @@ jobs:
       - name: Verify migrations apply cleanly
         run: alembic upgrade head
 
+      - name: Verify Compose deployment modes
+        run: |
+          docker compose version
+          pytest tests/test_deployment_compose.py
+
       - name: Run tests
         run: pytest
 

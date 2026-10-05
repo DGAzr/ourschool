@@ -1,0 +1,15 @@
+# Use after either base file when connecting to your own PostgreSQL server:
+#   docker compose -f docker-compose.ghcr.yml -f docker-compose.external-db.yml up -d
+# Set DATABASE_URL or DATABASE_* in .env. Do not enable the local-db profile
+# (including through COMPOSE_PROFILES), or explicitly select the db service.
+# When combining with development, select this file last.
+# Requires Docker Compose 2.20+ for the optional dependency.
+services:
+  db:
+    profiles: ["local-db"]
+
+  backend:
+    depends_on:
+      db:
+        condition: service_healthy
+        required: false

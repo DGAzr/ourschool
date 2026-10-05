@@ -43,8 +43,16 @@ excluded; release-facing metadata must agree on the new version.
       prints `X.Y.Z`.
 - [ ] Fresh-install smoke test from a clean directory:
       `cp env.EXAMPLE .env`, set `SECRET_KEY`, `docker compose -f
-      docker-compose.ghcr.yml --profile local-db up -d` using the previous
-      release, then complete the published-image upgrade test in step 5.
+      docker-compose.ghcr.yml up -d` with the new files and candidate images.
+      Verify all three services become healthy while host ports 5432/8000
+      are occupied; login through frontend `/api/auth/login`.
+- [ ] Also test an upgrade from the previous release using its original
+      Compose files (and `--profile local-db` if required). Switch to the new
+      files and images with the same project name and volume; verify records
+      survive. Never reset volumes.
+- [ ] External PostgreSQL: select the external override and verify no bundled
+      database container starts. Development: explicitly select the dev preset
+      and verify loopback ports and Vite HMR.
 - [ ] Login as the seeded admin forces a password change; app works after.
 
 ## 4. Tag
@@ -66,8 +74,10 @@ aliases.
 - [ ] Both images exist and are pullable:
       `docker pull ghcr.io/dgazr/ourschool-backend:vX.Y.Z` and
       `.../ourschool-frontend:vX.Y.Z`
-- [ ] `curl http://localhost:8000/health` (or `/api/health` through the
-      frontend) reports a healthy service.
+- [ ] `docker compose -f docker-compose.ghcr.yml exec backend curl -f
+      http://localhost:8000/health/db` reports a healthy database.
+- [ ] Frontend `/api/auth/login` authenticates the seeded admin; backend
+      `/health` routes are tested inside the container, not at `/api/health`.
 - [ ] `docker compose -f docker-compose.ghcr.yml exec backend python -c
       'from app.version import __version__; print(__version__)'` prints
       `X.Y.Z`.

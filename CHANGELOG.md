@@ -6,6 +6,21 @@ All notable changes to OurSchool are documented here.
 
 ## [Unreleased]
 
+### Docker Compose defaults (#41)
+
+- Bundled PostgreSQL now starts without a profile. Production publishes only
+  the frontend port; PostgreSQL and the API stay on the Compose network, so
+  other applications can keep using host ports 5432 and 8000.
+- External PostgreSQL requires `docker-compose.external-db.yml` in addition
+  to either base file and the existing connection settings. Include it in
+  subsequent startup, upgrade and management commands; do not enable `local-db`.
+- Development is explicit: `docker compose -f docker-compose.yml -f
+  docker-compose.dev.yml up --build` enables source mounts, Vite HMR and
+  configurable loopback database/API ports. Existing local
+  `docker-compose.override.yml` files are preserved and should be reviewed
+  or moved aside because bare Compose commands still load them automatically.
+- Existing PostgreSQL volumes and connection-setting precedence are unchanged.
+
 ### Lesson drawer preserves student work
 
 - Moving lessons into the drawer, including automatic rollover, keeps all

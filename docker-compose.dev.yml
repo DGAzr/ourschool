@@ -1,0 +1,32 @@
+# Explicit development preset; never loaded automatically:
+#   docker compose -f docker-compose.yml -f docker-compose.dev.yml up --build
+# PostgreSQL/API host access is loopback-only. Change POSTGRES_PORT/BACKEND_PORT
+# if another application occupies those host ports; container ports stay fixed.
+# Backend code is bind-mounted (restart backend after edits); Vite provides HMR.
+services:
+  db:
+    ports:
+      - "127.0.0.1:${POSTGRES_PORT:-5432}:5432"
+
+  backend:
+    ports:
+      - "127.0.0.1:${BACKEND_PORT:-8000}:8000"
+    volumes:
+      - ./app:/app/app:ro
+      - ./alembic:/app/alembic:ro
+      - ./alembic.ini:/app/alembic.ini:ro
+
+  frontend:
+    build:
+      target: builder
+    volumes:
+      - ./frontend:/app:ro
+      - /app/node_modules
+    command: ["npm", "run", "dev", "--", "--host", "0.0.0.0", "--port", "80"]
+    environment:
+      # Server-side only; a VITE_ prefix would expose this to the browser bundle.
+      PROXY_TARGET: http://backend:8000
+      # VM bind mounts may not forward file-change events to Vite.
+      CHOKIDAR_USEPOLLING: ${CHOKIDAR_USEPOLLING:-true}
+    healthcheck:
+      test: ["CMD", "node", "-e", "require('http').get('http://localhost:80', r => process.exit(r.statusCode === 200 ? 0 : 1)).on('error', () => process.exit(1))"]
