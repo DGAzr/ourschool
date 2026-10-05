@@ -17,7 +17,8 @@ import { settingsApi } from '../services/settings'
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useId, useMemo, useState } from 'react'
+import { ChevronDown } from 'lucide-react'
 import { Navigate, useNavigate, useSearchParams } from 'react-router-dom'
 
 import { useAuth } from '../contexts/AuthContext'
@@ -88,6 +89,8 @@ const LessonPlanningContent: React.FC = () => {
   })
   const [review, setReview] = useState<{title:string;impacts:AssignmentImpact[];resolve:(confirmed:boolean)=>void} | null>(null)
   const [batchDate, setBatchDate] = useState('')
+  const [planControlsOpen, setPlanControlsOpen] = useState(false)
+  const planControlsId = useId()
   const [copyStudents,setCopyStudents]=useState<number[]|null>(null)
   const [copying, setCopying] = useState(false)
   const [printing, setPrinting] = useState<'day'|'week'|null>(null)
@@ -319,17 +322,31 @@ const LessonPlanningContent: React.FC = () => {
         onOpenTeach={() => navigate(calendarDateHref('/teach', rangeStart))}
       />
       <div className="flex flex-wrap items-end gap-3 my-4">
-        <Select label="Student filter" value={filters.student} onChange={e=>setFilters({...filters,student:e.target.value})} options={[{value:'',label:'All students'},...students.map(s=>({value:s.id,label:`${s.first_name} ${s.last_name}`}))]} fullWidth={false} />
-        <Select label="Subject filter" value={filters.subject} onChange={e=>setFilters({...filters,subject:e.target.value})} options={[{value:'',label:'All subjects'},...subjects.map(s=>({value:s.id,label:s.name}))]} fullWidth={false} />
-        <Button variant="outline" onClick={()=>setFilters({student:'',subject:''})}>Clear filters</Button>
-        <span className="text-xs text-muted">Plan: {scopedLessons.length}/{lessons.length} · Drawer: {scopedDrawer.length}/{drawerLessons.length}</span>
+        <div className="flex max-w-full flex-wrap items-end gap-3">
+          <Select label="Student filter" value={filters.student} onChange={e=>setFilters({...filters,student:e.target.value})} options={[{value:'',label:'All students'},...students.map(s=>({value:s.id,label:`${s.first_name} ${s.last_name}`}))]} fullWidth={false} />
+          <Select label="Subject filter" value={filters.subject} onChange={e=>setFilters({...filters,subject:e.target.value})} options={[{value:'',label:'All subjects'},...subjects.map(s=>({value:s.id,label:s.name}))]} fullWidth={false} />
+          <Button variant="outline" onClick={()=>setFilters({student:'',subject:''})}>Clear filters</Button>
+          <span className="text-xs text-muted">Plan: {scopedLessons.length}/{lessons.length} · Drawer: {scopedDrawer.length}/{drawerLessons.length}</span>
+        </div>
+        <button
+          type="button"
+          aria-expanded={planControlsOpen}
+          aria-controls={planControlsId}
+          onClick={() => setPlanControlsOpen(open => !open)}
+          className="ml-auto inline-flex shrink-0 items-center gap-2 rounded-field px-2 py-2 text-sm text-muted hover:text-ink focus:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-1"
+        >
+          More Plan Controls
+          <ChevronDown aria-hidden="true" className={`h-4 w-4 transition-transform ${planControlsOpen ? 'rotate-180' : ''}`} />
+        </button>
       </div>
-      <div className="flex flex-wrap items-end gap-3 mb-4">
-        <Input label="Copy starting on" type="date" value={batchDate || addDays(rangeStart,7)} onChange={e=>setBatchDate(e.target.value)} fullWidth={false} /><details className="text-sm"><summary className="cursor-pointer text-accent">Students for copies · {copyStudents===null?'same as original':copyStudents.length+' selected'}</summary><button type="button" className="text-accent mr-3" onClick={()=>setCopyStudents(null)}>Use original students</button>{students.map(student=><label key={student.id} className="inline-flex items-center gap-1 mr-3"><input type="checkbox" checked={copyStudents?.includes(student.id)??false} onChange={e=>setCopyStudents(previous=>e.target.checked?[...(previous??[]),student.id]:(previous??[]).filter(id=>id!==student.id))}/>{student.first_name}</label>)}</details>
-        <Button variant="outline" disabled={copying || !scopedLessons.some(l=>l.date===rangeStart)} onClick={()=>void handleBatch(scopedLessons.filter(l=>l.date===rangeStart),'copy',batchDate || addDays(rangeStart,7))}>Copy day</Button>
-        <Button variant="outline" disabled={copying || periodBusy || loading} onClick={()=>void preparePeriod('week',true)}>Copy week</Button>
-        <Button variant="outline" onClick={()=>void preparePeriod('day')} disabled={periodBusy || !scopedLessons.some(l=>l.date===rangeStart)}>Print day</Button>
-        <Button variant="outline" onClick={()=>void preparePeriod('week')} disabled={periodBusy || loading}>Print week</Button>
+      <div id={planControlsId} hidden={!planControlsOpen}>
+        <div className="flex flex-wrap items-end gap-3 mb-4">
+          <Input label="Copy starting on" type="date" value={batchDate || addDays(rangeStart,7)} onChange={e=>setBatchDate(e.target.value)} fullWidth={false} /><details className="text-sm"><summary className="cursor-pointer text-accent">Students for copies · {copyStudents===null?'same as original':copyStudents.length+' selected'}</summary><button type="button" className="text-accent mr-3" onClick={()=>setCopyStudents(null)}>Use original students</button>{students.map(student=><label key={student.id} className="inline-flex items-center gap-1 mr-3"><input type="checkbox" checked={copyStudents?.includes(student.id)??false} onChange={e=>setCopyStudents(previous=>e.target.checked?[...(previous??[]),student.id]:(previous??[]).filter(id=>id!==student.id))}/>{student.first_name}</label>)}</details>
+          <Button variant="outline" disabled={copying || !scopedLessons.some(l=>l.date===rangeStart)} onClick={()=>void handleBatch(scopedLessons.filter(l=>l.date===rangeStart),'copy',batchDate || addDays(rangeStart,7))}>Copy day</Button>
+          <Button variant="outline" disabled={copying || periodBusy || loading} onClick={()=>void preparePeriod('week',true)}>Copy week</Button>
+          <Button variant="outline" onClick={()=>void preparePeriod('day')} disabled={periodBusy || !scopedLessons.some(l=>l.date===rangeStart)}>Print day</Button>
+          <Button variant="outline" onClick={()=>void preparePeriod('week')} disabled={periodBusy || loading}>Print week</Button>
+        </div>
       </div>
       <ReadinessStrip readiness={readiness} />
       {boardDays.length > days.length && <p className="text-sm text-muted">Scheduled weekend lessons are also shown so work stays visible.</p>}
