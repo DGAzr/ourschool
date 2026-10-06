@@ -1,6 +1,6 @@
 """Bounded teacher dashboard projections; queue predicates match their lists."""
 
-from datetime import timedelta, datetime, timezone
+from datetime import timedelta, datetime, time, timezone
 from sqlalchemy import func
 from app.crud.assignment_reads import assignment_base, tab_predicates, A
 from app.crud.points import is_points_system_enabled
@@ -350,7 +350,7 @@ def recent_activity(db, student_id, limit):
                 User.last_name,
                 column.label("timestamp"),
             )
-            .filter(column >= start, column <= now)
+            .filter(column >= start.date(), column <= now.date())
             .order_by(column.desc(), A.id.desc())
             .limit(limit)
             .all()
@@ -363,7 +363,7 @@ def recent_activity(db, student_id, limit):
                     timestamp=row.timestamp,
                     student_name=f"{row.first_name} {row.last_name}",
                     details=dict(assignment_id=row.id, student_id=row.student_id),
-                    time_ago=row.timestamp.strftime("%b %d, %H:%M"),
+                    time_ago=row.timestamp.strftime("%b %d"),
                 )
             )
     records = (
@@ -399,8 +399,15 @@ def recent_activity(db, student_id, limit):
                 time_ago=row.updated_at.strftime("%b %d, %H:%M"),
             )
         )
-    return dict(
-        activities=sorted(activities, key=lambda item: item["timestamp"], reverse=True)[
-            :limit
-        ]
-    )
+
+    def sort_timestamp(item):
+        timestamp = item["timestamp"]
+        # Assignment events store only a date. Use midnight UTC for ordering
+        # alongside attendance timestamps, keeping date-only display precision.
+        return (
+            timestamp
+            if isinstance(timestamp, datetime)
+            else datetime.combine(timestamp, time.min, tzinfo=timezone.utc)
+        )
+
+    return dict(activities=sorted(activities, key=sort_timestamp, reverse=True)[:limit])

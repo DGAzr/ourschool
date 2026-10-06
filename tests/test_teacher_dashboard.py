@@ -57,6 +57,81 @@ def test_dashboard_requires_teacher(client, student_factory, section):
     )
 
 
+@pytest.mark.parametrize("include_attendance", [False, True])
+def test_recent_activity_mixes_dates_and_timestamps(
+    client,
+    admin_headers,
+    student_factory,
+    classroom,
+    db_session,
+    include_attendance,
+):
+    now = datetime.now(timezone.utc)
+    student, _ = student_factory()
+    other, _ = student_factory()
+    sid = student["id"]
+    template = classroom["template"]["id"]
+    submitted = StudentAssignment(
+        template_id=template,
+        student_id=sid,
+        submitted_date=now.date(),
+    )
+    graded = StudentAssignment(
+        template_id=template,
+        student_id=sid,
+        graded_date=now.date() - timedelta(days=7),
+    )
+    db_session.add_all(
+        [
+            submitted,
+            graded,
+            StudentAssignment(
+                template_id=template,
+                student_id=sid,
+                graded_date=now.date() - timedelta(days=8),
+            ),
+            StudentAssignment(
+                template_id=template,
+                student_id=sid,
+                submitted_date=now.date() + timedelta(days=1),
+            ),
+            StudentAssignment(
+                template_id=template,
+                student_id=other["id"],
+                submitted_date=now.date(),
+            ),
+        ]
+    )
+    if include_attendance:
+        db_session.add(
+            AttendanceRecord(
+                student_id=sid,
+                date=now.date(),
+                status="present",
+                updated_at=now,
+            )
+        )
+    db_session.commit()
+    activities = read(client, admin_headers, "activity", student_id=sid)["activities"]
+    expected = ["assignment_submitted", "assignment_graded"]
+    if include_attendance:
+        expected.insert(0, "attendance_recorded")
+    assert [item["activity_type"] for item in activities] == expected
+    assert all(item["details"]["student_id"] == sid for item in activities)
+    submission = next(
+        item for item in activities if item["activity_type"] == "assignment_submitted"
+    )
+    assert submission["timestamp"] == now.date().isoformat()
+    assert submission["time_ago"] == now.strftime("%b %d")
+    assert (
+        read(client, admin_headers, "activity", student_id=sid, limit=1)["activities"]
+        == activities[:1]
+    )
+    db_session.query(User).filter(User.id == sid).update({"is_active": False})
+    db_session.commit()
+    assert read(client, admin_headers, "activity", student_id=sid)["activities"] == []
+
+
 def test_review_counts_effective_deadlines_and_exact_lists(
     client, admin_headers, student_factory, classroom, db_session
 ):
