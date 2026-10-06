@@ -79,8 +79,8 @@ export const shopApi = {
   setMyGoal: (itemId: number | null): Promise<StudentPoints> =>
     api.put('/shop/my-goal', { item_id: itemId }),
   getMyRedemptions: (): Promise<ShopRedemption[]> => api.get('/shop/my-redemptions'),
-  getRedemptions: (status: 'pending' | 'ready' | 'history'): Promise<ShopRedemption[]> =>
-    api.get(`/shop/redemptions?status=${status}`),
+  getRedemptions: (status: 'pending' | 'ready' | 'history', studentId?:number, activeStudents=false): Promise<ShopRedemption[]> =>
+    api.get(`/shop/redemptions?status=${status}${studentId ? `&student_id=${studentId}` : ''}${activeStudents ? '&active_students=true' : ''}`),
   approveRedemption: (id: number, pickupInstructions?:string): Promise<ShopRedemption> =>
     api.post(`/shop/redemptions/${id}/approve`, {pickup_instructions:pickupInstructions}),
   declineRedemption: (id: number): Promise<ShopRedemption> =>

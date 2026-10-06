@@ -9,7 +9,7 @@
  */
 
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 
 import { useAuth } from '../contexts/AuthContext'
 import { useToast } from '../components/ui'
@@ -33,17 +33,14 @@ const TeachRunSheet: React.FC = () => {
   const [selectedDate, setSelectedDate] = useCalendarDateParam()
   const [subjects, setSubjects] = useState<Subject[]>([])
   const [students, setStudents] = useState<User[]>([])
-  const [work, setWork] = useState<LessonAssignmentProgress[] | undefined>(undefined)
+  const [work, setWork] = useState<LessonAssignmentProgress[] | undefined>(
+    undefined,
+  )
   const [workError, setWorkError] = useState<string | null>(null)
+  const [teachParams] = useSearchParams()
   const [editingLesson, setEditingLesson] = useState<Lesson | null>(null)
-  const {
-    lessons,
-    loading,
-    error,
-    refetch,
-    markTaught,
-    toggleMaterial,
-  } = useLessons({ startDate: selectedDate, endDate: selectedDate })
+  const { lessons, loading, error, refetch, markTaught, toggleMaterial } =
+    useLessons({ startDate: selectedDate, endDate: selectedDate })
   const latestRefetch = useRef(refetch)
   const rolloverStarted = useRef(false)
 
@@ -70,12 +67,25 @@ const TeachRunSheet: React.FC = () => {
 
   useEffect(() => {
     let cancelled = false
-    lessonsApi.assignmentProgress(selectedDate).then(data => {
-      if (!cancelled) { setWork(data); setWorkError(null) }
-    }).catch(() => {
-      if (!cancelled) { setWork(undefined); setWorkError('Could not load student work. Reload this page to try again.') }
-    })
-    return () => { cancelled = true }
+    lessonsApi
+      .assignmentProgress(selectedDate)
+      .then((data) => {
+        if (!cancelled) {
+          setWork(data)
+          setWorkError(null)
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setWork(undefined)
+          setWorkError(
+            'Could not load student work. Reload this page to try again.',
+          )
+        }
+      })
+    return () => {
+      cancelled = true
+    }
   }, [selectedDate, lessons])
 
   const handleMarkTaught = useCallback(
@@ -83,7 +93,7 @@ const TeachRunSheet: React.FC = () => {
       const ok = await markTaught(lesson)
       if (!ok) toast('Could not update the lesson.', 'danger')
     },
-    [markTaught, toast]
+    [markTaught, toast],
   )
 
   const handleToggleMaterial = useCallback(
@@ -91,7 +101,7 @@ const TeachRunSheet: React.FC = () => {
       const ok = await toggleMaterial(lessonId, materialId, isGathered)
       if (!ok) toast('Could not update the material.', 'danger')
     },
-    [toast, toggleMaterial]
+    [toast, toggleMaterial],
   )
 
   const handleEditorFinished = useCallback(
@@ -100,13 +110,20 @@ const TeachRunSheet: React.FC = () => {
       warnings.forEach((warning) => toast(warning, 'danger'))
       void refetch()
     },
-    [refetch, toast]
+    [refetch, toast],
   )
 
   return (
     <div>
-      {workError && <p role="alert" className="text-neg-fg mb-3">{workError}</p>}
+      {workError && (
+        <p role="alert" className="text-neg-fg mb-3">
+          {workError}
+        </p>
+      )}
       <TeachView
+        initialStudentId={Number(teachParams.get('student_id')) || null}
+        initialRemaining={teachParams.get('remaining') === 'true'}
+        selectedLessonId={Number(teachParams.get('lessonId')) || null}
         assignments={work}
         subjects={subjects}
         selectedDate={selectedDate}

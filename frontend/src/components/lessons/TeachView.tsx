@@ -27,6 +27,9 @@ import StudentAvatars from './StudentAvatars'
 import TeachCard from './TeachCard'
 
 interface TeachViewProps {
+  initialStudentId?: number | null
+  initialRemaining?: boolean
+  selectedLessonId?: number | null
   assignments?: LessonAssignmentProgress[]
   subjects: Subject[]
   selectedDate: string
@@ -39,7 +42,7 @@ interface TeachViewProps {
   onToggleMaterial: (
     lessonId: number,
     materialId: number,
-    isGathered: boolean
+    isGathered: boolean,
   ) => void
   onOpenPlanner: () => void
 }
@@ -47,6 +50,9 @@ interface TeachViewProps {
 /** The Teach run-sheet for one day, with student and subject filters. */
 const TeachView: React.FC<TeachViewProps> = ({
   subjects,
+  initialStudentId = null,
+  initialRemaining = false,
+  selectedLessonId = null,
   assignments,
   selectedDate,
   lessons,
@@ -58,10 +64,11 @@ const TeachView: React.FC<TeachViewProps> = ({
   onToggleMaterial,
   onOpenPlanner,
 }) => {
+  const [remainingOnly, setRemainingOnly] = useState(initialRemaining)
   const [studentFilterState, setStudentFilterState] = useState<{
     date: string
     value: number | null
-  }>({ date: selectedDate, value: null })
+  }>({ date: selectedDate, value: initialStudentId })
   const [subjectFilterState, setSubjectFilterState] = useState<{
     date: string
     value: number | null
@@ -95,13 +102,14 @@ const TeachView: React.FC<TeachViewProps> = ({
   const filtered = useMemo(
     () =>
       lessons.filter((lesson) => {
+        if (remainingOnly && lesson.status === 'taught') return false
         if (studentFilter != null && !lesson.students.some((s) => s.id === studentFilter)) {
           return false
         }
         if (subjectFilter != null && lesson.subject_id !== subjectFilter) return false
         return true
       }),
-    [lessons, studentFilter, subjectFilter]
+    [lessons, studentFilter, subjectFilter, remainingOnly],
   )
 
   // Overall readiness is computed over every lesson that day, not the filtered set.
@@ -110,14 +118,16 @@ const TeachView: React.FC<TeachViewProps> = ({
       lessons.reduce(
         (sum, lesson) =>
           sum + (lesson.status === 'taught' ? 0 : lesson.materials.filter((m) => !m.is_gathered).length),
-        0
+        0,
       ),
-    [lessons]
+    [lessons],
   )
   const allGathered = materialsRemaining === 0
 
-  const filterActive = studentFilter != null || subjectFilter != null
+  const filterActive =
+    studentFilter != null || subjectFilter != null || remainingOnly
   const clearFilters = () => {
+    setRemainingOnly(false)
     setStudentFilter(null)
     setSubjectFilter(null)
   }
@@ -191,6 +201,14 @@ const TeachView: React.FC<TeachViewProps> = ({
         <>
           {/* Filter bar */}
           <div className="flex flex-wrap items-center gap-x-4 gap-y-2.5 mb-[18px] pb-4 border-b border-line-2">
+            <label className="flex items-center gap-2 text-sm">
+              <input
+                type="checkbox"
+                checked={remainingOnly}
+                onChange={(e) => setRemainingOnly(e.target.checked)}
+              />
+              Lessons still to teach
+            </label>
             {/* Students */}
             <div className="flex flex-wrap items-center gap-2">
               <span className="uppercase text-[10.5px] font-bold tracking-wide text-faint">
@@ -303,14 +321,25 @@ const TeachView: React.FC<TeachViewProps> = ({
           ) : (
             <div className="flex flex-col gap-3.5">
               {filtered.map((lesson) => (
-                <TeachCard
+                <div
                   key={lesson.id}
-                  lesson={lesson}
-                  assignments={assignments?.filter(a => a.lesson_id === lesson.id)}
-                  onEdit={onEditLesson}
-                  onMarkTaught={onMarkTaught}
-                  onToggleMaterial={onToggleMaterial}
-                />
+                  id={`lesson-${lesson.id}`}
+                  className={
+                    selectedLessonId === lesson.id
+                      ? 'ring-2 ring-accent rounded-card'
+                      : undefined
+                  }
+                >
+                  <TeachCard
+                    lesson={lesson}
+                    assignments={assignments?.filter(
+                      (a) => a.lesson_id === lesson.id,
+                    )}
+                    onEdit={onEditLesson}
+                    onMarkTaught={onMarkTaught}
+                    onToggleMaterial={onToggleMaterial}
+                  />
+                </div>
               ))}
             </div>
           )}

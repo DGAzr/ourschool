@@ -13,6 +13,7 @@ from sqlalchemy import func, or_, and_
 
 from app.models.assignment import AssignmentTemplate as T, StudentAssignment as A
 from app.models.user import User, UserRole
+from app.models.subject import Subject
 from app.enums import AssignmentStatus as Status
 
 TEMPLATE_FIELDS = (
@@ -128,9 +129,11 @@ def template_projection(db):
 
 
 def assignment_projection(query, *, include_feedback=False):
-    return query.with_entities(
+    return query.outerjoin(Subject, T.subject_id == Subject.id).with_entities(
         *(getattr(A, field) for field in ASSIGNMENT_FIELDS),
         *((A.teacher_feedback,) if include_feedback else ()),
+        func.concat(User.first_name, " ", User.last_name).label("student_name"),
+        Subject.name.label("subject_name"),
         *(getattr(T, field).label("template_" + field) for field in TEMPLATE_FIELDS),
         func.substr(T.description, 1, 240).label("description"),
     )
@@ -140,6 +143,8 @@ def assignment_summary(row):
     values = row._mapping
     return dict(
         **{field: values[field] for field in ASSIGNMENT_FIELDS},
+        student_name=values["student_name"],
+        subject_name=values["subject_name"],
         **(
             {"teacher_feedback": values["teacher_feedback"]}
             if "teacher_feedback" in values
@@ -154,22 +159,23 @@ def assignment_summary(row):
     )
 
 
-def assignment_base(db):
-    return (
+def assignment_base(db, *, active_students=False):
+    query = (
         db.query(A)
         .join(T, A.template_id == T.id)
         .join(User, A.student_id == User.id)
         .filter(User.role == UserRole.STUDENT)
     )
+    return query.filter(User.is_active.is_(True)) if active_students else query
 
 
-def tab_predicates():
+def tab_predicates(today=None):
     graded = or_(A.is_graded.is_(True), A.status == Status.GRADED)
     done = or_(graded, A.status == Status.EXCUSED)
     submitted = A.status == Status.SUBMITTED
     unfinished = A.status.in_([Status.NOT_STARTED, Status.IN_PROGRESS, Status.OVERDUE])
     overdue = unfinished & (
-        func.coalesce(A.extended_due_date, A.due_date) < date.today()
+        func.coalesce(A.extended_due_date, A.due_date) < (today or date.today())
     )
     awaiting = A.status.in_([Status.NOT_STARTED, Status.IN_PROGRESS])
     return {
@@ -181,7 +187,8 @@ def tab_predicates():
         "todo": ~done & ~submitted,
         "submitted": ~done & submitted,
         "done": done,
-        "needs": submitted & A.is_graded.is_(False),
+        "needs": submitted & ~graded,
+        "review": (unfinished | submitted) & ~done,
         "overdue": overdue & ~graded,
         "awaiting": unfinished & ~graded,
         "awaiting_submission": unfinished & ~graded,

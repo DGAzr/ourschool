@@ -106,6 +106,8 @@ export interface StudentAssignment {
   is_graded: boolean
   graded_date?: string
   graded_by?: number
+  student_name?: string
+  subject_name?: string
   teacher_feedback?: string
   student_notes?: string
   submission_notes?: string

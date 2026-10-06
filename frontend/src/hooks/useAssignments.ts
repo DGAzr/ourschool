@@ -35,11 +35,16 @@ interface UseAssignmentsProps {
   termId?: number | null
   termBasis?: 'assigned' | 'original_due' | 'effective'
   tab?: string
+  dueTo?: string
+  effectiveDue?: boolean
+  activeStudents?: boolean
+  includeUndated?: boolean
+  today?: string
 }
 
 export const useAssignments = ({ isAdmin, adminViewMode, selectedSubject, includeArchived,
   enabled = true, search = '', assignmentType, studentId, templateId, termId,
-  termBasis = 'effective', tab = 'all',
+  termBasis = 'effective', tab = 'all', dueTo, effectiveDue, activeStudents, includeUndated, today,
 }: UseAssignmentsProps) => {
   const [subjects, setSubjects] = useState<Subject[]>([])
   const [students, setStudents] = useState<User[]>([])
@@ -55,6 +60,7 @@ export const useAssignments = ({ isAdmin, adminViewMode, selectedSubject, includ
     subject_id: selectedSubject, student_id: studentId, template_id: templateId,
     term_id: termId, term_basis: termBasis, student_view: !isAdmin, tab,
     search: settledSearch, assignment_type: assignmentType,
+    due_to: dueTo, effective_due: effectiveDue, active_students: activeStudents, include_undated: includeUndated, today,
   }, assignmentPage, enabled && !templatesMode)
 
   useEffect(() => {

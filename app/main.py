@@ -42,6 +42,7 @@ from app.routers import (
     assignment_types,
     assignments,
     attendance,
+    dashboard,
     auth,
     backup,
     integrations,
@@ -195,6 +196,9 @@ app.include_router(auth.router, prefix="/api/auth", tags=["authentication"])
 app.include_router(users.router, prefix="/api/users", tags=["users"])
 app.include_router(activity.router, prefix="/api/activity", tags=["activity"])
 app.include_router(attendance.router, prefix="/api/attendance", tags=["attendance"])
+app.include_router(
+    dashboard.router, prefix="/api/dashboard/teacher", tags=["dashboard"]
+)
 app.include_router(subjects.router, prefix="/api/subjects", tags=["subjects"])
 app.include_router(meta.router, prefix="/api", tags=["meta"])
 app.include_router(assignments.router, prefix="/api/assignments", tags=["assignments"])

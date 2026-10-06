@@ -20,6 +20,7 @@ import React, { useCallback, useEffect, useMemo, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { Plus, Store } from 'lucide-react'
 
+import { useDashboardRead } from '../hooks/useDashboardRead'
 import { useAuth } from '../contexts/AuthContext'
 import { usePointsStatus } from '../contexts/PointsStatusContext'
 import { getErrorMessage } from '../services/api'
@@ -51,17 +52,42 @@ const AdminShop: React.FC = () => {
   const [error, setError] = useState<string | null>(null)
 
   // ?tab=redemptions deep-links straight to the queue (Dashboard "Needs you").
-  const [searchParams] = useSearchParams()
+  const [searchParams, setSearchParams] = useSearchParams()
   const [tab, setTab] = useState<Tab>(
-    searchParams.get('tab') === 'redemptions' ? 'redemptions' : 'items'
+    searchParams.get('tab') === 'redemptions' ? 'redemptions' : 'items',
   )
-  const [queueTab, setQueueTab] = useState<QueueTab>('pending')
+  const [queueTab, setQueueTab] = useState<QueueTab>(
+    searchParams.get('queue') === 'ready'
+      ? 'ready'
+      : searchParams.get('queue') === 'history'
+        ? 'history'
+        : 'pending',
+  )
+  const studentId = Number(searchParams.get('student_id')) || undefined
+  const activeStudents = searchParams.get('active_students') === 'true'
   const [editing, setEditing] = useState<Editing>(null)
 
   const [items, setItems] = useState<ShopItem[]>([])
   const [categories, setCategories] = useState<ShopCategory[]>([])
   const [overview, setOverview] = useState<ShopAdminOverview | null>(null)
-  const [redemptions, setRedemptions] = useState<ShopRedemption[]>([])
+  const [queueVersion, setQueueVersion] = useState(0)
+  const queueRead = useDashboardRead<ShopRedemption[]>(
+    '/shop/redemptions',
+    {
+      status: queueTab,
+      student_id: studentId,
+      active_students: activeStudents,
+    },
+    queueVersion,
+    tab === 'redemptions' && enabled,
+  )
+  const countRead = useDashboardRead<{ pending: number; ready: number }>(
+    '/shop/redemptions/counts',
+    { student_id: studentId, active_students: activeStudents },
+    queueVersion,
+    tab === 'redemptions' && enabled,
+  )
+  const redemptions = queueRead.data ?? []
   const [busyId, setBusyId] = useState<number | null>(null)
 
   const refetchOverview = useCallback(() => {
@@ -89,30 +115,23 @@ const AdminShop: React.FC = () => {
     loadCore()
   }, [loadCore])
 
-  // Load the queue whenever the redemptions tab / sub-tab changes.
-  useEffect(() => {
-    if (tab !== 'redemptions' || !enabled) return
-    shopApi
-      .getRedemptions(queueTab)
-      .then(setRedemptions)
-      .catch((err) => toast(getErrorMessage(err, 'Failed to load requests'), 'danger'))
-  }, [tab, queueTab, enabled, toast])
-
   const refetchItems = useCallback(() => {
     shopApi.getItems().then(setItems).catch(() => undefined)
     refetchOverview()
   }, [refetchOverview])
 
   const refetchQueue = useCallback(() => {
-    shopApi.getRedemptions(queueTab).then(setRedemptions).catch(() => undefined)
+    setQueueVersion((v) => v + 1)
     refetchOverview()
-  }, [queueTab, refetchOverview])
+  }, [refetchOverview])
 
   const toggleActive = useCallback(
     async (item: ShopItem) => {
       // Optimistic flip.
       setItems((prev) =>
-        prev.map((i) => (i.id === item.id ? { ...i, is_active: !i.is_active } : i))
+        prev.map((i) =>
+          i.id === item.id ? { ...i, is_active: !i.is_active } : i,
+        ),
       )
       try {
         await shopApi.setItemActive(item.id, !item.is_active)
@@ -121,13 +140,13 @@ const AdminShop: React.FC = () => {
         // Revert on failure.
         setItems((prev) =>
           prev.map((i) =>
-            i.id === item.id ? { ...i, is_active: item.is_active } : i
-          )
+            i.id === item.id ? { ...i, is_active: item.is_active } : i,
+          ),
         )
         toast(getErrorMessage(err, 'Could not update visibility'), 'danger')
       }
     },
-    [refetchOverview, toast]
+    [refetchOverview, toast],
   )
 
   const reorder = useCallback(
@@ -146,7 +165,7 @@ const AdminShop: React.FC = () => {
         toast(getErrorMessage(err, 'Could not reorder items'), 'danger')
       }
     },
-    [items, toast]
+    [items, toast],
   )
 
   const runQueueAction = useCallback(
@@ -161,18 +180,24 @@ const AdminShop: React.FC = () => {
         setBusyId(null)
       }
     },
-    [refetchQueue, toast]
+    [refetchQueue, toast],
   )
 
-  const pending = overview?.pending_redemptions ?? 0
-  const ready = overview?.ready_redemptions ?? 0
+  const pending =
+    (tab === 'items'
+      ? overview?.pending_redemptions
+      : countRead.data?.pending) ?? 0
+  const ready =
+    (tab === 'items' ? overview?.ready_redemptions : countRead.data?.ready) ?? 0
 
   const subtitle = useMemo(() => {
+    if (tab === 'redemptions' && (countRead.loading || countRead.error))
+      return 'Review student reward requests.'
     if (pending > 0) {
       return `${pending} redemption request${pending === 1 ? '' : 's'} need your approval.`
     }
     return "Everything's approved — the shop's running smoothly."
-  }, [pending])
+  }, [pending, tab, countRead.loading, countRead.error])
 
   if (!user || user.role !== 'admin') {
     return (
@@ -299,17 +324,71 @@ const AdminShop: React.FC = () => {
           />
         </div>
       ) : (
-        <RedemptionQueue
-          queueTab={queueTab}
-          onQueueTab={setQueueTab}
-          pendingCount={pending}
-          readyCount={ready}
-          redemptions={redemptions}
-          busyId={busyId}
-          onApprove={(r,instructions) => runQueueAction(r.id, id=>shopApi.approveRedemption(id,instructions))}
-          onDecline={(r) => runQueueAction(r.id, shopApi.declineRedemption)}
-          onFulfill={(r) => runQueueAction(r.id, shopApi.fulfillRedemption)}
-        />
+        <div>
+          {(studentId || activeStudents) && (
+            <p className="text-sm mb-3">
+              {studentId
+                ? `Requests for ${redemptions[0]?.student_name ?? `student #${studentId}`}`
+                : 'Requests for active students'}
+              .{' '}
+              <button
+                className="text-accent"
+                onClick={() =>
+                  setSearchParams((prev) => {
+                    const next = new URLSearchParams(prev)
+                    next.delete('student_id')
+                    next.delete('active_students')
+                    return next
+                  })
+                }
+              >
+                Show all students
+              </button>
+            </p>
+          )}
+          {(queueRead.error || countRead.error) && (
+            <div role="alert">
+              {queueRead.error || countRead.error}
+              <button
+                className="text-accent min-h-[44px]"
+                onClick={() => {
+                  queueRead.retry()
+                  countRead.retry()
+                }}
+              >
+                Try again
+              </button>
+            </div>
+          )}
+          {queueRead.loading && <p role="status">Loading requests…</p>}
+          {!queueRead.loading &&
+            !queueRead.error &&
+            !countRead.loading &&
+            !countRead.error && (
+              <RedemptionQueue
+                queueTab={queueTab}
+                onQueueTab={(value) => {
+                  setQueueTab(value)
+                  setSearchParams((prev) => {
+                    const next = new URLSearchParams(prev)
+                    next.set('queue', value)
+                    return next
+                  })
+                }}
+                pendingCount={pending}
+                readyCount={ready}
+                redemptions={redemptions}
+                busyId={busyId}
+                onApprove={(r, instructions) =>
+                  runQueueAction(r.id, (id) =>
+                    shopApi.approveRedemption(id, instructions),
+                  )
+                }
+                onDecline={(r) => runQueueAction(r.id, shopApi.declineRedemption)}
+                onFulfill={(r) => runQueueAction(r.id, shopApi.fulfillRedemption)}
+              />
+            )}
+        </div>
       )}
     </div>
   )

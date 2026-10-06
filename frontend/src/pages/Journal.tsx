@@ -18,7 +18,10 @@ import QuickReflection from '../components/journal/QuickReflection'
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-import React, { useState, useEffect, useRef, useCallback, useEffectEvent } from 'react'
+import React, { useState, useEffect, useRef, useCallback } from 'react'
+import { useSearchParams } from 'react-router-dom'
+import { api } from '../services/api'
+import { OffsetNavigation } from '../components/dashboard/DashboardSection'
 import { journalApi } from '../services/journal'
 import {
   JournalEntryWithAuthor,
@@ -58,7 +61,7 @@ const SPARKS = [
   'Describe a moment where something finally clicked for you.',
   'What are you looking forward to learning next?',
   'What challenged you today, and how did you handle it?',
-  'Write about something you\'re proud of from this week.',
+  "Write about something you're proud of from this week.",
 ]
 
 const REACTIONS = ['Proud of you', 'Love this', 'Great insight', 'Keep going']
@@ -69,13 +72,18 @@ const formatDate = (dateString: string) => {
   try { return format(parseISO(dateString), 'MMM d, yyyy') } catch { return dateString }
 }
 
-const moodColor = (key?: string) => MOODS.find(m => m.key === key)?.color ?? 'var(--accent)'
+const moodColor = (key?: string) =>
+  MOODS.find((m) => m.key === key)?.color ?? 'var(--accent)'
 
 // Returns ordered segments for the mood bar (one per distinct mood, in MOODS order)
-const moodBreakdown = (entryList: { mood?: string }[]): { color: string; count: number; label: string }[] =>
-  MOODS
-    .map(m => ({ color: m.color, label: m.label, count: entryList.filter(e => e.mood === m.key).length }))
-    .filter(seg => seg.count > 0)
+const moodBreakdown = (
+  entryList: { mood?: string }[],
+): { color: string; count: number; label: string }[] =>
+  MOODS.map((m) => ({
+    color: m.color,
+    label: m.label,
+    count: entryList.filter((e) => e.mood === m.key).length,
+  })).filter((seg) => seg.count > 0)
 
 function Spinner() {
   return (
@@ -93,10 +101,13 @@ interface ComposerProps {
   onSaved: (entry: JournalEntryWithAuthor) => void
 }
 
-const StudentComposer: React.FC<ComposerProps> = ({ composerData, onSaved }) => {
-  const {user}=useAuth()
+const StudentComposer: React.FC<ComposerProps> = ({
+  composerData,
+  onSaved,
+}) => {
+  const { user } = useAuth()
   const editorRef = useRef<HTMLDivElement>(null)
-  const [richWriting,setRichWriting]=useState(false)
+  const [richWriting, setRichWriting] = useState(false)
   const [title, setTitle] = useState('')
   const [mood, setMood] = useState<string | null>(null)
   const [icon, setIcon] = useState<string | null>(null)
@@ -114,15 +125,20 @@ const StudentComposer: React.FC<ComposerProps> = ({ composerData, onSaved }) => 
 
   const addGoal = () => {
     if (!goalDraft.trim()) return
-    setGoals(prev => [...prev, { id: goalId.current++, text: goalDraft.trim(), done: false }])
+    setGoals((prev) => [
+      ...prev,
+      { id: goalId.current++, text: goalDraft.trim(), done: false },
+    ])
     setGoalDraft('')
   }
 
   const toggleGoal = (id: number) =>
-    setGoals(prev => prev.map(g => g.id === id ? { ...g, done: !g.done } : g))
+    setGoals((prev) =>
+      prev.map((g) => (g.id === id ? { ...g, done: !g.done } : g)),
+    )
 
   const removeGoal = (id: number) =>
-    setGoals(prev => prev.filter(g => g.id !== id))
+    setGoals((prev) => prev.filter((g) => g.id !== id))
 
   const execCmd = (cmd: string, value?: string) => {
     editorRef.current?.focus()
@@ -136,7 +152,10 @@ const StudentComposer: React.FC<ComposerProps> = ({ composerData, onSaved }) => 
     if (!hasContent || saving) return
     const content = editorRef.current?.innerHTML ?? ''
     const bodyText = editorRef.current?.innerText?.trim() ?? ''
-    if (!title.trim()) { setTitleError(true); return }
+    if (!title.trim()) {
+      setTitleError(true)
+      return
+    }
     setSaving(true)
     setSaveError(null)
     try {
@@ -163,14 +182,16 @@ const StudentComposer: React.FC<ComposerProps> = ({ composerData, onSaved }) => 
       setOpen(false)
       onSaved(entry)
     } catch (err) {
-      setSaveError(getErrorMessage(err, 'Failed to save entry. Please try again.'))
+      setSaveError(
+        getErrorMessage(err, 'Failed to save entry. Please try again.'),
+      )
     } finally {
       setSaving(false)
     }
   }
 
   const pickSpark = () => {
-    const unused = SPARKS.filter(s => s !== activePrompt)
+    const unused = SPARKS.filter((s) => s !== activePrompt)
     setActivePrompt(unused[Math.floor(Math.random() * unused.length)])
   }
 
@@ -178,14 +199,16 @@ const StudentComposer: React.FC<ComposerProps> = ({ composerData, onSaved }) => 
   const pointsPerEntry = user?.show_points===false?null:composerData?.points_per_entry
   const pointsEarnedToday = user?.show_points===false?null:composerData?.points_today
 
-  return <>
+  return (
+    <>
     <div className="mb-3 flex gap-3 text-sm"><button type="button" aria-pressed={!richWriting} onClick={()=>setRichWriting(false)}>Quick reflection</button><button type="button" aria-pressed={richWriting} onClick={()=>setRichWriting(true)}>More writing</button></div>
     <div hidden={richWriting}><QuickReflection onSaved={onSaved}/></div>
     <div hidden={!richWriting}>{renderRichComposer()}</div>
   </>
+  )
 
   function renderRichComposer() {
-  if (!open) {
+    if (!open) {
     return (
       <button
         onClick={() => setOpen(true)}
@@ -196,77 +219,108 @@ const StudentComposer: React.FC<ComposerProps> = ({ composerData, onSaved }) => 
     )
   }
 
-  return (
-    <div className="bg-panel border border-line rounded-card-lg shadow-card mb-8 overflow-hidden">
-      {/* Title + icon picker */}
-      <div className="px-5 pt-5">
-        <div className="flex items-center gap-2.5 mb-1">
-          <IconPickerButton
-            value={icon}
-            color={moodColor(mood ?? undefined)}
-            onSelect={name => setIcon(name)}
-          />
-          <input
-            type="text"
-            value={title}
-            onChange={e => { setTitle(e.target.value); setTitleError(false) }}
-            aria-label="Entry title"
-            placeholder="Give this entry a title…"
-            className={`flex-1 min-w-0 bg-transparent text-[17px] font-semibold placeholder:text-faintest focus:outline-none border-none ${titleError ? 'text-neg-fg placeholder:text-neg-fg/50' : 'text-ink'}`}
-          />
-        </div>
-        {titleError && <p className="text-[12px] text-neg-fg mb-2">A title is required before saving.</p>}
+    return (
+      <div className="bg-panel border border-line rounded-card-lg shadow-card mb-8 overflow-hidden">
+        {/* Title + icon picker */}
+        <div className="px-5 pt-5">
+          <div className="flex items-center gap-2.5 mb-1">
+            <IconPickerButton
+              value={icon}
+              color={moodColor(mood ?? undefined)}
+              onSelect={(name) => setIcon(name)}
+            />
+            <input
+              type="text"
+              value={title}
+              onChange={(e) => {
+                setTitle(e.target.value)
+                setTitleError(false)
+              }}
+              aria-label="Entry title"
+              placeholder="Give this entry a title…"
+              className={`flex-1 min-w-0 bg-transparent text-[17px] font-semibold placeholder:text-faintest focus:outline-none border-none ${titleError ? 'text-neg-fg placeholder:text-neg-fg/50' : 'text-ink'}`}
+            />
+          </div>
+          {titleError && (
+            <p className="text-[12px] text-neg-fg mb-2">A title is required before saving.</p>
+          )}
 
-        {/* Spark prompt */}
-        {activePrompt && (
+          {/* Spark prompt */}
+          {activePrompt && (
           <p className="text-[13.5px] italic text-muted mb-2 pl-1">"{activePrompt}"</p>
         )}
 
-        {/* Formatting toolbar */}
-        <div className="flex items-center gap-0.5 mb-2 -ml-1">
-          {[
+          {/* Formatting toolbar */}
+          <div className="flex items-center gap-0.5 mb-2 -ml-1">
+            {[
             { label: 'B', cmd: 'bold', style: 'font-bold', aria: 'Bold' },
             { label: 'I', cmd: 'italic', style: 'italic', aria: 'Italic' },
-          ].map(b => (
-            <button key={b.cmd} type="button" aria-label={b.aria} onMouseDown={e => { e.preventDefault(); execCmd(b.cmd) }}
-              className={`w-7 h-7 rounded-[5px] text-[13px] text-faint hover:text-ink hover:bg-track transition-colors ${b.style}`}>
-              {b.label}
+          ].map((b) => (
+              <button
+                key={b.cmd}
+                type="button"
+                aria-label={b.aria}
+                onMouseDown={(e) => {
+                  e.preventDefault()
+                  execCmd(b.cmd)
+                }}
+                className={`w-7 h-7 rounded-[5px] text-[13px] text-faint hover:text-ink hover:bg-track transition-colors ${b.style}`}
+              >
+                {b.label}
+              </button>
+            ))}
+            <button
+              type="button"
+              aria-label="Heading"
+              onMouseDown={(e) => {
+                e.preventDefault()
+                execCmd('formatBlock', 'h3')
+              }}
+              className="w-7 h-7 rounded-[5px] text-[13px] font-bold text-faint hover:text-ink hover:bg-track transition-colors"
+            >
+              H
             </button>
-          ))}
-          <button type="button" aria-label="Heading" onMouseDown={e => { e.preventDefault(); execCmd('formatBlock', 'h3') }}
-            className="w-7 h-7 rounded-[5px] text-[13px] font-bold text-faint hover:text-ink hover:bg-track transition-colors">
-            H
-          </button>
-          <button type="button" aria-label="Bullet list" onMouseDown={e => { e.preventDefault(); execCmd('insertUnorderedList') }}
-            className="w-7 h-7 rounded-[5px] text-[13px] text-faint hover:text-ink hover:bg-track transition-colors">
-            •
-          </button>
-          <div className="w-px h-4 bg-line mx-1" />
-          <button type="button" onClick={pickSpark}
+            <button
+              type="button"
+              aria-label="Bullet list"
+              onMouseDown={(e) => {
+                e.preventDefault()
+                execCmd('insertUnorderedList')
+              }}
+              className="w-7 h-7 rounded-[5px] text-[13px] text-faint hover:text-ink hover:bg-track transition-colors"
+            >
+              •
+            </button>
+            <div className="w-px h-4 bg-line mx-1" />
+            <button type="button" onClick={pickSpark}
             className="h-7 px-2.5 rounded-[5px] text-[11.5px] font-semibold text-faint hover:text-ink hover:bg-track transition-colors">
             ✦ Need a spark?
           </button>
+          </div>
+
+          {/* Rich text editor */}
+          <div
+            ref={editorRef}
+            contentEditable
+            role="textbox"
+            aria-multiline="true"
+            aria-label="Journal entry"
+            suppressContentEditableWarning
+            onInput={(e) =>
+              setEditorEmpty(
+                (e.currentTarget.innerText?.trim().length ?? 0) === 0,
+              )
+            }
+            className="min-h-[120px] text-[14.5px] leading-relaxed text-ink focus:outline-none empty:before:content-[attr(data-placeholder)] empty:before:text-faintest"
+            data-placeholder="Start writing… there's no wrong way to do this."
+          />
         </div>
 
-        {/* Rich text editor */}
-        <div
-          ref={editorRef}
-          contentEditable
-          role="textbox"
-          aria-multiline="true"
-          aria-label="Journal entry"
-          suppressContentEditableWarning
-          onInput={e => setEditorEmpty((e.currentTarget.innerText?.trim().length ?? 0) === 0)}
-          className="min-h-[120px] text-[14.5px] leading-relaxed text-ink focus:outline-none empty:before:content-[attr(data-placeholder)] empty:before:text-faintest"
-          data-placeholder="Start writing… there's no wrong way to do this."
-        />
-      </div>
-
-      {/* Mood row */}
-      <div className="px-5 pt-4">
-        <p className="text-[10.5px] font-semibold text-faint uppercase tracking-[.06em] mb-2">How are you feeling?</p>
-        <div className="flex gap-2 flex-wrap">
-          {WRITING_MOODS.map(m => (
+        {/* Mood row */}
+        <div className="px-5 pt-4">
+          <p className="text-[10.5px] font-semibold text-faint uppercase tracking-[.06em] mb-2">How are you feeling?</p>
+          <div className="flex gap-2 flex-wrap">
+            {WRITING_MOODS.map((m) => (
             <button key={m.key} type="button"
               onClick={() => setMood(mood === m.key ? null : m.key)}
               className={`flex items-center gap-1.5 h-[28px] px-2.5 rounded-pill border text-[12.5px] font-medium transition-colors ${
@@ -278,84 +332,111 @@ const StudentComposer: React.FC<ComposerProps> = ({ composerData, onSaved }) => 
               {m.label}
             </button>
           ))}
-        </div>
-      </div>
-
-      {/* Tags row */}
-      {subjects.length > 0 && (
-        <div className="px-5 pt-3">
-          <p className="text-[10.5px] font-semibold text-faint uppercase tracking-[.06em] mb-2">Tag a subject</p>
-          <div className="flex gap-2 flex-wrap">
-            {subjects.map(s => {
-              const active = tags.includes(s.name)
-              return (
-                <button key={s.id} type="button"
-                  onClick={() => setTags(prev => active ? prev.filter(t => t !== s.name) : [...prev, s.name])}
-                  className={`flex items-center gap-1.5 h-[26px] px-2 rounded-pill border text-[12px] transition-colors ${
-                    active ? 'border-transparent text-white' : 'bg-panel border-line text-ink-2 hover:border-field-border'
-                  }`}
-                  style={active ? { background: s.color || 'var(--accent)', borderColor: s.color || 'var(--accent)' } : {}}
-                >
-                  {s.icon
-                    ? <Icon name={s.icon} size={12} color={active ? 'white' : (s.color || 'var(--accent)')} />
-                    : <span className="w-1.5 h-1.5 rounded-full flex-none" style={{ background: s.color || 'var(--accent)' }} />
-                  }
-                  {s.name}
-                </button>
-              )
-            })}
           </div>
         </div>
-      )}
 
-      {/* Win of the day */}
-      <div className="px-5 pt-3">
-        <p className="text-[10.5px] font-semibold text-faint uppercase tracking-[.06em] mb-2">Win of the day</p>
-        <input
-          type="text"
-          value={win}
-          onChange={e => setWin(e.target.value)}
-          aria-label="Win of the day"
-          placeholder="Something you're proud of today…"
-          className="w-full bg-field-bg border border-field-border rounded-field px-3 py-2 text-[13.5px] text-ink focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent placeholder:text-faintest"
-        />
-      </div>
+        {/* Tags row */}
+        {subjects.length > 0 && (
+          <div className="px-5 pt-3">
+            <p className="text-[10.5px] font-semibold text-faint uppercase tracking-[.06em] mb-2">Tag a subject</p>
+            <div className="flex gap-2 flex-wrap">
+              {subjects.map((s) => {
+                const active = tags.includes(s.name)
+                return (
+                  <button
+                    key={s.id}
+                    type="button"
+                    onClick={() =>
+                      setTags((prev) =>
+                        active
+                          ? prev.filter((t) => t !== s.name)
+                          : [...prev, s.name],
+                      )
+                    }
+                    className={`flex items-center gap-1.5 h-[26px] px-2 rounded-pill border text-[12px] transition-colors ${
+                    active ? 'border-transparent text-white' : 'bg-panel border-line text-ink-2 hover:border-field-border'
+                  }`}
+                    style={
+                      active
+                        ? {
+                            background: s.color || 'var(--accent)',
+                            borderColor: s.color || 'var(--accent)',
+                          }
+                        : {}
+                    }
+                  >
+                    {s.icon ? (
+                      <Icon
+                        name={s.icon}
+                        size={12}
+                        color={active ? 'white' : s.color || 'var(--accent)'}
+                      />
+                    ) : (
+                      <span className="w-1.5 h-1.5 rounded-full flex-none" style={{ background: s.color || 'var(--accent)' }} />
+                    )}
+                    {s.name}
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+        )}
 
-      {/* Goals */}
-      <div className="px-5 pt-3">
-        <p className="text-[10.5px] font-semibold text-faint uppercase tracking-[.06em] mb-2">Goals</p>
-        {goals.map(g => (
-          <div key={g.id} className="flex items-center gap-2 mb-1.5">
-            <button type="button" onClick={() => toggleGoal(g.id)}
+        {/* Win of the day */}
+        <div className="px-5 pt-3">
+          <p className="text-[10.5px] font-semibold text-faint uppercase tracking-[.06em] mb-2">Win of the day</p>
+          <input
+            type="text"
+            value={win}
+            onChange={(e) => setWin(e.target.value)}
+            aria-label="Win of the day"
+            placeholder="Something you're proud of today…"
+            className="w-full bg-field-bg border border-field-border rounded-field px-3 py-2 text-[13.5px] text-ink focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent placeholder:text-faintest"
+          />
+        </div>
+
+        {/* Goals */}
+        <div className="px-5 pt-3">
+          <p className="text-[10.5px] font-semibold text-faint uppercase tracking-[.06em] mb-2">Goals</p>
+          {goals.map((g) => (
+            <div key={g.id} className="flex items-center gap-2 mb-1.5">
+              <button type="button" onClick={() => toggleGoal(g.id)}
               aria-label={g.done ? `Mark goal "${g.text}" as not done` : `Mark goal "${g.text}" as done`}
               className={`w-4 h-4 rounded-[4px] border flex-none flex items-center justify-center transition-colors ${
                 g.done ? 'bg-accent border-accent' : 'border-field-border'
               }`}>
-              {g.done && <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M2 5l2.5 2.5L8 3" stroke="white" strokeWidth="1.5" strokeLinecap="round"/></svg>}
-            </button>
-            <span className={`text-[13px] flex-1 ${g.done ? 'line-through text-faint' : 'text-ink'}`}>{g.text}</span>
-            <button type="button" aria-label={`Remove goal "${g.text}"`} onClick={() => removeGoal(g.id)} className="text-faint hover:text-danger text-[14px] leading-none">×</button>
-          </div>
-        ))}
-        <div className="flex gap-2 mt-1">
-          <input
-            type="text"
-            value={goalDraft}
-            onChange={e => setGoalDraft(e.target.value)}
-            onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addGoal() } }}
-            aria-label="Add a goal"
-            placeholder="Add a goal… (Enter to add)"
-            className="flex-1 bg-field-bg border border-field-border rounded-field px-3 py-1.5 text-[13px] text-ink focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent placeholder:text-faintest"
-          />
-          <button type="button" onClick={addGoal}
+                {g.done && (
+                  <svg width="10" height="10" viewBox="0 0 10 10" fill="none"><path d="M2 5l2.5 2.5L8 3" stroke="white" strokeWidth="1.5" strokeLinecap="round"/></svg>
+                )}
+              </button>
+              <span className={`text-[13px] flex-1 ${g.done ? 'line-through text-faint' : 'text-ink'}`}>{g.text}</span>
+              <button type="button" aria-label={`Remove goal "${g.text}"`} onClick={() => removeGoal(g.id)} className="text-faint hover:text-danger text-[14px] leading-none">×</button>
+            </div>
+          ))}
+          <div className="flex gap-2 mt-1">
+            <input
+              type="text"
+              value={goalDraft}
+              onChange={(e) => setGoalDraft(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') {
+                  e.preventDefault()
+                  addGoal()
+                }
+              }}
+              aria-label="Add a goal"
+              placeholder="Add a goal… (Enter to add)"
+              className="flex-1 bg-field-bg border border-field-border rounded-field px-3 py-1.5 text-[13px] text-ink focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent placeholder:text-faintest"
+            />
+            <button type="button" onClick={addGoal}
             className="h-[34px] px-3 border border-line rounded-field text-[13px] font-semibold text-muted hover:text-ink hover:bg-track transition-colors">
             Add
           </button>
+          </div>
         </div>
-      </div>
 
-      {/* Save bar */}
-      <div className="flex items-center justify-between px-5 py-3.5 mt-4 border-t border-line-2 bg-panel-2">
+        {/* Save bar */}
+        <div className="flex items-center justify-between px-5 py-3.5 mt-4 border-t border-line-2 bg-panel-2">
         <div className="text-[12.5px] text-faint">
           {saveError && <span className="text-neg-fg">{saveError}</span>}
           {pointsPerEntry && !pointsEarnedToday && (
@@ -380,8 +461,8 @@ const StudentComposer: React.FC<ComposerProps> = ({ composerData, onSaved }) => 
           </button>
         </div>
       </div>
-    </div>
-  )
+      </div>
+    )
   }
 }
 
@@ -395,14 +476,22 @@ interface EntryCardProps {
   onEdit: (entry: JournalEntryWithAuthor) => void
 }
 
-const StudentEntryCard: React.FC<EntryCardProps> = ({ entry, index, total, onDelete, onEdit }) => {
-  const mood = MOODS.find(m => m.key === entry.mood)
+const StudentEntryCard: React.FC<EntryCardProps> = ({
+  entry,
+  index,
+  total,
+  onDelete,
+  onEdit,
+}) => {
+  const mood = MOODS.find((m) => m.key === entry.mood)
 
   return (
     <div className="relative pl-6">
       <span
         className="absolute left-[1px] top-[7px] w-[11px] h-[11px] rounded-full border-2 border-accent"
-        style={{ background: entry.mood ? moodColor(entry.mood) : 'var(--accent-soft)' }}
+        style={{
+          background: entry.mood ? moodColor(entry.mood) : 'var(--accent-soft)',
+        }}
       />
       {index < total - 1 && (
         <span className="absolute left-[5.5px] top-5 bottom-[-1.25rem] w-[1.5px] bg-line" />
@@ -441,7 +530,7 @@ const StudentEntryCard: React.FC<EntryCardProps> = ({ entry, index, total, onDel
                   {mood.label}
                 </span>
               )}
-              {entry.tags?.map(t => (
+              {entry.tags?.map((t) => (
                 <span key={t} className="px-2 py-[2px] rounded-pill bg-track border border-line text-[11px] text-muted">{t}</span>
               ))}
             </div>
@@ -468,7 +557,9 @@ const StudentEntryCard: React.FC<EntryCardProps> = ({ entry, index, total, onDel
             {entry.goals.map((g, i) => (
               <div key={i} className="flex items-center gap-2 mb-1">
                 <span className={`w-3.5 h-3.5 rounded-[3px] border flex-none flex items-center justify-center ${g.done ? 'bg-accent border-accent' : 'border-field-border'}`}>
-                  {g.done && <svg width="8" height="8" viewBox="0 0 8 8" fill="none"><path d="M1.5 4l2 2L6.5 2" stroke="white" strokeWidth="1.5" strokeLinecap="round"/></svg>}
+                  {g.done && (
+                    <svg width="8" height="8" viewBox="0 0 8 8" fill="none"><path d="M1.5 4l2 2L6.5 2" stroke="white" strokeWidth="1.5" strokeLinecap="round"/></svg>
+                  )}
                 </span>
                 <span className={`text-[13px] ${g.done ? 'line-through text-faint' : 'text-ink'}`}>{g.text}</span>
               </div>
@@ -481,15 +572,21 @@ const StudentEntryCard: React.FC<EntryCardProps> = ({ entry, index, total, onDel
           <div className="mx-4 mb-3 px-3 py-3 bg-panel-2 border border-line rounded-[10px]">
             {entry.reactions && entry.reactions.length > 0 && (
               <div className="flex flex-wrap gap-1.5 mb-2">
-                {entry.reactions.map(r => (
+                {entry.reactions.map((r) => (
                   <span key={r} className="px-2.5 py-[3px] rounded-pill bg-accent-soft text-accent text-[12px] font-medium">{r}</span>
                 ))}
               </div>
             )}
-            {entry.replies?.map(r => (
+            {entry.replies?.map((r) => (
               <div key={r.id} className="flex gap-2.5 mt-2">
                 <div className="w-6 h-6 rounded-full bg-accent-soft flex-none flex items-center justify-center">
-                  <span className="text-[10px] font-bold text-accent">{r.author_name.split(' ').map(n => n[0]).join('').slice(0, 2)}</span>
+                  <span className="text-[10px] font-bold text-accent">
+                    {r.author_name
+                      .split(' ')
+                      .map((n) => n[0])
+                      .join('')
+                      .slice(0, 2)}
+                  </span>
                 </div>
                 <div className="flex-1">
                   <span className="text-[12px] font-semibold text-ink mr-2">{r.author_name}</span>
@@ -524,22 +621,33 @@ interface AdminEntryPanelProps {
   onEdit: (entry: JournalEntryWithAuthor) => void
 }
 
-const AdminEntryPanel: React.FC<AdminEntryPanelProps> = ({ entry, onReacted, onReplied, onDelete, onMarkReviewed, onEdit }) => {
+const AdminEntryPanel: React.FC<AdminEntryPanelProps> = ({
+  entry,
+  onReacted,
+  onReplied,
+  onDelete,
+  onMarkReviewed,
+  onEdit,
+}) => {
   const [replyDraft, setReplyDraft] = useState('')
   const [sending, setSending] = useState(false)
   const [responseError, setResponseError] = useState('')
-  const mood = MOODS.find(m => m.key === entry.mood)
+  const mood = MOODS.find((m) => m.key === entry.mood)
 
   const toggleReaction = async (reaction: string) => {
     const current = entry.reactions ?? []
     const updated = current.includes(reaction)
-      ? current.filter(r => r !== reaction)
+      ? current.filter((r) => r !== reaction)
       : [...current, reaction]
     setResponseError('')
     try {
       const result = await journalApi.setReactions(entry.id, updated)
       onReacted(result)
-    } catch (err) { setResponseError(getErrorMessage(err, 'Could not save your response. Please try again.')) }
+    } catch (err) {
+      setResponseError(
+        getErrorMessage(err, 'Could not save your response. Please try again.'),
+      )
+    }
   }
 
   const sendReply = async () => {
@@ -552,7 +660,11 @@ const AdminEntryPanel: React.FC<AdminEntryPanelProps> = ({ entry, onReacted, onR
       // Refresh entry
       const updated = await journalApi.getById(entry.id)
       onReplied(updated)
-    } catch (err) { setResponseError(getErrorMessage(err, 'Could not save your response. Please try again.')) } finally {
+    } catch (err) {
+      setResponseError(
+        getErrorMessage(err, 'Could not save your response. Please try again.'),
+      )
+    } finally {
       setSending(false)
     }
   }
@@ -563,7 +675,11 @@ const AdminEntryPanel: React.FC<AdminEntryPanelProps> = ({ entry, onReacted, onR
       await journalApi.deleteReply(replyId)
       const updated = await journalApi.getById(entry.id)
       onReplied(updated)
-    } catch (err) { setResponseError(getErrorMessage(err, 'Could not save your response. Please try again.')) }
+    } catch (err) {
+      setResponseError(
+        getErrorMessage(err, 'Could not save your response. Please try again.'),
+      )
+    }
   }
 
   return (
@@ -587,13 +703,19 @@ const AdminEntryPanel: React.FC<AdminEntryPanelProps> = ({ entry, onReacted, onR
               )}
             </div>
             <div className="flex items-center gap-2 text-[12.5px] text-faint flex-wrap">
-              {mood && <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full" style={{ background: mood.color }} />{mood.label}</span>}
-              {entry.tags?.map(t => <span key={t} className="px-2 py-[1px] rounded-pill bg-track border border-line text-[11px]">{t}</span>)}
+              {mood && (
+                <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full" style={{ background: mood.color }} />{mood.label}</span>
+              )}
+              {entry.tags?.map((t) => (
+                <span key={t} className="px-2 py-[1px] rounded-pill bg-track border border-line text-[11px]">{t}</span>
+              ))}
               <span>·</span>
               <span>{entry.student_name}</span>
               <span>·</span>
               <span className="font-mono">{formatDate(entry.entry_date)}</span>
-              {entry.edited_at && <span title={`${entry.edited_by_name ?? 'Unknown'} · ${formatDate(entry.edited_at)}`}>· Edited</span>}
+              {entry.edited_at && (
+                <span title={`${entry.edited_by_name ?? 'Unknown'} · ${formatDate(entry.edited_at)}`}>· Edited</span>
+              )}
             </div>
           </div>
           <div className="flex flex-wrap items-center gap-2 flex-none">
@@ -638,12 +760,14 @@ const AdminEntryPanel: React.FC<AdminEntryPanelProps> = ({ entry, onReacted, onR
         )}
       </div>
 
-      {responseError && <p role="alert" className="px-5 pb-3 text-sm text-danger">{responseError}</p>}
+      {responseError && (
+        <p role="alert" className="px-5 pb-3 text-sm text-danger">{responseError}</p>
+      )}
       {/* Reactions */}
       <div className="px-5 pb-3">
         <p className="text-[10.5px] font-semibold text-faint uppercase tracking-[.06em] mb-2">Reactions</p>
         <div className="flex gap-2 flex-wrap">
-          {REACTIONS.map(r => {
+          {REACTIONS.map((r) => {
             const active = (entry.reactions ?? []).includes(r)
             return (
               <button key={r} type="button" onClick={() => toggleReaction(r)}
@@ -660,7 +784,7 @@ const AdminEntryPanel: React.FC<AdminEntryPanelProps> = ({ entry, onReacted, onR
       {/* Replies */}
       {entry.replies && entry.replies.length > 0 && (
         <div className="px-5 pb-3 space-y-2">
-          {entry.replies.map(r => (
+          {entry.replies.map((r) => (
             <div key={r.id} className="flex items-start gap-2.5 bg-panel-2 rounded-[10px] p-3">
               <div className="w-6 h-6 rounded-full bg-accent-soft flex-none flex items-center justify-center">
                 <span className="text-[10px] font-bold text-accent">{r.author_name.split(' ').map((n: string) => n[0]).join('').slice(0, 2)}</span>
@@ -682,8 +806,10 @@ const AdminEntryPanel: React.FC<AdminEntryPanelProps> = ({ entry, onReacted, onR
           <input
             type="text"
             value={replyDraft}
-            onChange={e => setReplyDraft(e.target.value)}
-            onKeyDown={e => { if (e.key === 'Enter') sendReply() }}
+            onChange={(e) => setReplyDraft(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') sendReply()
+            }}
             aria-label="Reply"
             placeholder="Leave a reply…"
             className="flex-1 bg-field-bg border border-field-border rounded-field px-3 py-2 text-[13.5px] text-ink focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent placeholder:text-faintest"
@@ -709,13 +835,20 @@ const Journal: React.FC = () => {
   const { user } = useAuth()
   const [entries, setEntries] = useState<JournalEntryWithAuthor[]>([])
   const [students, setStudents] = useState<JournalStudent[]>([])
-  const [composerData, setComposerData] = useState<JournalComposerData | null>(null)
+  const [composerData, setComposerData] = useState<JournalComposerData | null>(
+    null,
+  )
   const [loading, setLoading] = useState(true)
-  const [selectedStudentId, setSelectedStudentId] = useState<number | null>(null)
+  const [journalParams, setJournalParams] = useSearchParams()
+  const [selectedStudentId, setSelectedStudentId] = useState<number | null>(
+    Number(journalParams.get('student_id')) || null,
+  )
   const [searchTerm, setSearchTerm] = useState('')
-  const [inboxState,setInboxState]=useState('all')
-  const [dateFrom,setDateFrom]=useState('')
-  const [dateTo,setDateTo]=useState('')
+  const [inboxState, setInboxState] = useState(
+    journalParams.get('review') ?? 'all',
+  )
+  const [dateFrom, setDateFrom] = useState(journalParams.get('date_from') ?? '')
+  const [dateTo, setDateTo] = useState(journalParams.get('date_to') ?? '')
   const [error, setError] = useState<string | null>(null)
   const [deletingEntryId, setDeletingEntryId] = useState<number | null>(null)
   const [deleteLoading, setDeleteLoading] = useState(false)
@@ -723,43 +856,87 @@ const Journal: React.FC = () => {
 
   const isAdmin = user?.role === 'admin'
 
-  // No synchronous setState here: this runs from the mount effect, and the
-  // set-state-in-effect lint rule requires state updates to happen inside the
-  // promise callbacks. `loading` starts true.
-  const fetchEntries = useCallback((studentId?: number | null) => {
-    // Admin always fetches all entries so sidebar counts remain accurate
-    journalApi.getAll(isAdmin ? undefined : (studentId ?? undefined))
-      .then(raw => {
-        const data: JournalEntryWithAuthor[] = Array.isArray(raw) ? raw : []
-        setError(null)
-        setEntries(data)
+  const [navigation, setNavigation] = useState({ key: '', offset: 0 })
+  const pageKey = `${selectedStudentId}:${inboxState}:${dateFrom}:${dateTo}:${searchTerm}`
+  const offset = navigation.key === pageKey ? navigation.offset : 0
+  const [page, setPage] = useState<{
+    total: number
+    offset: number
+    has_more: boolean
+    student_counts: { student_id: number; total: number; needs: number }[]
+  }>({ total: 0, offset: 0, has_more: false, student_counts: [] })
+  const activeStudents = journalParams.get('active_students') === 'true'
+  const fetchEntries = useCallback(() => {
+    const params = new URLSearchParams({
+      review: inboxState,
+      offset: String(offset),
+      limit: '25',
+      timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+      active_students: String(activeStudents),
+    })
+    if (selectedStudentId) params.set('student_id', String(selectedStudentId))
+    if (dateFrom) params.set('date_from', dateFrom)
+    if (dateTo) params.set('date_to', dateTo)
+    if (searchTerm) params.set('search', searchTerm)
+    const request: Promise<{
+      items: JournalEntryWithAuthor[]
+      total: number
+      offset: number
+      has_more: boolean
+      student_counts: { student_id: number; total: number; needs: number }[]
+    }> = isAdmin
+      ? api.get(`/journal/entries/page?${params}`)
+      : journalApi
+          .getAll()
+          .then((items) => ({
+            items,
+            total: items.length,
+            offset: 0,
+            has_more: false,
+            student_counts: [],
+          }))
+    let cancelled = false
+    request
+      .then((data) => {
+        if (!cancelled) {
+          setError(null)
+          setEntries(data.items)
+          setPage(data)
+          setLoading(false)
+        }
       })
-      .catch(err => {
-        setError(`Failed to load journal entries: ${getErrorMessage(err)}`)
-        setEntries([])
+      .catch((err) => {
+        if (!cancelled) {
+          setError(`Failed to load journal entries: ${getErrorMessage(err)}`)
+          setLoading(false)
+        }
       })
-      .finally(() => {
-        setLoading(false)
-      })
-  }, [isAdmin])
-
-  // Effect event: reads the latest selectedStudentId without making it a
-  // refetch trigger (student switching is filtered client-side, not refetched).
-  const fetchEntriesForSelectedStudent = useEffectEvent(() => {
-    fetchEntries(selectedStudentId)
-  })
-
+    return () => {
+      cancelled = true
+    }
+  }, [
+    isAdmin,
+    selectedStudentId,
+    inboxState,
+    dateFrom,
+    dateTo,
+    searchTerm,
+    offset,
+    activeStudents,
+  ])
+  useEffect(() => {
+    if (user) return fetchEntries()
+  }, [user, fetchEntries])
   useEffect(() => {
     if (!user) return
-    // Admin: only re-fetch from server on mount (selectedStudentId filter is client-side)
-    if (isAdmin) {
-      fetchEntries(null)
-      journalApi.getStudents().then(s => setStudents(Array.isArray(s) ? s : [])).catch(() => {})
-    } else {
-      fetchEntriesForSelectedStudent()
+    if (isAdmin)
+      journalApi
+        .getStudents()
+        .then((s) => setStudents(Array.isArray(s) ? s : []))
+        .catch(() => {})
+    else
       journalApi.getComposerData().then(setComposerData).catch(() => {})
-    }
-  }, [user, isAdmin, fetchEntries])
+  }, [user, isAdmin])
 
   const handleDelete = (id: number) => setDeletingEntryId(id)
 
@@ -768,7 +945,7 @@ const Journal: React.FC = () => {
     setDeleteLoading(true)
     try {
       await journalApi.delete(deletingEntryId)
-      setEntries(prev => prev.filter(e => e.id !== deletingEntryId))
+      setEntries((prev) => prev.filter((e) => e.id !== deletingEntryId))
     } catch (err) {
       setError(`Failed to delete entry: ${getErrorMessage(err)}`)
     } finally {
@@ -777,32 +954,51 @@ const Journal: React.FC = () => {
     }
   }
 
-  const updateEntry = (updated: JournalEntryWithAuthor) =>
-    setEntries(prev => prev.map(e => e.id === updated.id ? updated : e))
+  const updateEntry = (updated: JournalEntryWithAuthor) => {
+    setEntries((prev) => prev.map((e) => (e.id === updated.id ? updated : e)))
+    if (isAdmin) fetchEntries()
+  }
 
   const markReviewed = async (id: number) => {
     // Optimistic flip for instant badge decrement
-    setEntries(prev => prev.map(e => e.id === id ? { ...e, needs_response: false } : e))
+    setEntries((prev) =>
+      prev.map((e) => (e.id === id ? { ...e, needs_response: false } : e)),
+    )
     try {
       const updated = await journalApi.markRead(id)
       updateEntry(updated)
     } catch {
       setError('Could not mark this reflection reviewed. Please try again.')
       // Roll back on error
-      setEntries(prev => prev.map(e => e.id === id ? { ...e, needs_response: true } : e))
+      setEntries((prev) =>
+        prev.map((e) => (e.id === id ? { ...e, needs_response: true } : e)),
+      )
     }
   }
 
-  const scopedEntries = entries.filter(e => {
-    const day=format(parseISO(e.entry_date), 'yyyy-MM-dd')
-    if(dateFrom&&day<dateFrom || dateTo&&day>dateTo)return false
-    if(inboxState==='needs'&&!e.needs_response)return false
-    if(inboxState==='new'&&(e.author_id!==e.student_id||e.replies.some(r=>r.author_role==='admin')))return false
-    if(inboxState==='reviewed'&&e.needs_response)return false
-    const needle=searchTerm.toLowerCase()
-    return [e.title,e.content,e.student_name].some(text=>text.toLowerCase().includes(needle))
-  })
-  const filteredEntries=scopedEntries.filter(e=>!isAdmin||selectedStudentId===null||e.student_id===selectedStudentId)
+  const scopedEntries = isAdmin
+    ? entries
+    : entries.filter((e) => {
+        const day = format(parseISO(e.entry_date), 'yyyy-MM-dd')
+        if ((dateFrom && day < dateFrom) || (dateTo && day > dateTo))
+          return false
+        if (inboxState === 'needs' && !e.needs_response) return false
+        if (
+          inboxState === 'new' &&
+          (e.author_id !== e.student_id ||
+            e.replies.some((r) => r.author_role === 'admin'))
+        )
+          return false
+        if (inboxState === 'reviewed' && e.needs_response) return false
+        const needle = searchTerm.toLowerCase()
+        return [e.title, e.content, e.student_name].some((text) =>
+          text.toLowerCase().includes(needle),
+        )
+      })
+  const filteredEntries = scopedEntries.filter(
+    (e) =>
+      !isAdmin||selectedStudentId===null||e.student_id===selectedStudentId,
+  )
 
   const hour = new Date().getHours()
   const greeting = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening'
@@ -820,7 +1016,14 @@ const Journal: React.FC = () => {
   }
 
   return (
-    <div style={{ height: 'calc(100vh - 4rem)', display: 'flex', flexDirection: 'column', minHeight: 520 }}>
+    <div
+      style={{
+        height: 'calc(100vh - 4rem)',
+        display: 'flex',
+        flexDirection: 'column',
+        minHeight: 520,
+      }}
+    >
       {error && (
         <div className="flex-none mb-4 px-4 py-3 rounded-card text-[13px] text-neg-fg bg-neg-bg border border-neg-fg/20">
           {error}
@@ -858,12 +1061,14 @@ const Journal: React.FC = () => {
           {/* Composer */}
           <StudentComposer
             composerData={composerData}
-            onSaved={entry => {
+            onSaved={(entry) => {
               notifyBalanceChanged()
-              setEntries(prev => [entry, ...prev])
+              setEntries((prev) => [entry, ...prev])
               void journalApi.getComposerData().then(setComposerData).catch(() => {})
               if (composerData && entry.points_awarded) {
-                setComposerData(prev => prev ? { ...prev, points_today: entry.points_awarded ?? null } : prev)
+                setComposerData((prev) =>
+                  prev ? { ...prev, points_today: entry.points_awarded ?? null } : prev,
+                )
               }
             }}
           />
@@ -899,7 +1104,66 @@ const Journal: React.FC = () => {
       {/* ═══════════════════════════
           ADMIN VIEW
       ═══════════════════════════ */}
-      {isAdmin && <div className="flex flex-wrap gap-3 mb-4 items-end"><label className="text-sm">Response status<select className="block bg-panel border border-line rounded-field p-2" value={inboxState} onChange={e=>setInboxState(e.target.value)}><option value="all">All entries</option><option value="needs">Needs response</option><option value="new">New · no teacher reply</option><option value="reviewed">Reviewed · no response needed</option></select></label><label className="text-sm">From<input type="date" className="block bg-panel border border-line rounded-field p-2" value={dateFrom} onChange={e=>setDateFrom(e.target.value)}/></label><label className="text-sm">Through<input type="date" className="block bg-panel border border-line rounded-field p-2" min={dateFrom} value={dateTo} onChange={e=>setDateTo(e.target.value)}/></label><button className="text-sm text-accent" onClick={()=>{setInboxState('all');setDateFrom('');setDateTo('');setSearchTerm('');setSelectedStudentId(null)}}>Clear filters</button><p className="text-xs text-muted">{filteredEntries.length} entries in this scope. Student badges count entries needing a response within these filters.</p></div>}
+      {isAdmin && (
+        <OffsetNavigation
+          offset={page.offset}
+          total={page.total}
+          hasMore={page.has_more}
+          limit={25}
+          onChange={(value) => setNavigation({ key: pageKey, offset: value })}
+        />
+      )}
+      {isAdmin && (
+        <div className="flex flex-wrap gap-3 mb-4 items-end">
+          <label className="text-sm">
+            Response status
+            <select
+              className="block bg-panel border border-line rounded-field p-2"
+              value={inboxState}
+              onChange={(e) => setInboxState(e.target.value)}
+            >
+              <option value="all">All entries</option>
+              <option value="needs">Needs response</option>
+              <option value="new">New · no teacher reply</option>
+              <option value="reviewed">Reviewed · no response needed</option>
+            </select>
+          </label>
+          <label className="text-sm">
+            From
+            <input
+              type="date"
+              className="block bg-panel border border-line rounded-field p-2"
+              value={dateFrom}
+              onChange={(e) => setDateFrom(e.target.value)}
+            />
+          </label>
+          <label className="text-sm">
+            Through
+            <input
+              type="date"
+              className="block bg-panel border border-line rounded-field p-2"
+              min={dateFrom}
+              value={dateTo}
+              onChange={(e) => setDateTo(e.target.value)}
+            />
+          </label>
+          <button
+            className="text-sm text-accent"
+            onClick={() => {
+              setInboxState('all')
+              setDateFrom('')
+              setDateTo('')
+              setSearchTerm('')
+              setSelectedStudentId(null)
+              setJournalParams({})
+            }}
+          >
+            Clear filters
+          </button>
+          <p className="text-xs text-muted">
+            {page.total} entries in this scope. Student badges count entries needing a response within these filters.</p>
+        </div>
+      )}
       {isAdmin && (
         <div className="flex flex-col lg:flex-row flex-1 min-h-0 gap-4">
           {/* Student roster — horizontal chips on mobile, side rail on desktop */}
@@ -908,12 +1172,12 @@ const Journal: React.FC = () => {
             <div className="hidden lg:block flex-none px-3 pt-3 pb-2 border-b border-line-3">
               <div className="relative">
                 <svg className="absolute left-2.5 top-1/2 -translate-y-1/2 text-faint" width="13" height="13" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
-                  <circle cx="11" cy="11" r="8" /><path d="m21 21-4.35-4.35" />
-                </svg>
+                <circle cx="11" cy="11" r="8" /><path d="m21 21-4.35-4.35" />
+              </svg>
                 <input
                   type="text"
                   value={searchTerm}
-                  onChange={e => setSearchTerm(e.target.value)}
+                  onChange={(e) => setSearchTerm(e.target.value)}
                   placeholder="Search entries…"
                   aria-label="Search journal entries"
                   className="w-full pl-7 pr-2 py-1.5 bg-field-bg border border-field-border rounded-field text-[12.5px] text-ink placeholder:text-faintest focus:outline-none focus:ring-1 focus:ring-accent"
@@ -930,11 +1194,17 @@ const Journal: React.FC = () => {
                 }`}
               >
                 All students
-                <span className="ml-1.5 font-mono text-[11px] text-faint">{scopedEntries.length}</span>
+                <span className="ml-1.5 font-mono text-[11px] text-faint">
+                  {page.student_counts.reduce((sum, c) => sum + c.total, 0)}
+                </span>
               </button>
-              {students.map(s => {
-                const studentEntries = scopedEntries.filter(e => e.student_id === s.id)
-                const awaiting = studentEntries.filter(e => e.needs_response).length
+              {students.map((s) => {
+                const studentEntries = scopedEntries.filter(
+                  (e) => e.student_id === s.id,
+                )
+                const awaiting =
+                  page.student_counts.find((c) => c.student_id === s.id)
+                    ?.needs ?? 0
                 const initials = s.name.split(' ').map((n: string) => n[0]).slice(0, 2).join('')
                 return (
                   <button
@@ -954,27 +1224,36 @@ const Journal: React.FC = () => {
                           <span className="flex-none w-4 h-4 rounded-full bg-[#ff6b6b] text-white text-[9px] font-bold flex items-center justify-center">{awaiting}</span>
                         )}
                       </div>
-                      {studentEntries.length > 0 && (() => {
-                        const segs = moodBreakdown(studentEntries)
-                        const moodCount = segs.reduce((acc, s) => acc + s.count, 0)
-                        const noMoodCount = studentEntries.length - moodCount
-                        const total = studentEntries.length
-                        const title = [
-                          ...segs.map(s => `${s.label} ×${s.count}`),
-                          ...(noMoodCount > 0 ? [`no mood ×${noMoodCount}`] : []),
-                        ].join(', ')
-                        return (
-                          <div className="flex rounded-full overflow-hidden mt-1.5 h-[5px] w-full bg-track" title={title} aria-label={`Mood breakdown: ${title}`}>
-                            {segs.map(s => (
-                              <span
-                                key={s.label}
-                                className="block h-full flex-none"
-                                style={{ background: s.color, width: `${(s.count / total) * 100}%` }}
-                              />
-                            ))}
-                          </div>
-                        )
-                      })()}
+                      {studentEntries.length > 0 &&
+                        (() => {
+                          const segs = moodBreakdown(studentEntries)
+                          const moodCount = segs.reduce(
+                            (acc, s) => acc + s.count,
+                            0,
+                          )
+                          const noMoodCount = studentEntries.length - moodCount
+                          const total = studentEntries.length
+                          const title = [
+                            ...segs.map((s) => `${s.label} ×${s.count}`),
+                            ...(noMoodCount > 0
+                              ? [`no mood ×${noMoodCount}`]
+                              : []),
+                          ].join(', ')
+                          return (
+                            <div className="flex rounded-full overflow-hidden mt-1.5 h-[5px] w-full bg-track" title={title} aria-label={`Mood breakdown: ${title}`}>
+                              {segs.map((s) => (
+                                <span
+                                  key={s.label}
+                                  className="block h-full flex-none"
+                                  style={{
+                                    background: s.color,
+                                    width: `${(s.count / total) * 100}%`,
+                                  }}
+                                />
+                              ))}
+                            </div>
+                          )
+                        })()}
                     </div>
                   </button>
                 )
@@ -990,10 +1269,14 @@ const Journal: React.FC = () => {
                 }`}
               >
                 All
-                <span className="ml-1 font-mono text-[11px] opacity-60">{scopedEntries.length}</span>
+                <span className="ml-1 font-mono text-[11px] opacity-60">
+                  {page.student_counts.reduce((sum, c) => sum + c.total, 0)}
+                </span>
               </button>
-              {students.map(s => {
-                const awaiting = scopedEntries.filter(e => e.student_id === s.id && e.needs_response).length
+              {students.map((s) => {
+                const awaiting =
+                  page.student_counts.find((c) => c.student_id === s.id)
+                    ?.needs ?? 0
                 return (
                   <button
                     key={s.id}
@@ -1019,7 +1302,7 @@ const Journal: React.FC = () => {
               <input
                 type="text"
                 value={searchTerm}
-                onChange={e => setSearchTerm(e.target.value)}
+                onChange={(e) => setSearchTerm(e.target.value)}
                 placeholder="Search entries…"
                 aria-label="Search journal entries"
                 className="w-full pl-7 pr-2 py-2 bg-field-bg border border-field-border rounded-field text-[13px] text-ink placeholder:text-faintest focus:outline-none focus:ring-1 focus:ring-accent"
@@ -1032,7 +1315,9 @@ const Journal: React.FC = () => {
             <div className="hidden lg:flex items-center justify-between mb-3 flex-none">
               <div>
                 <p className="text-[11px] font-semibold text-faint uppercase tracking-[.06em] mb-0.5">
-                  {selectedStudentId ? students.find(s => s.id === selectedStudentId)?.name : 'All students'}
+                  {selectedStudentId
+                    ? students.find((s) => s.id === selectedStudentId)?.name
+                    : 'All students'}
                 </p>
                 <h1 className="text-[27px] font-bold text-ink tracking-[-0.02em] leading-none">Journal</h1>
               </div>
@@ -1048,7 +1333,8 @@ const Journal: React.FC = () => {
                     {searchTerm ? 'Try clearing the search.' : 'Entries will appear here once students start writing.'}
                   </p>
                 </div>
-              ) : filteredEntries.map(entry => (
+              ) : (
+                filteredEntries.map((entry) => (
                 <AdminEntryPanel
                   key={entry.id}
                   entry={entry}
@@ -1059,7 +1345,8 @@ const Journal: React.FC = () => {
                   onMarkReviewed={markReviewed}
                   onEdit={setEditingEntry}
                 />
-              ))}
+              ))
+              )}
             </div>
           </div>
         </div>
@@ -1080,7 +1367,10 @@ const Journal: React.FC = () => {
         <JournalEditDialog
           entry={editingEntry}
           onClose={() => setEditingEntry(null)}
-          onSaved={updated => { updateEntry(updated); setEditingEntry(null) }}
+          onSaved={(updated) => {
+            updateEntry(updated)
+            setEditingEntry(null)
+          }}
         />
       )}
     </div>

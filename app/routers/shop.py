@@ -339,12 +339,27 @@ def admin_redemptions(
     db: Annotated[Session, Depends(get_db)],
     auth_user: Annotated[AuthUser, Depends(require_admin_or_permission("shop:read"))],
     status: str = Query("pending", pattern="^(pending|ready|history)$"),
+    student_id: int | None = None,
+    active_students: bool = False,
 ):
     """Admin redemption queue, including older pending/ready redemptions."""
     _require_shop_enabled(db)
-    redemptions = shop_crud.get_admin_redemptions(db, status)
+    redemptions = shop_crud.get_admin_redemptions(
+        db, status, student_id, active_students
+    )
     shop_crud.attach_student_name(db, redemptions)
     return redemptions
+
+
+@router.get("/redemptions/counts")
+def redemption_counts(
+    db: Annotated[Session, Depends(get_db)],
+    auth_user: Annotated[AuthUser, Depends(require_admin_or_permission("shop:read"))],
+    student_id: int | None = None,
+    active_students: bool = False,
+):
+    _require_shop_enabled(db)
+    return shop_crud.admin_redemption_counts(db, student_id, active_students)
 
 
 @router.post(

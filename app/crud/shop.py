@@ -308,7 +308,12 @@ def get_my_redemptions(db: Session, student_id: int) -> List[ShopRedemption]:
     )
 
 
-def get_admin_redemptions(db: Session, status_group: str) -> List[ShopRedemption]:
+def admin_redemption_query(
+    db: Session,
+    status_group: str,
+    student_id: int | None = None,
+    active_students: bool = False,
+):
     """Admin queue for a status group.
 
     ``status_group`` is one of ``pending`` | ``ready`` | ``history``.
@@ -319,6 +324,12 @@ def get_admin_redemptions(db: Session, status_group: str) -> List[ShopRedemption
       instant ``redeemed`` ones, so auto-fulfilled purchases show up too.
     """
     query = db.query(ShopRedemption).options(joinedload(ShopRedemption.item))
+    if student_id:
+        query = query.filter(ShopRedemption.student_id == student_id)
+    if active_students:
+        query = query.join(User, User.id == ShopRedemption.student_id).filter(
+            User.is_active.is_(True), User.role == "student"
+        )
     if status_group == "pending":
         query = query.filter(
             ShopRedemption.status == "pending",
@@ -334,7 +345,27 @@ def get_admin_redemptions(db: Session, status_group: str) -> List[ShopRedemption
     else:
         raise ValueError(f"Unknown status group: {status_group}")
 
-    return query.order_by(desc(ShopRedemption.created_at)).all()
+    return query
+
+
+def get_admin_redemptions(
+    db: Session,
+    status_group: str,
+    student_id: int | None = None,
+    active_students: bool = False,
+) -> List[ShopRedemption]:
+    return (
+        admin_redemption_query(db, status_group, student_id, active_students)
+        .order_by(ShopRedemption.created_at, ShopRedemption.id)
+        .all()
+    )
+
+
+def admin_redemption_counts(db: Session, student_id: int | None, active_students: bool):
+    return {
+        status: admin_redemption_query(db, status, student_id, active_students).count()
+        for status in ("pending", "ready")
+    }
 
 
 def get_redemption(db: Session, redemption_id: int) -> Optional[ShopRedemption]:

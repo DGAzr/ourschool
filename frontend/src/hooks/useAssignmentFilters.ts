@@ -17,13 +17,19 @@
  */
 
 import { useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 
 /** Filter state is shared; matching rows and counts come from the page API. */
 export const useAssignmentFilters = () => {
   const [searchTerm, setSearchTerm] = useState('')
-  const [selectedSubject, setSelectedSubject] = useState<number | null>(null)
+  const [params, setParams] = useSearchParams()
+  const readId = (key: string) => { const value = Number(params.get(key)); return Number.isSafeInteger(value) && value > 0 ? value : null }
+  const selectedSubject = readId('subject_id')
+  const selectedStudent = readId('student_id')
+  const setId = (key: string, value: number | null) => setParams(previous => { const next = new URLSearchParams(previous); if (value) next.set(key, String(value)); else next.delete(key); return next }, { replace: true })
+  const setSelectedSubject = (value: number | null) => setId('subject_id', value)
+  const setSelectedStudent = (value: number | null) => setId('student_id', value)
   const [selectedType, setSelectedType] = useState<string | null>(null)
-  const [selectedStudent, setSelectedStudent] = useState<number | null>(null)
 
   return {
     searchTerm, setSearchTerm,

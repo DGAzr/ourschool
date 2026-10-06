@@ -128,6 +128,9 @@ def assignment_page(
     term_id: int | None = None,
     term_basis: Literal["assigned", "original_due", "effective"] = "effective",
     student_view: bool = False,
+    active_students: bool = False,
+    effective_due: bool = False,
+    today: date | None = None,
     tab: Literal[
         "all",
         "open",
@@ -141,6 +144,7 @@ def assignment_page(
         "overdue",
         "awaiting",
         "queue_all",
+        "review",
     ] = "all",
     due_from: date | None = None,
     due_to: date | None = None,
@@ -157,7 +161,7 @@ def assignment_page(
         student_id = auth_user.id
         student_view = True
     query = scoped_filters(
-        assignment_base(db),
+        assignment_base(db, active_students=active_students),
         subject_id=subject_id,
         student_id=student_id,
         template_id=template_id,
@@ -166,7 +170,11 @@ def assignment_page(
     )
     if lesson_id is not None:
         query = query.filter(A.lesson_id == lesson_id)
-    due = func.coalesce(A.extended_due_date, A.due_date) if student_view else A.due_date
+    due = (
+        func.coalesce(A.extended_due_date, A.due_date)
+        if student_view or effective_due
+        else A.due_date
+    )
     if due_from and due_to and due_from > due_to:
         raise HTTPException(422, "Start date must be on or before end date")
     if due_from:
@@ -177,7 +185,7 @@ def assignment_page(
         query = query.filter(
             or_(due <= due_to, due.is_(None)) if include_undated else due <= due_to
         )
-    predicates = tab_predicates()
+    predicates = tab_predicates(today)
     if term_id is not None:
         term = db.query(Term).filter(Term.id == term_id).first()
         if term is None:

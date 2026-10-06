@@ -16,11 +16,12 @@
 
 """Journal entry router."""
 
-from datetime import datetime, timezone
+from datetime import date, datetime, timezone
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from typing import Annotated, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from sqlalchemy import func, Date, cast, or_
 from sqlalchemy.orm import Session, joinedload
 
 from app.core.database import get_db
@@ -157,6 +158,91 @@ async def get_journal_entries(
         )
 
     return result
+
+
+@router.get("/entries/page")
+def journal_review_page(
+    auth_user: Annotated[
+        AuthUser, Depends(require_admin_or_permission("journal:read"))
+    ],
+    db: Annotated[Session, Depends(get_db)],
+    zone: Annotated[str, Depends(_school_timezone)],
+    student_id: int | None = None,
+    review: str = Query("all", pattern="^(all|needs|new|reviewed)$"),
+    active_students: bool = False,
+    date_from: date | None = None,
+    date_to: date | None = None,
+    search: str = Query("", max_length=200),
+    offset: int = Query(0, ge=0),
+    limit: int = Query(25, ge=1, le=100),
+):
+    if date_from and date_to and date_from > date_to:
+        raise HTTPException(422, "Start date must be on or before end date")
+    query = db.query(JournalEntry).join(User, User.id == JournalEntry.student_id)
+    if active_students:
+        query = query.filter(User.is_active.is_(True), User.role == UserRole.STUDENT)
+    if review == "needs":
+        query = query.filter(JournalEntry.needs_response.is_(True))
+    elif review == "reviewed":
+        query = query.filter(JournalEntry.needs_response.is_(False))
+    elif review == "new":
+        teacher_reply = (
+            db.query(JournalReply.id)
+            .join(User, User.id == JournalReply.author_id)
+            .filter(
+                JournalReply.entry_id == JournalEntry.id, User.role == UserRole.ADMIN
+            )
+            .exists()
+        )
+        query = query.filter(
+            JournalEntry.author_id == JournalEntry.student_id, ~teacher_reply
+        )
+    day = cast(func.timezone(zone, JournalEntry.entry_date), Date)
+    if date_from:
+        query = query.filter(day >= date_from)
+    if date_to:
+        query = query.filter(day <= date_to)
+    if search:
+        needle = f"%{search}%"
+        query = query.filter(
+            or_(
+                JournalEntry.title.ilike(needle),
+                JournalEntry.content.ilike(needle),
+                func.concat(User.first_name, " ", User.last_name).ilike(needle),
+            )
+        )
+    counts = (
+        query.with_entities(
+            JournalEntry.student_id,
+            func.count().label("total"),
+            func.count().filter(JournalEntry.needs_response.is_(True)).label("needs"),
+        )
+        .group_by(JournalEntry.student_id)
+        .all()
+    )
+    if student_id:
+        query = query.filter(JournalEntry.student_id == student_id)
+    total = query.count()
+    offset = min(offset, max(0, (total - 1) // limit * limit))
+    ordering = (
+        (JournalEntry.created_at, JournalEntry.id)
+        if review == "needs"
+        else (JournalEntry.entry_date.desc(), JournalEntry.id.desc())
+    )
+    rows = (
+        query.options(joinedload(JournalEntry.replies))
+        .order_by(*ordering)
+        .offset(offset)
+        .limit(limit)
+        .all()
+    )
+    return dict(
+        items=[_entry_to_response(entry, auth_user, db) for entry in rows],
+        total=total,
+        has_more=offset + len(rows) < total,
+        offset=offset,
+        student_counts=[dict(row._mapping) for row in counts],
+    )
 
 
 @router.get("/entries/{entry_id}", response_model=JournalEntryWithAuthor)

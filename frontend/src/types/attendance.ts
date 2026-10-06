@@ -20,7 +20,7 @@
  * Attendance tracking and reporting types
  */
 
-export type AttendanceStatus = 'present' | 'absent' | 'late' | 'excused'
+type AttendanceStatus = 'present' | 'absent' | 'late' | 'excused'
 
 export interface AttendanceRecord {
   id: number

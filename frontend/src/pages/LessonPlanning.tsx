@@ -83,9 +83,10 @@ const LessonPlanningContent: React.FC = () => {
   const [drawer, setDrawer] = useState<DrawerState>(null)
   const [drawerLessons, setDrawerLessons] = useState<Lesson[]>([])
 
+  const [plannerParams]=useSearchParams()
   const filterKey = `lessonPlanning.filters.${user?.id}`
   const [filters, setFilters] = useState<{student:string;subject:string}>(() => {
-    try {const stored = JSON.parse(localStorage.getItem(filterKey) ?? '{}'); return {student: String(stored?.student ?? ''),subject: String(stored?.subject ?? '')}} catch {return {student:'',subject:''}}
+    try {const stored = JSON.parse(localStorage.getItem(filterKey) ?? '{}'); return {student: plannerParams.get('student_id') ?? String(stored?.student ?? ''),subject: plannerParams.get('subject_id') ?? String(stored?.subject ?? '')}} catch {return {student:plannerParams.get('student_id')??'',subject:plannerParams.get('subject_id')??''}}
   })
   const [review, setReview] = useState<{title:string;impacts:AssignmentImpact[];resolve:(confirmed:boolean)=>void} | null>(null)
   const [batchDate, setBatchDate] = useState('')
