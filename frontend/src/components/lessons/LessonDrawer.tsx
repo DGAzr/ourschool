@@ -223,13 +223,13 @@ const LessonDrawer: React.FC<LessonDrawerProps> = ({
         className={`rounded-[12px] border min-w-0 transition-colors ${
           isOver ? 'border-accent bg-accent-soft' : 'border-line bg-panel-2'
         }`}
-        aria-label={`Lesson Drawer, ${lessons.length} lessons`}
+        aria-label={`Teacher's Drawer, ${lessons.length} lessons`}
       >
         <button
           type="button"
           onClick={() => onCollapsedChange(false)}
           className="flex w-full items-center justify-between gap-2 px-3 py-2.5 text-left xl:min-h-[120px] xl:flex-col xl:justify-start xl:px-2"
-          aria-label="Expand Lesson Drawer"
+          aria-label="Expand Teacher's Drawer"
           aria-expanded="false"
         >
           <span className="flex min-w-0 items-center gap-2 xl:flex-col">
@@ -239,7 +239,7 @@ const LessonDrawer: React.FC<LessonDrawerProps> = ({
               <PackageCheck size={14} className="shrink-0 text-ink" />
             )}
             <span className="text-[13px] font-bold text-ink xl:sr-only">
-              {activeTab === 'lessons' ? 'Lesson Drawer' : 'Materials Drawer'}
+              Teacher's Drawer
             </span>
             <span className="font-mono text-[10.5px] text-muted bg-track rounded-full px-2 py-0.5 xl:px-1.5">
               {activeCount}
@@ -258,10 +258,10 @@ const LessonDrawer: React.FC<LessonDrawerProps> = ({
       className={`rounded-[12px] border p-2.5 min-w-0 transition-colors ${
         isOver ? 'border-accent bg-accent-soft' : 'border-line bg-panel-2'
       }`}
-      aria-label={`Lesson Drawer, ${lessons.length} lessons`}
+      aria-label={`Teacher's Drawer, ${lessons.length} lessons`}
     >
       <div className="flex items-center justify-between gap-2 px-1 mb-2">
-        <span className="text-[13px] font-bold text-ink">Lesson Drawer</span>
+        <span className="text-[13px] font-bold text-ink">Teacher's Drawer</span>
         <div className="flex items-center gap-2">
           {activeTab === 'lessons' ? (
             <button
@@ -276,7 +276,7 @@ const LessonDrawer: React.FC<LessonDrawerProps> = ({
             type="button"
             onClick={() => onCollapsedChange(true)}
             className="inline-flex rounded-[6px] p-0.5 text-muted hover:bg-track hover:text-ink"
-            aria-label="Collapse Lesson Drawer"
+            aria-label="Collapse Teacher's Drawer"
             aria-expanded="true"
           >
             <ChevronUp size={14} className="xl:hidden" />
@@ -287,7 +287,7 @@ const LessonDrawer: React.FC<LessonDrawerProps> = ({
 
       <div
         role="tablist"
-        aria-label="Lesson drawer views"
+        aria-label="Teacher's drawer views"
         className="mb-2.5 grid grid-cols-2 rounded-[8px] bg-track p-0.5"
       >
         <button

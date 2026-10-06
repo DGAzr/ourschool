@@ -31,6 +31,7 @@ import { shopApi } from '../services/shop'
 import { lessonsApi } from '../services/lessons'
 import { activityApi, type ActivityItem } from '../services/activity'
 import { termsApi } from '../services/terms'
+import { attendanceApi } from '../services/attendance'
 import { todayISO } from '../utils/lessonPlanning'
 import { AdminReport, StudentReport, Term } from '../types'
 import { Lesson } from '../types/lesson'
@@ -230,6 +231,8 @@ const Dashboard: React.FC = () => {
   const [activityReloadKey, setActivityReloadKey] = useState(0)
   const [showAwardModal, setShowAwardModal] = useState(false)
   const [showBulkAttendanceModal, setShowBulkAttendanceModal] = useState(false)
+  const [attendanceRecordedToday, setAttendanceRecordedToday] = useState(false)
+  const [attendanceReloadKey, setAttendanceReloadKey] = useState(0)
   const [showAssignmentDetailModal, setShowAssignmentDetailModal] = useState(false)
   const [selectedAssignmentId, setSelectedAssignmentId] = useState<number | null>(null)
 
@@ -259,7 +262,7 @@ const Dashboard: React.FC = () => {
   }
 
   const handleAttendanceSuccess = () => {
-    // Optionally refresh dashboard data or show success message
+    setAttendanceReloadKey(previous => previous + 1)
   }
 
   const handleActivityClick = (activity: ActivityItem) => {
@@ -344,6 +347,20 @@ const Dashboard: React.FC = () => {
       loadActivityData()
     }
   }, [activityReloadKey, user?.id])
+
+  useEffect(() => {
+    if (!isAdmin) return
+    let cancelled = false
+    const today = todayISO()
+    attendanceApi.getAll({ start_date: today, end_date: today })
+      .then(records => {
+        if (!cancelled) setAttendanceRecordedToday(records.length > 0)
+      })
+      .catch(() => {
+        if (!cancelled) setAttendanceRecordedToday(false)
+      })
+    return () => { cancelled = true }
+  }, [isAdmin, attendanceReloadKey])
 
   // Today's lessons for the admin "Needs you today" card.
   useEffect(() => {
@@ -438,7 +455,7 @@ const Dashboard: React.FC = () => {
         </div>
       )}
 
-      {isAdmin && <><SetupChecklist/><TeacherTodayPanel lessons={todayLessons} pendingGrades={adminReport?.pending_grades ?? 0} /></>}
+      {isAdmin && <><SetupChecklist/><TeacherTodayPanel lessons={todayLessons} pendingGrades={adminReport?.pending_grades ?? 0} attendanceRecordedToday={attendanceRecordedToday} /></>}
       {/* ── Health tiles ── */}
       {isAdmin && adminReport && (
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3 mb-6">

@@ -295,7 +295,7 @@ const DrawerContent: React.FC<DrawerContentProps> = ({
                         {usage.lesson_title}
                       </span>
                       <span className="font-mono text-[10.5px] text-faint">
-                        {usage.date ?? 'Lesson Drawer'}
+                        {usage.date ?? "Teacher's Drawer"}
                       </span>
                     </div>
                   )

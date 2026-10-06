@@ -327,7 +327,7 @@ const LessonEditor: React.FC<LessonEditorProps> = ({
       isOpen
       wide
       onClose={closeEditor}
-      title={isEdit ? 'Edit lesson' : date ? 'Plan a lesson' : 'Add to Lesson Drawer'}
+      title={isEdit ? 'Edit lesson' : date ? 'Plan a lesson' : "Add to Teacher's Drawer"}
       footer={
         <>
           {isEdit && (
@@ -366,10 +366,10 @@ const LessonEditor: React.FC<LessonEditorProps> = ({
             type="date"
             value={date}
             onChange={(e) => setDate(e.target.value)}
-            helperText="Leave blank to keep this lesson in the Lesson Drawer."
+            helperText="Leave blank to keep this lesson in the Teacher's Drawer."
           />
           <p className="text-[12.5px] text-muted pb-2.5 truncate">
-            {date ? formatScheduled(date) : 'Unscheduled · Lesson Drawer'}
+            {date ? formatScheduled(date) : "Unscheduled · Teacher's Drawer"}
             {isEdit && date !== lesson?.date ? (
               <span className="text-accent"> · rescheduling</span>
             ) : null}

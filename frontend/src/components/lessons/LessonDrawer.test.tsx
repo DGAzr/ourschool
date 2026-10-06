@@ -72,7 +72,7 @@ describe('LessonDrawer', () => {
     renderDrawer(vi.fn(), onCollapsedChange)
     expect(screen.getByText('Fractions later')).toBeTruthy()
     expect(screen.getByText(/Was scheduled/)).toBeTruthy()
-    fireEvent.click(screen.getByRole('button', { name: 'Collapse Lesson Drawer' }))
+    fireEvent.click(screen.getByRole('button', { name: "Collapse Teacher's Drawer" }))
     expect(onCollapsedChange).toHaveBeenCalledWith(true)
   })
 
