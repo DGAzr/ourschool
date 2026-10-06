@@ -279,6 +279,25 @@ body {
 }
 .animate-shimmer { animation: shimmer 3s linear infinite; }
 
+/* A brief celebration contained within the dashboard completion message. */
+@keyframes todayConfetti {
+  0% { transform: translate3d(0, -12px, 0) rotate(0); opacity: 0; }
+  10% { opacity: .85; }
+  100% { transform: translate3d(var(--confetti-drift), 100px, 0) rotate(var(--confetti-turn)); opacity: 0; }
+}
+.today-confetti-piece {
+  position: absolute;
+  top: 0;
+  width: 6px;
+  height: 10px;
+  border-radius: 2px;
+  animation: todayConfetti 1.8s ease-out both;
+}
+@media (prefers-reduced-motion: reduce) {
+  .today-confetti { display: none; }
+  .today-confetti-piece { animation: none; }
+}
+
 /* ── Scrollbar ─────────────────────────────────────────────────────── */
 ::-webkit-scrollbar       { width: 6px; height: 6px; }
 ::-webkit-scrollbar-track { background: transparent; }

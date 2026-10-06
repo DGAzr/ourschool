@@ -12,7 +12,9 @@ import { formatDateOnly } from '../../utils/formatters'
 import { lessonsApi } from '../../services/lessons'
 import { getErrorMessage } from '../../services/api'
 import { useToast } from '../ui'
+import { useAuth } from '../../contexts/AuthContext'
 import DashboardSection, { OffsetNavigation } from './DashboardSection'
+import TodayCompletion from './TodayCompletion'
 
 function LessonRows({
   items,
@@ -45,7 +47,7 @@ function LessonRows({
       }
     >
       {items.map((lesson) => (
-        <li key={lesson.id} className="rounded-field border border-line p-3">
+        <li key={lesson.id} className="bg-panel rounded-field border border-line p-3">
           <div className="flex flex-wrap justify-between gap-2">
             <div className="min-w-0">
               <Link
@@ -149,6 +151,7 @@ export function TeacherSchedule({
   version: number
   refresh: () => void
 }) {
+  const { user } = useAuth()
   const [navigation, setNavigation] = useState({ key: '', offset: 0 })
   const key = `${today}:${scope}:${studentId}`
   const offset = navigation.key === key ? navigation.offset : 0
@@ -158,6 +161,14 @@ export function TeacherSchedule({
     version,
   )
   const data = read.data
+  const lessonsComplete = !!data && data.total > 0 && data.taught === data.total
+  const dayComplete =
+    scope === 'today' &&
+    lessonsComplete &&
+    !!data &&
+    data.today_planned === 0 &&
+    data.attendance.total > 0 &&
+    data.attendance.recorded === data.attendance.total
   return (
     <DashboardSection
       title={scope === 'week' ? 'This week' : 'Today'}
@@ -190,53 +201,73 @@ export function TeacherSchedule({
               today
             </span>
           </Link>
-          <p className="text-sm text-muted mb-3">
-            {data.total} lessons · {data.taught} taught ·{' '}
-            {data.materials_remaining} materials to gather
-          </p>
-          {!data.items.length && (
-            <p className="text-sm text-muted flex items-center gap-2">
-              <CalendarDays size={16} />
-              No lessons scheduled in this view.
+          <div
+            className={`rounded-field border p-3 ${lessonsComplete ? 'bg-pos-bg border-[var(--pos-fg)]/20' : 'border-line'}`}
+          >
+            <h3
+              className={`flex items-center gap-2 font-semibold mb-1 ${lessonsComplete ? 'text-pos-fg' : ''}`}
+            >
+              {lessonsComplete && <Check size={16} aria-hidden="true" />}
+              Lessons{lessonsComplete ? ' complete' : ''}
+            </h3>
+            <p
+              className={`text-sm mb-3 ${lessonsComplete ? 'text-pos-fg' : 'text-muted'}`}
+            >
+              {data.total} lessons · {data.taught} taught ·{' '}
+              {data.materials_remaining} materials to gather
             </p>
-          )}
-          <LessonRows items={data.items} refresh={refresh} />
-          <OffsetNavigation
-            offset={data.offset}
-            total={data.total}
-            hasMore={data.has_more}
-            limit={10}
-            onChange={(value) => setNavigation({ key, offset: value })}
-          />
-          <div className="mt-4 pt-3 border-t border-line text-sm">
-            <h3 className="font-semibold mb-1">Before finishing today</h3>
-            <Link
-              className="text-accent block min-h-[32px]"
-              to={dashboardHref('/attendance', {
-                date: today,
-                student_id: studentId,
-                unrecorded: true,
-              })}
-            >
-              {Math.max(0, data.attendance.total - data.attendance.recorded)}{' '}
-              {data.attendance.total - data.attendance.recorded === 1
-                ? 'student still needs'
-                : 'students still need'}{' '}
-              attendance recorded
-            </Link>
-            <Link
-              className="text-accent block min-h-[32px]"
-              to={dashboardHref('/teach', {
-                date: today,
-                student_id: studentId,
-                remaining: true,
-              })}
-            >
-              {data.today_planned}{' '}
-              {data.today_planned === 1 ? 'lesson' : 'lessons'} still marked
-              planned or ready
-            </Link>
+            {!data.items.length && (
+              <p className="text-sm text-muted flex items-center gap-2">
+                <CalendarDays size={16} />
+                No lessons scheduled in this view.
+              </p>
+            )}
+            <LessonRows items={data.items} refresh={refresh} />
+            <OffsetNavigation
+              offset={data.offset}
+              total={data.total}
+              hasMore={data.has_more}
+              limit={10}
+              onChange={(value) => setNavigation({ key, offset: value })}
+            />
           </div>
+          {dayComplete ? (
+            <TodayCompletion
+              key={`${today}:${studentId}:${user?.id}`}
+              celebrationKey={`ourschool.today-complete.${user?.id}.${today}.${studentId ?? 'all'}`}
+              animate={user?.celebrate_completion !== false}
+            />
+          ) : (
+            <div className="mt-4 pt-3 border-t border-line text-sm">
+              <h3 className="font-semibold mb-1">Before finishing today</h3>
+              <Link
+                className="text-accent block min-h-[32px]"
+                to={dashboardHref('/attendance', {
+                  date: today,
+                  student_id: studentId,
+                  unrecorded: true,
+                })}
+              >
+                {Math.max(0, data.attendance.total - data.attendance.recorded)}{' '}
+                {data.attendance.total - data.attendance.recorded === 1
+                  ? 'student still needs'
+                  : 'students still need'}{' '}
+                attendance recorded
+              </Link>
+              <Link
+                className="text-accent block min-h-[32px]"
+                to={dashboardHref('/teach', {
+                  date: today,
+                  student_id: studentId,
+                  remaining: true,
+                })}
+              >
+                {data.today_planned}{' '}
+                {data.today_planned === 1 ? 'lesson' : 'lessons'} still marked
+                planned or ready
+              </Link>
+            </div>
+          )}
         </>
       )}
     </DashboardSection>
