@@ -1,5 +1,7 @@
 # Stage 1: build the React app
-FROM node:22-alpine AS builder
+# The output is static JS/CSS, shared by every target architecture. Build it
+# natively so npm's build tools don't run under QEMU during multi-platform builds.
+FROM --platform=$BUILDPLATFORM node:22-alpine AS builder
 
 # Version string available to the frontend build. The publish workflow passes
 # the release tag; local builds default to "dev" unless APP_VERSION is set.
