@@ -127,9 +127,10 @@ def template_projection(db):
     )
 
 
-def assignment_projection(query):
+def assignment_projection(query, *, include_feedback=False):
     return query.with_entities(
         *(getattr(A, field) for field in ASSIGNMENT_FIELDS),
+        *((A.teacher_feedback,) if include_feedback else ()),
         *(getattr(T, field).label("template_" + field) for field in TEMPLATE_FIELDS),
         func.substr(T.description, 1, 240).label("description"),
     )
@@ -139,6 +140,11 @@ def assignment_summary(row):
     values = row._mapping
     return dict(
         **{field: values[field] for field in ASSIGNMENT_FIELDS},
+        **(
+            {"teacher_feedback": values["teacher_feedback"]}
+            if "teacher_feedback" in values
+            else {}
+        ),
         template=dict(
             **{field: values["template_" + field] for field in TEMPLATE_FIELDS},
             description=values["description"],

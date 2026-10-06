@@ -19,7 +19,7 @@ import { Icon } from '../ui'
 
 import React from 'react'
 import { Link } from 'react-router-dom'
-import { Archive, Edit2, Trash2 } from 'lucide-react'
+import { Archive, Edit2, MessageSquare, Trash2 } from 'lucide-react'
 import { StudentAssignment, Subject } from '../../types'
 import { assignmentUtils } from '../../services/assignments'
 import { formatDateOnly } from '../../utils/formatters'
@@ -200,7 +200,7 @@ const StudentAssignmentCard: React.FC<StudentAssignmentCardProps> = ({
           </div>
         )}
 
-        {/* Grade + teacher feedback */}
+        {/* Grade */}
         {assignment.is_graded && assignment.points_earned != null && (
           <div className="mb-4 px-3 py-2.5 bg-pos-bg border border-[var(--pos-fg)]/20 rounded-field">
             <div className="flex items-baseline justify-between gap-2">
@@ -211,12 +211,23 @@ const StudentAssignmentCard: React.FC<StudentAssignmentCardProps> = ({
                 </span>
               </span>
             </div>
-            {assignment.teacher_feedback && (
-              <p className="text-[12.5px] text-ink-2 mt-1.5 leading-relaxed line-clamp-3">
-                {assignment.teacher_feedback}
-              </p>
-            )}
           </div>
+        )}
+
+        {assignment.teacher_feedback?.trim() && (
+          <section
+            aria-labelledby={`assignment-feedback-${assignment.id}`}
+            className="mb-4 p-4 bg-accent-soft border border-accent/25 border-l-4 border-l-accent rounded-field"
+          >
+            <h4 id={`assignment-feedback-${assignment.id}`} className="flex items-center gap-2 text-sm font-semibold text-accent mb-2">
+              <MessageSquare className="w-4 h-4 shrink-0" aria-hidden="true" />
+              Instructor feedback
+            </h4>
+            <MarkdownRenderer
+              content={assignment.teacher_feedback}
+              className={`${simple ? 'text-base' : 'text-sm'} leading-relaxed [overflow-wrap:anywhere] [&_pre]:max-w-full [&_pre]:overflow-x-auto`}
+            />
+          </section>
         )}
 
         {/* Actions */}

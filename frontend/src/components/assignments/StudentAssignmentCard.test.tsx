@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react'
+import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import { describe, expect, it, vi } from 'vitest'
@@ -35,5 +35,42 @@ describe('student task actions', () => {
     expect(screen.getByRole('button', { name: 'Open assignment' })).toHaveFocus()
     await userEvent.keyboard('{Enter}')
     expect(view).toHaveBeenCalledWith(work)
+  })
+})
+
+describe('instructor feedback', () => {
+  it('shows the full Markdown feedback alongside the grade', () => {
+    render(<StudentAssignmentCard assignment={{
+      ...work, status: 'graded', is_graded: true, points_earned: 92,
+      teacher_feedback: '**Great work!** Keep practicing *fractions*.\n\n- Show each step\n- Check your answer\n\n[Review examples](https://example.com/fractions)\n\nOne more thing: explain how you checked your work.',
+    }} />)
+
+    expect(screen.getByText('92 / 100')).toBeVisible()
+    const feedback = within(screen.getByRole('region', { name: 'Instructor feedback' }))
+    expect(feedback.getByText('Great work!').tagName).toBe('STRONG')
+    expect(feedback.getByText('fractions').tagName).toBe('EM')
+    expect(feedback.getAllByRole('listitem')).toHaveLength(2)
+    expect(feedback.getByRole('link', { name: 'Review examples' })).toHaveAttribute('href', 'https://example.com/fractions')
+    expect(feedback.getByText('One more thing: explain how you checked your work.')).toBeVisible()
+  })
+
+  it('shows feedback even without a numeric grade', () => {
+    render(<StudentAssignmentCard assignment={{ ...work, status: 'excused', teacher_feedback: 'Thanks for showing me your work.' }} simple />)
+    expect(screen.getByRole('region', { name: 'Instructor feedback' })).toBeVisible()
+    expect(screen.getByText('Thanks for showing me your work.')).toBeVisible()
+  })
+
+  it.each([undefined, '', ' \n\t '])('omits the panel for empty feedback (%j)', teacher_feedback => {
+    render(<StudentAssignmentCard assignment={{ ...work, teacher_feedback }} />)
+    expect(screen.queryByRole('region', { name: 'Instructor feedback' })).not.toBeInTheDocument()
+  })
+
+  it('uses sanitized Markdown for instructor content', () => {
+    render(<StudentAssignmentCard assignment={{
+      ...work, teacher_feedback: '[Unsafe link](javascript:alert(1))\n\n<script>alert(1)</script>',
+    }} />)
+    const panel = screen.getByRole('region', { name: 'Instructor feedback' })
+    expect(within(panel).getByText('Unsafe link')).not.toHaveAttribute('href', 'javascript:alert(1)')
+    expect(panel.querySelector('script')).toBeNull()
   })
 })

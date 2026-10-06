@@ -149,7 +149,8 @@ def test_assignment_pages_counts_ties_nulls_and_authorization(
     assert body["total"] == 123
     assert body["counts"]["graded"] == 61
     assert body["counts"]["todo"] == 62
-    assert "teacher_feedback" not in body["items"][0]
+    assert body["items"][0]["teacher_feedback"] == "secret long feedback" * 500
+    assert "custom_instructions" not in body["items"][0]
     ids = [a["id"] for a in body["items"]]
     while body["next_cursor"]:
         body = get_page(client, headers, limit=20, cursor=body["next_cursor"])
@@ -165,6 +166,11 @@ def test_assignment_pages_counts_ties_nulls_and_authorization(
     assert forbidden.status_code == 403
     scoped = get_page(client, admin_headers, student_id=other["id"])
     assert scoped["total"] == 1
+    assert "teacher_feedback" not in scoped["items"][0]
+    student_preview = get_page(
+        client, admin_headers, student_id=student["id"], student_view=True, tab="done"
+    )
+    assert student_preview["items"][0]["teacher_feedback"] == "secret long feedback" * 500
     assert client.get("/api/assignments/page").status_code == 401
 
 

@@ -213,7 +213,7 @@ def assignment_page(
             query = query.filter(after_date(cursor, due))
         order_by = (due.asc().nullslast(), A.id)
     rows = (
-        assignment_projection(query)
+        assignment_projection(query, include_feedback=student_view)
         .add_columns(ordering.label("sort_date"))
         .order_by(*order_by)
         .limit(limit + 1)
