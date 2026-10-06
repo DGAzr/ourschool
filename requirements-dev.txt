@@ -2,10 +2,8 @@
 -r requirements.txt
 
 pytest==9.1.1
-# httpx<0.28 keeps Starlette's TestClient(app=...) shortcut working
-httpx<0.28
 
 # Code quality and dead-code detection
-ruff==0.15.18
-black==26.5.1
-vulture==2.14
+ruff==0.16.10
+black==26.10.0
+vulture==2.16

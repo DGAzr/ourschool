@@ -228,11 +228,11 @@ docker compose -f docker-compose.yml -f docker-compose.dev.yml up --build
 ### Backend
 | | |
 |---|---|
-| **FastAPI** 0.138 | Web framework |
-| **SQLAlchemy** 2.0 + psycopg3 | ORM + PostgreSQL driver |
-| **Alembic** 1.18 | Database migrations |
+| **FastAPI** 0.142 | Web framework |
+| **SQLAlchemy** 2.1 + psycopg3 | ORM + PostgreSQL driver |
+| **Alembic** 1.20 | Database migrations |
 | **Pydantic** 2.13 | Data validation |
-| **python-jose** + **bcrypt** 5 | JWT auth + password hashing |
+| **PyJWT** + **bcrypt** 5 | JWT auth + password hashing |
 
 ### Frontend
 | | |

@@ -1,35 +1,34 @@
 # Core FastAPI and web framework dependencies
-fastapi==0.138.0
-uvicorn[standard]==0.49.0
-starlette>=0.27.0  # Required by FastAPI (explicit for clarity)
+fastapi==0.142.2
+uvicorn[standard]==0.54.0
+starlette==1.7.0  # Required by FastAPI (explicit for clarity)
 
 # Database and ORM
-sqlalchemy==2.0.51
-alembic==1.18.4
-psycopg==3.3.4  # PostgreSQL adapter (psycopg3)
+sqlalchemy==2.1.3
+alembic==1.20.0
+psycopg==3.3.6  # PostgreSQL adapter (psycopg3)
 
 # Authentication and security
 # Required by FastAPI's OAuth2PasswordRequestForm (used in auth/login endpoint)
 # 0.0.18 fixes the multipart DoS (CVE-2024-24762) present in 0.0.6
 python-multipart==0.0.32
-# 3.5.0 fixes JWT algorithm-confusion / DoS advisories (CVE-2024-33663/33664)
-python-jose[cryptography]==3.5.0
+# PyJWT replaces python-jose and its unpatched ecdsa dependency.
+PyJWT[crypto]==2.15.1
 # passlib removed: it was unmaintained (last release 2020) and incompatible with
 # bcrypt>=4.1.  security.py now calls bcrypt directly with explicit 72-byte
 # truncation, preserving backward-compatibility with all existing $2b$ hashes.
 bcrypt==5.0.0
 
 # Data validation and settings
-pydantic[email]==2.13.4
-pydantic-settings==2.14.2
+pydantic[email]==2.13.5
+pydantic-settings==2.15.0
 
 # Image processing for the Points Shop (upload validation, downscale, re-encode)
-Pillow==11.3.0
+Pillow==12.3.0
 
 # Outbound HTTP client for the Paperless-NGX integration.
-# <0.28 matches the dev pin (keeps Starlette's TestClient(app=...) working).
-httpx<0.28
+httpx==0.28.1
 # Fernet encryption for integration secrets (Paperless API token at rest).
-# Already installed transitively via python-jose[cryptography]; declared
+# Already installed transitively via PyJWT[crypto]; declared
 # explicitly because app/core/crypto.py imports it directly.
-cryptography>=42
+cryptography==50.0.2
