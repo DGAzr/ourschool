@@ -4,43 +4,38 @@
 
 OurSchool is a self-hosted homeschool management system for families who take attendance seriously, grade assignments carefully, and really don't want to maintain a pile of spreadsheets. It handles the administrative grind — attendance, subjects, assignments, grading, reports, and a shameless gamification points system — so you can spend more time on the actual teaching.
 
-> **Public beta — `v1.1-beta`**
+> **Public beta — `v1.1-beta5`**
 >
-> This beta adds lesson planning, the Points Shop, and Paperless-ngx integration.
 > Back up your data before every upgrade and review the [migration guide](docs/migrations.md) for upgrade guidance.
 
 
 ## ✨ Features
 
-- **Multi-user auth** — Separate logins for parents (admin) and students. Program administrators see the whole picture for all students while students get a streamlined view of their own work and progress.
-- **Attendance tracking** — Daily records with status and notes. Flexible academic terms (`semester`, `quarter`, `trimester`, or `custom`) that map to your jurisdiction's reporting requirements.
-- **Subjects** — Configure subject areas with names, descriptions, and colors. They persist across terms so you're not re-entering them every year.
-- **Assignment templates → student assignments** — Create a template once, assign it to one or more students. Inline row grading and bulk-grade support mean less clicking.
-- **Lesson planning and Teach** — Plan instruction by exact date, park unfinished ideas in a persistent Lesson Drawer, run each day's lessons from a dedicated Teach module, track preparation, link reusable assignment templates, and give students a My Lessons view of their schedule.
-- **Points Shop** — Turn earned points into an optional reward catalog with student goals, redemption history, inventory controls, and an admin fulfillment queue.
-- **Paperless-ngx integration** — Connect a self-hosted Paperless-ngx server, sync and search teaching materials, and attach documents to lessons, templates, or individual assignments.
-- **Journal** — Teacher and student entries with date tracking, reactions, and threaded replies.
-- **Reports** — Performance reports, attendance summaries, assignment completion rates, grade trends, and term report cards. 
-- **System backup / restore** — Full export/import with dry-run preview, cross-version compatibility, and stable external IDs for conflict-free entity resolution. Two restore modes: the default merge, or **wipe-and-restore** for true point-in-time recovery (guarded by a typed confirmation; your admin login always survives).
-- **Light/dark/system theme** — Synced to your account, so your preference follows you across devices.
-- **Integration API** — REST API with Bearer token and API key (`os_` prefix) auth. MCP-ready: `GET /api/meta` for enum/permission discovery. Full endpoint reference below.
+- **Parent and student accounts** — Separate permissions, configurable session timeouts, and PIN-protected student switching on shared devices.
+- **Today dashboards** — Daily priorities for teachers and students, including preparation, unfinished work, grading, and help requests.
+- **Attendance and subjects** — Daily attendance, configurable school days and academic terms, and reusable subject areas.
+- **Assignments and grading** — Reusable templates, individual customization, configurable assignment types, bulk grading, feedback, and weighted grades.
+- **Student workspace** — Instructions, materials, notes, time logs, online or paper completion, and teacher help. Simple task mode includes read-aloud.
+- **Lesson planning and Teach** — Schedule, copy, reschedule, or stash lessons; track materials and preparation; teach from a daily plan. Students see their own lessons and assignments.
+- **School identity and printed plans** — Set your school name and logo, print teacher or student plans, and follow a guided setup checklist.
+- **Journal and reflections** — Text and mood reflections, Markdown entries, reactions, and threaded teacher replies.
+- **Points Shop** — Optional points, reward goals, inventory, redemptions, pickup instructions, and refunds.
+- **Paperless-ngx materials** — Sync scanned curriculum, map subjects and material types, search and preview documents, and attach them to lessons or assignments.
+- **Reports** — Attendance, completion, grade trends, student progress, term report cards, and assignment CSV exports.
+- **Backup and restore** — Portable JSON school backups, restore previews, merge or wipe-and-restore, and support for older backup formats.
+- **Personal preferences** — Optional points, effort signals, and celebrations; account-synced themes; responsive layouts and keyboard-accessible controls.
+- **Draft recovery** — Recover unsaved lesson, template, and grading drafts on the same device.
+- **Integration API** — REST API with scoped API keys, permissions discovery, and support for automation and MCP clients.
 
 
 ### Sharing a device with a student
 
-Click your account name at the bottom of the sidebar and choose **Switch to
-Student**. Choose an active student, then enter and confirm a six-digit PIN.
-The student can use their normal account and save real work. Every OurSchool
-tab sharing that browser session switches together; other devices stay separate.
+Choose **Switch to Student** from your account menu, select a student, and set a
+six-digit PIN. All tabs sharing that browser session switch together; other
+devices stay independent. Student work saves normally.
 
-Use **Return to Parent/Teacher** and enter that PIN to return to your account.
-Five incorrect attempts pause PIN entry for five minutes. If you forget the PIN,
-sign out and log in normally. Session expiry also signs out; it never unlocks
-parent access automatically. This feature controls OurSchool, not the device.
-
-Browser-session upgrades require everyone to log in once. Password changes and
-successful backup restores also revoke browser sessions. Sessions and PINs are
-excluded from JSON backups; all school work keeps its existing backup support.
+Choose **Return to Parent/Teacher** and enter the PIN to return. If you forget
+it, sign out and log in normally.
 
 ## 🚀 Quick Start (Docker — recommended)
 
@@ -67,9 +62,9 @@ That's it. The backend runs migrations and seeds an admin account automatically 
 
 > ⚠️ **Default credentials:** Admin login is `admin` / `admin123` — these are public knowledge and exist only to get you in the door. The app requires you to choose a new password on first login.
 
-> 📌 **External database?** Set `DATABASE_URL` (or `DATABASE_*`) in `.env`, download `docker-compose.external-db.yml`, and add `-f docker-compose.external-db.yml` to every Compose command. Do not enable the `local-db` profile. See the [deployment guide](docs/deployment.md#using-an-external-database).
+> 📌 **External database?** Set `DATABASE_URL` (or `DATABASE_*`) in `.env`, download `docker-compose.external-db.yml`, and add `-f docker-compose.external-db.yml` after the base file in every Compose command. Setting `DATABASE_URL` alone does not disable the bundled database. Do not enable the `local-db` profile. See the [deployment guide](docs/deployment.md#using-an-external-database).
 
-> 🏷️ **Image tag:** The compose file defaults to `v1.1-beta`. Change `IMAGE_TAG` in `.env` to pin a different release. All published tags: [ghcr.io/dgazr/ourschool-backend](https://github.com/DGAzr/ourschool/pkgs/container/ourschool-backend).
+> 🏷️ **Image tag:** The compose file defaults to the `v1.1-beta` alias. Set `IMAGE_TAG=v1.1-beta5` in `.env` to pin this release. All published tags: [ghcr.io/dgazr/ourschool-backend](https://github.com/DGAzr/ourschool/pkgs/container/ourschool-backend).
 
 
 ## 📸 Screenshots
@@ -121,7 +116,7 @@ For contributors or anyone who wants to run the app without Docker.
 ### Prerequisites
 
 - Python **3.11+**
-- Node.js **20+**
+- Node.js **22.13+** (required by the PDF viewer dependency; Docker builds use Node 22)
 - PostgreSQL
 
 ### Backend
@@ -250,7 +245,8 @@ docker compose -f docker-compose.yml -f docker-compose.dev.yml up --build
 | **Vite** 8 | Build tool |
 | **lucide-react** | Icons |
 | **date-fns** | Date formatting |
-| **react-markdown** | Markdown rendering (journal) |
+| **react-markdown** | Markdown rendering and printed lesson plans |
+| **PDF.js** | Authenticated in-app PDF previews |
 
 
 ## 🐳 Deployment
@@ -260,6 +256,15 @@ docker compose -f docker-compose.yml -f docker-compose.dev.yml up --build
 **Contributors:** Use `docker-compose.yml` (builds from local Dockerfiles). Select `docker-compose.dev.yml` explicitly for development. A user-owned `docker-compose.override.yml` still loads automatically with bare Compose commands; review or move it aside when adopting these presets. Explicit `-f` commands ignore it.
 
 **Networking:** Production publishes only frontend port `${FRONTEND_PORT:-4173}`. Reach the API at `http://localhost:4173/api/...`; route a PaaS such as Coolify to frontend container port 80. Database/API host ports are available only with the development preset and bind to loopback.
+
+### Upgrades
+
+Back up first, refresh your Compose files, and deploy frontend and backend
+together. Migrations run automatically. Keep the same project name and database
+volume; never use `down -v` when upgrading. External databases require the
+external override in every Compose command. Upgrading to beta5 requires everyone
+to sign in again. See the [deployment guide](docs/deployment.md) and
+[release history](CHANGELOG.md) for details.
 
 **Security checklist before going live:**
 - Generate a real `SECRET_KEY` (`openssl rand -hex 32`). The app refuses to start without it.
