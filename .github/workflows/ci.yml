@@ -99,3 +99,5 @@ jobs:
         run: docker build -f Dockerfile.backend -t ourschool-backend:ci .
       - name: Build frontend image
         run: docker build -f Dockerfile.frontend -t ourschool-frontend:ci .
+      - name: Verify production PDF worker serving
+        run: bash utils/check_frontend_image.sh ourschool-frontend:ci
