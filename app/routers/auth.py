@@ -16,9 +16,10 @@
 
 """Authentication APIs."""
 
+import hashlib
 import threading
 import time
-from collections import defaultdict, deque
+from collections import OrderedDict, deque
 from datetime import datetime, timedelta, timezone
 import math
 from typing import Annotated, Deque, Dict, Tuple
@@ -52,7 +53,9 @@ oauth2_scheme = OAuth2PasswordBearer(tokenUrl="api/auth/login")
 # setups put a rate limiter at the reverse proxy.
 _LOGIN_WINDOW_SECONDS = 300
 _LOGIN_MAX_ATTEMPTS = 8
-_login_failures: Dict[Tuple[str, str], Deque[float]] = defaultdict(deque)
+_LOGIN_MAX_IP_ATTEMPTS = 40
+_LOGIN_MAX_TRACKED_KEYS = 4096
+_login_failures: Dict[Tuple[str, str], Deque[float]] = OrderedDict()
 _login_lock = threading.Lock()
 
 
@@ -62,32 +65,61 @@ def _client_ip(request: Request) -> str:
     return "unknown"
 
 
+def _login_key(ip: str, username: str) -> Tuple[str, str]:
+    # Bound retained key size even when a request supplies a huge username.
+    return (ip, hashlib.sha256(username.casefold().encode()).hexdigest())
+
+
+def _prune_login_failures(now: float) -> None:
+    # Entries are ordered by last failure. Check-only requests allocate nothing.
+    while _login_failures:
+        key = next(iter(_login_failures))
+        attempts = _login_failures[key]
+        if attempts and now - attempts[-1] <= _LOGIN_WINDOW_SECONDS:
+            break
+        del _login_failures[key]
+
+
 def _check_login_rate_limit(ip: str, username: str) -> None:
-    """Raise 429 if too many recent failures for this ip/username."""
-    key = (ip, username.lower())
     now = time.monotonic()
     with _login_lock:
-        attempts = _login_failures[key]
-        while attempts and now - attempts[0] > _LOGIN_WINDOW_SECONDS:
-            attempts.popleft()
-        if len(attempts) >= _LOGIN_MAX_ATTEMPTS:
-            retry_after = int(_LOGIN_WINDOW_SECONDS - (now - attempts[0]))
-            raise HTTPException(
-                status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-                detail="Too many failed login attempts. Try again later.",
-                headers={"Retry-After": str(max(retry_after, 1))},
-            )
+        _prune_login_failures(now)
+        for key, maximum in (
+            (_login_key(ip, username), _LOGIN_MAX_ATTEMPTS),
+            ((ip, "*"), _LOGIN_MAX_IP_ATTEMPTS),
+        ):
+            attempts = _login_failures.get(key)
+            if not attempts:
+                continue
+            while attempts and now - attempts[0] > _LOGIN_WINDOW_SECONDS:
+                attempts.popleft()
+            if len(attempts) >= maximum:
+                retry_after = int(_LOGIN_WINDOW_SECONDS - (now - attempts[0]))
+                raise HTTPException(
+                    status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+                    detail="Too many failed login attempts. Try again later.",
+                    headers={"Retry-After": str(max(retry_after, 1))},
+                )
 
 
 def _record_login_failure(ip: str, username: str) -> None:
-    key = (ip, username.lower())
+    now = time.monotonic()
     with _login_lock:
-        _login_failures[key].append(time.monotonic())
+        _prune_login_failures(now)
+        for key, maximum in (
+            (_login_key(ip, username), _LOGIN_MAX_ATTEMPTS),
+            ((ip, "*"), _LOGIN_MAX_IP_ATTEMPTS),
+        ):
+            attempts = _login_failures.pop(key, deque(maxlen=maximum))
+            attempts.append(now)
+            _login_failures[key] = attempts
+        while len(_login_failures) > _LOGIN_MAX_TRACKED_KEYS:
+            _login_failures.pop(next(iter(_login_failures)))
 
 
 def _clear_login_failures(ip: str, username: str) -> None:
     with _login_lock:
-        _login_failures.pop((ip, username.lower()), None)
+        _login_failures.pop(_login_key(ip, username), None)
 
 
 def get_user_by_username(db: Session, username: str):

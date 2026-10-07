@@ -199,6 +199,21 @@ def redeem_item(
     return redemption, student_points
 
 
+def _lock_redemption(db: Session, redemption_id: int) -> ShopRedemption:
+    # Refresh the identity-map object: another transaction may have decided it
+    # while this request was waiting. All transitions lock redemption first.
+    row = (
+        db.query(ShopRedemption)
+        .filter(ShopRedemption.id == redemption_id)
+        .with_for_update()
+        .populate_existing()
+        .first()
+    )
+    if row is None:
+        raise ValueError("Redemption no longer exists")
+    return row
+
+
 def approve_redemption(
     db: Session,
     redemption: ShopRedemption,
@@ -206,6 +221,7 @@ def approve_redemption(
     instructions: Optional[str] = None,
 ) -> ShopRedemption:
     """pending -> ready. Commits."""
+    redemption = _lock_redemption(db, redemption.id)
     if redemption.status != "pending":
         raise ValueError(f"Cannot approve a redemption in '{redemption.status}' status")
     redemption.pickup_instructions = (instructions or "").strip() or (
@@ -221,6 +237,7 @@ def approve_redemption(
 
 def fulfill_redemption(db: Session, redemption: ShopRedemption) -> ShopRedemption:
     """ready -> fulfilled. Commits."""
+    redemption = _lock_redemption(db, redemption.id)
     if redemption.status != "ready":
         raise ValueError(f"Cannot fulfill a redemption in '{redemption.status}' status")
     redemption.status = "fulfilled"
@@ -242,12 +259,13 @@ def decline_redemption(
     total_spent (not total_earned). Restocks the item if it still exists and is
     stock-limited.
     """
+    redemption = _lock_redemption(db, redemption.id)
     if redemption.status != "pending":
         raise ValueError(f"Cannot decline a redemption in '{redemption.status}' status")
 
     cost = redemption.cost_points
 
-    # Lock order matches redeem_item (item, then points) to avoid deadlocks.
+    # After locking the redemption, keep the shared item -> points lock order.
     item = None
     if redemption.item_id is not None:
         item = (
@@ -262,6 +280,7 @@ def decline_redemption(
         db.query(StudentPoints)
         .filter(StudentPoints.student_id == redemption.student_id)
         .with_for_update()
+        .populate_existing()
         .first()
     )
 

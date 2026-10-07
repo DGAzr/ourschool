@@ -22,7 +22,7 @@ OurSchool is a self-hosted homeschool management system for families who take at
 - **Points Shop** — Optional points, reward goals, inventory, redemptions, pickup instructions, and refunds.
 - **Paperless-ngx materials** — Sync scanned curriculum, map subjects and material types, search and preview documents, and attach them to lessons or assignments.
 - **Reports** — Attendance, completion, grade trends, student progress, term report cards, and assignment CSV exports.
-- **Backup and restore** — Portable JSON school backups, restore previews, merge or wipe-and-restore, and support for older backup formats.
+- **Backup and restore** — Portable JSON school backups, restore previews, merge or wipe-and-restore, and support for older backup formats. [Restore and upgrade details](docs/backup-restore.md).
 - **Personal preferences** — Optional points, effort signals, and celebrations; account-synced themes; responsive layouts and keyboard-accessible controls.
 - **Draft recovery** — Recover unsaved lesson, template, and grading drafts on the same device.
 - **Integration API** — REST API with scoped API keys, permissions discovery, and support for automation and MCP clients.
@@ -64,7 +64,7 @@ That's it. The backend runs migrations and seeds an admin account automatically 
 
 > 📌 **External database?** Set `DATABASE_URL` (or `DATABASE_*`) in `.env`, download `docker-compose.external-db.yml`, and add `-f docker-compose.external-db.yml` after the base file in every Compose command. Setting `DATABASE_URL` alone does not disable the bundled database. Do not enable the `local-db` profile. See the [deployment guide](docs/deployment.md#using-an-external-database).
 
-> 🏷️ **Image tag:** The compose file defaults to the `v1.1-beta` alias. Set `IMAGE_TAG=v1.1-beta5` in `.env` to pin this release. All published tags: [ghcr.io/dgazr/ourschool-backend](https://github.com/DGAzr/ourschool/pkgs/container/ourschool-backend).
+> 🏷️ **Image tag:** The compose file defaults to the published `v1.1-beta5` release. Set `IMAGE_TAG` in `.env` to select another published release. All published tags: [ghcr.io/dgazr/ourschool-backend](https://github.com/DGAzr/ourschool/pkgs/container/ourschool-backend).
 
 
 ## 📸 Screenshots

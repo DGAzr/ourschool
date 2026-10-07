@@ -74,7 +74,7 @@ def _attach_transaction_names(transactions, student: Optional[User] = None) -> N
 
 
 @router.get("/status", response_model=PointsSystemStatus)
-async def get_points_system_status(
+def get_points_system_status(
     auth_user: AuthUser = Depends(require_user_or_permission("points:read")),
     db: Session = Depends(get_db),
 ):
@@ -85,7 +85,7 @@ async def get_points_system_status(
 
 
 @router.post("/toggle")
-async def toggle_points_system(
+def toggle_points_system(
     auth_user: AuthUser = Depends(require_admin_or_permission("settings:write")),
     db: Session = Depends(get_db),
 ):
@@ -100,7 +100,7 @@ async def toggle_points_system(
 
 
 @router.get("/my-balance", response_model=StudentPoints)
-async def get_my_points_balance(
+def get_my_points_balance(
     student: User = Depends(
         require_student_session("/points/student/{student_id}/balance")
     ),
@@ -110,7 +110,7 @@ async def get_my_points_balance(
     if not points_crud.is_points_system_enabled(db):
         raise HTTPException(status_code=403, detail="Points system is disabled")
 
-    student_points = points_crud.get_or_create_student_points(db, student.id)
+    student_points = points_crud.get_student_points_for_read(db, student.id)
     student_points.student_name = f"{student.first_name} {student.last_name}"
     points_crud.attach_goal_item(student_points)
 
@@ -118,7 +118,7 @@ async def get_my_points_balance(
 
 
 @router.get("/my-ledger", response_model=PointsLedger)
-async def get_my_points_ledger(
+def get_my_points_ledger(
     page: int = Query(1, ge=1, description="Page number"),
     per_page: int = Query(20, ge=1, le=100, description="Items per page"),
     student: User = Depends(
@@ -148,7 +148,7 @@ async def get_my_points_ledger(
 
 
 @router.get("/student/{student_id}/balance", response_model=StudentPoints)
-async def get_student_points_balance(
+def get_student_points_balance(
     student_id: int,
     auth_user: AuthUser = Depends(require_admin_or_permission("points:read")),
     db: Session = Depends(get_db),
@@ -166,7 +166,7 @@ async def get_student_points_balance(
 
     student_points = points_crud.get_student_points(db, student_id)
     if not student_points:
-        student_points = points_crud.get_or_create_student_points(db, student_id)
+        student_points = points_crud.get_student_points_for_read(db, student_id)
     if student_points.student:
         student_points.student_name = (
             f"{student_points.student.first_name} {student_points.student.last_name}"
@@ -176,7 +176,7 @@ async def get_student_points_balance(
 
 
 @router.get("/student/{student_id}/ledger", response_model=PointsLedger)
-async def get_student_points_ledger(
+def get_student_points_ledger(
     student_id: int,
     page: int = Query(1, ge=1, description="Page number"),
     per_page: int = Query(20, ge=1, le=100, description="Items per page"),
@@ -214,7 +214,7 @@ async def get_student_points_ledger(
 
 
 @router.post("/adjust", response_model=PointTransaction)
-async def adjust_student_points(
+def adjust_student_points(
     adjustment: AdminPointAdjustment,
     auth_user: AuthUser = Depends(require_admin_or_permission("points:write")),
     db: Session = Depends(get_db),
@@ -261,7 +261,7 @@ async def adjust_student_points(
 
 
 @router.get("/admin/overview", response_model=AdminPointsOverview)
-async def get_admin_points_overview(
+def get_admin_points_overview(
     auth_user: AuthUser = Depends(require_admin_or_permission("points:read")),
     db: Session = Depends(get_db),
 ):
@@ -279,7 +279,7 @@ async def get_admin_points_overview(
 
 
 @router.get("/presets")
-async def get_award_presets(
+def get_award_presets(
     auth_user: AuthUser = Depends(require_admin_or_permission("settings:read")),
     db: Session = Depends(get_db),
 ):
@@ -296,7 +296,7 @@ async def get_award_presets(
 
 
 @router.put("/presets")
-async def set_award_presets(
+def set_award_presets(
     presets: list[dict],
     auth_user: AuthUser = Depends(require_admin_or_permission("settings:write")),
     db: Session = Depends(get_db),
@@ -327,7 +327,7 @@ async def set_award_presets(
 
 
 @router.get("/journal-points")
-async def get_journal_points(
+def get_journal_points(
     auth_user: AuthUser = Depends(require_admin_or_permission("settings:read")),
     db: Session = Depends(get_db),
 ):
@@ -338,7 +338,7 @@ async def get_journal_points(
 
 
 @router.put("/journal-points")
-async def set_journal_points(
+def set_journal_points(
     payload: dict,
     auth_user: AuthUser = Depends(require_admin_or_permission("settings:write")),
     db: Session = Depends(get_db),

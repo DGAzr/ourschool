@@ -18,6 +18,7 @@
 
 import base64
 import logging
+import uuid
 from datetime import date, datetime, timezone
 from typing import Any, Dict, Optional
 
@@ -32,6 +33,7 @@ from app.models.assignment import (
     AssignmentTimeEntry,
     StudentAssignment,
 )
+from app.models.assignment_type import AssignmentTypeConfig
 from app.models.attendance import AttendanceRecord
 from app.models.journal import JournalEntry, JournalReply
 from app.models.lesson import Lesson, LessonMaterial, LessonResource, LessonTemplate
@@ -59,7 +61,7 @@ from .shared import log_backup_operation, sanitize_import_data, validate_backup_
 logger = logging.getLogger(__name__)
 
 # Backup format versions supported by this importer
-SUPPORTED_VERSIONS = {"1.0", "2.0", "2.1", "2.2", "2.3", "2.4", "2.5"}
+SUPPORTED_VERSIONS = {"1.0", "2.0", "2.1", "2.2", "2.3", "2.4", "2.5", "2.6"}
 LEGACY_VERSIONS = {"1.0"}  # Versions that lack external_id — name-only fallback
 
 # Typed phrase required in the request body to arm wipe_before_import.
@@ -67,10 +69,9 @@ WIPE_CONFIRMATION_PHRASE = "WIPE ALL DATA"
 
 # Deletion order for wipe-and-restore: children before parents so plain
 # DELETEs never trip FK constraints. Covers the backup-scoped tables plus
-# journal_replies and grade_history, which are FK children of them but are
-# not restorable from a backup. Deliberately absent: assignment_types (the
-# importer only auto-creates missing type keys, so wiping would destroy
-# display names and icons irrecoverably) and api_keys (standalone system
+# journal_replies and grade_history. Assignment types are replaced only when
+# the backup includes their configuration; older backups retain local types.
+# Deliberately absent: api_keys (standalone system
 # credentials, not user-bound — wiping them would break external
 # integrations; their created_by FK is ON DELETE SET NULL). Users need
 # admin-preservation logic and are handled separately.
@@ -167,17 +168,6 @@ def _wipe_for_restore(
     result.deleted_counts = deleted
 
     verb = "Would delete" if result.dry_run else "Deleted"
-    if deleted.get("journal_replies"):
-        result.warnings.append(
-            f"{verb} {deleted['journal_replies']} journal replies; replies are "
-            "not part of backups and cannot be restored."
-        )
-    if deleted.get("grade_history"):
-        result.warnings.append(
-            f"{verb} {deleted['grade_history']} grade history records; grade "
-            "history is audit data and is not re-imported from backups."
-        )
-
     total = sum(deleted.values())
     tables = sum(1 for count in deleted.values() if count)
     log_backup_operation(
@@ -199,6 +189,78 @@ def _resolve(
     if external_id and external_id in by_uuid:
         return by_uuid[external_id]
     return by_name.get(name)
+
+
+def _user_id(data, prefix, result):
+    return _resolve(
+        getattr(data, prefix + "_external_id", None),
+        getattr(data, prefix + "_email", None),
+        result.id_mappings.get("users_by_uuid", {}),
+        result.id_mappings.get("users_by_email", {}),
+    )
+
+
+def _identity(data, result, section, index):
+    return data.external_id or str(
+        uuid.uuid5(uuid.NAMESPACE_URL, result.import_log[1] + section + str(index))
+    )
+
+
+def _assignment_for_link(db, data, result, due_field):
+    external_id = getattr(data, "assignment_external_id", None)
+    if external_id:
+        local_id = result.id_mappings.get("assignments_by_uuid", {}).get(external_id)
+        return db.get(StudentAssignment, local_id) if local_id else None
+    student_id = _user_id(data, "student", result)
+    template_id = _resolve(
+        data.template_external_id,
+        data.assignment_template_name,
+        result.id_mappings.get("templates_by_uuid", {}),
+        result.id_mappings.get("templates_by_name", {}),
+    )
+    matches = (
+        db.query(StudentAssignment)
+        .filter(
+            StudentAssignment.student_id == student_id,
+            StudentAssignment.template_id == template_id,
+            StudentAssignment.due_date == getattr(data, due_field),
+        )
+        .all()
+    )
+    if len(matches) > 1:
+        raise ValueError(
+            "Legacy backup has an ambiguous assignment reference; use a format 2.6 backup"
+        )
+    return matches[0] if matches else None
+
+
+def _import_assignment_types(db, entries, result, options):
+    imported = skipped = updated = 0
+    for item in entries:
+        existing = (
+            db.query(AssignmentTypeConfig)
+            .filter(AssignmentTypeConfig.key == item.key)
+            .first()
+        )
+        if existing and not options.get("update_existing_data"):
+            skipped += 1
+            continue
+        values = item.model_dump(exclude={"external_id"}, exclude_none=True)
+        if existing:
+            for key, value in values.items():
+                setattr(existing, key, value)
+            updated += 1
+        else:
+            db.add(
+                AssignmentTypeConfig(
+                    external_id=item.external_id or str(uuid.uuid4()), **values
+                )
+            )
+            imported += 1
+        db.flush()
+    result.imported_counts["assignment_types"] = imported
+    result.updated_counts["assignment_types"] = updated
+    result.skipped_counts["assignment_types"] = skipped
 
 
 def import_system_data(
@@ -243,6 +305,10 @@ def import_system_data(
                 f"Unsupported backup format version: {version}. Supported: {', '.join(sorted(SUPPORTED_VERSIONS))}"
             )
             return result
+        if version != "2.6":
+            result.warnings.append(
+                "Older backups may omit type weights, replies, timestamps and stable record links; create a fresh format 2.6 backup after upgrading."
+            )
         if version in LEGACY_VERSIONS:
             result.warnings.append(
                 f"Backup is format {version} (legacy). External IDs are not present — "
@@ -257,6 +323,10 @@ def import_system_data(
 
         backup_dict = sanitize_import_data(backup_data.model_dump())
         backup_data = SystemBackup(**backup_dict)
+
+        result.import_log.append(
+            "Backup timestamp: " + backup_data.backup_timestamp.isoformat()
+        )
 
         # Preview uses the same dependency resolution and duplicate checks as
         # import, inside a savepoint that is always rolled back. This also
@@ -284,20 +354,24 @@ def import_system_data(
         # point-in-time restore semantics.
         if import_options.get("wipe_before_import", False):
             _wipe_for_restore(db, current_user, result, False)
+            if backup_data.assignment_types:
+                db.query(AssignmentTypeConfig).delete(synchronize_session=False)
 
         # Import in dependency order
         _import_users(
             db, backup_data.users, result, import_options, False, current_user
         )
         _import_subjects(db, backup_data.subjects, result, False)
-        _import_terms(db, backup_data.terms, result, False, current_user.id)
+        _import_terms(db, backup_data.terms, result, False)
+        _import_assignment_types(
+            db, backup_data.assignment_types, result, import_options
+        )
         _import_assignment_templates(
-            db, backup_data.assignment_templates, result, False, current_user.id
+            db, backup_data.assignment_templates, result, False
         )
         _import_term_subjects(db, backup_data.term_subjects, result, False)
-        _import_student_assignments(
-            db, backup_data.student_assignments, result, False, current_user.id
-        )
+        _import_lessons(db, backup_data.lessons, result, False)
+        _import_student_assignments(db, backup_data.student_assignments, result, False)
         _import_assignment_time_entries(
             db, backup_data.assignment_time_entries, result, False
         )
@@ -314,9 +388,6 @@ def import_system_data(
         _import_student_points(db, backup_data.student_points, result, False)
         _import_point_transactions(db, backup_data.point_transactions, result, False)
         _import_shop_redemptions(db, backup_data.shop_redemptions, result, False)
-        # Lessons last among data sections: they remap through the users,
-        # subjects, and assignment-template maps built above.
-        _import_lessons(db, backup_data.lessons, result, False)
         # Paperless after lessons: attachment links resolve through the
         # lessons/templates/users maps plus the document map built here.
         _import_paperless_libraries(db, backup_data, result, False)
@@ -338,6 +409,9 @@ def import_system_data(
             db, backup_data.student_assignment_paperless_materials, result, False
         )
         _import_system_settings(db, backup_data.system_settings, result, False)
+
+        if result.errors:
+            raise ValueError("Backup validation failed: " + "; ".join(result.errors))
 
         if not dry_run:
             from app.core.browser_sessions import revoke_browser_sessions
@@ -364,9 +438,9 @@ def import_system_data(
         return result
 
     except Exception as e:
-        if preview_transaction is not None:
+        if preview_transaction is not None and preview_transaction.is_active:
             preview_transaction.rollback()
-        elif not dry_run:
+        else:
             db.rollback()
         logger.error(f"System backup import failed: {str(e)}", exc_info=True)
         result.errors.append("Import failed due to an internal error. See server logs.")
@@ -380,6 +454,7 @@ def _import_users(
     """Import users. Builds two resolution maps: by external_id and by email."""
     by_uuid: Dict[str, int] = {}
     by_email: Dict[str, int] = {}
+    restored_ids = set()
     imported = skipped = updated = 0
     allow_admin_import = import_options.get("allow_admin_import", False)
     wipe_mode = import_options.get("wipe_before_import", False)
@@ -410,12 +485,22 @@ def _import_users(
         # username/email the active session is bound to.
         if wipe_mode and existing_id == current_user.id:
             if not dry_run:
+                current_user.external_id = (
+                    user_data.external_id or current_user.external_id
+                )
                 current_user.first_name = user_data.first_name
                 current_user.last_name = user_data.last_name
                 current_user.date_of_birth = user_data.date_of_birth
                 current_user.grade_level = user_data.grade_level
                 current_user.theme_preference = user_data.theme_preference
+                current_user.student_ui_mode = user_data.student_ui_mode
+                current_user.show_points = user_data.show_points
+                current_user.show_effort_signals = user_data.show_effort_signals
+                current_user.celebrate_completion = user_data.celebrate_completion
+                current_user.created_at = user_data.created_at
+                current_user.updated_at = user_data.updated_at
                 db.flush()
+                restored_ids.add(current_user.id)
             if user_data.external_id:
                 by_uuid[user_data.external_id] = existing_id
             by_email[user_data.email] = existing_id
@@ -458,7 +543,14 @@ def _import_users(
                 existing_user.date_of_birth = user_data.date_of_birth
                 existing_user.grade_level = user_data.grade_level
                 existing_user.theme_preference = user_data.theme_preference
+                existing_user.student_ui_mode = user_data.student_ui_mode
+                existing_user.show_points = user_data.show_points
+                existing_user.show_effort_signals = user_data.show_effort_signals
+                existing_user.celebrate_completion = user_data.celebrate_completion
+                existing_user.created_at = user_data.created_at
+                existing_user.updated_at = user_data.updated_at
                 db.flush()
+                restored_ids.add(existing_user.id)
                 by_email[user_data.email] = existing_user.id
                 if user_data.external_id:
                     by_uuid[user_data.external_id] = existing_user.id
@@ -487,9 +579,12 @@ def _import_users(
                     show_points=user_data.show_points,
                     show_effort_signals=user_data.show_effort_signals,
                     celebrate_completion=user_data.celebrate_completion,
+                    created_at=user_data.created_at,
+                    updated_at=user_data.updated_at,
                 )
                 db.add(new_user)
                 db.flush()
+                restored_ids.add(new_user.id)
                 by_email[user_data.email] = new_user.id
                 by_uuid[new_user.external_id] = new_user.id
                 imported += 1
@@ -500,6 +595,21 @@ def _import_users(
         else:
             imported += 1
 
+    # Parents may appear after their students; resolve after every user exists.
+    for item in users_data:
+        user_id = _resolve(item.external_id, item.email, by_uuid, by_email)
+        if user_id in restored_ids:
+            parent_id = _resolve(
+                item.parent_external_id, item.parent_email, by_uuid, by_email
+            )
+            if item.parent_id and not (item.parent_external_id or item.parent_email):
+                result.warnings.append(
+                    f"User {item.email}: legacy parent ID cannot be safely remapped"
+                )
+            db.query(User).filter(User.id == user_id).update(
+                {User.parent_id: parent_id, User.updated_at: item.updated_at}
+            )
+    db.flush()
     result.imported_counts["users"] = imported
     result.skipped_counts["users"] = skipped
     result.updated_counts["users"] = updated
@@ -540,6 +650,11 @@ def _import_subjects(db: Session, subjects_data, result, dry_run):
                 description=subject_data.description,
                 color=subject_data.color,
                 icon=getattr(subject_data, "icon", None),
+                **(
+                    {"created_at": subject_data.created_at}
+                    if subject_data.created_at
+                    else {}
+                ),
             )
             db.add(new_subject)
             db.flush()
@@ -555,7 +670,7 @@ def _import_subjects(db: Session, subjects_data, result, dry_run):
     result.id_mappings["subjects_by_name"] = by_name
 
 
-def _import_terms(db: Session, terms_data, result, dry_run, admin_user_id: int):
+def _import_terms(db: Session, terms_data, result, dry_run):
     """Import terms. Resolution: external_id > name."""
     by_uuid: Dict[str, int] = {}
     by_name: Dict[str, int] = {}
@@ -597,7 +712,12 @@ def _import_terms(db: Session, terms_data, result, dry_run, admin_user_id: int):
                 start_date=term_data.start_date,
                 end_date=term_data.end_date,
                 academic_year=academic_year,
-                created_by=admin_user_id,
+                created_by=_user_id(term_data, "created_by", result),
+                description=term_data.description,
+                is_active=term_data.is_active,
+                term_order=term_data.term_order,
+                created_at=term_data.created_at,
+                updated_at=term_data.updated_at,
             )
             db.add(new_term)
             db.flush()
@@ -613,9 +733,7 @@ def _import_terms(db: Session, terms_data, result, dry_run, admin_user_id: int):
     result.id_mappings["terms_by_name"] = by_name
 
 
-def _import_assignment_templates(
-    db: Session, templates_data, result, dry_run, admin_user_id: int
-):
+def _import_assignment_templates(db: Session, templates_data, result, dry_run):
     """Import assignment templates. Resolution: external_id > name."""
     by_uuid: Dict[str, int] = {}
     by_name: Dict[str, int] = {}
@@ -646,7 +764,6 @@ def _import_assignment_templates(
             import uuid as _uuid
 
             from app.crud import assignment_types as crud_types
-            from app.schemas.assignment_type import AssignmentTypeCreate
 
             subject_id = _resolve(
                 getattr(template_data, "subject_external_id", None),
@@ -667,14 +784,12 @@ def _import_assignment_templates(
             # a family that defined a type we don't have locally.
             type_key = template_data.assignment_type or "homework"
             if crud_types.get_by_key(db, type_key) is None:
-                created_type = crud_types.create_assignment_type(
-                    db,
-                    AssignmentTypeCreate(
-                        key=type_key,
-                        name=type_key.replace("_", " ").title(),
-                    ),
+                db.add(
+                    AssignmentTypeConfig(
+                        key=type_key, name=type_key.replace("_", " ").title()
+                    )
                 )
-                type_key = created_type.key
+                db.flush()
 
             new_template = AssignmentTemplate(
                 external_id=template_data.external_id or str(_uuid.uuid4()),
@@ -690,7 +805,11 @@ def _import_assignment_templates(
                 materials_needed=template_data.materials_needed,
                 is_exportable=template_data.is_exportable,
                 is_library=getattr(template_data, "is_library", True),
-                created_by=admin_user_id,
+                is_archived=template_data.is_archived,
+                export_data=template_data.export_data,
+                created_by=_user_id(template_data, "created_by", result),
+                created_at=template_data.created_at,
+                updated_at=template_data.updated_at,
             )
             db.add(new_template)
             db.flush()
@@ -751,9 +870,14 @@ def _import_term_subjects(db: Session, term_subjects_data, result, dry_run):
                 new_ts = TermSubject(
                     term_id=term_id,
                     subject_id=subject_id,
-                    is_active=True,
-                    weight=ts_data.weight or 1.0,
-                    learning_goals="Imported from backup",
+                    is_active=ts_data.is_active,
+                    weight=ts_data.weight if ts_data.weight is not None else 1.0,
+                    grading_scale=ts_data.grading_scale,
+                    learning_goals=ts_data.learning_goals,
+                    teacher_notes=ts_data.teacher_notes,
+                    **(
+                        {"created_at": ts_data.created_at} if ts_data.created_at else {}
+                    ),
                 )
                 db.add(new_ts)
                 db.flush()
@@ -772,9 +896,7 @@ def _import_term_subjects(db: Session, term_subjects_data, result, dry_run):
     result.skipped_counts["term_subjects"] = skipped
 
 
-def _import_student_assignments(
-    db: Session, student_assignments_data, result, dry_run, admin_user_id: int
-):
+def _import_student_assignments(db: Session, student_assignments_data, result, dry_run):
     """Import student assignments."""
     users_by_uuid = result.id_mappings.get("users_by_uuid", {})
     users_by_email = result.id_mappings.get("users_by_email", {})
@@ -782,7 +904,9 @@ def _import_student_assignments(
     templates_by_name = result.id_mappings.get("templates_by_name", {})
     imported = skipped = 0
 
-    for sa_data in student_assignments_data:
+    by_uuid = {row.external_id: row.id for row in db.query(StudentAssignment)}
+    legacy_existing = list(db.query(StudentAssignment).order_by(StudentAssignment.id))
+    for index, sa_data in enumerate(student_assignments_data):
         student_id = _resolve(
             getattr(sa_data, "student_external_id", None),
             sa_data.student_email,
@@ -803,20 +927,27 @@ def _import_student_assignments(
             continue
 
         if not dry_run:
-            from app.models.assignment import StudentAssignment
             from app.enums import AssignmentStatus
 
-            # Idempotency: skip if this student already has this template on this
-            # due date, so re-importing a backup does not duplicate assignments.
+            external_id = _identity(sa_data, result, "assignments", index)
             existing = (
-                db.query(StudentAssignment)
-                .filter(
-                    StudentAssignment.student_id == student_id,
-                    StudentAssignment.template_id == template_id,
-                    StudentAssignment.due_date == sa_data.due_date,
-                )
-                .first()
+                db.get(StudentAssignment, by_uuid[external_id])
+                if external_id in by_uuid
+                else None
             )
+            if not existing and not sa_data.external_id:
+                existing = next(
+                    (
+                        row
+                        for row in legacy_existing
+                        if row.student_id == student_id
+                        and row.template_id == template_id
+                        and row.due_date == sa_data.due_date
+                    ),
+                    None,
+                )
+                if existing:
+                    legacy_existing.remove(existing)
             if existing:
                 skipped += 1
                 result.import_log.append(
@@ -825,6 +956,27 @@ def _import_student_assignments(
                 continue
 
             new_sa = StudentAssignment(
+                external_id=external_id,
+                lesson_id=result.id_mappings.get("lessons_by_uuid", {}).get(
+                    sa_data.lesson_external_id
+                ),
+                started_date=sa_data.started_at.date() if sa_data.started_at else None,
+                completed_date=(
+                    sa_data.completed_at.date() if sa_data.completed_at else None
+                ),
+                submitted_date=(
+                    sa_data.submitted_at.date() if sa_data.submitted_at else None
+                ),
+                is_graded=(
+                    sa_data.is_graded
+                    if sa_data.is_graded is not None
+                    else sa_data.status == "graded"
+                ),
+                graded_date=sa_data.graded_date,
+                percentage_grade=sa_data.percentage_grade,
+                graded_by=_user_id(sa_data, "graded_by", result),
+                created_at=sa_data.created_at,
+                updated_at=sa_data.updated_at,
                 template_id=template_id,
                 student_id=student_id,
                 assigned_date=sa_data.assigned_date or sa_data.due_date or date.today(),
@@ -846,7 +998,7 @@ def _import_student_assignments(
                 custom_max_points=sa_data.custom_max_points,
                 time_spent_minutes=getattr(sa_data, "time_spent_minutes", 0) or 0,
                 is_student_created=getattr(sa_data, "is_student_created", False),
-                assigned_by=admin_user_id,
+                assigned_by=_user_id(sa_data, "assigned_by", result),
             )
             new_sa.help_requests = [
                 AssignmentHelpRequest(
@@ -860,11 +1012,11 @@ def _import_student_assignments(
             db.add(new_sa)
             db.flush()
 
-            # The backup format only carries status + points, not the derived
-            # grading fields. Reconstruct them so imported grades are complete:
-            # an assignment with a score and GRADED status is a graded grade.
+            # Reconstruct grading metadata only for legacy backups. Format 2.6
+            # carries the exact grading fields and lifecycle dates.
             if (
-                new_sa.points_earned is not None
+                sa_data.is_graded is None
+                and new_sa.points_earned is not None
                 and new_sa.status == AssignmentStatus.GRADED
             ):
                 new_sa.is_graded = True
@@ -874,11 +1026,13 @@ def _import_student_assignments(
                 new_sa.calculate_percentage_grade()
                 db.flush()
 
+            by_uuid[new_sa.external_id] = new_sa.id
             result.import_log.append(
                 f"Created student_assignment for {sa_data.student_email}"
             )
         imported += 1
 
+    result.id_mappings["assignments_by_uuid"] = by_uuid
     result.imported_counts["student_assignments"] = imported
     result.skipped_counts["student_assignments"] = skipped
 
@@ -891,7 +1045,7 @@ def _import_assignment_time_entries(db: Session, entries, result, dry_run):
     imported = skipped = 0
     touched_assignment_ids = set()
 
-    for item in entries:
+    for index, item in enumerate(entries):
         student_id = _resolve(
             item.student_external_id,
             item.student_email,
@@ -910,15 +1064,7 @@ def _import_assignment_time_entries(db: Session, entries, result, dry_run):
                 "Skipped assignment time entry (unresolved assignment)"
             )
             continue
-        assignment = (
-            db.query(StudentAssignment)
-            .filter(
-                StudentAssignment.student_id == student_id,
-                StudentAssignment.template_id == template_id,
-                StudentAssignment.due_date == item.assignment_due_date,
-            )
-            .first()
-        )
+        assignment = _assignment_for_link(db, item, result, "assignment_due_date")
         if assignment is None:
             skipped += 1
             result.import_log.append(
@@ -931,14 +1077,10 @@ def _import_assignment_time_entries(db: Session, entries, result, dry_run):
             users_by_uuid,
             users_by_email,
         )
+        external_id = _identity(item, result, "time_entries", index)
         existing = (
             db.query(AssignmentTimeEntry)
-            .filter(
-                AssignmentTimeEntry.assignment_id == assignment.id,
-                AssignmentTimeEntry.work_date == item.work_date,
-                AssignmentTimeEntry.minutes == item.minutes,
-                AssignmentTimeEntry.note == item.note,
-            )
+            .filter(AssignmentTimeEntry.external_id == external_id)
             .first()
         )
         if existing:
@@ -948,6 +1090,7 @@ def _import_assignment_time_entries(db: Session, entries, result, dry_run):
         if not dry_run:
             db.add(
                 AssignmentTimeEntry(
+                    external_id=external_id,
                     assignment_id=assignment.id,
                     logged_by=logger_id,
                     work_date=item.work_date,
@@ -970,7 +1113,12 @@ def _import_assignment_time_entries(db: Session, entries, result, dry_run):
             )
             db.query(StudentAssignment).filter(
                 StudentAssignment.id == assignment_id
-            ).update({StudentAssignment.time_spent_minutes: int(total or 0)})
+            ).update(
+                {
+                    StudentAssignment.time_spent_minutes: int(total or 0),
+                    StudentAssignment.updated_at: StudentAssignment.updated_at,
+                }
+            )
     result.imported_counts["assignment_time_entries"] = imported
     result.skipped_counts["assignment_time_entries"] = skipped
 
@@ -1063,6 +1211,22 @@ def _import_student_term_grades(db: Session, term_grades_data, result, dry_run):
                 assignments_completed=tg_data.assignments_completed,
                 assignments_total=tg_data.assignments_total,
                 progress_notes=tg_data.progress_notes,
+                finalized_by=_user_id(tg_data, "finalized_by", result),
+                **{
+                    key: getattr(tg_data, key)
+                    for key in (
+                        "finalized_date",
+                        "attendance_rate",
+                        "student_reflection",
+                        "parent_notes",
+                        "learning_goals",
+                        "areas_for_improvement",
+                        "strengths",
+                        "last_calculated",
+                        "created_at",
+                        "updated_at",
+                    )
+                },
             )
             db.add(new_tg)
             db.flush()
@@ -1075,15 +1239,61 @@ def _import_student_term_grades(db: Session, term_grades_data, result, dry_run):
     result.skipped_counts["student_term_grades"] = skipped
 
 
-def _import_grade_history(db: Session, grade_history_data, result, dry_run):
-    """Grade history is audit data — exported for archival but not re-imported."""
-    count = len(grade_history_data) if grade_history_data else 0
-    if count:
-        result.warnings.append(
-            f"{count} grade_history entries present in backup but not imported (audit data — grades are restored via student_term_grades)"
+def _import_grade_history(db: Session, entries, result, dry_run):
+    imported = skipped = 0
+    for index, item in enumerate(entries):
+        external_id = _identity(item, result, "grade_history", index)
+        if (
+            db.query(GradeHistory)
+            .filter(GradeHistory.external_id == external_id)
+            .first()
+        ):
+            skipped += 1
+            continue
+        student_id = _user_id(item, "student", result)
+        term_id = _resolve(
+            item.term_external_id,
+            item.term_name,
+            result.id_mappings.get("terms_by_uuid", {}),
+            result.id_mappings.get("terms_by_name", {}),
         )
-    result.imported_counts["grade_history"] = 0
-    result.skipped_counts["grade_history"] = count
+        subject_id = _resolve(
+            item.subject_external_id,
+            item.subject_name,
+            result.id_mappings.get("subjects_by_uuid", {}),
+            result.id_mappings.get("subjects_by_name", {}),
+        )
+        grade = (
+            db.query(StudentTermGrade)
+            .join(TermSubject)
+            .filter(
+                StudentTermGrade.student_id == student_id,
+                TermSubject.term_id == term_id,
+                TermSubject.subject_id == subject_id,
+            )
+            .first()
+        )
+        if grade is None:
+            raise ValueError("Cannot resolve grade history parent")
+        db.add(
+            GradeHistory(
+                external_id=external_id,
+                student_term_grade_id=grade.id,
+                assignment_id=result.id_mappings.get("assignments_by_uuid", {}).get(
+                    item.assignment_external_id
+                ),
+                changed_by=_user_id(item, "changed_by", result),
+                field_name=item.field_name,
+                old_value=item.old_value,
+                new_value=item.new_value,
+                change_reason=item.change_reason,
+                changed_at=item.changed_at,
+            )
+        )
+        db.flush()
+        imported += 1
+    result.imported_counts["grade_history"] = imported
+    result.skipped_counts["grade_history"] = skipped
 
 
 def _import_attendance_records(db: Session, attendance_data, result, dry_run):
@@ -1134,6 +1344,8 @@ def _import_attendance_records(db: Session, attendance_data, result, dry_run):
                     else AttendanceStatus.PRESENT
                 ),
                 notes=att_data.notes,
+                created_at=att_data.created_at,
+                updated_at=att_data.updated_at,
             )
             db.add(new_att)
             db.flush()
@@ -1150,7 +1362,8 @@ def _import_journal_entries(db: Session, journal_data, result, dry_run):
     users_by_email = result.id_mappings.get("users_by_email", {})
     imported = skipped = 0
 
-    for je_data in journal_data:
+    by_uuid = {row.external_id: row.id for row in db.query(JournalEntry)}
+    for index, je_data in enumerate(journal_data):
         author_id = _resolve(
             getattr(je_data, "user_external_id", None),
             je_data.user_email,
@@ -1179,23 +1392,18 @@ def _import_journal_entries(db: Session, journal_data, result, dry_run):
             users_by_email,
         )
 
-        entry_date = (
+        entry_date = je_data.entry_date or (
             datetime.combine(je_data.date, datetime.min.time())
             if isinstance(je_data.date, date)
             else je_data.date
         )
 
         if not dry_run:
-            from app.models.journal import JournalEntry
 
-            # Idempotency: dedup on (author, title, entry_date).
+            external_id = _identity(je_data, result, "journals", index)
             existing = (
                 db.query(JournalEntry)
-                .filter(
-                    JournalEntry.author_id == author_id,
-                    JournalEntry.title == je_data.title,
-                    JournalEntry.entry_date == entry_date,
-                )
+                .filter(JournalEntry.external_id == external_id)
                 .first()
             )
             if existing:
@@ -1206,6 +1414,7 @@ def _import_journal_entries(db: Session, journal_data, result, dry_run):
                 continue
 
             new_je = JournalEntry(
+                external_id=external_id,
                 student_id=student_id,
                 author_id=author_id,
                 title=je_data.title,
@@ -1224,11 +1433,22 @@ def _import_journal_entries(db: Session, journal_data, result, dry_run):
                 created_at=je_data.created_at,
                 updated_at=je_data.updated_at,
             )
+            new_je.replies = [
+                JournalReply(
+                    external_id=reply.external_id or str(uuid.uuid4()),
+                    author_id=_user_id(reply, "author", result),
+                    text=reply.text,
+                    created_at=reply.created_at,
+                )
+                for reply in je_data.replies
+            ]
             db.add(new_je)
             db.flush()
+            by_uuid[new_je.external_id] = new_je.id
             result.import_log.append(f"Created journal entry: {je_data.title}")
         imported += 1
 
+    result.id_mappings["journals_by_uuid"] = by_uuid
     result.imported_counts["journal_entries"] = imported
     result.skipped_counts["journal_entries"] = skipped
 
@@ -1257,6 +1477,11 @@ def _import_system_settings(db: Session, system_settings_data, result, dry_run):
                 setting_type=ss_data.setting_type,
                 description=ss_data.description,
                 is_active=ss_data.is_active,
+                **{
+                    key: getattr(ss_data, key)
+                    for key in ("created_at", "updated_at")
+                    if getattr(ss_data, key) is not None
+                },
             )
             db.add(new_ss)
             db.flush()
@@ -1329,6 +1554,8 @@ def _import_student_points(db: Session, student_points_data, result, dry_run):
                 total_earned=sp_data.total_earned,
                 total_spent=sp_data.total_spent,
                 goal_item_id=goal_item_id,
+                created_at=sp_data.created_at,
+                updated_at=sp_data.updated_at,
             )
             db.add(new_sp)
             db.flush()
@@ -1347,7 +1574,8 @@ def _import_point_transactions(db: Session, point_transactions_data, result, dry
     users_by_email = result.id_mappings.get("users_by_email", {})
     imported = skipped = 0
 
-    for tx_data in point_transactions_data:
+    by_uuid = {row.external_id: row.id for row in db.query(PointTransaction)}
+    for index, tx_data in enumerate(point_transactions_data):
         student_id = _resolve(
             getattr(tx_data, "student_external_id", None),
             tx_data.student_email,
@@ -1361,22 +1589,34 @@ def _import_point_transactions(db: Session, point_transactions_data, result, dry
             continue
 
         if not dry_run:
-            from app.models.points import PointTransaction
 
+            external_id = _identity(tx_data, result, "transactions", index)
             existing = (
                 db.query(PointTransaction)
-                .filter(
-                    PointTransaction.student_id == student_id,
-                    PointTransaction.amount == tx_data.amount,
-                    PointTransaction.transaction_type == tx_data.transaction_type,
-                    PointTransaction.created_at == tx_data.created_at,
-                )
+                .filter(PointTransaction.external_id == external_id)
                 .first()
             )
             if existing:
                 skipped += 1
                 continue
+            source_id = None
+            if tx_data.source_assignment_external_id:
+                source_id = result.id_mappings.get("assignments_by_uuid", {}).get(
+                    tx_data.source_assignment_external_id
+                )
+            elif tx_data.source_journal_external_id:
+                source_id = result.id_mappings.get("journals_by_uuid", {}).get(
+                    tx_data.source_journal_external_id
+                )
+            elif tx_data.transaction_type == "assignment" and not tx_data.external_id:
+                result.warnings.append(
+                    "Legacy assignment point transaction lacks its source; regrading may award points again"
+                )
             new_tx = PointTransaction(
+                external_id=external_id,
+                source_id=source_id,
+                admin_id=_user_id(tx_data, "admin", result),
+                actor_name=tx_data.actor_name,
                 student_id=student_id,
                 amount=tx_data.amount,
                 transaction_type=tx_data.transaction_type,
@@ -1386,11 +1626,13 @@ def _import_point_transactions(db: Session, point_transactions_data, result, dry
             )
             db.add(new_tx)
             db.flush()
+            by_uuid[new_tx.external_id] = new_tx.id
             result.import_log.append(
                 f"Created point_transaction for {tx_data.student_email}: {tx_data.amount} pts ({tx_data.transaction_type})"
             )
         imported += 1
 
+    result.id_mappings["transactions_by_uuid"] = by_uuid
     result.imported_counts["point_transactions"] = imported
     result.skipped_counts["point_transactions"] = skipped
 
@@ -1433,7 +1675,14 @@ def _import_shop_images(db: Session, images_data, result, dry_run):
     """Import shop images (base64 -> bytes). Dedup on external_id."""
     imported = skipped = 0
 
+    from app.core.image_storage import MAX_UPLOAD_BYTES, process_upload
+
     for img_data in images_data:
+        if len(img_data.data_b64) > 4 * ((MAX_UPLOAD_BYTES + 2) // 3):
+            raise ValueError("Backup image exceeds upload limit")
+        data, mime = process_upload(
+            base64.b64decode(img_data.data_b64, validate=True), lossless=True
+        )
         existing = (
             db.query(ShopImage)
             .filter(ShopImage.external_id == img_data.external_id)
@@ -1445,9 +1694,9 @@ def _import_shop_images(db: Session, images_data, result, dry_run):
         if not dry_run:
             new_img = ShopImage(
                 external_id=img_data.external_id,
-                mime_type=img_data.mime_type,
-                size_bytes=img_data.size_bytes,
-                data=base64.b64decode(img_data.data_b64),
+                mime_type=mime,
+                size_bytes=len(data),
+                data=data,
                 created_at=img_data.created_at,
             )
             db.add(new_img)
@@ -1521,9 +1770,7 @@ def _import_shop_redemptions(db: Session, redemptions_data, result, dry_run):
 
     Resolves student like _import_student_points and item by external_id (a
     missing item just leaves item_id NULL — the snapshot preserves display).
-    Transaction-link FKs and decided_by are not restored (no stable txn
-    external id); ledger totals still restore via student_points +
-    point_transactions.
+    Transaction links and decision authors use stable identities on restore.
     """
     users_by_uuid = result.id_mappings.get("users_by_uuid", {})
     users_by_email = result.id_mappings.get("users_by_email", {})
@@ -1566,6 +1813,13 @@ def _import_shop_redemptions(db: Session, redemptions_data, result, dry_run):
         if not dry_run:
             new_r = ShopRedemption(
                 external_id=r_data.external_id,
+                point_transaction_id=result.id_mappings.get(
+                    "transactions_by_uuid", {}
+                ).get(r_data.point_transaction_external_id),
+                refund_transaction_id=result.id_mappings.get(
+                    "transactions_by_uuid", {}
+                ).get(r_data.refund_transaction_external_id),
+                decided_by=_user_id(r_data, "decided_by", result),
                 student_id=student_id,
                 item_id=item_id,
                 item_name=r_data.item_name,
@@ -2105,15 +2359,7 @@ def _import_student_assignment_paperless_materials(
             )
             continue
 
-        assignment = (
-            db.query(StudentAssignment)
-            .filter(
-                StudentAssignment.student_id == student_id,
-                StudentAssignment.template_id == template_id,
-                StudentAssignment.due_date == link_data.due_date,
-            )
-            .first()
-        )
+        assignment = _assignment_for_link(db, link_data, result, "due_date")
         if assignment is None:
             result.import_log.append(
                 f"Skipped assignment attachment '{link_data.title}' "

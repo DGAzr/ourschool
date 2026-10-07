@@ -475,20 +475,23 @@ def get_shop_image(
     Immutable cache + ETag/304. Not gated behind the shop-enabled switch so
     plain ``<img src>`` keeps working.
     """
-    # 304 short-circuit: the external_id is the ETag (content is immutable).
-    etag = f'"{image_id}"'
-    if request.headers.get("if-none-match") == etag:
-        return Response(status_code=304, headers={"ETag": etag})
-
     result = image_storage.get_image(db, image_id)
     if result is None:
         raise HTTPException(status_code=404, detail="Image not found")
     data, mime = result
+    try:
+        image_storage.validate_stored_image(data, mime)
+    except ValueError:
+        raise HTTPException(status_code=404, detail="Image is invalid; re-upload it")
+    etag = f'"{image_id}"'
+    if request.headers.get("if-none-match") == etag:
+        return Response(status_code=304, headers={"ETag": etag})
     return Response(
         content=data,
         media_type=mime,
         headers={
             "Cache-Control": "public, max-age=31536000, immutable",
             "ETag": etag,
+            "X-Content-Type-Options": "nosniff",
         },
     )

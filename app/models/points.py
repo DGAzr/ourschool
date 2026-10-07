@@ -24,6 +24,8 @@ This module handles the gamification system where students earn points through:
 Points are separate from academic grades and can be used for external rewards.
 """
 
+import uuid
+
 from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Text, Boolean
 from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship
@@ -81,6 +83,9 @@ class PointTransaction(Base):
     __tablename__ = "point_transactions"
 
     id = Column(Integer, primary_key=True, index=True)
+    external_id = Column(
+        String(36), unique=True, nullable=False, default=lambda: str(uuid.uuid4())
+    )
     student_id = Column(
         Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
     )

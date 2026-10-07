@@ -41,6 +41,7 @@ export interface SystemBackupFile {
   users?: Record<string, unknown>[]
   subjects?: Record<string, unknown>[]
   terms?: Record<string, unknown>[]
+  assignment_types?: Record<string, unknown>[]
   assignment_templates?: Record<string, unknown>[]
   term_subjects?: Record<string, unknown>[]
   student_assignments?: Record<string, unknown>[]

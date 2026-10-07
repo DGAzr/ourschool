@@ -265,6 +265,9 @@ class GradeHistory(Base):
     __tablename__ = "grade_history"
 
     id = Column(Integer, primary_key=True, index=True)
+    external_id = Column(
+        String(36), unique=True, nullable=False, default=lambda: str(uuid.uuid4())
+    )
     student_term_grade_id = Column(
         Integer, ForeignKey("student_term_grades.id"), nullable=False
     )

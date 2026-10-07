@@ -22,6 +22,7 @@ from typing import List, Optional, Tuple
 from datetime import datetime, timezone
 from sqlalchemy.orm import Session, joinedload, make_transient
 from sqlalchemy import and_, desc, func
+from sqlalchemy.dialects.postgresql import insert
 
 from app.models.points import StudentPoints, PointTransaction, SystemSettings
 from app.models.user import User
@@ -83,17 +84,28 @@ def get_or_create_student_points(db: Session, student_id: int) -> StudentPoints:
     )
 
     if not student_points:
-        student_points = StudentPoints(
-            student_id=student_id, current_balance=0, total_earned=0, total_spent=0
+        # Concurrent first requests must not race a plain INSERT. Transaction
+        # ownership remains with grading/shop callers (including savepoints).
+        db.execute(
+            insert(StudentPoints)
+            .values(
+                student_id=student_id, current_balance=0, total_earned=0, total_spent=0
+            )
+            .on_conflict_do_nothing(index_elements=[StudentPoints.student_id])
         )
-        db.add(student_points)
-        # Flush (not commit) so this is safe inside callers' transactions —
-        # bulk-grade wraps each item in a SAVEPOINT and a commit here would
-        # close it. Callers that need persistence commit themselves.
-        db.flush()
-        db.refresh(student_points)
+        student_points = (
+            db.query(StudentPoints).filter(StudentPoints.student_id == student_id).one()
+        )
 
     return student_points
+
+
+def get_student_points_for_read(db: Session, student_id: int) -> StudentPoints:
+    """Ensure a durable balance and release insert locks before responding."""
+    points = get_or_create_student_points(db, student_id)
+    db.commit()
+    db.refresh(points)
+    return points
 
 
 def create_point_transaction(
@@ -258,7 +270,7 @@ def get_student_points_ledger(
     """Get student points and paginated transaction history."""
     from app.models.assignment import StudentAssignment, AssignmentTemplate
 
-    student_points = get_or_create_student_points(db, student_id)
+    student_points = get_student_points_for_read(db, student_id)
 
     total_transactions = (
         db.query(PointTransaction)

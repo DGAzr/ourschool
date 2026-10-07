@@ -153,6 +153,9 @@ class StudentAssignment(Base):
     )
 
     id = Column(Integer, primary_key=True, index=True)
+    external_id = Column(
+        String(36), unique=True, nullable=False, default=lambda: str(uuid.uuid4())
+    )
 
     # References
     template_id = Column(Integer, ForeignKey("assignment_templates.id"), nullable=False)
@@ -461,6 +464,9 @@ class AssignmentTimeEntry(Base):
     )
 
     id = Column(Integer, primary_key=True, index=True)
+    external_id = Column(
+        String(36), unique=True, nullable=False, default=lambda: str(uuid.uuid4())
+    )
     assignment_id = Column(
         Integer,
         ForeignKey("student_assignments.id", ondelete="CASCADE"),

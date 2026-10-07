@@ -455,7 +455,9 @@ def test_preview_resolves_new_parent_records_without_persisting_them(
         external_id=str(uuid.uuid4()),
     )
     new_assignment.update(
-        student_email=new_email, student_external_id=new_student["external_id"]
+        student_email=new_email,
+        student_external_id=new_student["external_id"],
+        external_id=str(uuid.uuid4()),
     )
     backup["users"] = [new_student]
     backup["student_assignments"] = [new_assignment]

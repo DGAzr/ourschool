@@ -30,7 +30,7 @@ import {
 export const isSystemBackupFile = (value: unknown): value is SystemBackupFile => {
   if (typeof value !== 'object' || value === null) return false
   const record = value as Record<string, unknown>
-  return typeof record.format_version === 'string' && ['1.0','2.0','2.1','2.2','2.3','2.4','2.5'].includes(record.format_version) && typeof record.backup_timestamp === 'string' && Number.isFinite(Date.parse(record.backup_timestamp)) && typeof record.created_by==='string' && ['users','subjects','terms','assignment_templates','student_assignments'].every(key=>Array.isArray(record[key]))
+  return typeof record.format_version === 'string' && ['1.0','2.0','2.1','2.2','2.3','2.4','2.5','2.6'].includes(record.format_version) && typeof record.backup_timestamp === 'string' && Number.isFinite(Date.parse(record.backup_timestamp)) && typeof record.created_by==='string' && ['users','subjects','terms','assignment_templates','student_assignments'].every(key=>Array.isArray(record[key]))
 }
 
 export const backupApi = {

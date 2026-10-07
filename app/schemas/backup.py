@@ -28,6 +28,9 @@ DateType = date
 class UserBackup(BaseModel):
     """Schema for backing up user data."""
 
+    parent_external_id: Optional[str] = None
+    parent_email: Optional[str] = None
+
     external_id: Optional[str] = (
         None  # Stable cross-version identity (added format 2.0)
     )
@@ -52,6 +55,8 @@ class UserBackup(BaseModel):
 class SubjectBackup(BaseModel):
     """Schema for backing up subject data."""
 
+    created_at: Optional[datetime] = None
+
     external_id: Optional[str] = (
         None  # Stable cross-version identity (added format 2.0)
     )
@@ -63,6 +68,8 @@ class SubjectBackup(BaseModel):
 
 class AssignmentTemplateBackup(BaseModel):
     """Schema for backing up assignment template data."""
+
+    created_by_external_id: Optional[str] = None
 
     external_id: Optional[str] = (
         None  # Stable cross-version identity (added format 2.0)
@@ -80,6 +87,8 @@ class AssignmentTemplateBackup(BaseModel):
     materials_needed: Optional[str] = None
     is_exportable: bool = True
     is_library: bool = True
+    is_archived: bool = False
+    export_data: Optional[str] = None
     created_by_email: str  # User email for resolution
     created_at: datetime
     updated_at: datetime
@@ -94,6 +103,16 @@ class HelpRequestBackup(BaseModel):
 
 class StudentAssignmentBackup(BaseModel):
     """Schema for backing up student assignment data."""
+
+    external_id: Optional[str] = None
+    lesson_external_id: Optional[str] = None
+    assigned_by_external_id: Optional[str] = None
+    assigned_by_email: Optional[str] = None
+    graded_by_external_id: Optional[str] = None
+    graded_by_email: Optional[str] = None
+    is_graded: Optional[bool] = None
+    graded_date: Optional[date] = None
+    percentage_grade: Optional[float] = None
 
     student_external_id: Optional[str] = None  # Preferred resolution key (format 2.0)
     student_email: str  # Fallback resolution key
@@ -126,6 +145,9 @@ class StudentAssignmentBackup(BaseModel):
 class AssignmentTimeEntryBackup(BaseModel):
     """Schema for preserving assignment work-session history."""
 
+    external_id: Optional[str] = None
+    assignment_external_id: Optional[str] = None
+
     student_external_id: Optional[str] = None
     student_email: str
     template_external_id: Optional[str] = None
@@ -143,6 +165,12 @@ class AssignmentTimeEntryBackup(BaseModel):
 class TermBackup(BaseModel):
     """Schema for backing up term data."""
 
+    description: Optional[str] = None
+    is_active: bool = False
+    term_order: int = 0
+    created_by_external_id: Optional[str] = None
+    created_by_email: Optional[str] = None
+
     external_id: Optional[str] = (
         None  # Stable cross-version identity (added format 2.0)
     )
@@ -159,6 +187,12 @@ class TermBackup(BaseModel):
 class TermSubjectBackup(BaseModel):
     """Schema for backing up term-subject relationships."""
 
+    is_active: bool = True
+    grading_scale: Optional[str] = None
+    learning_goals: Optional[str] = None
+    teacher_notes: Optional[str] = None
+    created_at: Optional[datetime] = None
+
     term_external_id: Optional[str] = None  # Preferred resolution key (format 2.0)
     term_name: str  # Fallback resolution key
     subject_external_id: Optional[str] = None  # Preferred resolution key (format 2.0)
@@ -169,6 +203,17 @@ class TermSubjectBackup(BaseModel):
 
 class StudentTermGradeBackup(BaseModel):
     """Schema for backing up student term grades."""
+
+    finalized_date: Optional[date] = None
+    finalized_by_external_id: Optional[str] = None
+    finalized_by_email: Optional[str] = None
+    attendance_rate: Optional[float] = None
+    student_reflection: Optional[str] = None
+    parent_notes: Optional[str] = None
+    learning_goals: Optional[str] = None
+    areas_for_improvement: Optional[str] = None
+    strengths: Optional[str] = None
+    last_calculated: Optional[datetime] = None
 
     student_external_id: Optional[str] = None
     student_email: str  # Fallback resolution key
@@ -195,7 +240,15 @@ class StudentTermGradeBackup(BaseModel):
 class GradeHistoryBackup(BaseModel):
     """Schema for backing up grade history audit entries."""
 
-    student_email: str  # For reference (import is skipped — audit data only)
+    external_id: Optional[str] = None
+    student_external_id: Optional[str] = None
+    term_external_id: Optional[str] = None
+    subject_external_id: Optional[str] = None
+    assignment_external_id: Optional[str] = None
+    changed_by_external_id: Optional[str] = None
+    changed_by_email: Optional[str] = None
+
+    student_email: str  # Fallback resolution key
     term_name: str
     subject_name: str
     field_name: str
@@ -207,6 +260,9 @@ class GradeHistoryBackup(BaseModel):
 
 class SystemSettingsBackup(BaseModel):
     """Schema for backing up system settings."""
+
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
 
     setting_key: str
     setting_value: str
@@ -227,8 +283,20 @@ class AttendanceRecordBackup(BaseModel):
     updated_at: datetime
 
 
+class JournalReplyBackup(BaseModel):
+    external_id: Optional[str] = None
+    author_external_id: Optional[str] = None
+    author_email: str
+    text: str
+    created_at: datetime
+
+
 class JournalEntryBackup(BaseModel):
     """Schema for backing up journal entries."""
+
+    external_id: Optional[str] = None
+    entry_date: Optional[datetime] = None
+    replies: List["JournalReplyBackup"] = []
 
     user_external_id: Optional[str] = None
     user_email: str  # Fallback resolution key
@@ -271,6 +339,13 @@ class StudentPointsBackup(BaseModel):
 
 class PointTransactionBackup(BaseModel):
     """Schema for backing up individual point transactions."""
+
+    external_id: Optional[str] = None
+    source_assignment_external_id: Optional[str] = None
+    source_journal_external_id: Optional[str] = None
+    admin_external_id: Optional[str] = None
+    admin_email: Optional[str] = None
+    actor_name: Optional[str] = None
 
     student_external_id: Optional[str] = None
     student_email: str  # Fallback resolution key
@@ -333,11 +408,13 @@ class ShopRedemptionBackup(BaseModel):
 
     The item is resolved by external_id on restore (optional — a deleted item
     just leaves item_id NULL, and the snapshot fields preserve display).
-    Transaction-link FKs (point_transaction_id, refund_transaction_id) and
-    decided_by are intentionally dropped on restore: point transactions carry
-    no stable external id, so those links can't be rebuilt. Ledger totals still
-    restore correctly via student_points + point_transactions.
+    Transaction links and decision authors use stable identities on restore.
     """
+
+    point_transaction_external_id: Optional[str] = None
+    refund_transaction_external_id: Optional[str] = None
+    decided_by_external_id: Optional[str] = None
+    decided_by_email: Optional[str] = None
 
     external_id: str
     student_external_id: Optional[str] = None
@@ -531,9 +608,10 @@ class TemplatePaperlessMaterialBackup(PaperlessAttachmentBackupBase):
 class StudentAssignmentPaperlessMaterialBackup(PaperlessAttachmentBackupBase):
     """A one-off Paperless document attached to a single assignment instance.
 
-    StudentAssignments carry no external_id; identity uses the same
-    (student, template, due_date) triple the assignment importer dedupes on.
+    Assignment identity is stable; the natural keys support older backups.
     """
+
+    assignment_external_id: Optional[str] = None
 
     student_external_id: Optional[str] = None
     student_email: str  # Fallback resolution key
@@ -545,11 +623,24 @@ class StudentAssignmentPaperlessMaterialBackup(PaperlessAttachmentBackupBase):
 # Complete system backup schema
 
 
+class AssignmentTypeBackup(BaseModel):
+    external_id: Optional[str] = None
+    key: str
+    name: str
+    color: str = "#3B82F6"
+    icon: Optional[str] = None
+    weight: float = Field(0, ge=0, le=100)
+    is_active: bool = True
+    display_order: int = 0
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
+
+
 class SystemBackup(BaseModel):
     """Complete system backup schema containing all data."""
 
     # Metadata
-    format_version: str = "2.5"
+    format_version: str = "2.6"
     backup_timestamp: datetime
     created_by: str
     system_info: Dict[str, Any] = {}
@@ -558,6 +649,7 @@ class SystemBackup(BaseModel):
     users: List[UserBackup] = []
     subjects: List[SubjectBackup] = []
     terms: List[TermBackup] = []
+    assignment_types: List[AssignmentTypeBackup] = []
     assignment_templates: List[AssignmentTemplateBackup] = []
     term_subjects: List[TermSubjectBackup] = []
 

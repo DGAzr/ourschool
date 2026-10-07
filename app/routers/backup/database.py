@@ -39,6 +39,7 @@ from app.schemas.backup import (
 )
 
 from .exporters import (
+    export_assignment_types,
     export_assignment_templates,
     export_assignment_time_entries,
     export_attendance_records,
@@ -114,7 +115,7 @@ def export_system_backup(
 
         # Create system backup
         backup = SystemBackup(
-            format_version="2.5",
+            format_version="2.6",
             backup_timestamp=datetime.now(timezone.utc),
             created_by=actor,
             system_info={
@@ -144,6 +145,7 @@ def export_system_backup(
             users=users_data,
             subjects=subjects_data,
             terms=terms_data,
+            assignment_types=export_assignment_types(db),
             assignment_templates=templates_data,
             term_subjects=term_subjects_data,
             student_assignments=student_assignments_data,

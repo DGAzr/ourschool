@@ -16,6 +16,7 @@
 
 """Journal models."""
 
+import uuid
 from datetime import datetime, timezone
 
 from sqlalchemy import (
@@ -39,6 +40,9 @@ class JournalEntry(Base):
     __tablename__ = "journal_entries"
 
     id = Column(Integer, primary_key=True, index=True)
+    external_id = Column(
+        String(36), unique=True, nullable=False, default=lambda: str(uuid.uuid4())
+    )
     student_id = Column(
         Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
     )
@@ -100,6 +104,9 @@ class JournalReply(Base):
     __tablename__ = "journal_replies"
 
     id = Column(Integer, primary_key=True, index=True)
+    external_id = Column(
+        String(36), unique=True, nullable=False, default=lambda: str(uuid.uuid4())
+    )
     entry_id = Column(
         Integer,
         ForeignKey("journal_entries.id", ondelete="CASCADE"),

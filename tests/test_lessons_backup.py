@@ -84,7 +84,7 @@ def test_lessons_backup_round_trip(
     r = client.get("/api/backup/export", headers=admin_headers)
     assert r.status_code == 200, r.text
     backup = r.json()
-    assert backup["format_version"] == "2.5"
+    assert backup["format_version"] == "2.6"
     drawer_export = next(
         lesson for lesson in backup["lessons"] if lesson["title"] == "Drawer Lesson"
     )

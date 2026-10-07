@@ -26,6 +26,7 @@ from app.models.assignment import (
     AssignmentTimeEntry,
     StudentAssignment,
 )
+from app.models.assignment_type import AssignmentTypeConfig
 from app.models.attendance import AttendanceRecord
 from app.models.journal import JournalEntry
 from app.models.lesson import Lesson
@@ -43,6 +44,7 @@ from app.models.subject import Subject
 from app.models.term import GradeHistory, StudentTermGrade, Term, TermSubject
 from app.models.user import User
 from app.schemas.backup import (
+    AssignmentTypeBackup,
     AssignmentTemplateBackup,
     AssignmentTimeEntryBackup,
     AttendanceRecordBackup,
@@ -75,6 +77,23 @@ from app.schemas.backup import (
 )
 
 
+def _user_ref(db, user_id, prefix):
+    user = db.get(User, user_id) if user_id is not None else None
+    return {
+        prefix + "_external_id": user.external_id if user else None,
+        prefix + "_email": user.email if user else None,
+    }
+
+
+def export_assignment_types(db: Session) -> List[AssignmentTypeBackup]:
+    return [
+        AssignmentTypeBackup(
+            **{key: getattr(row, key) for key in AssignmentTypeBackup.model_fields}
+        )
+        for row in db.query(AssignmentTypeConfig)
+    ]
+
+
 def export_users(db: Session) -> List[UserBackup]:
     """Export all users (excluding password hashes for security)."""
     users_data = []
@@ -82,6 +101,7 @@ def export_users(db: Session) -> List[UserBackup]:
     for user in users:
         users_data.append(
             UserBackup(
+                **_user_ref(db, user.parent_id, "parent"),
                 external_id=user.external_id,
                 email=user.email,
                 username=user.username,
@@ -111,6 +131,7 @@ def export_subjects(db: Session) -> List[SubjectBackup]:
     for subject in subjects:
         subjects_data.append(
             SubjectBackup(
+                created_at=subject.created_at,
                 external_id=subject.external_id,
                 name=subject.name,
                 description=subject.description,
@@ -128,6 +149,10 @@ def export_terms(db: Session) -> List[TermBackup]:
     for term in terms:
         terms_data.append(
             TermBackup(
+                **_user_ref(db, term.created_by, "created_by"),
+                description=term.description,
+                is_active=term.is_active,
+                term_order=term.term_order,
                 external_id=term.external_id,
                 name=term.name,
                 type=term.term_type.value,
@@ -155,6 +180,11 @@ def export_assignment_templates(db: Session) -> List[AssignmentTemplateBackup]:
 
         templates_data.append(
             AssignmentTemplateBackup(
+                created_by_external_id=(
+                    db.get(User, template.created_by).external_id
+                    if template.created_by
+                    else None
+                ),
                 external_id=template.external_id,
                 name=template.name,
                 description=template.description,
@@ -171,6 +201,8 @@ def export_assignment_templates(db: Session) -> List[AssignmentTemplateBackup]:
                 materials_needed=template.materials_needed,
                 is_exportable=template.is_exportable,
                 is_library=template.is_library,
+                is_archived=template.is_archived,
+                export_data=template.export_data,
                 created_by_email=creator_email,
                 created_at=template.created_at,
                 updated_at=template.updated_at,
@@ -186,6 +218,11 @@ def export_term_subjects(db: Session) -> List[TermSubjectBackup]:
     for ts in term_subjects:
         term_subjects_data.append(
             TermSubjectBackup(
+                is_active=ts.is_active,
+                grading_scale=ts.grading_scale,
+                learning_goals=ts.learning_goals,
+                teacher_notes=ts.teacher_notes,
+                created_at=ts.created_at,
                 term_external_id=ts.term.external_id if ts.term else None,
                 term_name=ts.term.name if ts.term else "Unknown",
                 subject_external_id=ts.subject.external_id if ts.subject else None,
@@ -203,6 +240,13 @@ def export_student_assignments(db: Session) -> List[StudentAssignmentBackup]:
     for sa in student_assignments:
         student_assignments_data.append(
             StudentAssignmentBackup(
+                external_id=sa.external_id,
+                lesson_external_id=sa.lesson.external_id if sa.lesson else None,
+                **_user_ref(db, sa.assigned_by, "assigned_by"),
+                **_user_ref(db, sa.graded_by, "graded_by"),
+                is_graded=sa.is_graded,
+                graded_date=sa.graded_date,
+                percentage_grade=sa.percentage_grade,
                 student_external_id=sa.student.external_id if sa.student else None,
                 student_email=sa.student.email if sa.student else "Unknown",
                 template_external_id=sa.template.external_id if sa.template else None,
@@ -263,6 +307,8 @@ def export_assignment_time_entries(db: Session) -> List[AssignmentTimeEntryBacku
         template = assignment.template if assignment else None
         result.append(
             AssignmentTimeEntryBackup(
+                external_id=entry.external_id,
+                assignment_external_id=assignment.external_id,
                 student_external_id=student.external_id if student else None,
                 student_email=student.email if student else "Unknown",
                 template_external_id=template.external_id if template else None,
@@ -292,6 +338,20 @@ def export_student_term_grades(db: Session) -> List[StudentTermGradeBackup]:
         subject = ts.subject if ts else None
         term_grades_data.append(
             StudentTermGradeBackup(
+                **_user_ref(db, grade.finalized_by, "finalized_by"),
+                **{
+                    key: getattr(grade, key)
+                    for key in (
+                        "finalized_date",
+                        "attendance_rate",
+                        "student_reflection",
+                        "parent_notes",
+                        "learning_goals",
+                        "areas_for_improvement",
+                        "strengths",
+                        "last_calculated",
+                    )
+                },
                 student_external_id=(
                     grade.student.external_id if grade.student else None
                 ),
@@ -331,6 +391,14 @@ def export_grade_history(db: Session) -> List[GradeHistoryBackup]:
         student = stg.student if stg else None
         grade_history_data.append(
             GradeHistoryBackup(
+                external_id=history.external_id,
+                student_external_id=student.external_id if student else None,
+                term_external_id=term.external_id if term else None,
+                subject_external_id=subject.external_id if subject else None,
+                assignment_external_id=(
+                    history.assignment.external_id if history.assignment else None
+                ),
+                **_user_ref(db, history.changed_by, "changed_by"),
                 student_email=student.email if student else "Unknown",
                 term_name=term.name if term else "Unknown",
                 subject_name=subject.name if subject else "Unknown",
@@ -372,6 +440,17 @@ def export_journal_entries(db: Session) -> List[JournalEntryBackup]:
     for entry in journal_entries:
         journal_data.append(
             JournalEntryBackup(
+                external_id=entry.external_id,
+                entry_date=entry.entry_date,
+                replies=[
+                    dict(
+                        external_id=reply.external_id,
+                        text=reply.text,
+                        created_at=reply.created_at,
+                        **_user_ref(db, reply.author_id, "author"),
+                    )
+                    for reply in entry.replies
+                ],
                 user_external_id=entry.author.external_id if entry.author else None,
                 user_email=entry.author.email if entry.author else "Unknown",
                 student_external_id=(
@@ -410,6 +489,8 @@ def export_system_settings(db: Session) -> List[SystemSettingsBackup]:
     for setting in db.query(SystemSettings).all():
         settings_data.append(
             SystemSettingsBackup(
+                created_at=setting.created_at,
+                updated_at=setting.updated_at,
                 setting_key=setting.setting_key,
                 setting_value=setting.setting_value,
                 setting_type=setting.setting_type,
@@ -446,10 +527,27 @@ def export_student_points(db: Session) -> List[StudentPointsBackup]:
 
 def export_point_transactions(db: Session) -> List[PointTransactionBackup]:
     """Export all point transactions in chronological order."""
+    assignments = dict(
+        db.query(StudentAssignment.id, StudentAssignment.external_id).all()
+    )
+    journals = dict(db.query(JournalEntry.id, JournalEntry.external_id).all())
     transactions_data = []
     for tx in db.query(PointTransaction).order_by(PointTransaction.created_at).all():
         transactions_data.append(
             PointTransactionBackup(
+                external_id=tx.external_id,
+                source_assignment_external_id=(
+                    assignments.get(tx.source_id)
+                    if tx.transaction_type == "assignment"
+                    else None
+                ),
+                source_journal_external_id=(
+                    journals.get(tx.source_id)
+                    if tx.transaction_type == "journal_submission"
+                    else None
+                ),
+                **_user_ref(db, tx.admin_id, "admin"),
+                actor_name=tx.actor_name,
                 student_external_id=tx.student.external_id if tx.student else None,
                 student_email=tx.student.email if tx.student else "Unknown",
                 amount=tx.amount,
@@ -520,9 +618,11 @@ def export_shop_items(db: Session) -> List[ShopItemBackup]:
 def export_shop_redemptions(db: Session) -> List[ShopRedemptionBackup]:
     """Export all shop redemptions.
 
-    Transaction-link FKs and decided_by are not exported: point transactions
-    carry no stable external id, so those links can't be rebuilt on restore.
+    Includes transaction links and decision authors by stable identity.
     """
+    transactions = dict(
+        db.query(PointTransaction.id, PointTransaction.external_id).all()
+    )
     redemptions = []
     query = db.query(ShopRedemption).options(
         joinedload(ShopRedemption.student), joinedload(ShopRedemption.item)
@@ -530,6 +630,11 @@ def export_shop_redemptions(db: Session) -> List[ShopRedemptionBackup]:
     for r in query.all():
         redemptions.append(
             ShopRedemptionBackup(
+                point_transaction_external_id=transactions.get(r.point_transaction_id),
+                refund_transaction_external_id=transactions.get(
+                    r.refund_transaction_id
+                ),
+                **_user_ref(db, r.decided_by, "decided_by"),
                 external_id=r.external_id,
                 student_external_id=r.student.external_id if r.student else None,
                 student_email=r.student.email if r.student else "Unknown",
@@ -753,8 +858,7 @@ def export_student_assignment_paperless_materials(
 ) -> List[StudentAssignmentPaperlessMaterialBackup]:
     """Export one-off assignment ↔ document attachments.
 
-    StudentAssignments have no external_id, so links are keyed by the same
-    (student, template, due_date) triple the assignment importer dedupes on.
+    Assignments are referenced by stable identity.
     Links whose assignment lost its student or template can't be re-keyed and
     are skipped.
     """
@@ -774,6 +878,7 @@ def export_student_assignment_paperless_materials(
             continue
         exported.append(
             StudentAssignmentPaperlessMaterialBackup(
+                assignment_external_id=sa.external_id,
                 student_external_id=sa.student.external_id,
                 student_email=sa.student.email,
                 template_external_id=sa.template.external_id,

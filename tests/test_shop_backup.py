@@ -175,11 +175,14 @@ def test_shop_backup_round_trip(
     restored_item2 = next(i for i in all_items if i["name"] == "BackupItem2")
     assert r.json()["goal_item_id"] == restored_item2["id"]
 
-    # Image bytes restored intact.
+    # Safe lossless normalization preserves the exact decoded pixels.
     restored_image_id = restored_item["image_ids"][0]
     r = client.get(f"/api/shop/images/{restored_image_id}")
     assert r.status_code == 200
-    assert r.content == original_bytes
+    assert (
+        Image.open(io.BytesIO(r.content)).convert("RGBA").tobytes()
+        == Image.open(io.BytesIO(original_bytes)).convert("RGBA").tobytes()
+    )
 
     # Redemption restored (external_id preserved, snapshot intact).
     r = client.get("/api/shop/my-redemptions", headers=student_headers)

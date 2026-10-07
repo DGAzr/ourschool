@@ -19,8 +19,7 @@
 Images are stored as bytea rows in ``shop_images`` so they ride along in DB
 backups and each deployment stays DB-only. Routes call only the four functions
 below — ``process_upload``, ``store_image``, ``get_image``, ``delete_image`` —
-so an S3-backed implementation could replace this module without touching the
-routers or the frontend (the ``db`` param would simply be ignored).
+so approved shop images remain included in JSON backups and restores.
 """
 
 import io
@@ -36,14 +35,16 @@ MAX_UPLOAD_BYTES = 10 * 1024 * 1024  # 10 MB
 # Longest edge after downscale.
 MAX_EDGE = 1200
 JPEG_QUALITY = 85
+MAX_IMAGE_PIXELS = 16_000_000
 
 
-def process_upload(raw: bytes) -> Tuple[bytes, str]:
+def process_upload(raw: bytes, *, lossless: bool = False) -> Tuple[bytes, str]:
     """Validate, normalize, downscale and re-encode an uploaded image.
 
     Returns ``(data, mime_type)``. Raises ``ValueError`` for non-images or
     oversize uploads. Images with an alpha channel are saved as PNG; everything
-    else is flattened and saved as JPEG (q85).
+    else is flattened and saved as JPEG (q85). Backup restores use
+    ``lossless=True`` to preserve decoded pixels across repeated restores.
 
     The client-declared MIME type is deliberately ignored — the output type is
     derived from the actual decoded pixels (Pillow), which is both more robust
@@ -58,6 +59,8 @@ def process_upload(raw: bytes) -> Tuple[bytes, str]:
 
     try:
         image = Image.open(io.BytesIO(raw))
+        if image.width * image.height > MAX_IMAGE_PIXELS:
+            raise ValueError("Image dimensions exceed the pixel limit")
         image.verify()  # detect truncated/garbage data
     except Exception as exc:  # noqa: BLE001 - normalize any decode failure
         raise ValueError("Uploaded file is not a valid image") from exc
@@ -76,8 +79,8 @@ def process_upload(raw: bytes) -> Tuple[bytes, str]:
     )
 
     out = io.BytesIO()
-    if has_alpha:
-        image = image.convert("RGBA")
+    if has_alpha or lossless:
+        image = image.convert("RGBA" if has_alpha else "RGB")
         image.save(out, format="PNG", optimize=True)
         mime = "image/png"
     else:
@@ -86,6 +89,23 @@ def process_upload(raw: bytes) -> Tuple[bytes, str]:
         mime = "image/jpeg"
 
     return out.getvalue(), mime
+
+
+def validate_stored_image(data: bytes, mime: str) -> None:
+    """Reject unsafe legacy rows without deleting their stored bytes."""
+    formats = {"image/png": "PNG", "image/jpeg": "JPEG"}
+    if mime not in formats or not data or len(data) > MAX_UPLOAD_BYTES:
+        raise ValueError("Stored image is unsafe")
+    try:
+        with Image.open(io.BytesIO(data)) as image:
+            if (
+                image.format != formats[mime]
+                or image.width * image.height > MAX_IMAGE_PIXELS
+            ):
+                raise ValueError("Stored image is unsafe")
+            image.verify()
+    except Exception as exc:
+        raise ValueError("Stored image is unsafe") from exc
 
 
 def store_image(db: Session, data: bytes, mime: str) -> str:
