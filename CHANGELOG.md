@@ -6,6 +6,8 @@ All notable changes to OurSchool are documented here.
 
 ## [Unreleased]
 
+## [v1.1] — 2026-10-07
+
 ### PIN-protected student switching
 
 - Administrators can choose **Switch to Student** from their account-name menu,
