@@ -29,16 +29,71 @@ def restore(client, headers, backup, **options):
 
 
 def canonical(backup):
-    """Compare school data independently of export timing and local row IDs."""
+    """Ignore export timing, local IDs, and unordered lesson membership."""
     data = copy.deepcopy(backup)
     for key in ("backup_timestamp", "created_by", "system_info"):
         data.pop(key)
     for user in data["users"]:
         user.pop("parent_id")
+    # Student membership has no defined order; materials/resources do.
+    for lesson in data["lessons"]:
+        lesson["students"].sort(key=lambda student: str(sorted(student.items())))
     for value in data.values():
         if isinstance(value, list):
             value.sort(key=lambda row: str(sorted(row.items())))
     return data
+
+
+@pytest.mark.parametrize("order", [(2, 0, 1), (1, 2, 0), (2, 1, 0)])
+def test_canonical_ignores_lesson_student_order_without_mutating_backup(order):
+    students = [
+        {"student_external_id": f"student-{i}", "student_email": f"s{i}@test.local"}
+        for i in range(3)
+    ]
+    before = {
+        "backup_timestamp": "2026-10-07T00:00:00Z",
+        "created_by": "admin",
+        "system_info": {},
+        "users": [],
+        "lessons": [{"external_id": "lesson", "students": students}],
+    }
+    after = copy.deepcopy(before)
+    after["lessons"][0]["students"] = [students[i] for i in order]
+    original = copy.deepcopy(after)
+
+    assert canonical(after) == canonical(before)
+    assert after == original
+
+
+@pytest.mark.parametrize("change", ["missing", "duplicate", "email", "materials"])
+def test_canonical_preserves_lesson_membership_and_ordered_content(change):
+    before = {
+        "backup_timestamp": "2026-10-07T00:00:00Z",
+        "created_by": "admin",
+        "system_info": {},
+        "users": [],
+        "lessons": [
+            {
+                "external_id": "lesson",
+                "students": [
+                    {"student_external_id": "student", "student_email": "s@test.local"}
+                ],
+                "materials": [{"text": "First"}, {"text": "Second"}],
+            }
+        ],
+    }
+    after = copy.deepcopy(before)
+    lesson = after["lessons"][0]
+    if change == "missing":
+        lesson["students"].clear()
+    elif change == "duplicate":
+        lesson["students"].append(copy.deepcopy(lesson["students"][0]))
+    elif change == "email":
+        lesson["students"][0]["student_email"] = "changed@test.local"
+    else:
+        lesson["materials"].reverse()
+
+    assert canonical(after) != canonical(before)
 
 
 @pytest.mark.parametrize("wipe", [False, True])
