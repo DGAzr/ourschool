@@ -34,6 +34,8 @@ class UserBackup(BaseModel):
     external_id: Optional[str] = (
         None  # Stable cross-version identity (added format 2.0)
     )
+    oidc_issuer: Optional[str] = None
+    oidc_subject: Optional[str] = None
     email: str
     username: str
     first_name: str

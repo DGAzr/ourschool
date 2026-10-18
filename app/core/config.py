@@ -40,6 +40,20 @@ class Settings(BaseSettings):
     access_token_expire_minutes: int = Field(
         default=30, env="ACCESS_TOKEN_EXPIRE_MINUTES"
     )
+    # Optional OpenID Connect authentication.
+    oidc_enabled: bool = False
+    oidc_issuer_url: str = ""
+    oidc_client_id: str = ""
+    oidc_client_secret: Optional[str] = None
+    oidc_redirect_uri: Optional[str] = None
+    oidc_scopes: str = "openid email profile"
+    oidc_button_label: str = "Sign in with SSO"
+    oidc_user_match_claim: str = "email"
+    oidc_allow_unverified_email: bool = False
+    oidc_auto_provision: bool = False
+    oidc_allow_admin_linking: bool = False
+    oidc_disable_local_login: bool = False
+
     # Request hardening
     # Maximum accepted request body size in bytes (default 256 MiB). Protects
     # memory-heavy endpoints such as backup import from oversized payloads.

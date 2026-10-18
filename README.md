@@ -285,3 +285,10 @@ This program is free software: you can redistribute it and/or modify it under th
 This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU Affero General Public License for more details.
 
 You should have received a copy of the GNU Affero General Public License along with this program. If not, see <https://www.gnu.org/licenses/>.
+
+### Optional single sign-on
+
+OurSchool supports generic OpenID Connect (OIDC), including Pocket ID, Authentik,
+Keycloak and Authelia. It is off by default and uses existing accounts and browser
+sessions. See [OIDC setup](docs/oidc.md) for configuration, optional student
+provisioning, and recovery when password login is disabled.

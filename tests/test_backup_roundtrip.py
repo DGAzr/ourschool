@@ -486,3 +486,97 @@ def test_wipe_preview_matches_restore_counts_and_rolls_back(
     assert {k: v for k, v in backup.items() if isinstance(v, list)} == {
         k: v for k, v in after.items() if isinstance(v, list)
     }
+
+
+def test_oidc_identity_roundtrip(client, admin_headers, student_factory, db_session):
+    from app.models.user import User
+
+    student, _ = student_factory()
+    user = db_session.get(User, student["id"])
+    user.oidc_issuer = "https://backup-id.example"
+    user.oidc_subject = str(user.id)
+    db_session.commit()
+    backup = _export(client, admin_headers)
+    saved = next(item for item in backup["users"] if item["email"] == user.email)
+    assert saved["oidc_issuer"] == user.oidc_issuer
+    assert saved["oidc_subject"] == user.oidc_subject
+    user.oidc_issuer = None
+    user.oidc_subject = None
+    db_session.commit()
+    response = client.post(
+        "/api/backup/import",
+        headers=admin_headers,
+        json={
+            "backup_data": backup,
+            "import_options": {
+                "skip_existing_users": False,
+                "update_existing_data": True,
+            },
+        },
+    )
+    assert response.status_code == 200, response.text
+    assert response.json()["success"], response.json()
+    db_session.refresh(user)
+    assert user.oidc_issuer == saved["oidc_issuer"]
+    assert user.oidc_subject == saved["oidc_subject"]
+
+
+def _restore_update(client, admin_headers, backup):
+    response = client.post(
+        "/api/backup/import",
+        headers=admin_headers,
+        json={
+            "backup_data": backup,
+            "import_options": {
+                "skip_existing_users": False,
+                "update_existing_data": True,
+            },
+        },
+    )
+    assert response.status_code == 200, response.text
+    assert response.json()["success"], response.json()
+    return response.json()
+
+
+def test_older_backup_keeps_existing_oidc_link(
+    client, admin_headers, student_factory, db_session
+):
+    from app.models.user import User
+
+    student, _ = student_factory()
+    user = db_session.get(User, student["id"])
+    backup = _export(client, admin_headers)
+    for item in backup["users"]:
+        item.pop("oidc_issuer", None)
+        item.pop("oidc_subject", None)
+    user.oidc_issuer = "https://older-backup.example"
+    user.oidc_subject = f"keep-{user.id}"
+    db_session.commit()
+    _restore_update(client, admin_headers, backup)
+    db_session.refresh(user)
+    assert user.oidc_issuer == "https://older-backup.example"
+    assert user.oidc_subject == f"keep-{user.id}"
+
+
+def test_restore_skips_oidc_identity_held_by_another_user(
+    client, admin_headers, student_factory, db_session
+):
+    from app.models.user import User
+
+    first, _ = student_factory()
+    second, _ = student_factory()
+    first_user = db_session.get(User, first["id"])
+    second_user = db_session.get(User, second["id"])
+    first_user.oidc_issuer = "https://conflict.example"
+    first_user.oidc_subject = f"taken-{first_user.id}"
+    db_session.commit()
+    backup = _export(client, admin_headers)
+    saved = next(i for i in backup["users"] if i["email"] == second_user.email)
+    saved["oidc_issuer"] = "https://conflict.example"
+    saved["oidc_subject"] = f"taken-{first_user.id}"
+    body = _restore_update(client, admin_headers, backup)
+    assert any("SSO link" in w for w in body.get("warnings", [])), body
+    db_session.refresh(first_user)
+    db_session.refresh(second_user)
+    assert first_user.oidc_subject == f"taken-{first_user.id}"
+    assert second_user.oidc_subject is None

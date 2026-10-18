@@ -321,6 +321,13 @@ def import_system_data(
             result.errors.extend(validation_errors)
             return result
 
+        # Re-parsing below marks every field as set. Remember which users the
+        # backup actually carries SSO links for (older backups have none).
+        oidc_link_keys = {
+            user.external_id or user.email
+            for user in backup_data.users
+            if {"oidc_issuer", "oidc_subject"} & user.model_fields_set
+        }
         backup_dict = sanitize_import_data(backup_data.model_dump())
         backup_data = SystemBackup(**backup_dict)
 
@@ -359,7 +366,13 @@ def import_system_data(
 
         # Import in dependency order
         _import_users(
-            db, backup_data.users, result, import_options, False, current_user
+            db,
+            backup_data.users,
+            result,
+            import_options,
+            False,
+            current_user,
+            oidc_link_keys=oidc_link_keys,
         )
         _import_subjects(db, backup_data.subjects, result, False)
         _import_terms(db, backup_data.terms, result, False)
@@ -448,8 +461,28 @@ def import_system_data(
         return result
 
 
+def _oidc_identity_taken(db: Session, user_data, own_id) -> bool:
+    """Whether another local user already holds this backup's SSO identity."""
+    if not user_data.oidc_issuer or not user_data.oidc_subject:
+        return False
+    query = db.query(User.id).filter(
+        User.oidc_issuer == user_data.oidc_issuer,
+        User.oidc_subject == user_data.oidc_subject,
+    )
+    if own_id is not None:
+        query = query.filter(User.id != own_id)
+    return query.first() is not None
+
+
 def _import_users(
-    db: Session, users_data, result, import_options, dry_run, current_user
+    db: Session,
+    users_data,
+    result,
+    import_options,
+    dry_run,
+    current_user,
+    *,
+    oidc_link_keys: set,
 ):
     """Import users. Builds two resolution maps: by external_id and by email."""
     by_uuid: Dict[str, int] = {}
@@ -535,6 +568,16 @@ def _import_users(
                 else None
             )
             if existing_user and import_options.get("update_existing_data", False):
+                # Older backups omit SSO links; keep the current link then.
+                if (user_data.external_id or user_data.email) in oidc_link_keys:
+                    if _oidc_identity_taken(db, user_data, existing_user.id):
+                        result.warnings.append(
+                            f"SSO link for {user_data.email} skipped: identity "
+                            "already linked to another user."
+                        )
+                    else:
+                        existing_user.oidc_issuer = user_data.oidc_issuer
+                        existing_user.oidc_subject = user_data.oidc_subject
                 existing_user.first_name = user_data.first_name
                 existing_user.last_name = user_data.last_name
                 existing_user.username = user_data.username
@@ -559,6 +602,17 @@ def _import_users(
             else:
                 import uuid as _uuid
 
+                # Never copy an SSO identity onto a renamed duplicate or onto a
+                # user when another local account already holds it.
+                keep_oidc = not existing_user and not _oidc_identity_taken(
+                    db, user_data, None
+                )
+                if not keep_oidc and user_data.oidc_subject:
+                    result.warnings.append(
+                        f"SSO link for {user_data.email} skipped: identity "
+                        "already linked to another user."
+                    )
+
                 new_user = User(
                     external_id=user_data.external_id or str(_uuid.uuid4()),
                     email=user_data.email,
@@ -567,6 +621,8 @@ def _import_users(
                         if existing_user
                         else user_data.username
                     ),
+                    oidc_issuer=None if not keep_oidc else user_data.oidc_issuer,
+                    oidc_subject=None if not keep_oidc else user_data.oidc_subject,
                     hashed_password="needs_reset",
                     first_name=user_data.first_name,
                     last_name=user_data.last_name,

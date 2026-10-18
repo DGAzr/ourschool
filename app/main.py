@@ -49,6 +49,7 @@ from app.routers import (
     journal,
     lessons,
     meta,
+    oidc,
     paperless,
     performance,
     points,
@@ -192,6 +193,7 @@ async def request_logging_middleware(request: Request, call_next):
     return response
 
 
+app.include_router(oidc.router, prefix="/api/auth/oidc", tags=["authentication"])
 app.include_router(auth.router, prefix="/api/auth", tags=["authentication"])
 app.include_router(users.router, prefix="/api/users", tags=["users"])
 app.include_router(activity.router, prefix="/api/activity", tags=["activity"])
