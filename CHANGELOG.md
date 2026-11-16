@@ -6,6 +6,22 @@ All notable changes to OurSchool are documented here.
 
 ## [Unreleased]
 
+### Optional OpenID Connect sign-on (#36)
+
+- Self-hosters can enable OIDC with PKCE for Pocket ID, Authentik, Keycloak,
+  Authelia and other discovery-compatible providers. Existing browser sessions
+  and password login remain unchanged by default. Includes a reversible migration for stable OIDC issuer/subject account bindings.
+- Optional student provisioning and password-login disabling are configurable;
+  see [OIDC setup](docs/oidc.md).
+- Administrator SSO requires fresh provider authentication. Temporary local
+  passwords and their sessions are invalidated before SSO lifts password-change
+  restrictions. Account linking is serialized, UserInfo email verification stays
+  attached to its address, and provisioning can fetch its required UserInfo claims.
+- Single-key providers can omit the ID-token key identifier. The nginx callback
+  route keeps authorization codes out of access logs and asset request referrers.
+
+## [v1.1] — 2026-10-07
+
 ### PIN-protected student switching
 
 - Administrators can choose **Switch to Student** from their account-name menu,

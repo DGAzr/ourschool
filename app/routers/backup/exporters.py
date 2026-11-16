@@ -103,6 +103,8 @@ def export_users(db: Session) -> List[UserBackup]:
             UserBackup(
                 **_user_ref(db, user.parent_id, "parent"),
                 external_id=user.external_id,
+                oidc_issuer=user.oidc_issuer,
+                oidc_subject=user.oidc_subject,
                 email=user.email,
                 username=user.username,
                 first_name=user.first_name,

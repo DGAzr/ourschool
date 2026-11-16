@@ -30,6 +30,7 @@ import ToastProvider from './components/ui/Toast'
 import { useEffect, Suspense, lazy } from 'react'
 
 // Lazy load pages for better performance
+const OIDCCallback = lazy(() => import('./pages/OIDCCallback'))
 const Login = lazy(() => import('./pages/Login'))
 const Dashboard = lazy(() => import('./pages/Dashboard'))
 const Attendance = lazy(() => import('./pages/Attendance'))
@@ -112,6 +113,7 @@ function AppContent() {
       <AssignmentTypesProvider>
       <Suspense fallback={<PageLoadingSpinner />}>
         <Routes>
+          <Route path="/auth/oidc/callback" element={<OIDCCallback />} />
           <Route path="/login" element={<Login />} />
           <Route path="/" element={<ProtectedRoute><RequirePasswordChange><Layout /></RequirePasswordChange></ProtectedRoute>}>
             <Route index element={<Dashboard />} />

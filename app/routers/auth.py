@@ -29,6 +29,7 @@ from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
 from sqlalchemy import or_
 
+from app.core.config import settings
 from app.core.database import get_db
 from app.core.logging import get_logger, log_authentication_event
 from app.core.security import get_password_hash, verify_password
@@ -129,7 +130,16 @@ def get_user_by_username(db: Session, username: str):
 
 def authenticate_user(db: Session, username: str, password: str):
     """Authenticate a user."""
-    user = get_user_by_username(db, username)
+    # Serialize password verification/session issuance with SSO invalidating a
+    # temporary password. Otherwise a login could verify the old hash and issue
+    # an unrestricted session after SSO has already revoked existing sessions.
+    user = (
+        db.query(User)
+        .filter(User.username == username)
+        .populate_existing()
+        .with_for_update()
+        .first()
+    )
     if not user:
         return False
     if not verify_password(password, user.hashed_password):
@@ -204,6 +214,8 @@ async def login_for_access_token(
     db: Annotated[Session, Depends(get_db)],
 ):
     """Login for access token."""
+    if settings.oidc_enabled and settings.oidc_disable_local_login:
+        raise HTTPException(403, "Password login is disabled. Use single sign-on.")
     ip = _client_ip(request)
     _check_login_rate_limit(ip, form_data.username)
 
@@ -243,8 +255,12 @@ async def login_for_access_token(
         and form_data.password == "admin123"
     ):
         user.must_change_password = True
-        db.commit()
 
+    return create_login_session(db, user)
+
+
+def create_login_session(db: Session, user: User, authentication_event: str = "login"):
+    """Create the same browser session for every authentication method."""
     # Opportunistic cleanup keeps expired session secrets out of the database.
     db.query(BrowserSession).filter(
         or_(
@@ -264,7 +280,7 @@ async def login_for_access_token(
     result = issue_session_token(db, session, user)
 
     log_authentication_event(
-        "login", user_id=str(user.id), username=user.username, success=True
+        authentication_event, user_id=str(user.id), username=user.username, success=True
     )
 
     return result

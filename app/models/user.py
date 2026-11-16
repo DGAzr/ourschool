@@ -29,6 +29,7 @@ from sqlalchemy import (
     ForeignKey,
     Integer,
     String,
+    UniqueConstraint,
 )
 from sqlalchemy.orm import relationship
 
@@ -41,6 +42,7 @@ class User(Base):
 
     __tablename__ = "users"
     __table_args__ = (
+        UniqueConstraint("oidc_issuer", "oidc_subject", name="uq_users_oidc_identity"),
         CheckConstraint(
             "student_ui_mode IN ('regular', 'simple')", name="ck_student_ui_mode"
         ),
@@ -50,6 +52,8 @@ class User(Base):
     external_id = Column(
         String(36), unique=True, nullable=False, default=lambda: str(uuid.uuid4())
     )
+    oidc_issuer = Column(String, nullable=True)
+    oidc_subject = Column(String, nullable=True)
     email = Column(String, unique=True, index=True, nullable=False)
     username = Column(String, unique=True, index=True, nullable=False)
     hashed_password = Column(String, nullable=False)

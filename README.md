@@ -4,7 +4,7 @@
 
 OurSchool is a self-hosted homeschool management system for families who take attendance seriously, grade assignments carefully, and really don't want to maintain a pile of spreadsheets. It handles the administrative grind — attendance, subjects, assignments, grading, reports, and a shameless gamification points system — so you can spend more time on the actual teaching.
 
-> **Public beta — `v1.1-beta5`**
+> **Stable release — [`v1.1`](https://github.com/DGAzr/ourschool/tree/v1.1)**
 >
 > Back up your data before every upgrade and review the [migration guide](docs/migrations.md) for upgrade guidance.
 
@@ -43,8 +43,8 @@ Requires Docker Compose 2.20 or later. Pull the official images from GHCR.
 
 ```bash
 # 1. Grab the compose file and sample env
-curl -O https://raw.githubusercontent.com/DGAzr/ourschool/main/docker-compose.ghcr.yml
-curl -O https://raw.githubusercontent.com/DGAzr/ourschool/main/env.EXAMPLE
+curl -O https://raw.githubusercontent.com/DGAzr/ourschool/v1.1/docker-compose.ghcr.yml
+curl -O https://raw.githubusercontent.com/DGAzr/ourschool/v1.1/env.EXAMPLE
 
 # 2. Set up your environment
 cp env.EXAMPLE .env
@@ -64,7 +64,7 @@ That's it. The backend runs migrations and seeds an admin account automatically 
 
 > 📌 **External database?** Set `DATABASE_URL` (or `DATABASE_*`) in `.env`, download `docker-compose.external-db.yml`, and add `-f docker-compose.external-db.yml` after the base file in every Compose command. Setting `DATABASE_URL` alone does not disable the bundled database. Do not enable the `local-db` profile. See the [deployment guide](docs/deployment.md#using-an-external-database).
 
-> 🏷️ **Image tag:** The compose file defaults to the published `v1.1-beta5` release. Set `IMAGE_TAG` in `.env` to select another published release. All published tags: [ghcr.io/dgazr/ourschool-backend](https://github.com/DGAzr/ourschool/pkgs/container/ourschool-backend).
+> 🏷️ **Image tag:** The compose file defaults to the `v1.1` release. Set `IMAGE_TAG` in `.env` to select another published release. All published tags: [ghcr.io/dgazr/ourschool-backend](https://github.com/DGAzr/ourschool/pkgs/container/ourschool-backend).
 
 
 ## 📸 Screenshots
@@ -262,8 +262,8 @@ docker compose -f docker-compose.yml -f docker-compose.dev.yml up --build
 Back up first, refresh your Compose files, and deploy frontend and backend
 together. Migrations run automatically. Keep the same project name and database
 volume; never use `down -v` when upgrading. External databases require the
-external override in every Compose command. Upgrading to beta5 requires everyone
-to sign in again. See the [deployment guide](docs/deployment.md) and
+external override in every Compose command. Upgrading from an earlier beta to
+v1.1 requires everyone to sign in again. See the [deployment guide](docs/deployment.md) and
 [release history](CHANGELOG.md) for details.
 
 **Security checklist before going live:**
@@ -285,3 +285,10 @@ This program is free software: you can redistribute it and/or modify it under th
 This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the GNU Affero General Public License for more details.
 
 You should have received a copy of the GNU Affero General Public License along with this program. If not, see <https://www.gnu.org/licenses/>.
+
+### Optional single sign-on
+
+OurSchool supports generic OpenID Connect (OIDC), including Pocket ID, Authentik,
+Keycloak and Authelia. It is off by default and uses existing accounts and browser
+sessions. See [OIDC setup](docs/oidc.md) for configuration, optional student
+provisioning, and recovery when password login is disabled.

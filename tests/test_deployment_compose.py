@@ -191,7 +191,7 @@ def test_legacy_local_db_flag_is_unnecessary_but_still_harmless(config, base):
 
 def test_ghcr_defaults_select_a_published_release(config):
     services = config(["docker-compose.ghcr.yml"])["services"]
-    assert services["backend"]["image"] == "ghcr.io/dgazr/ourschool-backend:v1.1-beta5"
+    assert services["backend"]["image"] == "ghcr.io/dgazr/ourschool-backend:v1.1"
     assert (
-        services["frontend"]["image"] == "ghcr.io/dgazr/ourschool-frontend:v1.1-beta5"
+        services["frontend"]["image"] == "ghcr.io/dgazr/ourschool-frontend:v1.1"
     )
