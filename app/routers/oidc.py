@@ -19,6 +19,7 @@
 import base64
 import hashlib
 import json
+import math
 import secrets
 import time
 from typing import Annotated, Any
@@ -34,6 +35,7 @@ from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.core.database import get_db
+from app.core.browser_sessions import revoke_browser_sessions
 from app.core.logging import get_logger, log_authentication_event
 from app.core.security import get_password_hash
 from app.models.user import User, UserRole
@@ -156,6 +158,7 @@ async def start(response: Response) -> dict[str, str]:
         state, nonce, verifier = (secrets.token_urlsafe(32) for _ in range(3))
         uri = settings.oidc_redirect_uri
         validate_endpoint(uri)
+        started_at = int(time.time())
         cookie = jwt.encode(
             {
                 "state": state,
@@ -164,7 +167,8 @@ async def start(response: Response) -> dict[str, str]:
                 "redirect_uri": uri,
                 "iss": "ourschool-oidc-state",
                 "aud": settings.oidc_client_id,
-                "exp": int(time.time()) + _TRANSACTION_TTL,
+                "iat": started_at,
+                "exp": started_at + _TRANSACTION_TTL,
             },
             settings.secret_key,
             algorithm="HS256",
@@ -187,6 +191,9 @@ async def start(response: Response) -> dict[str, str]:
                 "scope": settings.oidc_scopes,
                 "state": state,
                 "nonce": nonce,
+                # A remembered parent IdP session must not bypass the return PIN.
+                # The callback also checks signed auth_time for administrators.
+                "max_age": 0,
                 "code_challenge": base64.urlsafe_b64encode(
                     hashlib.sha256(verifier.encode()).digest()
                 )
@@ -211,8 +218,9 @@ async def verified_claims(
     if not isinstance(token, str) or len(token.encode()) > 16384:
         raise OIDCError("Invalid ID token size")
     header = jwt.get_unverified_header(token)
-    if not header.get("kid"):
-        raise OIDCError("Missing signing key ID")
+    kid = header.get("kid")
+    if "kid" in header and (not isinstance(kid, str) or not kid):
+        raise OIDCError("Invalid signing key ID")
     algorithm = header.get("alg")
     if algorithm not in {"RS256", "RS384", "RS512", "ES256", "ES384", "ES512"}:
         raise OIDCError("Unsupported signing algorithm")
@@ -225,14 +233,16 @@ async def verified_claims(
         keys = [
             key
             for key in jwks["keys"]
-            if key.get("kid") == header.get("kid")
+            if (kid is None or key.get("kid") == kid)
             and key.get("use", "sig") == "sig"
             and key.get("alg", algorithm) == algorithm
+            and key.get("kty") == ("RSA" if algorithm.startswith("RS") else "EC")
+            and "verify" in key.get("key_ops", ["verify"])
         ]
         if len(keys) == 1:
             break
     if len(keys) != 1:
-        raise OIDCError("Unknown signing key")
+        raise OIDCError("Unknown or ambiguous signing key")
     claims = jwt.decode(
         token,
         jwt.PyJWK.from_dict(keys[0], algorithm=algorithm).key,
@@ -255,12 +265,58 @@ async def verified_claims(
     return claims
 
 
+def require_fresh_authentication(claims: dict[str, Any], started_at: int) -> None:
+    """Require the signed ID token to prove authentication during this login."""
+    authenticated_at = claims.get("auth_time")
+    if (
+        type(authenticated_at) not in (int, float)
+        or not math.isfinite(authenticated_at)
+        or authenticated_at < started_at
+        or authenticated_at > time.time() + 30
+    ):
+        raise OIDCError("Fresh administrator authentication required")
+
+
+def merge_userinfo(claims: dict[str, Any], extra: dict[str, Any]) -> dict[str, Any]:
+    """Merge profile claims without separating an email from its verification."""
+    if extra.get("sub") != claims["sub"]:
+        raise OIDCError("Userinfo subject mismatch")
+    email = claims.get("email")
+    extra_email = extra.get("email")
+    has_email = isinstance(email, str) and bool(email.strip())
+    has_extra_email = isinstance(extra_email, str) and bool(extra_email.strip())
+    if has_email and has_extra_email and email.lower() != extra_email.lower():
+        raise OIDCError("Userinfo email mismatch")
+    merged = {**extra, **claims}
+    merged.pop("email", None)
+    merged.pop("email_verified", None)
+    if has_email:
+        merged["email"] = email
+        if "email_verified" in claims:
+            merged["email_verified"] = claims["email_verified"]
+        elif has_extra_email:
+            merged["email_verified"] = extra.get("email_verified")
+    elif has_extra_email:
+        merged["email"] = extra_email
+        merged["email_verified"] = extra.get("email_verified")
+    return merged
+
+
+def linked_user(db: Session, claims: dict[str, Any]) -> User | None:
+    """Resolve and lock a bound identity without depending on profile claims."""
+    return (
+        db.query(User)
+        .filter_by(oidc_issuer=claims["iss"], oidc_subject=claims["sub"])
+        .populate_existing()
+        .with_for_update()
+        .one_or_none()
+    )
+
+
 def match_user(db: Session, claims: dict[str, Any]) -> User:
     """Resolve a stable identity, or safely link/provision its account."""
     issuer, subject = claims["iss"], claims["sub"]
-    linked = (
-        db.query(User).filter_by(oidc_issuer=issuer, oidc_subject=subject).one_or_none()
-    )
+    linked = linked_user(db, claims)
     if linked:
         return linked
     claim = settings.oidc_user_match_claim
@@ -271,11 +327,22 @@ def match_user(db: Session, claims: dict[str, Any]) -> User:
         if claims.get("email_verified") is not True:
             raise OIDCError("Unverified email")
     column = User.email if claim == "email" else User.username
-    users = db.query(User).filter(func.lower(column) == value.lower()).all()
+    # Hold the row lock through session creation. Re-read any cached ORM state
+    # after waiting so a concurrent first link cannot be overwritten.
+    users = (
+        db.query(User)
+        .filter(func.lower(column) == value.lower())
+        .order_by(User.id)
+        .populate_existing()
+        .with_for_update()
+        .all()
+    )
     if len(users) > 1:
         raise OIDCError("Ambiguous account")
     if users:
         user = users[0]
+        if (user.oidc_issuer, user.oidc_subject) == (issuer, subject):
+            return user
         if user.oidc_issuer is not None or user.oidc_subject is not None:
             raise OIDCError("Account already linked to another identity")
         if user.role == UserRole.ADMIN and not settings.oidc_allow_admin_linking:
@@ -343,7 +410,9 @@ async def callback(
             algorithms=["HS256"],
             audience=settings.oidc_client_id,
             issuer="ourschool-oidc-state",
-            options={"require": ["exp", "state", "nonce", "verifier", "redirect_uri"]},
+            options={
+                "require": ["iat", "exp", "state", "nonce", "verifier", "redirect_uri"]
+            },
         )
         if not secrets.compare_digest(transaction["state"], data.state):
             raise OIDCError("State mismatch")
@@ -373,27 +442,59 @@ async def callback(
             tokens = await read_provider_json(
                 client, "POST", provider["token_endpoint"], data=payload, auth=auth
             )
-            claims = await verified_claims(
+            identity_claims = await verified_claims(
                 provider, tokens["id_token"], transaction["nonce"]
             )
-            missing_claim = settings.oidc_user_match_claim not in claims or (
-                settings.oidc_user_match_claim == "email"
-                and "email_verified" not in claims
+            claims = identity_claims
+            # This lookup only decides whether profile claims are needed. Do
+            # not hold a user-row lock across awaitable provider requests.
+            bound_identity = (
+                db.query(User.id)
+                .filter_by(
+                    oidc_issuer=identity_claims["iss"],
+                    oidc_subject=identity_claims["sub"],
+                )
+                .scalar()
             )
-            if missing_claim and provider.get("userinfo_endpoint"):
+            needs_email = (
+                settings.oidc_user_match_claim == "email"
+                or settings.oidc_auto_provision
+            )
+            missing_claim = settings.oidc_user_match_claim not in claims or (
+                needs_email
+                and (
+                    "email" not in claims
+                    or (
+                        not settings.oidc_allow_unverified_email
+                        and "email_verified" not in claims
+                    )
+                )
+            )
+            if (
+                bound_identity is None
+                and missing_claim
+                and provider.get("userinfo_endpoint")
+            ):
                 extra = await read_provider_json(
                     client,
                     "GET",
                     provider["userinfo_endpoint"],
                     headers={"Authorization": "Bearer " + tokens["access_token"]},
                 )
-                if extra.get("sub") != claims["sub"]:
-                    raise OIDCError("Userinfo subject mismatch")
-                claims = {**extra, **claims}
+                claims = merge_userinfo(claims, extra)
+        # All provider awaits are finished before locking/re-reading the user.
         user = match_user(db, claims)
         if not user.is_active:
             raise OIDCError("Inactive account")
-        user.must_change_password = False
+        if user.role == UserRole.ADMIN:
+            require_fresh_authentication(identity_claims, transaction["iat"])
+        if user.must_change_password:
+            # SSO proves the provider identity, not ownership of a temporary
+            # local password. Invalidate it and its sessions before lifting the
+            # account-wide restriction; it must never become a permanent login.
+            user.hashed_password = get_password_hash(secrets.token_urlsafe(48))
+            revoke_browser_sessions(db, user.id)
+            user.must_change_password = False
         result = create_login_session(db, user, authentication_event="oidc_login")
         response = JSONResponse(Token.model_validate(result).model_dump(mode="json"))
     except Exception as exc:

@@ -130,7 +130,16 @@ def get_user_by_username(db: Session, username: str):
 
 def authenticate_user(db: Session, username: str, password: str):
     """Authenticate a user."""
-    user = get_user_by_username(db, username)
+    # Serialize password verification/session issuance with SSO invalidating a
+    # temporary password. Otherwise a login could verify the old hash and issue
+    # an unrestricted session after SSO has already revoked existing sessions.
+    user = (
+        db.query(User)
+        .filter(User.username == username)
+        .populate_existing()
+        .with_for_update()
+        .first()
+    )
     if not user:
         return False
     if not verify_password(password, user.hashed_password):
@@ -246,7 +255,6 @@ async def login_for_access_token(
         and form_data.password == "admin123"
     ):
         user.must_change_password = True
-        db.commit()
 
     return create_login_session(db, user)
 

@@ -69,10 +69,21 @@ Only the provider administrator should be able to change identity claims.
 Missing issuer/client ID/redirect URI or invalid match claim or scopes gives a clear
 503 from start/callback when enabled. Discovery/network failures give a generic
 503 at start; failed callbacks give a generic sign-in error. Server logs record
-failure categories without credentials. Existing inactive users cannot sign in;
-successful SSO login clears `must_change_password` for the linked account. This
-avoids trapping users who do not know a local password and uses the existing
-session/password-change flow without a separate session exception.
+failure categories without credentials. Existing inactive users cannot sign in.
+If an account is awaiting a local password change, successful SSO replaces that
+temporary password with a random, unknown password and revokes the account's
+existing sessions before clearing `must_change_password`. The temporary password
+cannot then be used for unrestricted local login. To establish a local password
+later, request an administrator password reset and complete the local password
+change flow before using SSO again. Regular local passwords are preserved.
+
+Every SSO request sends `max_age=0` to ask the provider to authenticate again.
+Administrator logins also require the signed ID token's `auth_time` to be at or
+after the signed login transaction's start time. Missing, stale, or invalid
+authentication times are refused, including for already-linked administrators.
+This prevents a remembered parent provider session from silently bypassing a
+shared browser's student-return PIN. Configure the provider to honor `max_age`
+and include `auth_time` in ID tokens; UserInfo cannot supply this proof.
 
 Auto-provisioned accounts receive a random, unknown password and no password-change
 requirement. Provisioned accounts are always students. Provisioning does not
@@ -81,7 +92,11 @@ School data for these accounts remains included in the existing JSON backup.
 On first login, OurSchool matches the configured claim and saves the provider's
 exact issuer and stable subject (`sub`). Later logins resolve that identity first,
 even if the provider email or username changes. An account already bound to a
-different identity cannot be relinked through claim matching. These identity
+different identity cannot be relinked through claim matching. First-time links
+are serialized so competing callbacks cannot overwrite a winning identity.
+Missing matching and provisioning claims are fetched from UserInfo when available;
+email verification is accepted only for the email address supplied with it, and
+conflicting email snapshots are refused. These identity
 fields round-trip through JSON backup and restore.
 
 **Security warning:** if provider users can set or change their email or username
@@ -119,12 +134,17 @@ the callback uses HTTPS. Starting another login replaces the pending transaction
 Discovery/JWKS are cached for five minutes; unknown signing key IDs trigger a
 refresh. Provider response bodies are limited to 1 MiB, ID tokens to 16 KiB,
 and provisioned username, email and names to 255 characters. Supported ID-token
-signatures are RSA and EC SHA-2 algorithms.
+signatures are RSA and EC SHA-2 algorithms. An ID token may omit `kid` when the
+JWKS contains exactly one compatible verification key; ambiguous sets and
+explicit unknown key IDs are refused.
 
 The supplied nginx configuration proxies `/api/` and serves the SPA fallback for
 `/auth/oidc/callback`. Vite's `/api` development proxy also works; set
 `OIDC_REDIRECT_URI` to your actual Vite origin. No application access token is
-placed in a URL. Sign-out ends the OurSchool session, not the provider session.
+placed in a URL. The callback page disables nginx access logging and sends
+`Referrer-Policy: no-referrer` so codes do not appear in subsequent asset request
+logs. Configure any outer reverse proxy to redact callback query parameters too.
+Sign-out ends the OurSchool session, not the provider session.
 
 **Break glass:** before disabling password login, test OIDC and keep a local
 administrator password. If the provider becomes unavailable, set
