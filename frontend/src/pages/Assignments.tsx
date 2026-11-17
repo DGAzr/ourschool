@@ -287,14 +287,14 @@ const Assignments: React.FC = () => {
   ]
 
   return (
-    <div>
+    <div className={!isAdmin ? 'student-workspace' : undefined}>
       {/* ── Page header ── */}
       <div className="flex items-start justify-between mb-6">
         <div>
           <p className="text-[11px] font-semibold text-faint uppercase tracking-[.08em] mb-1.5">
             {isAdmin ? 'Live work' : 'My work'}
           </p>
-          <h1 className="text-[27px] font-bold text-ink tracking-[-0.02em] leading-none">Assignments</h1>
+          <h1 className="text-[27px] font-bold text-ink tracking-[-0.02em] leading-none">{isAdmin ? 'Assignments' : 'My Work'}</h1>
           {isAdmin && !loading && (
             <p className="mt-1.5 text-[13px] text-muted">
               Every assignment given to a student — current and past.{' '}

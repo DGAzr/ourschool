@@ -308,3 +308,34 @@ body {
 @media print {
   .no-print { display: none !important; }
 }
+
+/* Student tasks use readable text, generous touch targets, and visible focus. */
+.student-workspace {
+  font-size: 1rem;
+  color: var(--ink);
+  overflow-wrap: anywhere;
+}
+.student-workspace :is(button, input:not([type='radio']):not([type='checkbox']), select, summary) {
+  min-height: 44px;
+}
+.student-workspace :is(input, select, textarea) {
+  font-size: 1rem;
+  max-width: 100%;
+}
+.student-workspace button {
+  min-width: 44px;
+}
+.student-workspace :is(a, button, input, textarea, select, summary):focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 3px;
+}
+.student-workspace .student-simple,
+.student-workspace.student-simple {
+  font-size: 1.125rem;
+}
+.student-simple :is(h2, h3) {
+  line-height: 1.4;
+}
+.student-workspace textarea {
+  resize: vertical;
+}

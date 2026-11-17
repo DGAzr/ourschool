@@ -1,24 +1,6 @@
-/*
- * OurSchool - Homeschool Management System
- * Copyright (C) 2025 Dustan Ashley
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Affero General Public License as published by
- * the Free Software Foundation, either version 3 of the License, or
- * (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU Affero General Public License for more details.
- *
- * You should have received a copy of the GNU Affero General Public License
- * along with this program.  If not, see <https://www.gnu.org/licenses/>.
- */
-
-import React, { useState } from 'react'
-import { Plus, Trash2, ExternalLink, CheckCircle, MessageSquare, Paperclip } from 'lucide-react'
+import { useState } from 'react'
 import { StudentAssignment } from '../../types'
+import { effectiveDueDate } from '../../utils/studentAssignments'
 import { formatDateOnly } from '../../utils/formatters'
 import Modal from '../ui/Modal'
 import Button from '../ui/Button'
@@ -27,205 +9,44 @@ interface SubmissionDialogProps {
   assignment: StudentAssignment
   isOpen: boolean
   onClose: () => void
-  onSubmit: (submissionData: {
-    submission_method?: 'online' | 'paper'
-    submission_notes?: string
-    submission_artifacts?: string[]
-  }) => void
+  onSubmit: (data: { submission_method?: 'online' | 'paper'; submission_notes?: string; submission_artifacts?: string[] }) => void
   loading?: boolean
+  error?: string | null
 }
 
-const SubmissionDialog: React.FC<SubmissionDialogProps> = ({
-  assignment,
-  isOpen,
-  onClose,
-  onSubmit,
-  loading = false
-}) => {
-  const [method,setMethod] = useState<'online'|'paper'>(assignment.submitted_date ? (assignment.submission_method ?? 'paper') : 'paper')
-  const [submissionNotes, setSubmissionNotes] = useState('')
-  const [artifactLinks, setArtifactLinks] = useState<string[]>([''])
-  const [validationErrors, setValidationErrors] = useState<{[key: string]: string}>({})
-
-  const handleAddArtifactLink = () => {
-    setArtifactLinks([...artifactLinks, ''])
+export default function SubmissionDialog({ assignment, isOpen, onClose, onSubmit, loading = false, error }: SubmissionDialogProps) {
+  const [method, setMethod] = useState<'online' | 'paper'>(assignment.submitted_date ? assignment.submission_method ?? 'paper' : 'paper')
+  const [note, setNote] = useState('')
+  const [links, setLinks] = useState([''])
+  const [invalid, setInvalid] = useState(false)
+  const due = effectiveDueDate(assignment)
+  const submit = () => {
+    if (loading) return
+    const artifacts = links.map(link => link.trim()).filter(Boolean)
+    if (artifacts.some(link => {
+      try { const url = new URL(link); return !['https:', 'http:'].includes(url.protocol) }
+      catch { return true }
+    })) { setInvalid(true); return }
+    setInvalid(false)
+    onSubmit({ submission_method: method, ...(note.trim() ? { submission_notes: note.trim() } : {}), ...(artifacts.length ? { submission_artifacts: artifacts } : {}) })
   }
-
-  const handleRemoveArtifactLink = (index: number) => {
-    const newLinks = artifactLinks.filter((_, i) => i !== index)
-    setArtifactLinks(newLinks.length === 0 ? [''] : newLinks)
-  }
-
-  const handleArtifactLinkChange = (index: number, value: string) => {
-    const newLinks = [...artifactLinks]
-    newLinks[index] = value
-    setArtifactLinks(newLinks)
-
-    if (validationErrors[`link_${index}`]) {
-      setValidationErrors(prev => {
-        const newErrors = { ...prev }
-        delete newErrors[`link_${index}`]
-        return newErrors
-      })
-    }
-  }
-
-  const validateUrl = (url: string): boolean => {
-    if (!url.trim()) return true
-    const urlPattern = /^https?:\/\/(?:(?:[A-Z0-9](?:[A-Z0-9-]{0,61}[A-Z0-9])?\.)+[A-Z]{2,6}\.?|localhost|\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})(?::\d+)?(?:\/?|[/?]\S+)$/i
-    return urlPattern.test(url.trim())
-  }
-
-  const handleSubmit = () => {
-    setValidationErrors({})
-
-    const errors: {[key: string]: string} = {}
-    artifactLinks.forEach((link, index) => {
-      if (link.trim() && !validateUrl(link.trim())) {
-        errors[`link_${index}`] = 'Please enter a valid URL (starting with http:// or https://)'
-      }
-    })
-
-    if (Object.keys(errors).length > 0) {
-      setValidationErrors(errors)
-      return
-    }
-
-    const validArtifacts = artifactLinks
-      .map(link => link.trim())
-      .filter(link => link.length > 0)
-
-    const submissionData: {
-      submission_method?: 'online' | 'paper'
-      submission_notes?: string
-      submission_artifacts?: string[]
-    } = {}
-
-    if (submissionNotes.trim()) {
-      submissionData.submission_notes = submissionNotes.trim()
-    }
-
-    if (validArtifacts.length > 0) {
-      submissionData.submission_artifacts = validArtifacts
-    }
-
-    onSubmit({...submissionData,submission_method:method})
-  }
-
-  const template = assignment.template
-
-  const FIELD = 'bg-field-bg border border-field-border rounded-field px-3 py-2 text-[13px] text-ink focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent w-full'
-
-  return (
-    <Modal
-      isOpen={isOpen}
-      onClose={onClose}
-      title="I’m finished"
-      subtitle={template?.name}
-      icon={<CheckCircle size={15} />}
-      iconVariant="dark"
-      size="md"
-      footer={
-        <>
-          <Button variant="secondary" onClick={onClose} disabled={loading}>Cancel</Button>
-          <Button variant="primary" loading={loading} onClick={handleSubmit}>
-            Ready for my teacher
-          </Button>
-        </>
-      }
-    >
-      <div className="space-y-5">
-        <fieldset>
-          <legend className="font-semibold mb-2">How did you finish?</legend>
-          <div className="space-y-2">
-            <label className="block"><input type="radio" name="submission-method" disabled={loading} checked={method==='paper'} onChange={()=>setMethod('paper')} /> Finished on paper — I’ll show my teacher</label>
-            <label className="block"><input type="radio" name="submission-method" disabled={loading} checked={method==='online'} onChange={()=>setMethod('online')} /> Finished online</label>
-          </div>
-        </fieldset>
-        <div className="bg-panel-2 border border-line rounded-[11px] p-4">
-          <p className="text-[11px] font-semibold text-muted uppercase tracking-wide mb-2">Assignment Summary</p>
-          <div className="grid grid-cols-2 gap-3 text-[13px]">
-            <div><span className="text-muted">Points:</span><span className="ml-2 text-ink">{assignment.custom_max_points || template?.max_points || 0}</span></div>
-            <div>
-              <span className="text-muted">Due Date:</span>
-              <span className="ml-2 text-ink">
-                {assignment.due_date ? formatDateOnly(assignment.due_date, { month: 'short', day: 'numeric', year: 'numeric' }) : 'No due date'}
-              </span>
-            </div>
-          </div>
-          {template?.description && <p className="text-[12px] text-muted mt-2 line-clamp-2">{template.description}</p>}
-        </div>
-
-        <div>
-          <label className="flex items-center text-[11px] font-semibold text-muted uppercase tracking-wide mb-1.5 gap-1.5">
-            <MessageSquare className="h-3.5 w-3.5" />Notes to teacher (optional)
-          </label>
-          <textarea aria-label="Notes to teacher" value={submissionNotes} onChange={(e) => setSubmissionNotes(e.target.value)}
-            placeholder="Anything you want your teacher to know?"
-            rows={4} className={`${FIELD} resize-vertical`} disabled={loading} />
-          <p className="mt-1 text-[11px] text-faint">Use this space to explain your work, ask questions, or provide context.</p>
-        </div>
-
-        <div>
-          <label className="flex items-center text-[11px] font-semibold text-muted uppercase tracking-wide mb-1.5 gap-1.5">
-            <Paperclip className="h-3.5 w-3.5" />External Links (Optional)
-          </label>
-          <p className="text-[11px] text-faint mb-3">Add links to Google Drive, YouTube, or other external resources.</p>
-          <div className="space-y-2">
-            {artifactLinks.map((link, index) => (
-              <div key={index} className="flex items-center gap-2">
-                <div className="flex-1">
-                  <input aria-label="Work link" type="url" value={link}
-                    onChange={(e) => handleArtifactLinkChange(index, e.target.value)}
-                    placeholder="https://example.com/your-work"
-                    className={`${FIELD} ${validationErrors[`link_${index}`] ? 'border-neg-fg/50 bg-neg-bg' : ''}`}
-                    disabled={loading} />
-                  {validationErrors[`link_${index}`] && (
-                    <p className="mt-0.5 text-[11px] text-neg-fg">{validationErrors[`link_${index}`]}</p>
-                  )}
-                </div>
-                {link.trim() && validateUrl(link.trim()) && (
-                  <a href={link.trim()} target="_blank" rel="noopener noreferrer"
-                    className="p-1.5 text-accent hover:bg-accent/10 rounded-field transition-colors" title="Preview link">
-                    <ExternalLink className="h-4 w-4" />
-                  </a>
-                )}
-                <button onClick={() => handleRemoveArtifactLink(index)}
-                  disabled={loading || artifactLinks.length === 1}
-                  className="p-1.5 text-faint hover:text-neg-fg hover:bg-neg-bg rounded-field transition-colors disabled:opacity-50 disabled:cursor-not-allowed" title="Remove link" aria-label="Remove link">
-                  <Trash2 className="h-4 w-4" />
-                </button>
-              </div>
-            ))}
-          </div>
-          <button onClick={handleAddArtifactLink} disabled={loading}
-            className="mt-2 flex items-center gap-1 text-[12px] text-accent hover:underline disabled:opacity-50">
-            <Plus className="h-3.5 w-3.5" />Add another link
-          </button>
-        </div>
-
-        {(submissionNotes.trim() || artifactLinks.some(l => l.trim())) && (
-          <div className="p-4 bg-accent/6 border border-accent/20 rounded-field">
-            <p className="text-[11px] font-semibold text-accent uppercase tracking-wide mb-2">Submission Preview</p>
-            {submissionNotes.trim() && (
-              <div className="mb-2">
-                <p className="text-[11px] text-muted">Notes:</p>
-                <p className="text-[13px] text-ink mt-0.5">{submissionNotes.trim()}</p>
-              </div>
-            )}
-            {artifactLinks.some(l => l.trim()) && (
-              <div>
-                <p className="text-[11px] text-muted">Links:</p>
-                <ul className="text-[12px] text-ink mt-0.5 space-y-0.5">
-                  {artifactLinks.filter(l => l.trim()).map((l, i) => <li key={i} className="break-all">• {l.trim()}</li>)}
-                </ul>
-              </div>
-            )}
-          </div>
-        )}
-      </div>
-    </Modal>
-  )
+  return <Modal isOpen={isOpen} onClose={() => { if (!loading) onClose() }} title="I’m finished" subtitle={assignment.template?.name} size="md" showCloseButton={!loading} closeOnOverlayClick={!loading} footer={<>
+    <Button className="min-h-11" variant="secondary" onClick={onClose} disabled={loading}>Keep working</Button>
+    <Button className="min-h-11" loading={loading} onClick={submit}>Ready for my teacher</Button>
+  </>}>
+    <div className="student-workspace space-y-4">
+      {error && <p role="alert" className="rounded-field bg-neg-bg p-3 text-neg-fg">{error}</p>}
+      <fieldset className="space-y-2"><legend className="mb-2 font-semibold">How did you finish?</legend>
+        <label className="flex min-h-11 items-center gap-3"><input type="radio" name="submission-method" checked={method === 'paper'} disabled={loading} onChange={() => setMethod('paper')} />Finished on paper — I’ll show my teacher</label>
+        <label className="flex min-h-11 items-center gap-3"><input type="radio" name="submission-method" checked={method === 'online'} disabled={loading} onChange={() => setMethod('online')} />Finished online</label>
+      </fieldset>
+      <p className="text-sm text-muted">{due ? `Due ${formatDateOnly(due)}` : 'No deadline'} · Your teacher will review your work.</p>
+      <details><summary className="min-h-11 cursor-pointer font-semibold">Add a note to your teacher · Optional</summary><label htmlFor="submission-note" className="block py-2">Notes to teacher</label><textarea id="submission-note" value={note} onChange={e => setNote(e.target.value)} disabled={loading} rows={3} className="w-full rounded-field border border-line bg-field-bg p-3 text-base text-ink" /></details>
+      <details open={method === 'online' || invalid}><summary className="min-h-11 cursor-pointer font-semibold">Add work links · Optional</summary><p className="mb-2 text-sm text-muted">Link to existing online work.</p>
+        {links.map((link, index) => <div key={index} className="mb-2 flex flex-wrap gap-2"><label className="min-w-0 flex-1 basis-40"><span className="block text-sm">Work link {index + 1}</span><input type="url" value={link} disabled={loading} onChange={e => { setLinks(values => values.map((value, i) => i === index ? e.target.value : value)); setInvalid(false) }} className="min-h-11 w-full rounded-field border border-line bg-field-bg px-3 text-base text-ink" placeholder="https://…" /></label>{links.length > 1 && <Button variant="secondary" disabled={loading} onClick={() => setLinks(values => values.filter((_, i) => i !== index))} aria-label={`Remove work link ${index + 1}`}>Remove</Button>}</div>)}
+        {invalid && <p role="alert" className="text-neg-fg">Enter valid work links starting with https:// or http://.</p>}
+        <Button variant="secondary" disabled={loading} onClick={() => setLinks(values => [...values, ''])}>Add another link</Button>
+      </details>
+    </div>
+  </Modal>
 }
-
-export default SubmissionDialog

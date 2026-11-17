@@ -10,14 +10,17 @@
 
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import AssignmentDetailModal from '../components/assignments/AssignmentDetailModal'
+import { useAuth } from '../contexts/AuthContext'
+import StudentActivityWorkspace from './StudentActivityWorkspace'
 
 /** A stable destination for dashboard, lesson and student work links. */
 export default function AssignmentWork() {
   const { assignmentId } = useParams()
   const navigate = useNavigate()
+  const { user } = useAuth()
   const id = Number(assignmentId)
   if (!Number.isSafeInteger(id) || id <= 0) {
     return <div role="alert">Assignment not found. <Link to="/assignments">Back to assignments</Link></div>
   }
-  return <AssignmentDetailModal assignmentId={id} isOpen onClose={() => navigate('/assignments')} presentation="page" />
+  return user?.role === 'student' ? <StudentActivityWorkspace id={id} /> : <AssignmentDetailModal assignmentId={id} isOpen onClose={() => navigate('/assignments')} presentation="page" />
 }

@@ -25,7 +25,7 @@ import { useAuth } from '../../contexts/AuthContext'
  */
 
 import React, { useEffect, useMemo, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { assignmentsApi } from '../../services/assignments'
 import { termsApi } from '../../services/terms'
 import { useAssignments } from '../../hooks/useAssignments'
@@ -62,21 +62,27 @@ import PageNavigation from './PageNavigation'
 const StudentAssignmentsView: React.FC = () => {
   const {user}=useAuth()
   const navigate = useNavigate()
+  const location = useLocation()
+  const from = location.pathname + location.search
+  const { searchTerm, setSearchTerm, selectedSubject, setSelectedSubject, params, changeParams } = useAssignmentFilters(true)
   const { types: assignmentTypes } = useAssignmentTypes()
 
-  const [activeTab, setActiveTab] = useState<StudentTab>('todo')
+  const activeTab: StudentTab = params.get('tab') === 'submitted' ? 'submitted' : params.get('tab') === 'done' ? 'done' : 'todo'
+  const setActiveTab = (tab: StudentTab) => changeParams(next => next.set('tab', tab))
   // undefined = defaulting to the active term once terms load; null = "All terms"
-  const [selectedTerm, setSelectedTerm] = useState<number | null | undefined>(undefined)
+  const [defaultTerm, setDefaultTerm] = useState<number | null | undefined>(undefined)
+  const rawTerm = params.get('term')
+  const selectedTerm = rawTerm === 'all' ? null : rawTerm && /^[1-9]\d*$/.test(rawTerm) ? Number(rawTerm) : defaultTerm
   const [terms, setTerms] = useState<Term[]>([])
 
-  const { searchTerm, setSearchTerm, selectedSubject, setSelectedSubject } =
-    useAssignmentFilters()
-
-  const { studentAssignments, subjects, loading, error, refetch, setError, counts, pagination } = useAssignments({
+  const { studentAssignments, subjects, loading: pageLoading, error, refetch, setError, counts, pagination } = useAssignments({
     isAdmin: false,
     adminViewMode: 'grading',
-    selectedSubject, search: searchTerm, tab: activeTab, termId: selectedTerm, termBasis: 'original_due',
+    selectedSubject, search: searchTerm, tab: activeTab, termId: activeTab === 'done' ? selectedTerm : undefined, termBasis: 'original_due',
+    enabled: activeTab !== 'done' || selectedTerm !== undefined,
+    navigationKey: `ourschool.work-pages.${user?.id}`,
   })
+  const loading = pageLoading || (activeTab === 'done' && selectedTerm === undefined)
 
   const [submissionBusy, setSubmissionBusy] = useState(false)
   const [submittingAssignment, setSubmittingAssignment] = useState<StudentAssignment | null>(null)
@@ -88,16 +94,16 @@ const StudentAssignmentsView: React.FC = () => {
       .then(termsData => {
         setTerms(termsData || [])
         const activeTerm = termsData?.find(t => t.is_active)
-        if (activeTerm) setSelectedTerm(prev => (prev === undefined ? activeTerm.id : prev))
+        setDefaultTerm(activeTerm?.id ?? null)
       })
-      .catch(() => {})
+      .catch(() => setDefaultTerm(null))
   }, [])
 
   // ── Handlers ──
   const handleStart = async (assignmentId: number) => {
     try {
       await assignmentsApi.startAssignment(assignmentId)
-      navigate(assignmentHref(assignmentId))
+      navigate(assignmentHref(assignmentId, { from }))
     } catch {
       setError('Failed to start assignment')
     }
@@ -159,7 +165,7 @@ const StudentAssignmentsView: React.FC = () => {
           isAdmin={false}
           onStart={handleStart}
           onComplete={handleComplete}
-          viewHref={assignmentHref(assignment.id)}
+          viewHref={assignmentHref(assignment.id, { from })}
           onEditSelf={openOwnEditor}
         />
       ))}
@@ -178,7 +184,6 @@ const StudentAssignmentsView: React.FC = () => {
 
   return (
     <>
-      <PageNavigation {...pagination} />
       {loading && <p role="status">Loading assignments…</p>}
       {error && (
         <div className="mb-4 px-4 py-3 rounded-card text-[13px] text-neg-fg bg-neg-bg border border-neg-fg/20">
@@ -186,16 +191,7 @@ const StudentAssignmentsView: React.FC = () => {
         </div>
       )}
 
-      <div className="flex justify-end mb-3">
-        <button
-          type="button"
-          onClick={() => setEditingOwn('new')}
-          className="h-[44px] px-3.5 rounded-field bg-btn-primary-bg text-btn-primary-fg text-[13px] font-semibold hover:opacity-90 sm:h-[34px]"
-        >
-          + Add your own assignment
-        </button>
-      </div>
-
+      <p className="mb-4 text-muted">All your work, grouped by deadline. <Link to="/" className="text-accent underline">See your plan for Today</Link>.</p>
       {/* Tabs */}
       <div className="flex items-center gap-1.5 mb-4 flex-wrap">
         {TABS.map(tab => {
@@ -251,7 +247,7 @@ const StudentAssignmentsView: React.FC = () => {
           <select
             aria-label="Filter assignments by term"
             value={selectedTerm ?? ''}
-            onChange={e => setSelectedTerm(e.target.value ? parseInt(e.target.value) : null)}
+            onChange={e => changeParams(next => next.set('term', e.target.value || 'all'))}
             className="h-[44px] px-3 pr-8 sm:h-[38px] bg-field-bg border border-field-border rounded-[9px] text-[13.5px] text-ink-2 focus:outline-none focus:ring-2 focus:ring-accent/30 focus:border-accent"
           >
             <option value="">All terms</option>
@@ -260,8 +256,10 @@ const StudentAssignmentsView: React.FC = () => {
         )}
       </div>
 
+      {hasFilters && <button type="button" onClick={() => { setSearchTerm(''); setSelectedSubject(null) }} className="mb-4 min-h-11 text-accent underline">Clear filters</button>}
+
       {/* Body */}
-      {visible.length === 0 ? (
+      {error ? <button onClick={refetch} className="min-h-11 text-accent underline">Try loading your work again</button> : loading ? null : visible.length === 0 ? (
         <div className="py-14 text-center">
           <p className="text-[15px] font-semibold text-ink-2 mb-1">
             {hasFilters ? 'No assignments match your filters' : EMPTY_COPY[activeTab].title}
@@ -289,6 +287,9 @@ const StudentAssignmentsView: React.FC = () => {
       ) : (
         renderCards(visible)
       )}
+
+      <PageNavigation {...pagination} />
+      <details className="mt-4"><summary className="min-h-11 cursor-pointer text-muted">More options</summary><button type="button" onClick={() => setEditingOwn('new')} className="min-h-11 px-3 text-accent underline">Add your own assignment</button></details>
 
       {/* Modals */}
       {submittingAssignment && (

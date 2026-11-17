@@ -17,7 +17,7 @@ export default function TaskHelp({assignmentId,requests,onRequested}: {assignmen
   }
   return <section className="space-y-2 rounded-lg border border-line p-3">
     {pending ? <><p className="font-semibold text-sm">Your teacher has your help request</p><p className="text-sm">{pending.note}</p><p className="text-xs text-muted">You can keep working while you wait.</p></> : <Button variant="outline" onClick={()=>setOpen(!open)}>Ask my teacher for help</Button>}
-    {open&&!pending&&<><TextArea label="What do you need help with?" value={note} onChange={e=>setNote(e.target.value)} maxLength={2000} rows={2}/><Button onClick={()=>void ask()} loading={busy} disabled={!note.trim()}>Send help request</Button></>}
+    {open&&!pending&&<><div className="flex flex-wrap gap-2">{['I don’t understand the instructions.', 'I need a material.', 'I want to check my answer.'].map(reason=><Button key={reason} variant="secondary" disabled={busy} aria-pressed={note===reason} onClick={()=>setNote(reason)}>{reason}</Button>)}</div><TextArea label="Choose a reason above or write your own" value={note} onChange={e=>setNote(e.target.value)} maxLength={2000} rows={2}/><Button onClick={()=>void ask()} loading={busy} disabled={!note.trim()}>Send help request</Button></>}
     {requests.filter(r=>r.resolved_at).slice(-1).map(r=><p key={r.id} className="text-sm">Teacher helped: {r.response || 'Discussed with you.'}</p>)}
     {error&&<p role="alert" className="text-danger text-sm">{error}</p>}
   </section>

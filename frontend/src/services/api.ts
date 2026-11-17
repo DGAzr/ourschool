@@ -18,6 +18,7 @@
 
 import { config } from '../config/env'
 import { STORAGE_KEYS } from '../constants/auth'
+import { loginHref } from '../utils/returnPath'
 
 // Base API configuration
 const API_BASE = config.api.baseUrl
@@ -105,7 +106,7 @@ const handleUnauthorized = (token: string | null) => {
   window.dispatchEvent(new CustomEvent(UNAUTHORIZED_EVENT))
   if (!redirecting && window.location.pathname !== '/login') {
     redirecting = true
-    window.location.assign('/login')
+    window.location.assign(loginHref(window.location.pathname + window.location.search + window.location.hash))
   }
 }
 

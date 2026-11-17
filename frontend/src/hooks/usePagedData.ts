@@ -12,11 +12,22 @@ export function usePagedData<T, R extends Page<T> = Page<T>>(
   filters: object,
   fetchPage: (params: Record<string, unknown>, signal: AbortSignal) => Promise<R>,
   enabled = true,
+  navigationKey?: string,
 ) {
   const key = JSON.stringify(filters)
-  const [navigation, setNavigation] = useState<{ key: string; cursors: (string | undefined)[] }>({ key, cursors: [undefined] })
+  const [navigation, setNavigation] = useState<{ key: string; cursors: (string | undefined)[] }>(() => {
+    try {
+      const stored = navigationKey ? JSON.parse(sessionStorage.getItem(navigationKey) ?? 'null') : null
+      if (typeof stored?.key === 'string' && Array.isArray(stored.cursors) && stored.cursors.length > 0 && stored.cursors.every((cursor: unknown) => cursor === null || typeof cursor === 'string')) return { key: stored.key, cursors: stored.cursors.map((cursor: string | null) => cursor ?? undefined) }
+    } catch { /* Navigation works without browser storage. */ }
+    return { key, cursors: [undefined] }
+  })
   const cursors = navigation.key === key ? navigation.cursors : [undefined]
   const cursor = cursors[cursors.length - 1]
+  const storedNavigation = JSON.stringify({ key, cursors })
+  useEffect(() => {
+    if (enabled && navigationKey) try { sessionStorage.setItem(navigationKey, storedNavigation) } catch { /* Optional recovery. */ }
+  }, [enabled, navigationKey, storedNavigation])
   const [revision, setRevision] = useState(0)
   const requestKey = JSON.stringify([key, cursor, revision, enabled])
   const [result, setResult] = useState<{ key: string; data?: R; error?: string }>()

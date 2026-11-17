@@ -17,8 +17,9 @@
  */
 
 import React from 'react'
-import { Navigate } from 'react-router-dom'
+import { Navigate, useLocation } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
+import { loginHref } from '../utils/returnPath'
 
 interface ProtectedRouteProps {
   children: React.ReactNode
@@ -26,8 +27,9 @@ interface ProtectedRouteProps {
 
 const ProtectedRoute: React.FC<ProtectedRouteProps> = ({ children }) => {
   const { user, isLoading } = useAuth()
+  const location = useLocation()
 
-  if (!user && !isLoading) return <Navigate to="/login" replace />
+  if (!user && !isLoading) return <Navigate to={loginHref(location.pathname + location.search + location.hash)} replace />
 
   // Keep drafts mounted during same-account focus validation, but hide and
   // isolate protected content until the server has confirmed the session.

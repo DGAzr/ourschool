@@ -29,6 +29,8 @@ import {
   LessonUpdate,
   LessonWriteResponse,
   StudentLesson,
+  StudentLessonDetail,
+  StudentDay,
 } from '../types/lesson'
 
 interface DateRange {
@@ -63,8 +65,14 @@ export const lessonsApi = {
   get: (id: number): Promise<Lesson> => api.get(`/lessons/${id}`),
 
   // Current student's schedule; defaults to today-forward server-side.
-  myLessons: (range?: DateRange): Promise<StudentLesson[]> =>
-    api.get(`/lessons/my-lessons${rangeQuery(range)}`),
+  myLessons: (range?: DateRange, signal?: AbortSignal): Promise<StudentLesson[]> =>
+    api.get(`/lessons/my-lessons${rangeQuery(range)}`, signal),
+
+  myLesson: (id: number, signal?: AbortSignal): Promise<StudentLessonDetail> =>
+    api.get(`/lessons/my-lessons/${id}`, signal),
+
+  myDay: (date: string, signal?: AbortSignal): Promise<StudentDay> =>
+    api.get(`/lessons/my-day?date=${encodeURIComponent(date)}`, signal),
 
   create: (data: LessonCreate): Promise<LessonWriteResponse> =>
     api.post('/lessons/', data),

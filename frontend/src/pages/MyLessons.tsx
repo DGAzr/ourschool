@@ -1,283 +1,48 @@
-/*
- * OurSchool - Homeschool Management System
- * Copyright (C) 2025 Dustan Ashley
- *
- * This program is free software: you can redistribute it and/or modify
- * it under the terms of the GNU Affero General Public License as published by
- * the Free Software Foundation, either version 3 of the License, or
- * (at your option) any later version.
- *
- * This program is distributed in the hope that it will be useful,
- * but WITHOUT ANY WARRANTY; without even the implied warranty of
- * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- * GNU Affero General Public License for more details.
- *
- * You should have received a copy of the GNU Affero General Public License
- * along with this program.  If not, see <https://www.gnu.org/licenses/>.
- */
-
-/**
- * The student's read-only schedule: upcoming planned lessons grouped by day,
- * with linked work, resource links, and attached documents. Defaults to
- * today-forward through the active term; a toggle reaches back to the term
- * start for review.
- */
-
-import { Link } from 'react-router-dom'
-import React, { useEffect, useMemo, useState } from 'react'
-import { Clock, ExternalLink, Paperclip } from 'lucide-react'
+import { useQuery } from '@tanstack/react-query'
+import { Link, useLocation, useParams } from 'react-router-dom'
+import { useAuth } from '../contexts/AuthContext'
+import { useCalendarDateParam } from '../hooks/useCalendarDateParam'
+import { useSchoolToday, useStudentLesson } from '../hooks/useStudentPlan'
 import { lessonsApi } from '../services/lessons'
-import { termsApi } from '../services/terms'
-import { SubjectDot } from '../components/ui'
-import DocumentThumb from '../components/materials/DocumentThumb'
-import MaterialPreviewButton from '../components/materials/MaterialPreviewButton'
-import DocumentViewerModal from '../components/materials/DocumentViewerModal'
-import { kindBadge } from '../components/materials/materialsLogic'
-import { StudentLesson } from '../types/lesson'
-import { PaperlessMaterial } from '../types/paperless'
-import { Term } from '../types/term'
+import { addDays } from '../utils/dates'
 import { formatDateOnly } from '../utils/formatters'
-import { assignmentHref, assignmentProgress } from '../utils/studentAssignments'
-import { todayISO } from '../utils/lessonPlanning'
+import { safeReturnPath } from '../utils/returnPath'
+import { lessonProgress } from '../utils/studentPlan'
+import { getErrorMessage } from '../services/api'
+import StudentLessonCard from '../components/student/StudentLessonCard'
+import { Button } from '../components/ui'
+import { useStudentScroll } from '../hooks/useStudentScroll'
 
-const addDaysISO = (iso: string, days: number): string => {
-  const [y, m, d] = iso.split('-').map(Number)
-  const date = new Date(y, m - 1, d + days)
-  const mm = String(date.getMonth() + 1).padStart(2, '0')
-  const dd = String(date.getDate()).padStart(2, '0')
-  return `${date.getFullYear()}-${mm}-${dd}`
+export default function MyLessons() {
+  const { user } = useAuth()
+  const { lessonId } = useParams()
+  const id = lessonId && /^[1-9]\d*$/.test(lessonId) && Number.isSafeInteger(Number(lessonId)) ? Number(lessonId) : undefined
+  const detail = useStudentLesson(id)
+  const location = useLocation()
+  const from = location.pathname + location.search
+  const today = useSchoolToday()
+  const [selectedDate, setSelectedDate] = useCalendarDateParam()
+  const end = addDays(selectedDate, 6)
+  const schedule = useQuery({
+    queryKey: ['student-lessons', user?.id, selectedDate, end],
+    queryFn: ({ signal }) => lessonsApi.myLessons({ start_date: selectedDate, end_date: end }, signal),
+    enabled: !lessonId && user?.role === 'student',
+    throwOnError: false,
+  })
+  const simple = user?.student_ui_mode === 'simple'
+  const query = lessonId ? detail : schedule
+  const lessons = lessonId ? (detail.data ? [detail.data] : []) : schedule.data ?? []
+  const back = safeReturnPath(new URLSearchParams(location.search).get('from'), '/my-lessons')
+  useStudentScroll(!!(lessonId ? detail.data : schedule.data))
+  return <div className={`student-workspace space-y-5 ${simple ? 'student-simple' : ''}`}>
+    {lessonId && <Link to={back} className="inline-flex min-h-11 items-center font-semibold text-accent">← Back to your plan</Link>}
+    <h1 className="text-[27px] font-bold text-ink">{lessonId ? 'Your lesson' : 'Lessons'}</h1>
+    {!lessonId && <div className="flex flex-wrap items-end gap-2"><Button variant="secondary" onClick={() => setSelectedDate(addDays(selectedDate, -7))}>Previous week</Button><label className="space-y-1"><span className="block text-sm font-semibold">Week starting</span><input type="date" aria-label="Week starting" value={selectedDate} onChange={e => { if (e.target.value) setSelectedDate(e.target.value) }} className="min-h-11 max-w-full rounded-field border border-line bg-field-bg px-3 text-ink" /></label><Button variant="secondary" onClick={() => setSelectedDate(addDays(selectedDate, 7))}>Next week</Button><Button variant="outline" onClick={() => setSelectedDate(today)}>Today</Button></div>}
+    {lessonId && !id ? <p role="alert">Lesson not found.</p> : query.isPending ? <p role="status">Loading your lessons…</p> : <>
+      {query.isError && <div role="alert" className="rounded-card bg-neg-bg p-4 text-neg-fg"><p>{getErrorMessage(query.error, 'Could not load your lessons.')}</p>{lessons.length > 0 && <p>Your last loaded lessons are shown below.</p>}<Button variant="secondary" onClick={() => void query.refetch()}>Try again</Button></div>}
+      {!query.isError && lessons.length === 0 && <p>No lessons on the schedule for these dates. Try another week or check with your teacher.</p>}
+      {lessons.map((lesson, index) => <section key={lesson.id} className="space-y-2">{lesson.date && <h2 className="font-semibold text-muted">{lesson.date === today ? 'Today' : formatDateOnly(lesson.date, { weekday: 'long', month: 'short', day: 'numeric' })}</h2>}<StudentLessonCard lesson={lesson} from={from} standalone={!!lessonId} expanded={lesson.date === today && !lessonProgress(lesson).complete && (!simple || index === 0)} /></section>)}
+    </>}
+    {!lessonId && <Link to="/assignments" className="inline-flex min-h-11 items-center font-semibold text-accent underline">Find unfinished work from any date</Link>}
+  </div>
 }
-
-const dayHeading = (iso: string, today: string): string => {
-  if (iso === today) return 'Today'
-  if (iso === addDaysISO(today, 1)) return 'Tomorrow'
-  return formatDateOnly(iso, { weekday: 'long', month: 'short', day: 'numeric' })
-}
-
-const MyLessons: React.FC = () => {
-  const [lessons, setLessons] = useState<StudentLesson[]>([])
-  const [activeTerm, setActiveTerm] = useState<Term | null>(null)
-  const [showPast, setShowPast] = useState(false)
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
-  const [viewingMaterial, setViewingMaterial] = useState<PaperlessMaterial | null>(null)
-
-  const today = todayISO()
-
-  useEffect(() => {
-    let cancelled = false
-    const load = async () => {
-      setLoading(true)
-      try {
-        const term = await termsApi.getActive()
-        const start = showPast && term ? term.start_date : today
-        // Guard against a stale active term whose end date is already behind
-        // us — that would make the range empty.
-        const end =
-          term?.end_date && term.end_date >= today ? term.end_date : addDaysISO(today, 14)
-        const data = await lessonsApi.myLessons({ start_date: start, end_date: end })
-        if (cancelled) return
-        setActiveTerm(term)
-        setLessons(data || [])
-        setError(null)
-      } catch {
-        if (!cancelled) setError('Failed to load your lessons.')
-      } finally {
-        if (!cancelled) setLoading(false)
-      }
-    }
-    load()
-    return () => {
-      cancelled = true
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [showPast])
-
-  // Group by date, preserving the API's (date, position) ordering.
-  const days = useMemo(() => {
-    const byDate = new Map<string, StudentLesson[]>()
-    for (const lesson of lessons) {
-      byDate.set(lesson.date, [...(byDate.get(lesson.date) ?? []), lesson])
-    }
-    return Array.from(byDate.entries())
-  }, [lessons])
-
-  return (
-    <div>
-      {/* Page header */}
-      <div className="flex items-start justify-between mb-6 gap-3 flex-wrap">
-        <div>
-          <p className="text-[11px] font-semibold text-faint uppercase tracking-[.08em] mb-1.5">
-            My schedule
-          </p>
-          <h1 className="text-[27px] font-bold text-ink tracking-[-0.02em] leading-none">My Lessons</h1>
-          <p className="mt-1.5 text-[13px] text-muted">
-            {showPast && activeTerm
-              ? `Everything planned since ${formatDateOnly(activeTerm.start_date, { month: 'short', day: 'numeric' })}.`
-              : 'What your teacher has planned, starting today.'}
-          </p>
-        </div>
-        {activeTerm && (
-          <button
-            onClick={() => setShowPast(p => !p)}
-            className="h-[34px] px-3.5 text-[13px] font-semibold rounded-[8px] bg-panel border border-line text-muted hover:text-ink hover:bg-track transition-colors"
-          >
-            {showPast ? 'Hide past lessons' : 'Show past lessons'}
-          </button>
-        )}
-      </div>
-
-      {error && (
-        <div className="mb-4 px-4 py-3 rounded-card text-[13px] text-neg-fg bg-neg-bg border border-neg-fg/20">
-          {error}
-        </div>
-      )}
-
-      {loading ? (
-        <div className="flex items-center justify-center py-16">
-          <div className="w-6 h-6 border-2 border-line border-t-accent rounded-full animate-spin" />
-        </div>
-      ) : days.length === 0 ? (
-        <div className="py-14 text-center">
-          <p className="text-[15px] font-semibold text-ink-2 mb-1">No lessons on the schedule</p>
-          <p className="text-[13px] text-faint">When your teacher plans lessons for you, they'll show up here.</p>
-        </div>
-      ) : (
-        <div className="space-y-8">
-          {days.map(([date, dayLessons]) => (
-            <section key={date}>
-              <h2
-                className={`text-[11px] font-semibold uppercase tracking-[.08em] mb-3 ${
-                  date === today ? 'text-accent' : date < today ? 'text-faintest' : 'text-faint'
-                }`}
-              >
-                {dayHeading(date, today)}
-              </h2>
-              <div className="space-y-3">
-                {dayLessons.map(lesson => (
-                  <div
-                    key={lesson.id}
-                    className="bg-panel border border-line rounded-card-lg overflow-hidden"
-                  >
-                    <div className="h-1" style={{ backgroundColor: lesson.subject?.color || 'var(--accent)' }} />
-                    <div className="p-5">
-                      {/* Title row */}
-                      <div className="flex flex-wrap items-start justify-between gap-3 mb-1">
-                        <div className="flex items-center gap-2 min-w-0">
-                          <SubjectDot color={lesson.subject?.color ?? '#74716A'} size={9} className="flex-none" />
-                          <h3 className="text-[15px] font-semibold text-ink break-words">{lesson.title}</h3>
-                        </div>
-                        {lesson.status === 'taught' && (
-                          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold uppercase tracking-wide bg-pos-bg text-pos-fg border border-[var(--pos-fg)]/20 flex-shrink-0">
-                            Taught
-                          </span>
-                        )}
-                      </div>
-                      <div className="flex items-center gap-2 text-[12.5px] text-muted mb-2">
-                        {lesson.subject && <span>{lesson.subject.name}</span>}
-                        {lesson.duration_minutes && (
-                          <>
-                            {lesson.subject && <span className="text-faintest">·</span>}
-                            <span className="inline-flex items-center gap-1">
-                              <Clock className="w-3 h-3" /> {lesson.duration_minutes} min
-                            </span>
-                          </>
-                        )}
-                      </div>
-
-                      {lesson.objective && (
-                        <p className="text-[13px] text-ink-2 leading-relaxed mb-3">{lesson.objective}</p>
-                      )}
-
-                      {lesson.status === 'taught' && (
-                        <p className="text-[12px] text-muted mb-3">
-                          {(lesson.assignments ?? []).filter(a => ['not_started', 'in_progress'].includes(assignmentProgress(a))).length} activities still to finish
-                        </p>
-                      )}
-                      {/* Linked work */}
-                      {lesson.templates.length > 0 && (
-                        <div className="flex items-center gap-1.5 flex-wrap mb-3">
-                          <span className="text-[11px] font-semibold text-faint uppercase tracking-[.06em]">Work:</span>
-                          {lesson.templates.map(link => {
-                            const work = (lesson.assignments ?? []).filter(a => a.template_id === link.template_id)
-                            return work.length ? work.map(a => (
-                              <Link key={a.id} to={assignmentHref(a.id)} className="inline-flex items-center px-2.5 py-2 rounded-field bg-accent-soft text-accent text-[12px] font-semibold hover:underline">
-                                {link.template?.name ?? 'Assignment'} · {assignmentProgress(a).replace('_', ' ')}
-                              </Link>
-                            )) : (
-                              <span key={link.id} className="text-[12px] text-muted">{link.template?.name ?? 'Activity'} · Not assigned yet</span>
-                            )
-                          })}
-                        </div>
-                      )}
-
-                      {/* Resource links */}
-                      {lesson.resources.length > 0 && (
-                        <div className="flex gap-2 flex-wrap mb-3">
-                          {lesson.resources.map(resource =>
-                            resource.url ? (
-                              <a
-                                key={resource.id}
-                                href={resource.url}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="inline-flex items-center gap-1.5 px-2.5 py-1.5 bg-panel-2 border border-line rounded-[7px] text-[12px] text-accent hover:underline"
-                              >
-                                <ExternalLink className="w-3 h-3" />
-                                {resource.label}
-                              </a>
-                            ) : (
-                              <span
-                                key={resource.id}
-                                className="inline-flex items-center px-2.5 py-1.5 bg-panel-2 border border-line rounded-[7px] text-[12px] text-muted"
-                              >
-                                {resource.label}
-                              </span>
-                            )
-                          )}
-                        </div>
-                      )}
-
-                      {/* Attached documents */}
-                      {lesson.paperless_materials.length > 0 && (
-                        <div className="space-y-1.5">
-                          <p className="text-[11px] font-semibold text-faint uppercase tracking-[.06em] flex items-center gap-1">
-                            <Paperclip className="w-3 h-3" /> Materials
-                          </p>
-                          {lesson.paperless_materials.map(material => (
-                            <div
-                              key={material.document_id}
-                              className="flex flex-wrap items-center gap-3 px-3 py-2 bg-panel-2 border border-line rounded-field"
-                            >
-                              <DocumentThumb
-                                externalId={material.external_id}
-                                title={material.title}
-                                className="w-[28px] h-[36px] flex-shrink-0"
-                              />
-                              <div className="flex-1 min-w-0">
-                                <p className="text-[13px] font-medium text-ink truncate">{material.title}</p>
-                                <p className="font-mono text-[9.5px] text-faint tracking-wide">
-                                  {kindBadge(material.material_kind)}
-                                  {material.page_count ? ` · ${material.page_count} pp` : ''}
-                                </p>
-                              </div>
-                              <MaterialPreviewButton material={material} onOpen={() => setViewingMaterial(material)} />
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </section>
-          ))}
-        </div>
-      )}
-
-      <DocumentViewerModal material={viewingMaterial} onClose={() => setViewingMaterial(null)} />
-    </div>
-  )
-}
-
-export default MyLessons

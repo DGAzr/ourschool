@@ -85,6 +85,7 @@ interface NavItem {
   name: string
   href: string
   icon: LucideIcon
+  secondary?: boolean
 }
 
 interface SidebarContentProps {
@@ -119,7 +120,7 @@ const SidebarContent: React.FC<SidebarContentProps> = ({
 
     {/* Nav */}
     <nav className="flex-1 py-3 overflow-y-auto">
-      {navigation.map((item) => {
+      {navigation.map((item, index) => {
         const Icon = item.icon
         // A nav item matches an exact path or a subpath. When several items
         // match (e.g. Settings "/admin" and Shop "/admin/shop" both prefix
@@ -138,8 +139,9 @@ const SidebarContent: React.FC<SidebarContentProps> = ({
               matches(other.href)
           )
         return (
+          <React.Fragment key={item.name}>
+          {item.secondary && !navigation[index - 1]?.secondary && <p className="mx-5 mb-2 mt-5 border-t border-line pt-4 text-sm text-faint">More</p>}
           <Link
-            key={item.name}
             to={item.href}
             onClick={onNavigate}
             className={`relative flex min-h-[44px] items-center gap-3 mx-2 px-3 py-2 rounded-[9px] text-[13.5px] font-medium transition-colors duration-150 ${
@@ -158,8 +160,9 @@ const SidebarContent: React.FC<SidebarContentProps> = ({
               size={16}
               className={isActive ? 'text-accent' : 'text-faint'}
             />
-            {item.name}
+            <span className={!isAdmin && !item.secondary ? 'font-semibold text-base' : ''}>{item.name}</span>
           </Link>
+          </React.Fragment>
         )
       })}
     </nav>
@@ -266,8 +269,8 @@ const Layout: React.FC = () => {
   const { connected: paperlessConnected, status: paperlessStatus } = usePaperlessStatusContext()
   const showMaterials = paperlessConnected || paperlessStatus?.cache_available === true
 
-  const navigation = [
-    { name: 'Dashboard', href: '/', icon: Home },
+  const navigation: NavItem[] = [
+    { name: isAdmin ? 'Dashboard' : 'Today', href: '/', icon: Home },
     ...(isAdmin
       ? [
           { name: 'Teach', href: '/teach', icon: Lectern },
@@ -289,18 +292,18 @@ const Layout: React.FC = () => {
           { name: 'Settings', href: '/admin', icon: Settings },
         ]
       : [
-          { name: 'Assignments', href: '/assignments', icon: ClipboardList },
-          { name: 'My Lessons', href: '/my-lessons', icon: NotebookPen },
-          { name: 'My Attendance', href: '/attendance', icon: Calendar },
-          { name: 'Journal', href: '/journal', icon: PenTool },
+          { name: 'Lessons', href: '/my-lessons', icon: NotebookPen },
+          { name: 'My Work', href: '/assignments', icon: ClipboardList },
+          { name: 'Journal', href: '/journal', icon: PenTool, secondary: true },
+          { name: 'My Attendance', href: '/attendance', icon: Calendar, secondary: true },
           // Points pages hide together when the points system is disabled.
           ...(showShop
             ? [
-                { name: 'My Points', href: '/my-points', icon: Coins },
-                { name: 'Points Shop', href: '/shop', icon: ShoppingBag },
+                { name: 'My Points', href: '/my-points', icon: Coins, secondary: true },
+                { name: 'Points Shop', href: '/shop', icon: ShoppingBag, secondary: true },
               ]
             : []),
-          { name: 'My Progress', href: '/reports', icon: BarChart3 },
+          { name: 'My Progress', href: '/reports', icon: BarChart3, secondary: true },
         ]),
   ]
 
@@ -376,7 +379,7 @@ const Layout: React.FC = () => {
           </div>
         </div>
 
-        <main className="flex-1 overflow-y-auto p-4 sm:p-7 min-w-0">
+        <main id="school-main-content" className="flex-1 overflow-y-auto p-4 sm:p-7 min-w-0">
           {session?.is_guided && <div role="status" className="mb-4 flex items-center justify-between gap-3 rounded-field bg-accent-soft px-4 py-2 text-sm">
             <span>Student session · {user?.first_name} {user?.last_name}</span>
             <button type="button" className="min-h-[44px] font-semibold text-accent" onClick={() => setSessionDialog('return')}>Return to Parent/Teacher</button>

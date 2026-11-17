@@ -20,9 +20,11 @@ import { useEffect, useRef, useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { config } from '../config/env'
+import { loginHref, REMEMBERED_DESTINATION, safeReturnPath } from '../utils/returnPath'
 
 const OIDCCallback = () => {
   const started = useRef(false)
+  const [destination] = useState(() => { try { return safeReturnPath(sessionStorage.getItem(REMEMBERED_DESTINATION)) } catch { return '/' } })
   const [authorization] = useState(() => {
     const params = new URLSearchParams(window.location.search)
     return { code: params.get('code'), state: params.get('state'), denied: params.has('error') }
@@ -46,16 +48,17 @@ const OIDCCallback = () => {
       if (!response.ok) throw new Error('Single sign-on failed')
       const data = await response.json()
       login(data.access_token, data.session.user, data.session)
-      navigate('/', { replace: true })
+      try { sessionStorage.removeItem(REMEMBERED_DESTINATION) } catch { /* Optional browser state. */ }
+      navigate(destination, { replace: true })
     }).catch(() => setError(true))
-  }, [authorization, login, navigate])
+  }, [authorization, destination, login, navigate])
 
   return <div className="min-h-screen flex items-center justify-center bg-bg px-4">
     <div className="w-full max-w-[360px] space-y-4">
       <h1 className="text-[22px] font-semibold text-ink tracking-[-0.02em]">Sign in to OurSchool</h1>
       {error ? <><div role="alert" className="px-4 py-3 rounded-card text-[13px] text-neg-fg bg-neg-bg border border-neg-fg/20">
         Single sign-on failed. Please try again or contact your administrator.
-      </div><Link className="block text-[13px] text-accent hover:underline" to="/login">Back to sign in</Link></>
+      </div><Link className="block text-[13px] text-accent hover:underline" to={loginHref(destination)}>Back to sign in</Link></>
         : <p role="status" className="text-[13px] text-muted">Signing in…</p>}
     </div>
   </div>

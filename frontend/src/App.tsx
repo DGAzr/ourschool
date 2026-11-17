@@ -124,6 +124,7 @@ function AppContent() {
             <Route path="lessons" element={<AdminRoute><LessonPlanning /></AdminRoute>} />
             <Route path="teach" element={<AdminRoute><Teach /></AdminRoute>} />
             <Route path="my-lessons" element={<MyLessons />} />
+            <Route path="my-lessons/:lessonId" element={<MyLessons />} />
             <Route path="materials" element={<AdminRoute><Materials /></AdminRoute>} />
             <Route path="grading" element={<AdminRoute><Grading /></AdminRoute>} />
             <Route path="reports" element={<Reports />} />

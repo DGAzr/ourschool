@@ -5,6 +5,22 @@ import { Page, usePagedData } from './usePagedData'
 const page = (id: number, next: string | null = null): Page<number> => ({ items: [id], total: 151, next_cursor: next, counts: { all: 151 } })
 
 describe('usePagedData', () => {
+  it('restores the student page after opening an activity and preserves it while filters initialize', async () => {
+    const navigationKey = 'test.student-work-pages.2'
+    sessionStorage.removeItem(navigationKey)
+    const load = vi.fn().mockResolvedValueOnce(page(1, 'second')).mockResolvedValue(page(2))
+    const first = renderHook(() => usePagedData<number>({tab:'todo'}, load, true, navigationKey))
+    await waitFor(() => expect(first.result.current.items).toEqual([1]))
+    act(() => first.result.current.pagination.next())
+    await waitFor(() => expect(first.result.current.items).toEqual([2]))
+    first.unmount()
+    const next = renderHook(({ready}) => usePagedData<number>({tab:'todo'}, load, ready, navigationKey), {initialProps:{ready:false}})
+    next.rerender({ready:true})
+    await waitFor(() => expect(next.result.current.items).toEqual([2]))
+    expect(load.mock.lastCall?.[0]).toEqual({tab:'todo',cursor:'second'})
+    expect(next.result.current.pagination.page).toBe(2)
+    sessionStorage.removeItem(navigationKey)
+  })
   it('navigates with cursors and resets on a new filter, keeping full counts', async () => {
     const load = vi.fn().mockResolvedValueOnce(page(1, 'second')).mockResolvedValueOnce(page(2)).mockResolvedValueOnce(page(150))
     const { result, rerender } = renderHook(({ search }) => usePagedData<number>({ search }, load), { initialProps: { search: '' } })

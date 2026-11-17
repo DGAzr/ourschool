@@ -21,6 +21,14 @@ import { PaperlessMaterial } from './paperless'
 
 export type LessonAssignmentProgress = Pick<StudentAssignment, 'id' | 'lesson_id' | 'template_id' | 'student_id' | 'status' | 'started_date' | 'submitted_date' | 'is_graded' | 'time_spent_minutes'>
 
+export interface StudentActivity extends LessonAssignmentProgress {
+  name: string
+  due_date?: string | null
+  extended_due_date?: string | null
+  estimated_duration_minutes?: number | null
+  help_requested: boolean
+}
+
 export type LessonStatus = 'planned' | 'ready' | 'taught'
 
 export interface LessonMaterial {
@@ -101,7 +109,7 @@ export interface Lesson {
 // Student-safe lesson projection returned by /lessons/my-lessons. Excludes
 // teacher-private fields (notes, roster, gather list).
 export interface StudentLesson {
-  assignments?: LessonAssignmentProgress[]
+  assignments?: StudentActivity[]
   id: number
   position: number
   title: string
@@ -113,6 +121,16 @@ export interface StudentLesson {
   templates: LessonTemplateLink[]
   resources: LessonResource[]
   paperless_materials: PaperlessMaterial[]
+}
+
+export type StudentLessonDetail = Omit<StudentLesson, 'date'> & { date: string | null }
+
+export interface StudentDay {
+  date: string
+  lessons: StudentLesson[]
+  standalone: StudentActivity[]
+  earlier: { items: StudentActivity[]; total: number }
+  other: { items: StudentActivity[]; total: number }
 }
 
 // --- Write payloads ---

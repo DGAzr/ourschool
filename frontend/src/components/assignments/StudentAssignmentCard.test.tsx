@@ -16,9 +16,9 @@ describe('student task actions', () => {
     const start = vi.fn()
     render(<MemoryRouter><StudentAssignmentCard assignment={work} viewHref="/assignments/12" onStart={start} /></MemoryRouter>)
     expect(screen.getByRole('link', { name: 'Open assignment' })).toHaveAttribute('href', '/assignments/12')
-    expect(screen.getByText('not started')).toBeVisible()
+    expect(screen.getByText('Ready to start')).toBeVisible()
     expect(screen.getByText(/Overdue · You can still finish/)).toBeVisible()
-    await userEvent.click(screen.getByRole('button', { name: 'Start Assignment' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Start' }))
     expect(start).toHaveBeenCalledWith(12)
   })
   it('allows started overdue work to be submitted', async () => {

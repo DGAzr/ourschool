@@ -26,6 +26,7 @@ import { formatDateOnly } from '../../utils/formatters'
 import { assignmentProgress, effectiveDueDate, isOverdue } from '../../utils/studentAssignments'
 import { letterGrade } from '../../utils/grading'
 import MarkdownRenderer from '../common/MarkdownRenderer'
+import { workStateLabel } from '../../utils/studentPlan'
 
 interface StudentAssignmentCardProps {
   assignment: StudentAssignment
@@ -86,18 +87,19 @@ const StudentAssignmentCard: React.FC<StudentAssignmentCardProps> = ({
       return (
         <button
           onClick={() => onStart(assignment.id)}
-          className="flex-1 h-[34px] px-4 rounded-field bg-btn-primary-bg text-btn-primary-fg text-[13px] font-semibold hover:opacity-90 transition-opacity"
+          className="flex-1 min-h-[44px] px-4 rounded-field bg-btn-primary-bg text-btn-primary-fg text-[13px] font-semibold hover:opacity-90 transition-opacity"
         >
-          Start Assignment
+          {isAdmin ? 'Start Assignment' : 'Start'}
         </button>
       )
     }
 
     if (progress === 'in_progress' && onComplete) {
+      if (viewHref) return <Link to={viewHref} className="inline-flex min-h-11 flex-1 items-center justify-center rounded-field bg-btn-primary-bg px-4 py-2 font-semibold text-btn-primary-fg">Continue</Link>
       return (
         <button
           onClick={() => onComplete(assignment)}
-          className="flex-1 h-[34px] px-4 rounded-field bg-pos-bg text-pos-fg text-[13px] font-semibold hover:opacity-80 transition-opacity"
+          className="flex-1 min-h-[44px] px-4 rounded-field bg-pos-bg text-pos-fg text-[13px] font-semibold hover:opacity-80 transition-opacity"
         >
           I’m finished
         </button>
@@ -106,8 +108,8 @@ const StudentAssignmentCard: React.FC<StudentAssignmentCardProps> = ({
 
     if (progress === 'submitted' && !assignment.is_graded) {
       return (
-        <div className="flex-1 h-[34px] px-4 rounded-field bg-track text-muted text-[13px] font-medium flex items-center justify-center">
-          Waiting for Grade
+        <div className="flex-1 min-h-[44px] px-4 rounded-field bg-track text-muted text-[13px] font-medium flex items-center justify-center">
+          Ready for teacher
         </div>
       )
     }
@@ -121,7 +123,7 @@ const StudentAssignmentCard: React.FC<StudentAssignmentCardProps> = ({
       <div className="h-1" style={{ backgroundColor: subject?.color || 'var(--accent)' }} />
 
       <div className="p-5">
-        {simple&&<div className="mb-3"><Icon name={subject?.icon??'BookOpen'} size={36}/><p className="text-base mt-2">Open this activity. Work on it, then show your teacher.</p></div>}
+        {simple&&<div className="mb-3"><Icon name={subject?.icon??'BookOpen'} size={36}/></div>}
         {/* Header */}
         <div className="flex flex-wrap items-start justify-between gap-2 mb-3">
           <div className="flex-1 min-w-0">
@@ -150,21 +152,22 @@ const StudentAssignmentCard: React.FC<StudentAssignmentCardProps> = ({
           </div>
 
           <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold uppercase tracking-wide ${statusBadge(progress)}`}>
-            {progress.replace('_', ' ')}
+                {isAdmin ? progress.replace('_', ' ') : workStateLabel(assignment)}
           </span>
         </div>
 
         {overdue && <p className="text-[12px] font-semibold text-neg-fg mb-3">Overdue · You can still finish this work</p>}
 
         {/* Description */}
-        {template?.description && (
+        {template?.description && !simple && (
           <div className="mb-3 text-[13px] text-muted line-clamp-2">
             <MarkdownRenderer content={template.description} className="line-clamp-2" />
           </div>
         )}
 
         {/* Meta row */}
-        <div className="flex flex-wrap gap-2 items-center justify-between text-[12.5px] text-muted mb-4">
+        {simple && template?.estimated_duration_minutes && <p className="mb-3 text-base text-muted">About {template.estimated_duration_minutes} minutes</p>}
+        <div hidden={simple} className="flex flex-wrap gap-2 items-center justify-between text-[12.5px] text-muted mb-4">
           <div className="flex flex-wrap items-center gap-3">
             <span>📋 {maxPts} pts</span>
             {template?.estimated_duration_minutes && (
@@ -241,7 +244,7 @@ const StudentAssignmentCard: React.FC<StudentAssignmentCardProps> = ({
           {assignment.is_student_created && onEditSelf && !assignment.is_graded && !['submitted', 'graded', 'excused'].includes(progress) && (
             <button
               onClick={() => onEditSelf(assignment)}
-              className="w-[34px] h-[34px] flex items-center justify-center rounded-field text-faint hover:text-accent hover:bg-accent-soft transition-colors"
+              className="w-[34px] min-h-[44px] flex items-center justify-center rounded-field text-faint hover:text-accent hover:bg-accent-soft transition-colors"
               title="Edit your assignment"
               aria-label="Edit your assignment"
             >
@@ -251,7 +254,7 @@ const StudentAssignmentCard: React.FC<StudentAssignmentCardProps> = ({
           {isAdmin && onArchive && (
             <button
               onClick={() => onArchive(assignment)}
-              className="w-[34px] h-[34px] flex items-center justify-center rounded-field text-faint hover:text-ink hover:bg-track transition-colors"
+              className="w-[34px] min-h-[44px] flex items-center justify-center rounded-field text-faint hover:text-ink hover:bg-track transition-colors"
               title="Archive"
               aria-label="Archive assignment"
             >
@@ -261,7 +264,7 @@ const StudentAssignmentCard: React.FC<StudentAssignmentCardProps> = ({
           {isAdmin && onDelete && (
             <button
               onClick={() => onDelete(assignment)}
-              className="w-[34px] h-[34px] flex items-center justify-center rounded-field text-faint hover:text-neg-fg hover:bg-neg-bg transition-colors"
+              className="w-[34px] min-h-[44px] flex items-center justify-center rounded-field text-faint hover:text-neg-fg hover:bg-neg-bg transition-colors"
               title="Delete"
               aria-label="Delete assignment"
             >

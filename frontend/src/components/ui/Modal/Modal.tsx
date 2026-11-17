@@ -152,7 +152,7 @@ const Modal: React.FC<ModalProps> = ({
         <div className="flex-1 min-h-0 overflow-y-auto px-5 py-[18px]">{children}</div>
 
         {footer && (
-          <div className="flex items-center justify-end gap-2.5 px-5 py-[14px] border-t border-line-2 bg-panel-2 flex-shrink-0">
+          <div className="flex flex-wrap items-center justify-end gap-2.5 px-5 py-[14px] border-t border-line-2 bg-panel-2 flex-shrink-0">
             {footer}
           </div>
         )}

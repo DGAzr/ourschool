@@ -60,9 +60,12 @@ from app.schemas.lesson import (
     LessonUpdate,
     LessonWriteResponse,
     StudentLessonResponse,
+    StudentLessonDetailResponse,
+    StudentDayResponse,
 )
 from app.routers.validators import validate_students
 from app.services.lesson_assignments import sync_lesson_assignments, assignment_impact
+from app.services.student_plan import accessible_lessons, project_lessons, student_day
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -465,39 +468,34 @@ def get_my_lessons(
     ``start_date`` to include past lessons.
     """
     effective_start = start_date or date.today()
-    query = db.query(Lesson).filter(
-        Lesson.students.any(User.id == student.id),
-        Lesson.date >= effective_start,
-    )
+    query = accessible_lessons(db, student.id).filter(Lesson.date >= effective_start)
     if end_date:
         query = query.filter(Lesson.date <= end_date)
     lessons = query.order_by(Lesson.date, Lesson.position, Lesson.id).all()
-    assignments_by_lesson = {}
-    if lessons:
-        assignments = (
-            db.query(StudentAssignment)
-            .filter(
-                StudentAssignment.lesson_id.in_([lesson.id for lesson in lessons]),
-                StudentAssignment.student_id == student.id,
-            )
-            .order_by(StudentAssignment.id)
-            .all()
-        )
-        for assignment in assignments:
-            assignments_by_lesson.setdefault(assignment.lesson_id, []).append(
-                assignment
-            )
-    return [
-        StudentLessonResponse.model_validate(lesson).model_copy(
-            update={
-                "assignments": [
-                    LessonAssignmentProgress.model_validate(assignment)
-                    for assignment in assignments_by_lesson.get(lesson.id, [])
-                ]
-            }
-        )
-        for lesson in lessons
-    ]
+    return project_lessons(db, student.id, lessons)
+
+
+@router.get("/my-day", response_model=StudentDayResponse)
+def get_my_day(
+    db: Annotated[Session, Depends(get_db)],
+    student: Annotated[User, Depends(require_student_session("/api/lessons/"))],
+    school_date: date = Query(..., alias="date"),
+):
+    """One local-school-day plan, with bounded previews of other open work."""
+    return student_day(db, student.id, school_date)
+
+
+@router.get("/my-lessons/{lesson_id}", response_model=StudentLessonDetailResponse)
+def get_my_lesson(
+    lesson_id: int,
+    db: Annotated[Session, Depends(get_db)],
+    student: Annotated[User, Depends(require_student_session("/api/lessons/"))],
+):
+    """Stable, student-safe lesson context including retained drawer work."""
+    lesson = accessible_lessons(db, student.id).filter(Lesson.id == lesson_id).first()
+    if not lesson:
+        raise HTTPException(status_code=404, detail="Lesson not found")
+    return project_lessons(db, student.id, [lesson])[0]
 
 
 @router.get("/assignment-progress", response_model=List[LessonAssignmentProgress])

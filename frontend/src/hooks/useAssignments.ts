@@ -40,15 +40,17 @@ interface UseAssignmentsProps {
   activeStudents?: boolean
   includeUndated?: boolean
   today?: string
+  navigationKey?: string
 }
 
 export const useAssignments = ({ isAdmin, adminViewMode, selectedSubject, includeArchived,
   enabled = true, search = '', assignmentType, studentId, templateId, termId,
-  termBasis = 'effective', tab = 'all', dueTo, effectiveDue, activeStudents, includeUndated, today,
+  termBasis = 'effective', tab = 'all', dueTo, effectiveDue, activeStudents, includeUndated, today, navigationKey,
 }: UseAssignmentsProps) => {
   const [subjects, setSubjects] = useState<Subject[]>([])
   const [students, setStudents] = useState<User[]>([])
   const [metadata, setMetadata] = useState({ loaded: false, error: null as string | null })
+  const [metadataRevision, setMetadataRevision] = useState(0)
   const [error, setError] = useState<string | null>(null)
   const settledSearch = useDebouncedSearch(search)
   const templatesMode = isAdmin && adminViewMode === 'templates'
@@ -61,7 +63,7 @@ export const useAssignments = ({ isAdmin, adminViewMode, selectedSubject, includ
     term_id: termId, term_basis: termBasis, student_view: !isAdmin, tab,
     search: settledSearch, assignment_type: assignmentType,
     due_to: dueTo, effective_due: effectiveDue, active_students: activeStudents, include_undated: includeUndated, today,
-  }, assignmentPage, enabled && !templatesMode)
+  }, assignmentPage, enabled && !templatesMode, navigationKey)
 
   useEffect(() => {
     if (!enabled) return
@@ -74,7 +76,7 @@ export const useAssignments = ({ isAdmin, adminViewMode, selectedSubject, includ
         }
       }).catch(() => { if (!cancelled) setMetadata({ loaded: true, error: 'Unable to load students and subjects' }) })
     return () => { cancelled = true }
-  }, [isAdmin, enabled])
+  }, [isAdmin, enabled, metadataRevision])
   const page = templatesMode ? templateData : assignmentData
   return {
     templates: templateData.items,
@@ -84,7 +86,7 @@ export const useAssignments = ({ isAdmin, adminViewMode, selectedSubject, includ
     subjects, students,
     loading: enabled && (!metadata.loaded || page.loading),
     error: error ?? metadata.error ?? page.error,
-    refetch: () => { setError(null); page.refetch() },
+    refetch: () => { setError(null); if (metadata.error) setMetadataRevision(value => value + 1); page.refetch() },
     setError, counts: page.counts, pagination: page.pagination, pageKey: page.pageKey,
   }
 }

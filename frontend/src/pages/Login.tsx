@@ -21,6 +21,7 @@ import { useNavigate, useLocation } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { Eye, EyeOff, GraduationCap } from 'lucide-react'
 import { config } from '../config/env'
+import { REMEMBERED_DESTINATION, safeReturnPath } from '../utils/returnPath'
 
 const Login: React.FC = () => {
   const [username, setUsername] = useState('')
@@ -46,6 +47,7 @@ const Login: React.FC = () => {
       const response = await fetch(`${config.api.baseUrl}/auth/oidc/start`, { credentials: 'include' })
       if (!response.ok) throw new Error('SSO unavailable')
       const data = await response.json()
+      try { sessionStorage.setItem(REMEMBERED_DESTINATION, safeReturnPath(new URLSearchParams(location.search).get('returnTo'))) } catch { /* Login still works without browser storage. */ }
       window.location.assign(data.authorization_url)
     } catch {
       setError('Single sign-on is currently unavailable. Please try again.')
@@ -75,7 +77,7 @@ const Login: React.FC = () => {
       if (response.ok) {
         const data = await response.json()
         login(data.access_token, data.session.user, data.session)
-        navigate('/', { replace: true })
+        navigate(safeReturnPath(new URLSearchParams(location.search).get('returnTo')), { replace: true })
       } else {
         const errorData = await response.json()
         setError(errorData.detail || 'Login failed')

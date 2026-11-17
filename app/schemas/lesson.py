@@ -227,6 +227,17 @@ class LessonAssignmentProgress(BaseModel):
     model_config = {"from_attributes": True}
 
 
+class StudentActivityResponse(LessonAssignmentProgress):
+    """Student work navigation without grades, notes, or another learner's data."""
+
+    lesson_id: Optional[int] = None
+    name: str
+    due_date: Optional[date_type] = None
+    extended_due_date: Optional[date_type] = None
+    estimated_duration_minutes: Optional[int] = None
+    help_requested: bool = False
+
+
 class StudentLessonResponse(BaseModel):
     """Student-safe lesson projection for the "my lessons" schedule view.
 
@@ -246,12 +257,31 @@ class StudentLessonResponse(BaseModel):
     templates: List[LessonTemplateLinkResponse] = []
     resources: List[LessonResourceResponse] = []
     paperless_materials: List[PaperlessMaterialResponse] = []
-    assignments: List[LessonAssignmentProgress] = []
+    assignments: List[StudentActivityResponse] = []
 
     class Config:
         """Pydantic configuration."""
 
         from_attributes = True
+
+
+class StudentLessonDetailResponse(StudentLessonResponse):
+    """Also supports retained assignments whose lesson is in the drawer."""
+
+    date: Optional[date_type] = None
+
+
+class StudentWorkSection(BaseModel):
+    items: List[StudentActivityResponse] = []
+    total: int = 0
+
+
+class StudentDayResponse(BaseModel):
+    date: date_type
+    lessons: List[StudentLessonResponse] = []
+    standalone: List[StudentActivityResponse] = []
+    earlier: StudentWorkSection
+    other: StudentWorkSection
 
 
 class LessonResponse(LessonBase):

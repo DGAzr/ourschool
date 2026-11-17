@@ -49,7 +49,13 @@ export const assignmentProgress = (a: Pick<StudentAssignment, 'status' | 'is_gra
   return 'not_started'
 }
 
-export const assignmentHref = (id: number): string => `/assignments/${id}`
+export const assignmentHref = (id: number, context?: { from?: string; day?: string }): string => {
+  const params = new URLSearchParams()
+  if (context?.from) params.set('from', context.from)
+  if (context?.day) params.set('day', context.day)
+  const query = params.toString()
+  return `/assignments/${id}${query ? `?${query}` : ''}`
+}
 
 /**
  * Whether unfinished work is past its effective due date. Computed from dates

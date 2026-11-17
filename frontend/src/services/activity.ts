@@ -16,8 +16,6 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-import { api } from './api'
-
 /**
  * Structured context attached to an activity item. Mirrors the ad-hoc
  * `details` dicts built in app/routers/activity.py; which fields are present
@@ -45,70 +43,3 @@ export interface ActivityItem {
   details: ActivityDetails
   time_ago: string
 }
-
-interface ActivityResponse {
-  activities: ActivityItem[]
-  total: number
-  date_range: {
-    start: string
-    end: string
-  }
-}
-
-interface ActivityFilters {
-  limit?: number
-  days?: number
-}
-
-class ActivityService {
-  /**
-   * Get recent activity for the current user
-   */
-  async getRecentActivity(filters: ActivityFilters = {}): Promise<ActivityResponse> {
-    try {
-      const params = new URLSearchParams()
-      
-      if (filters.limit !== undefined) {
-        params.append('limit', filters.limit.toString())
-      }
-      
-      if (filters.days !== undefined) {
-        params.append('days', filters.days.toString())
-      }
-      
-      const url = `/activity/recent${params.toString() ? '?' + params.toString() : ''}`
-      
-      const response = await api.get(url)
-      
-      if (!response) {
-        throw new Error('No response received from activity API')
-      }
-      
-      // The api.get() method returns the parsed JSON directly, not wrapped in a .data property
-      return response
-    } catch (error) {
-      throw error
-    }
-  }
-
-  /**
-   * Get activity with custom filters
-   */
-  async getActivity(options: {
-    limit?: number
-    days?: number
-  } = {}): Promise<ActivityItem[]> {
-    const response = await this.getRecentActivity(options)
-    return response.activities
-  }
-
-  /**
-   * Get activity for dashboard (limited to most recent items)
-   */
-  async getDashboardActivity(): Promise<ActivityItem[]> {
-    const response = await this.getRecentActivity({ limit: 10, days: 7 })
-    return response.activities
-  }
-}
-
-export const activityApi = new ActivityService()
