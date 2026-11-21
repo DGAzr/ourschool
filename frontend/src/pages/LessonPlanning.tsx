@@ -19,7 +19,7 @@ import { settingsApi } from '../services/settings'
 
 import { useCallback, useEffect, useId, useMemo, useState } from 'react'
 import { ChevronDown } from 'lucide-react'
-import { Navigate, useNavigate, useSearchParams } from 'react-router-dom'
+import { Navigate, useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 
 import { useAuth } from '../contexts/AuthContext'
 import { Spinner, useToast, Select, Input, Button } from '../components/ui'
@@ -49,6 +49,7 @@ import {
   calendarDateHref,
   useCalendarDateParam,
 } from '../hooks/useCalendarDateParam'
+import { formatDateOnly } from '../utils/formatters'
 import { addDays, isValidISODate } from '../utils/dates'
 
 import { lessonDraft, mergeLessonOrder } from '../utils/lessonChanges'
@@ -56,6 +57,14 @@ import Modal from '../components/ui/Modal/Modal'
 import PrintPlan from '../components/lessons/PrintPlan'
 
 const DAYS_STORAGE_KEY = 'lessonPlanning.daysShown'
+
+type CopyPreview = {
+  sourceStart: string
+  sourceEnd: string
+  destinationStart: string
+  destinationEnd: string
+  lessons: { id: number; title: string; from: string; to: string }[]
+}
 
 type DrawerState =
   | { mode: 'create'; date: string | null }
@@ -73,6 +82,7 @@ const LessonPlanningContent: React.FC = () => {
   const isAdmin = user?.role === 'admin'
   const { toast } = useToast()
   const navigate = useNavigate()
+  const location = useLocation()
 
   const [rangeStart, setRangeStart] = useCalendarDateParam()
   const [daysShown, setDaysShown] = useState<number>(() => readStoredDays())
@@ -80,7 +90,15 @@ const LessonPlanningContent: React.FC = () => {
 
   const [subjects, setSubjects] = useState<Subject[]>([])
   const [students, setStudents] = useState<User[]>([])
-  const [drawer, setDrawer] = useState<DrawerState>(null)
+  const [drawer, setDrawer] = useState<DrawerState>(() =>
+    location.state?.planLesson === true ? { mode: 'create', date: rangeStart } : null
+  )
+  const closeDrawer = useCallback(() => {
+    setDrawer(null)
+    if (location.state?.planLesson === true) {
+      navigate({ pathname: location.pathname, search: location.search }, { replace: true, state: null })
+    }
+  }, [location.pathname, location.search, location.state, navigate])
   const [drawerLessons, setDrawerLessons] = useState<Lesson[]>([])
 
   const [plannerParams]=useSearchParams()
@@ -88,7 +106,7 @@ const LessonPlanningContent: React.FC = () => {
   const [filters, setFilters] = useState<{student:string;subject:string}>(() => {
     try {const stored = JSON.parse(localStorage.getItem(filterKey) ?? '{}'); return {student: plannerParams.get('student_id') ?? String(stored?.student ?? ''),subject: plannerParams.get('subject_id') ?? String(stored?.subject ?? '')}} catch {return {student:plannerParams.get('student_id')??'',subject:plannerParams.get('subject_id')??''}}
   })
-  const [review, setReview] = useState<{title:string;impacts:AssignmentImpact[];resolve:(confirmed:boolean)=>void} | null>(null)
+  const [review, setReview] = useState<{title:string;impacts:AssignmentImpact[];copyPreview?:CopyPreview;resolve:(confirmed:boolean)=>void} | null>(null)
   const [batchDate, setBatchDate] = useState('')
   const [planControlsOpen, setPlanControlsOpen] = useState(false)
   const planControlsId = useId()
@@ -161,46 +179,96 @@ const LessonPlanningContent: React.FC = () => {
   const boardDays = includeScheduledDays(days, scopedLessons)
   const scopedDrawer = drawerLessons.filter(matches)
   const readiness = computeReadiness(scopedLessons)
-  const confirmImpacts = useCallback(async (sources: Lesson[], destination: string | null, title: string, copy = false, restore = false, selectedStudents:number[]|null=null): Promise<boolean> => {
-    const earliest = sources.reduce((min,l)=>l.date && l.date < min ? l.date : min,sources[0]?.date ?? destination ?? todayISO())
-    const offset = copy && destination ? Math.round((Date.parse(destination)-Date.parse(earliest))/86400000) : 0
-    const impacts = (await Promise.all(sources.map(lesson=>lessonsApi.impact({
-      ...lessonDraft(lesson, restore ? lesson.last_scheduled_date ?? null : copy && lesson.date ? addDays(lesson.date,offset) : destination, copy ? offset : undefined),
-      ...(copy && selectedStudents!==null ? {student_ids:selectedStudents}:{}),
-      lesson_id: copy ? undefined : lesson.id,
+  const confirmImpacts = useCallback(async (
+    sources: Lesson[],
+    destination: string | null,
+    title: string,
+    options: { copyPreview?: CopyPreview; restore?: boolean; studentIds?: number[] } = {},
+  ): Promise<boolean> => {
+    const { copyPreview, restore, studentIds } = options
+    const offset = copyPreview
+      ? (Date.parse(copyPreview.destinationStart) - Date.parse(copyPreview.sourceStart)) / 86400000
+      : undefined
+    const copyDates = new Map(copyPreview?.lessons.map(lesson => [lesson.id, lesson.to]))
+    const impacts = (await Promise.all(sources.map(lesson => lessonsApi.impact({
+      ...lessonDraft(lesson, restore ? lesson.last_scheduled_date ?? null : copyDates.get(lesson.id) ?? destination, offset),
+      ...(studentIds === undefined ? {} : { student_ids: studentIds }),
+      lesson_id: copyPreview ? undefined : lesson.id,
     })))).flat()
-    return new Promise(resolve=>setReview({title,impacts,resolve}))
-  },[])
-  const handleBatch = async (sources: Lesson[], action: 'schedule'|'restore_taught'|'copy', destination?:string) => {
+    return new Promise(resolve => setReview({ title, impacts, copyPreview, resolve }))
+  }, [])
+
+  const handleBatch = async (
+    sources: Lesson[],
+    action: 'schedule' | 'restore_taught' | 'copy',
+    destination?: string,
+    copyPreview?: CopyPreview,
+  ) => {
     if (sources.length === 0 || copying) return
     setCopying(true)
+    const studentIds = action === 'copy' ? copyStudents ?? undefined : undefined
     try {
-      if (!await confirmImpacts(sources,destination ?? null,action === 'copy' ? `Copy ${sources.length} lessons to new instances` : action === 'restore_taught' ? `Mark ${sources.length} lessons taught on their former days` : `Schedule ${sources.length} lessons`,action === 'copy',action === 'restore_taught',copyStudents)) return
-      const results = await lessonsApi.batch(sources.map(l=>l.id),action,destination,action==='copy' ? copyStudents??undefined : undefined)
-      results.flatMap(r=>r.warnings).forEach(w=>toast(w,'danger'))
-      await Promise.all([refetch(),refreshDrawer()])
-      toast(`${results.length} lessons ${action === 'copy' ? 'copied. Grades, submissions and work logs were not copied.' : action === 'restore_taught' ? 'restored and marked taught. Published work was kept.' : 'scheduled. Existing work was reused.'}`)
-    } catch(err) {toast(getErrorMessage(err,'Could not apply the lesson changes.'),'danger')}
-    finally {setCopying(false)}
+      const title = action === 'copy' ? `Review ${sources.length} lessons to copy`
+        : action === 'restore_taught' ? `Mark ${sources.length} lessons taught on their former days`
+        : `Schedule ${sources.length} lessons`
+      if (!await confirmImpacts(sources, destination ?? null, title, {
+        copyPreview, restore: action === 'restore_taught', studentIds,
+      })) return
+      const results = await lessonsApi.batch(sources.map(lesson => lesson.id), action, destination, studentIds, copyPreview?.sourceStart)
+      results.flatMap(r => r.warnings).forEach(w => toast(w, 'danger'))
+      await Promise.all([refetch(), refreshDrawer()])
+      toast(`${results.length} lessons ${action === 'copy' ? 'copied.' : action === 'restore_taught' ? 'restored and marked taught. Published work was kept.' : 'scheduled. Existing work was reused.'}`)
+    } catch (err) {
+      toast(getErrorMessage(err, 'Could not apply the lesson changes.'), 'danger')
+    } finally {
+      setCopying(false)
+    }
   }
-  const preparePeriod = async (kind: 'day' | 'week', copyingPeriod = false) => {
+
+  const weekEnd = addDays(rangeStart, 6)
+  const copyPlan = async (kind: 'day' | 'week') => {
+    if (periodBusy || copying) return
+    const sourceEnd = kind === 'week' ? weekEnd : rangeStart
+    const destinationStart = batchDate || addDays(rangeStart, 7)
+    const offset = (Date.parse(destinationStart) - Date.parse(rangeStart)) / 86400000
+    setPeriodBusy(true)
+    try {
+      const sources = (await lessonsApi.list({ start_date: rangeStart, end_date: sourceEnd })).filter(matches)
+      if (!sources.length) {
+        toast('No lessons in this date and filter scope.')
+        return
+      }
+      await handleBatch(sources, 'copy', destinationStart, {
+        sourceStart: rangeStart,
+        sourceEnd,
+        destinationStart,
+        destinationEnd: addDays(sourceEnd, offset),
+        lessons: sources.flatMap(lesson => lesson.date ? [{
+          id: lesson.id, title: lesson.title, from: lesson.date, to: addDays(lesson.date, offset),
+        }] : []),
+      })
+    } catch (err) {
+      toast(getErrorMessage(err, 'Could not load the lessons to copy.'), 'danger')
+    } finally {
+      setPeriodBusy(false)
+    }
+  }
+
+  const preparePeriod = async (kind: 'day' | 'week') => {
     if (periodBusy || copying) return
     setPeriodBusy(true)
     try {
       const rows = (await lessonsApi.list({
         start_date: rangeStart,
-        end_date: kind === 'week' ? addDays(rangeStart, 6) : rangeStart,
+        end_date: kind === 'week' ? weekEnd : rangeStart,
       })).filter(matches)
       if (!rows.length) {
         toast('No lessons in this date and filter scope.')
         return
       }
-      if (copyingPeriod) await handleBatch(rows, 'copy', batchDate || addDays(rangeStart, 7))
-      else {
-        setPrintLessons(rows)
-        setTeacherCopy(false)
-        setPrinting(kind)
-      }
+      setPrintLessons(rows)
+      setTeacherCopy(false)
+      setPrinting(kind)
     } catch (err) {
       toast(getErrorMessage(err, 'Could not load the selected plan.'), 'danger')
     } finally {
@@ -230,12 +298,12 @@ const LessonPlanningContent: React.FC = () => {
 
   const handleSaved = useCallback(
     (warnings: string[]) => {
-      setDrawer(null)
+      closeDrawer()
       warnings.forEach((w) => toast(w, 'danger'))
       refetch()
       void refreshDrawer()
     },
-    [refetch, refreshDrawer, toast]
+    [closeDrawer, refetch, refreshDrawer, toast]
   )
 
   const handleReorder = useCallback(
@@ -343,8 +411,9 @@ const LessonPlanningContent: React.FC = () => {
       <div id={planControlsId} hidden={!planControlsOpen}>
         <div className="flex flex-wrap items-end gap-3 mb-4">
           <Input label="Copy starting on" type="date" value={batchDate || addDays(rangeStart,7)} onChange={e=>setBatchDate(e.target.value)} fullWidth={false} /><details className="text-sm"><summary className="cursor-pointer text-accent">Students for copies · {copyStudents===null?'same as original':copyStudents.length+' selected'}</summary><button type="button" className="text-accent mr-3" onClick={()=>setCopyStudents(null)}>Use original students</button>{students.map(student=><label key={student.id} className="inline-flex items-center gap-1 mr-3"><input type="checkbox" checked={copyStudents?.includes(student.id)??false} onChange={e=>setCopyStudents(previous=>e.target.checked?[...(previous??[]),student.id]:(previous??[]).filter(id=>id!==student.id))}/>{student.first_name}</label>)}</details>
-          <Button variant="outline" disabled={copying || !scopedLessons.some(l=>l.date===rangeStart)} onClick={()=>void handleBatch(scopedLessons.filter(l=>l.date===rangeStart),'copy',batchDate || addDays(rangeStart,7))}>Copy day</Button>
-          <Button variant="outline" disabled={copying || periodBusy || loading} onClick={()=>void preparePeriod('week',true)}>Copy week</Button>
+          <Button variant="outline" disabled={copying || !scopedLessons.some(l=>l.date===rangeStart)} onClick={() => void copyPlan('day')}>Copy day</Button>
+          <Button variant="outline" disabled={copying || periodBusy || loading} onClick={() => void copyPlan('week')}>Copy week</Button>
+          <span className="text-xs text-muted w-full">Copy week uses {formatDateOnly(rangeStart)} through {formatDateOnly(weekEnd)}.</span>
           <Button variant="outline" onClick={()=>void preparePeriod('day')} disabled={periodBusy || !scopedLessons.some(l=>l.date===rangeStart)}>Print day</Button>
           <Button variant="outline" onClick={()=>void preparePeriod('week')} disabled={periodBusy || loading}>Print week</Button>
         </div>
@@ -377,6 +446,15 @@ const LessonPlanningContent: React.FC = () => {
 
       {review && <Modal isOpen onClose={()=>{review.resolve(false);setReview(null)}} title={review.title} footer={<><Button variant="outline" onClick={()=>{review.resolve(false);setReview(null)}}>Cancel</Button><Button onClick={()=>{review.resolve(true);setReview(null)}}>Apply changes</Button></>}>
         <p className="text-sm text-muted mb-3">Existing work stays attached when moving lessons. Copies start with fresh student work and ungathered materials.</p>
+        {review.copyPreview && <div className="mb-4 space-y-2 text-sm">
+          <p>Copying {formatDateOnly(review.copyPreview.sourceStart)} through {formatDateOnly(review.copyPreview.sourceEnd)}.</p>
+          <p>Destination {formatDateOnly(review.copyPreview.destinationStart)} through {formatDateOnly(review.copyPreview.destinationEnd)}.</p>
+          <ul className="space-y-1">
+            {review.copyPreview.lessons.map(lesson => <li key={lesson.id}>
+              <strong>{lesson.title}</strong> · {formatDateOnly(lesson.from)} → {formatDateOnly(lesson.to)}
+            </li>)}
+          </ul>
+        </div>}
         {review.impacts.length===0 && <p>No assignments affected.</p>}
         <ul className="space-y-2">{review.impacts.map((impact,i)=><li className="text-sm border border-line rounded-lg p-2" key={i}><strong className="capitalize">{impact.action}</strong> · {impact.student_name} · {impact.template_name}<p>{impact.due_date ? `Due ${impact.due_date}` : 'No deadline'} · {impact.explanation}</p></li>)}</ul>
       </Modal>}
@@ -388,7 +466,9 @@ const LessonPlanningContent: React.FC = () => {
           lesson={drawer.mode === 'edit' ? drawer.lesson : null}
           subjects={subjects}
           students={students}
-          onClose={() => setDrawer(null)}
+          onClose={closeDrawer}
+          initialStudentId={Number(filters.student) || undefined}
+          initialSubjectId={Number(filters.subject) || undefined}
           onSaved={handleSaved}
           onDeleted={handleSaved}
         />

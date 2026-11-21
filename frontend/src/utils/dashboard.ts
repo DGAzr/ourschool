@@ -9,20 +9,25 @@ export const reviewFilters: { value: ReviewFilter; label: string }[] = [
 ]
 export const isReviewFilter = (value: string | null): value is ReviewFilter =>
   reviewFilters.some((f) => f.value === value)
-export function savedReviewFilter(teacherId?: number): ReviewFilter {
+export function savedReviewFilter(teacherId?: number): ReviewFilter
+export function savedReviewFilter(teacherId: number | undefined, desk: 'grading'): ReviewFilter | 'all'
+export function savedReviewFilter(teacherId?: number, desk?: 'grading'): ReviewFilter | 'all' {
   try {
     const value = localStorage.getItem(`ourschool.review-filter.${teacherId}`)
-    return isReviewFilter(value) ? value : 'review'
+    if (desk && localStorage.getItem(`ourschool.grading-all.${teacherId}`) === 'true') return 'all'
+    return isReviewFilter(value) ? value : 'needs'
   } catch {
-    return 'review'
+    return 'needs'
   }
 }
 export function saveReviewFilter(
   teacherId: number | undefined,
-  value: ReviewFilter,
+  value: ReviewFilter | 'all',
+  desk?: 'grading',
 ) {
   try {
-    localStorage.setItem(`ourschool.review-filter.${teacherId}`, value)
+    if (desk) localStorage.setItem(`ourschool.grading-all.${teacherId}`, String(value === 'all'))
+    if (value !== 'all') localStorage.setItem(`ourschool.review-filter.${teacherId}`, value)
   } catch {
     /* Device preferences are optional. */
   }

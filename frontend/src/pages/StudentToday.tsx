@@ -3,7 +3,7 @@ import { Link, useLocation } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { usePointsStatus } from '../contexts/PointsStatusContext'
 import { useSchoolToday, useStudentDay } from '../hooks/useStudentPlan'
-import { dayProgress, lessonProgress } from '../utils/studentPlan'
+import { activityOpen, dayProgress, lessonProgress } from '../utils/studentPlan'
 import { formatDateOnly } from '../utils/formatters'
 import { getErrorMessage } from '../services/api'
 import { pointsApi, StudentPoints } from '../services/points'
@@ -45,6 +45,8 @@ export default function StudentToday() {
       </section>
       {!plan.isError && progress.complete && <section className="rounded-card border border-line bg-accent-soft p-4" role="status"><h2 className="text-lg font-semibold">{user?.celebrate_completion === false ? "Today's plan is finished." : "You finished today's plan!"}</h2><p>Your teacher can review the work you handed in.{data.earlier.total > 0 ? ` ${data.earlier.total} older unfinished activities are listed below.` : ''}</p><Link to="/my-lessons" className="inline-flex min-h-11 items-center font-semibold text-accent underline">See upcoming lessons</Link></section>}
       {progress.next && <section className="space-y-2" aria-label="Your next activity"><h2 className="text-lg font-semibold">Your next activity</h2><StudentActivityRow activity={progress.next} from={from} day={today} recommended /></section>}
+      {progress.next === undefined && progress.activities.some(a => activityOpen(a) && a.help_requested) &&
+        <p role="status" className="rounded-card border border-line bg-panel p-4">Your teacher has your help requests. You can open those activities below.</p>}
       {data.lessons.length > 0 && <section className="space-y-3" aria-label="Today's lessons"><h2 className="text-lg font-semibold">Today's lessons</h2>{data.lessons.map(lesson => <StudentLessonCard key={lesson.id} lesson={lesson} from={from} day={today} expanded={!lessonProgress(lesson).complete && (!simple || lesson.id === firstOpenLesson)} />)}</section>}
       {data.standalone.length > 0 && <section className="rounded-card border border-line bg-panel p-4" aria-label="Other activities for today"><h2 className="text-lg font-semibold">Other activities for today</h2><p className="text-sm text-muted">Work without a scheduled lesson that is due today, or was assigned today without a deadline.</p>{data.standalone.map(activity => <StudentActivityRow key={activity.id} activity={activity} from={from} day={today} />)}</section>}
       {data.lessons.length === 0 && data.standalone.length === 0 && !plan.isError && <div className="rounded-card border border-line bg-panel p-4"><p>Your teacher hasn't scheduled a plan for today.</p><Link to="/my-lessons" className="inline-flex min-h-11 items-center font-semibold text-accent">See your lessons</Link></div>}

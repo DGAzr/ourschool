@@ -36,9 +36,8 @@ from app.models.assignment import (
     StudentAssignment,
 )
 from app.models.subject import Subject
+from app.routers.validators import validate_paperless_documents
 from app.models.paperless import (
-    PaperlessDocument,
-    PaperlessConnection,
     StudentAssignmentPaperlessMaterial,
     snapshot_fields,
 )
@@ -150,30 +149,7 @@ def assign_template_to_students(
     # One-off Paperless materials for every assignment in this batch —
     # validated up front so a bad document id fails the whole request before
     # anything is created.
-    doc_ids = list(dict.fromkeys(assignment_request.paperless_document_ids))
-    conn = (
-        db.query(PaperlessConnection).filter_by(id=1).with_for_update().first()
-        if doc_ids
-        else None
-    )
-    docs = (
-        db.query(PaperlessDocument).filter(PaperlessDocument.id.in_(doc_ids)).all()
-        if doc_ids
-        else []
-    )
-    missing_doc_ids = set(doc_ids) - {doc.id for doc in docs}
-    if missing_doc_ids:
-        raise HTTPException(
-            status_code=404,
-            detail=f"Paperless documents with IDs "
-            f"{sorted(missing_doc_ids)} not found",
-        )
-    if any(
-        not doc.present or (conn and doc.library_id != conn.library_id) for doc in docs
-    ):
-        raise HTTPException(
-            status_code=409, detail="A Paperless document is no longer selectable"
-        )
+    docs = validate_paperless_documents(db, assignment_request.paperless_document_ids)
     material_snapshots = [(doc.id, snapshot_fields(doc)) for doc in docs]
 
     created_assignments = []

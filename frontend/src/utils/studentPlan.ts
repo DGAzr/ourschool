@@ -35,6 +35,13 @@ export function lessonProgress(lesson: StudentLessonDetail) {
   }
 }
 
+export function nextAvailableActivity(activities: StudentActivity[], currentId?: number) {
+  const available = activities.filter(activity =>
+    activity.id !== currentId && activityOpen(activity) && !activity.help_requested
+  )
+  return available.find(activity => assignmentProgress(activity) === 'in_progress') ?? available[0]
+}
+
 /** Counts canonical assignment ids once; empty/unassigned lessons cannot pass as done. */
 export function dayProgress(day: StudentDay) {
   const activities = [...new Map([...day.lessons.flatMap(orderedActivities), ...day.standalone].map(a => [a.id, a])).values()]
@@ -42,7 +49,6 @@ export function dayProgress(day: StudentDay) {
   const waiting = day.lessons.reduce((sum, l) => sum + lessonProgress(l).waiting.length, 0)
   const total = activities.length + instructions.length
   const finished = activities.filter(a => !activityOpen(a)).length + instructions.filter(l => l.status === 'taught').length
-  const actionable = activities.filter(activityOpen)
-  const next = actionable.find(a => assignmentProgress(a) === 'in_progress') ?? actionable[0]
+  const next = nextAvailableActivity(activities)
   return { activities, total, finished, waiting, next, complete: total > 0 && total === finished && waiting === 0 }
 }

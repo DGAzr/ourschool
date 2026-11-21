@@ -1,3 +1,4 @@
+import type { LessonActivityTemplateInput } from '../../types/lesson'
 /*
  * OurSchool - Homeschool Management System
  * Copyright (C) 2025 Dustan Ashley
@@ -24,6 +25,7 @@ import AssignmentOverridesFields from '../assignments/composer/AssignmentOverrid
 
 export interface LinkDraft {
   template_id: number
+  new_template?: LessonActivityTemplateInput
   name: string
   assignment_type: string
   max_points: number

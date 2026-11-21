@@ -48,7 +48,7 @@ const rangeQuery = (range?: DateRange): string => {
 }
 
 export const lessonsApi = {
-  batch: (lesson_ids: number[], action: 'schedule' | 'restore_taught' | 'copy', date?: string | null,student_ids?:number[]): Promise<LessonWriteResponse[]> => api.post('/lessons/batch', {lesson_ids,action,date,student_ids}),
+  batch: (lesson_ids: number[], action: 'schedule' | 'restore_taught' | 'copy', date?: string | null, student_ids?: number[], source_start_date?: string): Promise<LessonWriteResponse[]> => api.post('/lessons/batch', { lesson_ids, action, date, student_ids, source_start_date }),
   impact: (data: LessonCreate & { lesson_id?: number; deleting?: boolean }): Promise<AssignmentImpact[]> => api.post('/lessons/impact', data),
 
   list: (range?: DateRange): Promise<Lesson[]> =>

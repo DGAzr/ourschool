@@ -16,6 +16,7 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
+import { useState } from 'react'
 import { useAuth } from '../../contexts/AuthContext'
 import { useReportsData, ReportView } from './hooks/useReportsData'
 import ReportsNavigation from './shared/ReportsNavigation'
@@ -71,6 +72,7 @@ const ReportsContainer: React.FC = () => {
     reportCardTermId,
     setReportCardTermId,
     reportCardLoading,
+    reportCardError,
     availableStudentsForReportCard,
     availableTermsForReportCard,
     generateReportCard,
@@ -79,14 +81,8 @@ const ReportsContainer: React.FC = () => {
     setSelectedTermId,
   } = useReportsData()
 
-  const handleExport = () => {
-    if (selectedView === 'reportcard') {
-      window.print()
-    } else if (selectedView === 'attendance') {
-      // Trigger the download from the Attendance view via a custom event
-      document.dispatchEvent(new CustomEvent('reports:export'))
-    }
-  }
+  const [comments, setComments] = useState<Record<string, string>>({})
+  const commentKey = `${reportCardStudentId}/${reportCardTermId}`
 
   if (error) {
     return (
@@ -124,12 +120,6 @@ const ReportsContainer: React.FC = () => {
               ))}
             </select>
           )}
-          <button
-            onClick={handleExport}
-            className="h-[36px] px-3.5 border border-btn-border bg-panel rounded-field text-[13px] font-semibold text-ink-2 cursor-pointer hover:bg-track transition-colors"
-          >
-            Export
-          </button>
         </div>
       </div>
 
@@ -205,6 +195,9 @@ const ReportsContainer: React.FC = () => {
               reportCardTermId={reportCardTermId}
               setReportCardTermId={setReportCardTermId}
               reportCardLoading={reportCardLoading}
+              reportCardError={reportCardError}
+              teacherComments={comments[commentKey] ?? ''}
+              onTeacherComments={value => setComments(previous => ({ ...previous, [commentKey]: value }))}
               availableStudentsForReportCard={availableStudentsForReportCard}
               availableTermsForReportCard={availableTermsForReportCard}
               generateReportCard={generateReportCard}

@@ -194,9 +194,10 @@ const AdminAttendance: React.FC = () => {
     return { present: p, absent: a, late: l, excused: e }
   }, [visibleStudents, activeDate, statusForStudent])
 
-  const allMarked =
-    visibleStudents.length > 0 &&
-    visibleStudents.every((s) => !!statusForStudent(s.id, activeDate))
+  const scopedStudents = students.filter(s => !selectedStudent || String(s.id) === selectedStudent)
+  const recordedCount = scopedStudents.filter(s => !!statusForStudent(s.id, activeDate)).length
+  const unmarkedStudents = visibleStudents.filter(s => !statusForStudent(s.id, activeDate))
+  const allMarked = scopedStudents.length > 0 && recordedCount === scopedStudents.length
   const dayComplete = allMarked && !isFuture(activeDate)
 
   // Is today's active date outside the selected academic year?
@@ -346,11 +347,8 @@ const AdminAttendance: React.FC = () => {
   // ── mark all present ──────────────────────────────────────────────────
   const markAllPresent = async () => {
     if (isFuture(activeDate)) return
-    const unmarked = visibleStudents.filter(
-      (s) => !statusForStudent(s.id, activeDate),
-    )
     const results = await Promise.all(
-      unmarked.map((s) => markStudent(s.id, activeDate, 'present')),
+      unmarkedStudents.map((s) => markStudent(s.id, activeDate, 'present')),
     )
     const saved = results.filter(Boolean).length
     if (saved) toast(`${saved} student${saved > 1 ? 's' : ''} marked present`)
@@ -568,6 +566,7 @@ const AdminAttendance: React.FC = () => {
                   Absent
                   {rosterSummary.late > 0 && <> · {rosterSummary.late} Late</>}{' '}
                   · {rosterSummary.excused} Excused
+                  {dayReady && <> · {recordedCount} of {scopedStudents.length} recorded</>}
                 </span>
               </div>
               <button
@@ -581,7 +580,9 @@ const AdminAttendance: React.FC = () => {
                 }
                 className="text-[12.5px] font-semibold text-accent hover:opacity-70 disabled:opacity-30 transition-opacity"
               >
-                Mark all present
+                {unmarkedStudents.length > 0
+                  ? `Mark remaining ${unmarkedStudents.length} present`
+                  : 'Mark remaining present'}
               </button>
             </div>
 

@@ -156,7 +156,8 @@ export default function TeacherDashboard() {
         <div className="flex flex-wrap gap-2 text-sm">
           <Link
             className="text-accent font-semibold min-h-[44px] inline-flex items-center"
-            to={dashboardHref('/lessons', { date: today })}
+            to={dashboardHref('/lessons', { date: today, student_id: studentId })}
+            state={{ planLesson: true }}
           >
             Plan a lesson
           </Link>

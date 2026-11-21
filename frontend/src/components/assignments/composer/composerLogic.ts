@@ -26,6 +26,7 @@ import {
 export type ComposerMode =
   | { kind: 'create'; showAssign: boolean; libraryDefault: boolean;
       prefill?: { subject_id?: number | null; assigned_date?: string; due_date?: string } }
+  | { kind: 'lesson'; subjectId?: number | null }
   | { kind: 'assign'; template: AssignmentTemplate }
   | { kind: 'edit'; template: AssignmentTemplate }
 
@@ -51,20 +52,20 @@ export interface ComposerDraft {
 
 
 export const initialDraft = (mode: ComposerMode): ComposerDraft => {
-  const t = mode.kind === 'create' ? null : mode.template
+  const t = mode.kind === 'create' || mode.kind === 'lesson' ? null : mode.template
   return {
     name: t?.name ?? '',
     description: t?.description ?? '',
     instructions: t?.instructions ?? '',
     assignment_type: t?.assignment_type ?? 'homework',
-    subject_id: t?.subject_id ?? (mode.kind === 'create' ? mode.prefill?.subject_id ?? 0 : 0),
+    subject_id: t?.subject_id ?? (mode.kind === 'create' ? mode.prefill?.subject_id : mode.kind === 'lesson' ? mode.subjectId : null) ?? 0,
     icon: t?.icon ?? null,
     max_points: t?.max_points ?? 100,
     estimated_duration_minutes: t?.estimated_duration_minutes ?? undefined,
     prerequisites: t?.prerequisites ?? '',
     materials_needed: t?.materials_needed ?? '',
     is_exportable: t?.is_exportable ?? true,
-    save_to_library: mode.kind === 'create' ? mode.libraryDefault : (t?.is_library ?? true),
+    save_to_library: mode.kind === 'create' ? mode.libraryDefault : mode.kind === 'lesson' ? false : (t?.is_library ?? true),
     student_ids: [],
     assigned_date:
       (mode.kind === 'create' ? mode.prefill?.assigned_date : undefined) ?? todayISO(),
@@ -90,7 +91,7 @@ export const validateDraft = (draft: ComposerDraft, mode: ComposerMode): string 
   return null
 }
 
-const templateFields = (draft: ComposerDraft): AssignmentTemplateCreate => ({
+export const templateFields = (draft: ComposerDraft): AssignmentTemplateCreate => ({
   name: draft.name.trim(),
   description: draft.description.trim() || undefined,
   instructions: draft.instructions.trim() || undefined,

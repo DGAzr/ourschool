@@ -1,3 +1,4 @@
+import { useState } from 'react'
 /*
  * OurSchool - Homeschool Management System
  * Copyright (C) 2025 Dustan Ashley
@@ -44,22 +45,44 @@ const rc: ReportCardType = {
   parent_signature_line: true,
 }
 
-function renderCard(overrides: { isAdmin: boolean }) {
-  return render(
+function CardExample({ isAdmin, student = '1', term = '2', card = rc, loading = false }: {
+  isAdmin: boolean
+  student?: string
+  term?: string
+  card?: ReportCardType
+  loading?: boolean
+}) {
+  const [comment, setComment] = useState('')
+  return (
     <ReportCard
-      reportCard={rc}
-      reportCardStudentId="1"
+      reportCard={card}
+      reportCardStudentId={student}
       setReportCardStudentId={() => {}}
-      reportCardTermId="2"
+      reportCardTermId={term}
       setReportCardTermId={() => {}}
-      reportCardLoading={false}
-      availableStudentsForReportCard={[{ id: 1, name: 'Ada Ashley' }]}
+      reportCardLoading={loading}
+      teacherComments={comment}
+      onTeacherComments={setComment}
+      availableStudentsForReportCard={[{ id: 1, name: 'Ada Ashley' }, { id: 4, name: 'Sam Ashley' }]}
       availableTermsForReportCard={[{ id: 2, name: 'Spring', academic_year: '2025-2026' }]}
       generateReportCard={async () => {}}
-      isAdmin={overrides.isAdmin}
+      isAdmin={isAdmin}
     />
   )
 }
+
+const renderCard = ({ isAdmin }: { isAdmin: boolean }) => render(<CardExample isAdmin={isAdmin} />)
+
+it('only offers printing for the selected student and term after loading finishes', () => {
+  const { rerender } = renderCard({ isAdmin: true })
+  expect(screen.getByRole('button', { name: 'Print / PDF' })).toBeEnabled()
+  rerender(<CardExample isAdmin student="4" />)
+  expect(screen.queryByRole('button', { name: 'Print / PDF' })).toBeNull()
+  rerender(<CardExample isAdmin student="4" term="3" card={{ ...rc, student_id: 4 }} />)
+  expect(screen.queryByRole('button', { name: 'Print / PDF' })).toBeNull()
+  rerender(<CardExample isAdmin student="4" card={{ ...rc, student_id: 4 }} loading />)
+  expect(screen.queryByRole('button', { name: 'Print / PDF' })).toBeNull()
+})
 
 describe('ReportCard comments', () => {
   it('never shows fabricated auto-comments', () => {

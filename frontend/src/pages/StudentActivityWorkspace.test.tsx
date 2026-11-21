@@ -75,3 +75,12 @@ it('reloads saved notes when returning to an activity with an older cached detai
   expect(screen.getByRole('textbox', {name:'Your notes'})).toHaveValue('Resume at question six')
   expect(assignmentsApi.getStudentAssignment).toHaveBeenCalledTimes(2)
 })
+
+it('offers a different activity while a missing-material request is pending', async () => {
+  work.help_requests = [{ id: 1, assignment_id: 12, note: 'I need a material.', created_at: '2026-11-20' }]
+  mount()
+  const alternative = await screen.findByRole('region', { name: 'Work on something else' })
+  expect(within(alternative).getByRole('link', { name: 'Read three facts' })).toBeVisible()
+  expect(screen.getByText('Your teacher has your help request')).toBeVisible()
+  expect(screen.getByRole('button', { name: 'I’m finished' })).toBeEnabled()
+})

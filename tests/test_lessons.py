@@ -1462,3 +1462,75 @@ def test_copy_drawer_plan_uses_explicit_students_without_changing_original(
         ]
         is None
     )
+
+
+def test_new_activities_are_previewed_and_saved_atomically(
+    client, admin_headers, classroom, student_factory, db_session
+):
+    from app.models.assignment import AssignmentTemplate
+
+    learner, _ = student_factory()
+    template = {
+        "name": "Practice for today",
+        "subject_id": classroom["subject"]["id"],
+    }
+    payload = {
+        "title": "Practice lesson",
+        "date": "2026-02-11",
+        "student_ids": [learner["id"]],
+        "templates": [
+            {"new_template": template},
+            {
+                "new_template": {
+                    **template,
+                    "name": "Reusable practice",
+                    "is_library": True,
+                }
+            },
+        ],
+    }
+    names = ["Practice for today", "Reusable practice"]
+    templates = db_session.query(AssignmentTemplate).filter(
+        AssignmentTemplate.name.in_(names)
+    )
+    preview = client.post("/api/lessons/impact", json=payload, headers=admin_headers)
+    assert preview.status_code == 200, preview.text
+    assert {row["template_name"] for row in preview.json()} == set(names)
+    assert all(row["action"] == "create" for row in preview.json())
+    assert templates.count() == 0
+
+    invalid = {
+        **payload,
+        "templates": [
+            payload["templates"][0],
+            {"new_template": {**template, "paperless_document_ids": [999999999]}},
+        ],
+    }
+    assert _create_lesson(client, admin_headers, **invalid).status_code == 404
+    assert templates.count() == 0
+
+    saved = _create_lesson(client, admin_headers, **payload)
+    assert saved.status_code == 200, saved.text
+    lesson_id = saved.json()["lesson"]["id"]
+    assert len(_linked_sas(db_session, lesson_id)) == 2
+    assert {item.name: item.is_library for item in templates.all()} == {
+        "Practice for today": False,
+        "Reusable practice": True,
+    }
+
+
+def test_copy_uses_source_week_start_even_when_monday_is_empty(client, admin_headers):
+    source = _create_lesson(client, admin_headers, date="2026-02-11")
+    assert source.status_code == 200, source.text
+    copied = client.post(
+        "/api/lessons/batch",
+        headers=admin_headers,
+        json={
+            "lesson_ids": [source.json()["lesson"]["id"]],
+            "action": "copy",
+            "source_start_date": "2026-02-09",
+            "date": "2026-02-16",
+        },
+    )
+    assert copied.status_code == 200, copied.text
+    assert copied.json()[0]["lesson"]["date"] == "2026-02-18"

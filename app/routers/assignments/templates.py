@@ -41,7 +41,7 @@ from app.core.dual_auth import (
 )
 from app.crud.assignment_reads import template_stats
 from app.crud import assignment_types as crud_types
-from app.routers.validators import validate_students
+from app.routers.validators import validate_assignment_type, validate_students
 from app.schemas.assignment import (
     AssignmentComposeRequest,
     AssignmentComposeResponse,
@@ -56,13 +56,6 @@ from app.schemas.assignment_type import AssignmentTypeCreate
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
-
-
-def _validate_assignment_type(db: Session, key: str) -> None:
-    """Reject template writes that reference an unknown/inactive type key."""
-    type_row = crud_types.get_by_key(db, key)
-    if type_row is None or not type_row.is_active:
-        raise HTTPException(status_code=400, detail=f"Unknown assignment type '{key}'")
 
 
 def _attach_template_stats(db: Session, templates: List[AssignmentTemplate]) -> None:
@@ -102,7 +95,7 @@ def create_assignment_template(
     if not subject:
         raise HTTPException(status_code=404, detail="Subject not found")
 
-    _validate_assignment_type(db, template.assignment_type)
+    validate_assignment_type(db, template.assignment_type)
 
     created_by = get_user_id_from_auth(auth_user)
     db_template = AssignmentTemplate(**template.dict(), created_by=created_by)
@@ -135,7 +128,7 @@ def compose_assignment(
     if not subject:
         raise HTTPException(status_code=404, detail="Subject not found")
 
-    _validate_assignment_type(db, request.assignment_type)
+    validate_assignment_type(db, request.assignment_type)
 
     if request.student_ids:
         active_term = db.query(Term).filter(Term.is_active).first()
@@ -307,7 +300,7 @@ def update_assignment_template(
 
     update_data = template_update.dict(exclude_unset=True)
     if update_data.get("assignment_type") is not None:
-        _validate_assignment_type(db, update_data["assignment_type"])
+        validate_assignment_type(db, update_data["assignment_type"])
     for field, value in update_data.items():
         setattr(template, field, value)
 

@@ -30,6 +30,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
+from app.core.api_auth import APIKeyUser
 from app.core.database import get_db
 from app.core.dual_auth import (
     AuthUser,
@@ -40,7 +41,11 @@ from app.core.dual_auth import (
 from app.enums import LessonStatus
 from app.models.assignment import AssignmentTemplate, StudentAssignment
 from app.models.lesson import Lesson, LessonMaterial, LessonResource, LessonTemplate
-from app.models.paperless import LessonPaperlessMaterial
+from app.models.paperless import (
+    LessonPaperlessMaterial,
+    TemplatePaperlessMaterial,
+    snapshot_fields,
+)
 from app.models.user import User
 from app.schemas.lesson import (
     LessonAssignmentProgress,
@@ -63,7 +68,11 @@ from app.schemas.lesson import (
     StudentLessonDetailResponse,
     StudentDayResponse,
 )
-from app.routers.validators import validate_students
+from app.routers.validators import (
+    validate_assignment_type,
+    validate_paperless_documents,
+    validate_students,
+)
 from app.services.lesson_assignments import sync_lesson_assignments, assignment_impact
 from app.services.student_plan import accessible_lessons, project_lessons, student_day
 
@@ -108,6 +117,54 @@ def _validate_subject(db: Session, subject_id: Optional[int]) -> None:
 
     if not db.query(Subject.id).filter(Subject.id == subject_id).first():
         raise HTTPException(status_code=404, detail="Subject not found")
+
+
+def _resolve_new_activities(
+    db: Session,
+    links: List[LessonTemplateLinkInput],
+    auth_user: AuthUser,
+    *,
+    preview: bool = False,
+) -> tuple[List[LessonTemplateLinkInput], List[AssignmentTemplate]]:
+    """Resolve new activities for review or create them in the lesson transaction."""
+    resolved = []
+    new_templates = []
+    for link in links:
+        draft = link.new_template
+        if draft is None:
+            resolved.append(link)
+            continue
+        if isinstance(auth_user, APIKeyUser):
+            permissions = ["assignments:write"]
+            if draft.paperless_document_ids:
+                permissions.append("paperless:write")
+            for permission in permissions:
+                if not auth_user.has_permission(permission):
+                    raise HTTPException(403, f"Permission '{permission}' required")
+
+        _validate_subject(db, draft.subject_id)
+        validate_assignment_type(db, draft.assignment_type)
+        documents = validate_paperless_documents(db, draft.paperless_document_ids)
+        template = AssignmentTemplate(
+            **draft.model_dump(exclude={"paperless_document_ids"}),
+            created_by=get_user_id_from_auth(auth_user),
+        )
+        if preview:
+            # Negative ids only join the transient template to impact rows.
+            template.id = -len(new_templates) - 1
+        else:
+            template.paperless_materials = [
+                TemplatePaperlessMaterial(document_id=doc.id, **snapshot_fields(doc))
+                for doc in documents
+            ]
+            db.add(template)
+            db.flush()
+
+        new_templates.append(template)
+        resolved.append(
+            link.model_copy(update={"template_id": template.id, "new_template": None})
+        )
+    return resolved, new_templates
 
 
 def _apply_template_links(
@@ -225,7 +282,8 @@ def create_lesson(
         created_by=get_user_id_from_auth(auth_user),
     )
     lesson.students = students
-    _apply_template_links(db, lesson, payload.templates)
+    links, _ = _resolve_new_activities(db, payload.templates, auth_user)
+    _apply_template_links(db, lesson, links)
     _apply_materials(lesson, payload.materials)
     _apply_resources(lesson, payload.resources)
 
@@ -271,13 +329,25 @@ def batch_lessons(
         raise HTTPException(
             status_code=400, detail="Choose scheduled lessons and a new starting date"
         )
+    if (
+        payload.action == "copy"
+        and payload.source_start_date
+        and any(
+            row.date is None or row.date < payload.source_start_date for row in rows
+        )
+    ):
+        raise HTTPException(
+            status_code=409, detail="A source lesson moved. Review the copy again."
+        )
     selected_students = (
         validate_students(db, payload.student_ids)
         if payload.student_ids is not None
         else None
     )
     result = []
-    first_date = min((row.date for row in rows if row.date), default=payload.date)
+    first_date = payload.source_start_date or min(
+        (row.date for row in rows if row.date), default=payload.date
+    )
     for source in rows:
         lesson = source
         if payload.action == "copy":
@@ -358,7 +428,9 @@ def batch_lessons(
 def preview_assignment_impact(
     payload: LessonImpactInput,
     db: Annotated[Session, Depends(get_db)],
-    _auth: Annotated[AuthUser, Depends(require_admin_or_permission("lessons:write"))],
+    auth_user: Annotated[
+        AuthUser, Depends(require_admin_or_permission("lessons:write"))
+    ],
 ):
     """Preview changes without mutating lessons or student records."""
     lesson = None
@@ -367,8 +439,10 @@ def preview_assignment_impact(
         if lesson is None:
             raise HTTPException(status_code=404, detail="Lesson not found")
     students = validate_students(db, payload.student_ids)
-    links = [] if payload.deleting else payload.templates
-    template_ids = {link.template_id for link in links}
+    links, new_templates = _resolve_new_activities(
+        db, [] if payload.deleting else payload.templates, auth_user, preview=True
+    )
+    template_ids = {link.template_id for link in links if link.template_id > 0}
     templates = (
         db.query(AssignmentTemplate)
         .filter(AssignmentTemplate.id.in_(template_ids))
@@ -376,7 +450,7 @@ def preview_assignment_impact(
     )
     if template_ids != {t.id for t in templates}:
         raise HTTPException(status_code=404, detail="Assignment template not found")
-    if len(template_ids) != len(links):
+    if len(template_ids) + len(new_templates) != len(links):
         raise HTTPException(
             status_code=400, detail="An activity is linked more than once"
         )
@@ -387,7 +461,9 @@ def preview_assignment_impact(
         if lesson
         else []
     )
-    return assignment_impact(payload.date, students, links, existing, templates)
+    return assignment_impact(
+        payload.date, students, links, existing, templates + new_templates
+    )
 
 
 @router.get("/drawer", response_model=List[LessonResponse])
@@ -568,7 +644,8 @@ def update_lesson(
     if payload.student_ids is not None:
         lesson.students = validate_students(db, payload.student_ids)
     if payload.templates is not None:
-        _apply_template_links(db, lesson, payload.templates)
+        links, _ = _resolve_new_activities(db, payload.templates, auth_user)
+        _apply_template_links(db, lesson, links)
     if payload.materials is not None:
         _apply_materials(lesson, payload.materials)
     if payload.resources is not None:

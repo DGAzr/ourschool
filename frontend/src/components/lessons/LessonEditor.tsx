@@ -31,6 +31,7 @@ import {
   LessonResourceInput,
   LessonStatus,
   LessonTemplateLinkInput,
+  LessonActivityTemplateInput,
   LessonWriteResponse,
 } from '../../types/lesson'
 import { lessonsApi } from '../../services/lessons'
@@ -58,6 +59,8 @@ interface ResourceDraft {
 
 interface LessonEditorProps {
   initialDate: string | null
+  initialStudentId?: number
+  initialSubjectId?: number
   lesson: Lesson | null
   subjects: Subject[]
   students: User[]
@@ -79,6 +82,8 @@ const formatScheduled = (iso: string): string => {
 /** The right-hand slide-over form for creating or editing a lesson. */
 const LessonEditor: React.FC<LessonEditorProps> = ({
   initialDate,
+  initialStudentId,
+  initialSubjectId,
   lesson,
   subjects,
   students,
@@ -92,7 +97,7 @@ const LessonEditor: React.FC<LessonEditorProps> = ({
   const [date, setDate] = useState(initialDate ?? '')
   const [title, setTitle] = useState(lesson?.title ?? '')
   const [subjectId, setSubjectId] = useState<number | null>(
-    lesson?.subject_id ?? null
+    (lesson ? lesson.subject_id : initialSubjectId) ?? null
   )
   const [objective, setObjective] = useState(lesson?.objective ?? '')
   const [durationMinutes, setDurationMinutes] = useState<string>(
@@ -100,7 +105,7 @@ const LessonEditor: React.FC<LessonEditorProps> = ({
   )
   const [status, setStatus] = useState<LessonStatus>(lesson?.status ?? 'planned')
   const [studentIds, setStudentIds] = useState<number[]>(
-    lesson?.students.map((s) => s.id) ?? []
+    lesson ? lesson.students.map(s => s.id) : initialStudentId ? [initialStudentId] : []
   )
   const [links, setLinks] = useState<LinkDraft[]>(
     (lesson?.templates ?? []).flatMap((l) =>
@@ -156,22 +161,17 @@ const LessonEditor: React.FC<LessonEditorProps> = ({
     )
   }
 
-  const attachTemplate = (template: AssignmentTemplate) => {
-    // Ignore a duplicate (the backend rejects duplicate links anyway).
-    if (links.some((l) => l.template_id === template.id)) return
-    setLinks((prev) => [
-      ...prev,
-      {
-        template_id: template.id,
+  const addActivity = (template: Pick<AssignmentTemplate, 'name' | 'subject_id' | 'assignment_type' | 'max_points' | 'estimated_duration_minutes'>, templateId: number | null, newTemplate?: LessonActivityTemplateInput) => {
+    setLinks(previous => {
+      if (templateId !== null && previous.some(link => link.template_id === templateId)) return previous
+      return [...previous, {
+        template_id: templateId ?? Math.min(0, ...previous.map(link => link.template_id)) - 1,
         name: template.name,
         assignment_type: template.assignment_type,
         max_points: template.max_points,
-        custom_due_date: null,
-        custom_max_points: null,
-        custom_instructions: null,
-      },
-    ])
-    // Pre-fill only empty fields from the template.
+        new_template: newTemplate,
+      }]
+    })
     if (!title.trim()) setTitle(template.name)
     if (subjectId === null) setSubjectId(template.subject_id)
     if (!durationMinutes && template.estimated_duration_minutes) {
@@ -232,7 +232,7 @@ const LessonEditor: React.FC<LessonEditorProps> = ({
       student_ids: studentIds,
       templates: links.map(
         (l): LessonTemplateLinkInput => ({
-          template_id: l.template_id,
+          ...(l.new_template ? { new_template: l.new_template } : { template_id: l.template_id }),
           assignment_timing: l.assignment_timing ?? 'on_schedule',
           due_offset_days: l.due_offset_days ?? 0,
           custom_due_date: l.custom_due_date ?? null,
@@ -389,6 +389,7 @@ const LessonEditor: React.FC<LessonEditorProps> = ({
                 <button
                   key={subject.id}
                   type="button"
+                  aria-pressed={active}
                   onClick={() =>
                     setSubjectId(active ? null : subject.id)
                   }
@@ -464,6 +465,7 @@ const LessonEditor: React.FC<LessonEditorProps> = ({
                 <button
                   key={student.id}
                   type="button"
+                  aria-pressed={active}
                   onClick={() => toggleStudent(student.id)}
                   className={`${chipBase} inline-flex items-center gap-1.5 pl-1.5 ${
                     active
@@ -495,7 +497,7 @@ const LessonEditor: React.FC<LessonEditorProps> = ({
         {/* Linked assignments (multiple) */}
         <div>
           <label className="block text-[12px] font-semibold text-faint uppercase tracking-wide mb-1.5">
-            Linked assignments
+            Activities
           </label>
           <div className="flex flex-col gap-2">
             {links.map((link, idx) => (
@@ -530,20 +532,17 @@ const LessonEditor: React.FC<LessonEditorProps> = ({
                 <button
                   type="button"
                   onClick={() => removeLink(idx)}
-                  aria-label="Remove linked template"
+                  aria-label="Remove activity"
                   className="text-muted hover:text-danger transition-colors"
                 >
                   <X size={16} />
                 </button>
               </div>
             ))}
-            <button
-              type="button"
-              onClick={() => setLibraryOpen(true)}
-              className="w-full py-2.5 rounded-[10px] border border-dashed border-btn-border text-[12.5px] font-semibold text-faint hover:text-ink hover:border-faint transition-colors"
-            >
-              ＋ Link from your template library
-            </button>
+            <div className="flex flex-wrap gap-2">
+              <Button variant="outline" size="sm" onClick={() => setComposerOpen(true)}>Add activity</Button>
+              <Button variant="outline" size="sm" onClick={() => setLibraryOpen(true)}>Use library activity</Button>
+            </div>
           </div>
           {links.length > 0 && (
             <p className="text-[11.5px] text-muted mt-1.5">
@@ -709,30 +708,18 @@ const LessonEditor: React.FC<LessonEditorProps> = ({
         subjects={subjects}
         subjectId={subjectId}
         excludeTemplateIds={links.map((l) => l.template_id)}
-        onAttach={attachTemplate}
-        onCreateNew={() => {
-          setLibraryOpen(false)
-          setComposerOpen(true)
-        }}
+        onAttach={template => addActivity(template, template.id)}
       />
 
       {composerOpen && (
         <AssignmentComposer
-          mode={{
-            kind: 'create',
-            showAssign: false,
-            libraryDefault: false,
-            prefill: {
-              subject_id: subjectId,
-              assigned_date: date || initialDate || todayISO(),
-            },
-          }}
+          mode={{ kind: 'lesson', subjectId }}
           subjects={subjects}
           students={students}
           onClose={() => setComposerOpen(false)}
-          onSuccess={(result) => {
+          onAddActivity={activity => {
             setComposerOpen(false)
-            if (result) attachTemplate(result.template)
+            addActivity(activity, null, activity)
           }}
         />
       )}

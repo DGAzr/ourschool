@@ -47,7 +47,7 @@ const Templates: React.FC = () => {
   const isAdmin = user?.role === 'admin'
 
   // Composer + modal states
-  const [composer, setComposer] = useState<ComposerMode | null>(null)
+  const [composer, setComposer] = useState<Exclude<ComposerMode, { kind: 'lesson' }> | null>(null)
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const [showArchiveConfirm, setShowArchiveConfirm] = useState(false)
   const [showExportModal, setShowExportModal] = useState(false)

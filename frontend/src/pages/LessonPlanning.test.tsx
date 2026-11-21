@@ -71,7 +71,7 @@ it('preserves the copy date and selected students when collapsed and reopened',a
   await user.click(screen.getByRole('button',{name:'Copy week'}))
   await screen.findByText('No assignments affected.')
   await user.click(screen.getByRole('button',{name:'Apply changes'}))
-  await waitFor(()=>expect(mocks.batch).toHaveBeenCalledWith([1,2],'copy','2026-10-19',[2]))
+  await waitFor(()=>expect(mocks.batch).toHaveBeenCalledWith([1,2],'copy','2026-10-19',[2],'2026-10-05'))
   expect(toggle).toHaveAttribute('aria-expanded','true')
 })
 it('prints the full selected week even when the five-day board has no loaded lessons',async()=>{
@@ -88,5 +88,15 @@ it('copies the full week after reviewing its new work, independent of board widt
   await userEvent.click(screen.getByRole('button',{name:'Copy week'}))
   await screen.findByText('No assignments affected.')
   await userEvent.click(screen.getByRole('button',{name:'Apply changes'}))
-  await waitFor(()=>expect(mocks.batch).toHaveBeenCalledWith([1,2],'copy','2026-10-12',undefined))
+  await waitFor(()=>expect(mocks.batch).toHaveBeenCalledWith([1,2],'copy','2026-10-12',undefined,'2026-10-05'))
+})
+
+it('shows an empty Monday in the copy range and keeps Wednesday on Wednesday', async () => {
+  mocks.list.mockResolvedValue([makeLesson(3, '2026-10-07', 'Wednesday science')])
+  open()
+  await userEvent.click(screen.getByRole('button', { name: 'More Plan Controls' }))
+  await userEvent.click(screen.getByRole('button', { name: 'Copy week' }))
+  const row = (await screen.findByText('Wednesday science')).closest('li')
+  expect(row).toHaveTextContent('October 7, 2026 → October 14, 2026')
+  expect(mocks.impact).toHaveBeenCalledWith(expect.objectContaining({ date: '2026-10-14' }))
 })

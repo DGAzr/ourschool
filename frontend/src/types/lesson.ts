@@ -16,7 +16,7 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-import { StudentAssignment } from './assignment'
+import { AssignmentTemplateCreate, StudentAssignment } from './assignment'
 import { PaperlessMaterial } from './paperless'
 
 export type LessonAssignmentProgress = Pick<StudentAssignment, 'id' | 'lesson_id' | 'template_id' | 'student_id' | 'status' | 'started_date' | 'submitted_date' | 'is_graded' | 'time_spent_minutes'>
@@ -144,8 +144,13 @@ export interface LessonResourceInput {
   url?: string | null
 }
 
+export interface LessonActivityTemplateInput extends AssignmentTemplateCreate {
+  paperless_document_ids: number[]
+}
+
 export interface LessonTemplateLinkInput {
-  template_id: number
+  template_id?: number
+  new_template?: LessonActivityTemplateInput
   assignment_timing?: 'draft' | 'on_schedule' | 'now'
   due_offset_days?: number
   custom_due_date?: string | null

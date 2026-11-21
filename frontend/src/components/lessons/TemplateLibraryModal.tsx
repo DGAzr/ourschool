@@ -35,7 +35,7 @@ interface TemplateLibraryModalProps {
   /** Template ids already linked to the lesson — hidden from the list. */
   excludeTemplateIds?: number[]
   /** Opens the composer to create a new template in place. */
-  onCreateNew: () => void
+  onCreateNew?: () => void
 }
 
 /** A modal listing assignment templates to link to the current lesson. */
@@ -73,9 +73,9 @@ const TemplateLibraryModal: React.FC<TemplateLibraryModalProps> = ({
         placeholder="Search templates…"
         aria-label="Search template library"
       />
-      <Button variant="outline" size="sm" onClick={onCreateNew}>
-        + New assignment
-      </Button>
+      {onCreateNew && <Button variant="outline" size="sm" onClick={onCreateNew}>
+        Add activity
+      </Button>}
     </div>
   )
 

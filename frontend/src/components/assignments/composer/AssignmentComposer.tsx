@@ -28,28 +28,32 @@ import {
   buildComposePayload,
   buildAssignPayload,
   buildTemplateUpdate,
+  templateFields,
 } from './composerLogic'
 import { assignmentsApi } from '../../../services/assignments'
 import { paperlessApi } from '../../../services/paperless'
 import { getErrorMessage } from '../../../services/api'
 import { AssignmentComposeResponse, Subject, User } from '../../../types'
+import { LessonActivityTemplateInput } from '../../../types/lesson'
 import { PaperlessMaterial } from '../../../types/paperless'
 
 import { useRecoverableDraft } from '../../../hooks/useRecoverableDraft'
 import DraftRecovery from '../../ui/DraftRecovery'
 
-interface AssignmentComposerProps {
-  mode: ComposerMode
+type AssignmentComposerProps = {
   subjects: Subject[]
   students: User[]
   onClose: () => void
-  onSuccess: (result?: AssignmentComposeResponse) => void
-}
+} & (
+  | { mode: Extract<ComposerMode, { kind: 'lesson' }>; onAddActivity: (activity: LessonActivityTemplateInput) => void }
+  | { mode: Exclude<ComposerMode, { kind: 'lesson' }>; onSuccess: (result?: AssignmentComposeResponse) => void }
+)
 
 const TITLES = {
   create: 'New assignment',
   assign: 'Assign to students',
   edit: 'Edit template',
+  lesson: 'Add activity',
 } as const
 
 /**
@@ -58,9 +62,8 @@ const TITLES = {
  * - assign: existing template (fields locked) + assign section
  * - edit:   existing template metadata only (no assign section)
  */
-const AssignmentComposer: React.FC<AssignmentComposerProps> = ({
-  mode, subjects, students, onClose, onSuccess,
-}) => {
+const AssignmentComposer: React.FC<AssignmentComposerProps> = (props) => {
+  const { mode, subjects, students, onClose } = props
   const { toast } = useToast()
   const [draft, setDraft] = useState(() => initialDraft(mode))
   const [error, setError] = useState<string | null>(null)
@@ -71,11 +74,11 @@ const AssignmentComposer: React.FC<AssignmentComposerProps> = ({
   const [intent, setIntent] = useState<'template' | 'assign'>(mode.kind === 'create' && !mode.showAssign ? 'template' : 'assign')
   const [advanced, setAdvanced] = useState(false)
   const effectiveMode: ComposerMode = mode.kind === 'create' ? {...mode, showAssign: intent === 'assign'} : mode
-  const recoverable = useRecoverableDraft(`assignment.${mode.kind}.${mode.kind === 'create' ? 'new' : mode.template.id}`, {draft,pendingMaterials,intent}, saved => { setDraft(saved.draft); setPendingMaterials(saved.pendingMaterials); setIntent(saved.intent) })
+  const recoverable = useRecoverableDraft(`assignment.${mode.kind}.${'template' in mode ? mode.template.id : 'new'}`, {draft,pendingMaterials,intent}, saved => { setDraft(saved.draft); setPendingMaterials(saved.pendingMaterials); setIntent(saved.intent) })
   const closeComposer = () => recoverable.close(onClose)
   const showTemplateFields = mode.kind !== 'assign'
   const showAssign = mode.kind === 'assign' || (mode.kind === 'create' && intent === 'assign')
-  const showLibraryToggle = mode.kind === 'create'
+  const showLibraryToggle = mode.kind === 'lesson' || showAssign && mode.kind === 'create'
   const editTemplate = mode.kind === 'edit' ? mode.template : undefined
 
   const set = <K extends keyof typeof draft>(key: K, value: (typeof draft)[K]) =>
@@ -89,6 +92,15 @@ const AssignmentComposer: React.FC<AssignmentComposerProps> = ({
   const handleSave = async () => {
     const problem = validateDraft(draft, effectiveMode)
     if (problem) { setError(problem); return }
+    if ('onAddActivity' in props) {
+      props.onAddActivity({
+        ...templateFields(draft),
+        is_library: draft.save_to_library,
+        paperless_document_ids: pendingMaterials.map(material => material.document_id),
+      })
+      recoverable.clear()
+      return
+    }
     setSaving(true)
     setError(null)
     try {
@@ -97,7 +109,7 @@ const AssignmentComposer: React.FC<AssignmentComposerProps> = ({
         await assignmentsApi.update(mode.template.id, buildTemplateUpdate(draft))
         toast('Template updated.')
         recoverable.clear()
-        onSuccess()
+        props.onSuccess()
       } else if (mode.kind === 'assign') {
         await assignmentsApi.assignToStudents({
           ...buildAssignPayload(draft, mode.template.id),
@@ -105,7 +117,7 @@ const AssignmentComposer: React.FC<AssignmentComposerProps> = ({
         })
         toast(`Assigned to ${draft.student_ids.length} student${draft.student_ids.length !== 1 ? 's' : ''}.`)
         recoverable.clear()
-        onSuccess()
+        props.onSuccess()
       } else {
         const result = await assignmentsApi.compose(buildComposePayload(submittedDraft))
         const failed: string[] = []
@@ -122,7 +134,7 @@ const AssignmentComposer: React.FC<AssignmentComposerProps> = ({
           toast(result.created_assignment_ids.length > 0 ? 'Assignment created.' : 'Template created.')
         }
         recoverable.clear()
-        onSuccess(result)
+        props.onSuccess(result)
       }
     } catch (err) {
       setError(getErrorMessage(err, 'Could not save.'))
@@ -143,7 +155,8 @@ const AssignmentComposer: React.FC<AssignmentComposerProps> = ({
         <>
           <Button variant="outline" size="sm" onClick={closeComposer} disabled={saving}>Cancel</Button>
           <Button variant="primary" size="sm" onClick={handleSave} loading={saving}>
-            {mode.kind === 'edit' ? 'Save changes'
+            {mode.kind === 'lesson' ? 'Add to lesson'
+              : mode.kind === 'edit' ? 'Save changes'
               : showAssign && draft.student_ids.length > 0
                 ? `Assign to ${draft.student_ids.length} student${draft.student_ids.length !== 1 ? 's' : ''}`
                 : mode.kind === 'create' && intent === 'template' ? 'Save template' : 'Create assignment'}
@@ -162,6 +175,7 @@ const AssignmentComposer: React.FC<AssignmentComposerProps> = ({
             subjects={subjects}
             onUpdate={(field, value) => set(field as keyof typeof draft, value as never)}
             showAllFields={advanced}
+            nameLabel={mode.kind === 'lesson' ? 'Activity name' : undefined}
             disabled={saving}
           />
         ) : (
@@ -179,13 +193,14 @@ const AssignmentComposer: React.FC<AssignmentComposerProps> = ({
           </div>
         )}
 
-        {showTemplateFields && <button type="button" className="text-accent text-sm text-left" aria-expanded={advanced} onClick={() => setAdvanced(!advanced)}>{advanced ? 'Hide optional template details' : 'Show optional template details'}</button>}
+        {showTemplateFields && <button type="button" className="text-accent text-sm text-left" aria-expanded={advanced} onClick={() => setAdvanced(!advanced)}>{advanced ? 'Hide' : 'Show'} optional {mode.kind === 'lesson' ? 'activity' : 'template'} details</button>}
         <PaperlessMaterialsPicker
           template={editTemplate}
           pendingMaterials={editTemplate ? undefined : pendingMaterials}
           onPendingChange={editTemplate ? undefined : setPendingMaterials}
-          pendingSuccessMessage={count =>
-            `Added ${count} material${count === 1 ? '' : 's'} — they'll attach when you save`}
+          pendingSuccessMessage={count => mode.kind === 'lesson'
+            ? `Added ${count} material${count === 1 ? '' : 's'} to the activity draft`
+            : `Added ${count} material${count === 1 ? '' : 's'} — they'll attach when you save`}
           excludeDocumentIds={
             mode.kind === 'assign'
               ? (mode.template.paperless_materials ?? []).map(m => m.document_id)

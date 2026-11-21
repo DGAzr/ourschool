@@ -104,10 +104,10 @@ const QueuePanel: React.FC<QueuePanelProps> = ({
       <SegmentedControl
         segments={[
           { value: 'review', label: 'Combined' },
-          { value: 'needs', label: 'Submitted', count: needsGradingCount },
+          { value: 'needs', label: 'Ready to grade', count: needsGradingCount },
           { value: 'overdue', label: 'Overdue', count: overdueCount },
-          { value: 'awaiting', label: 'Awaiting', count: awaitingCount },
-          { value: 'all', label: 'All' },
+          { value: 'awaiting', label: 'Awaiting student', count: awaitingCount },
+          { value: 'all', label: 'All work' },
         ]}
         value={queueFilter}
         onChange={setQueueFilter}
@@ -407,9 +407,9 @@ const Grading: React.FC = () => {
   const queueFilter: ReviewFilter | 'all' =
     isReviewFilter(rawQueue) || rawQueue === 'all'
       ? rawQueue
-      : savedReviewFilter(user?.id)
+      : savedReviewFilter(user?.id, 'grading')
   const setQueueFilter = (value: ReviewFilter | 'all') => {
-    if (isReviewFilter(value)) saveReviewFilter(user?.id, value)
+    saveReviewFilter(user?.id, value, 'grading')
     setSearchParams(
       (previous) => {
         const next = new URLSearchParams(previous)

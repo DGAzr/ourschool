@@ -28,6 +28,9 @@ interface ReportCardProps {
   reportCardTermId: string
   setReportCardTermId: (id: string) => void
   reportCardLoading: boolean
+  reportCardError?: string | null
+  teacherComments: string
+  onTeacherComments: (value: string) => void
   availableStudentsForReportCard: Array<{ id: number; name: string }>
   availableTermsForReportCard: Array<{ id: number; name: string; academic_year: string }>
   generateReportCard: () => Promise<void>
@@ -51,6 +54,9 @@ const ReportCard: React.FC<ReportCardProps> = ({
   reportCardTermId,
   setReportCardTermId,
   reportCardLoading,
+  reportCardError,
+  teacherComments,
+  onTeacherComments,
   availableStudentsForReportCard,
   availableTermsForReportCard,
   generateReportCard,
@@ -58,8 +64,9 @@ const ReportCard: React.FC<ReportCardProps> = ({
 }) => {
   const [school,setSchool]=useState<{name:string;logo:string|null}>({name:'OurSchool',logo:null})
   useEffect(()=>{api.get('/settings/school/identity').then(setSchool).catch(()=>undefined)},[])
-  const rc = reportCard
-  const [teacherComments, setTeacherComments] = useState('')
+  const rc = !reportCardLoading && !reportCardError &&
+    reportCard?.student_id === Number(reportCardStudentId) &&
+    reportCard?.term_id === Number(reportCardTermId) ? reportCard : null
 
   return (
     <div>
@@ -184,7 +191,8 @@ const ReportCard: React.FC<ReportCardProps> = ({
             <textarea
               id="rc-teacher-comments"
               value={teacherComments}
-              onChange={(e) => setTeacherComments(e.target.value)}
+              onChange={(e) => onTeacherComments(e.target.value)}
+              disabled={!reportCardStudentId || !reportCardTermId}
               rows={2}
               placeholder="Appears on the printed card; leave blank for hand-written lines."
               style={{
@@ -225,7 +233,7 @@ const ReportCard: React.FC<ReportCardProps> = ({
             opacity: reportCardLoading || !reportCardTermId || (!reportCardStudentId && isAdmin) ? 0.5 : 1,
           }}
         >
-          {reportCardLoading ? 'Generating…' : 'Generate Report Card'}
+          {reportCardLoading ? 'Generating…' : reportCardError ? 'Retry preview' : rc ? 'Refresh preview' : 'Generate Report Card'}
         </button>
 
         {rc && (
@@ -247,6 +255,8 @@ const ReportCard: React.FC<ReportCardProps> = ({
           </button>
         )}
       </div>
+
+      {reportCardError && <p role="alert" className="text-neg-fg">{reportCardError}</p>}
 
       {/* Loading state */}
       {reportCardLoading && !rc && (

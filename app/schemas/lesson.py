@@ -19,9 +19,10 @@
 from datetime import date as date_type, datetime
 from typing import List, Optional, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 from app.enums import LessonStatus
+from app.schemas.assignment import AssignmentTemplateCreate
 from app.schemas.paperless import PaperlessMaterialResponse
 
 
@@ -113,15 +114,29 @@ class LessonTemplateSummary(BaseModel):
         from_attributes = True
 
 
+class LessonActivityTemplateInput(AssignmentTemplateCreate):
+    """An activity definition saved together with its lesson."""
+
+    is_library: bool = False
+    paperless_document_ids: List[int] = Field(default_factory=list)
+
+
 class LessonTemplateLinkInput(BaseModel):
     """One linked template on a lesson, with optional per-link overrides."""
 
-    template_id: int
+    template_id: Optional[int] = Field(default=None, gt=0)
+    new_template: Optional[LessonActivityTemplateInput] = None
     assignment_timing: Literal["draft", "on_schedule", "now"] = "on_schedule"
     due_offset_days: int = Field(default=0, ge=0, le=365)
     custom_due_date: Optional[date_type] = None
     custom_max_points: Optional[int] = Field(default=None, ge=1, le=1000)
     custom_instructions: Optional[str] = None
+
+    @model_validator(mode="after")
+    def validate_template_source(self):
+        if (self.template_id is None) == (self.new_template is None):
+            raise ValueError("Choose either a linked template or a new activity")
+        return self
 
 
 class LessonTemplateLinkResponse(BaseModel):
@@ -361,3 +376,4 @@ class LessonBatchInput(BaseModel):
     lesson_ids: List[int] = Field(min_length=1, max_length=100)
     action: Literal["schedule", "restore_taught", "copy"]
     date: Optional[date_type] = None
+    source_start_date: Optional[date_type] = None

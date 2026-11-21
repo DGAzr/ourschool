@@ -78,9 +78,16 @@ describe('attendance date and status workflow', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Mark Alex Learner Late' }))
     expect(mocks.update).toHaveBeenCalledWith(11, { status: 'late' })
   })
+  it('fills only unmarked attendance and shows the recorded roster count', async () => {
+    open()
+    await userEvent.click(await screen.findByRole('button', { name: 'Mark remaining 1 present' }))
+    expect(mocks.create).toHaveBeenCalledWith(expect.objectContaining({ student_id: 3, status: 'present' }))
+    expect(mocks.update).not.toHaveBeenCalled()
+    expect(await screen.findByText(/2 of 2 recorded/)).toBeVisible()
+  })
   it('prevents writes on a future day', async () => {
     open('2026-10-05')
     expect(await screen.findByRole('button', { name: 'Mark Alex Learner Present' })).toBeDisabled()
-    expect(screen.getByRole('button', { name: 'Mark all present' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Mark remaining 2 present' })).toBeDisabled()
   })
 })

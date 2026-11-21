@@ -143,7 +143,7 @@ describe('teacher dashboard', () => {
     expect(
       screen.getByText('1 of 2 students recorded today').closest('a'),
     ).toHaveClass('bg-pos-bg')
-    expect(screen.getByRole('button', { name: 'Combined' })).toHaveAttribute(
+    expect(screen.getByRole('button', { name: 'Submitted' })).toHaveAttribute(
       'aria-pressed',
       'true',
     )

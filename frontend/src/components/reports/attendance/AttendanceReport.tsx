@@ -305,13 +305,6 @@ const AttendanceReport: React.FC<AttendanceReportProps> = ({
     }
   }
 
-  // Listen for the global export event wired from ReportsContainer's "Export" button
-  useEffect(() => {
-    const handler = () => handleDownload()
-    document.addEventListener('reports:export', handler)
-    return () => document.removeEventListener('reports:export', handler)
-  })
-
   const hasResults = attendanceReport || bulkAttendanceReport
 
   // Determine date range for calendar
@@ -412,7 +405,7 @@ const AttendanceReport: React.FC<AttendanceReportProps> = ({
                     </p>
                   </div>
                   <Button variant="secondary" size="sm" icon={<Download size={13} />} onClick={handleDownload}>
-                    Download CSV
+                    Download attendance CSV
                   </Button>
                 </div>
                 <InstructionDaysRows students={bulkAttendanceReport.students} />
@@ -516,7 +509,7 @@ const AttendanceReport: React.FC<AttendanceReportProps> = ({
                 <div className="bg-panel border border-line rounded-card overflow-hidden">
                   <div style={{ padding: '14px 18px', borderBottom: '1px solid var(--line-2)', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                     <h3 style={{ margin: 0, fontSize: 15, fontWeight: 600, color: 'var(--ink)' }}>Daily log</h3>
-                    <Button variant="secondary" size="sm" icon={<Download size={13} />} onClick={handleDownload}>CSV</Button>
+                    <Button variant="secondary" size="sm" icon={<Download size={13} />} onClick={handleDownload}>Download attendance CSV</Button>
                   </div>
                   <div style={{ maxHeight: 420, overflowY: 'auto' }}>
                     {attendanceReport.daily_records.map(day => {

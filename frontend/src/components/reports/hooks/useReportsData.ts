@@ -17,6 +17,7 @@
  */
 
 import { useState, useEffect, useCallback, useEffectEvent } from 'react'
+import { useQuery } from '@tanstack/react-query'
 import { useAuth } from '../../../contexts/AuthContext'
 import { api } from '../../../services/api'
 import { reportsApi } from '../../../services/reports'
@@ -82,6 +83,7 @@ interface UseReportsDataReturn {
   reportCardTermId: string
   setReportCardTermId: (id: string) => void
   reportCardLoading: boolean
+  reportCardError: string | null
   availableStudentsForReportCard: Array<{id: number, name: string}>
   availableTermsForReportCard: Array<{id: number, name: string, academic_year: string}>
   generateReportCard: () => Promise<void>
@@ -118,9 +120,15 @@ export const useReportsData = (): UseReportsDataReturn => {
   const [customStartDate, setCustomStartDate] = useState<string>('')
   const [customEndDate, setCustomEndDate] = useState<string>('')
   const [useCustomDates, setUseCustomDates] = useState(false)
-  const [attendanceReport, setAttendanceReport] = useState<StudentAttendanceReport | null>(null)
-  const [bulkAttendanceReport, setBulkAttendanceReport] = useState<BulkAttendanceReport | null>(null)
+  const [loadedAttendanceReport, setAttendanceReport] = useState<StudentAttendanceReport | null>(null)
+  const [loadedBulkAttendanceReport, setBulkAttendanceReport] = useState<BulkAttendanceReport | null>(null)
   const [attendanceLoading, setAttendanceLoading] = useState(false)
+  const [generatedAttendanceScope, setGeneratedAttendanceScope] = useState('')
+  const attendanceScope = useCustomDates
+    ? `dates:${customStartDate}/${customEndDate}`
+    : `year:${selectedAcademicYear}`
+  const attendanceReport = generatedAttendanceScope === attendanceScope ? loadedAttendanceReport : null
+  const bulkAttendanceReport = generatedAttendanceScope === attendanceScope ? loadedBulkAttendanceReport : null
   // Per-student day-level report for the admin calendar picker
   const [selectedStudentCalendarReport, setSelectedStudentCalendarReport] = useState<StudentAttendanceReport | null>(null)
   const [calendarStudentLoading, setCalendarStudentLoading] = useState(false)
@@ -128,10 +136,13 @@ export const useReportsData = (): UseReportsDataReturn => {
   // Assignment report states
   
   // Report card states
-  const [reportCard, setReportCard] = useState<ReportCard | null>(null)
   const [reportCardStudentId, setReportCardStudentId] = useState<string>('')
   const [reportCardTermId, setReportCardTermId] = useState<string>('')
-  const [reportCardLoading, setReportCardLoading] = useState(false)
+  const reportCardQuery = useQuery({
+    queryKey: ['report-card', user?.id, reportCardStudentId, reportCardTermId],
+    enabled: selectedView === 'reportcard' && !!reportCardStudentId && !!reportCardTermId,
+    queryFn: () => reportsApi.getReportCard(Number(reportCardStudentId), Number(reportCardTermId)),
+  })
   const [availableStudentsForReportCard, setAvailableStudentsForReportCard] = useState<Array<{id: number, name: string}>>([])
   const [availableTermsForReportCard, setAvailableTermsForReportCard] = useState<Array<{id: number, name: string, academic_year: string}>>([])
 
@@ -210,25 +221,7 @@ export const useReportsData = (): UseReportsDataReturn => {
   }
 
   const generateReportCard = async () => {
-    if (!reportCardStudentId || !reportCardTermId) {
-      setError('Please select both a student and a term')
-      return
-    }
-
-    try {
-      setReportCardLoading(true)
-      setError(null)
-      
-      const studentId = parseInt(reportCardStudentId)
-      const termId = parseInt(reportCardTermId)
-
-      const data = await reportsApi.getReportCard(studentId, termId)
-      setReportCard(data)
-    } catch (err) {
-      setError('Failed to generate report card: ' + (getErrorMessage(err, 'Unknown error')))
-    } finally {
-      setReportCardLoading(false)
-    }
+    if (reportCardStudentId && reportCardTermId) await reportCardQuery.refetch()
   }
 
   // Fetch per-day records for a single student, using the same date range as the
@@ -316,6 +309,7 @@ export const useReportsData = (): UseReportsDataReturn => {
           setAttendanceReport(data)
         }
       }
+      setGeneratedAttendanceScope(attendanceScope)
     } catch (err) {
       setError('Failed to generate attendance report')
     } finally {
@@ -399,12 +393,14 @@ export const useReportsData = (): UseReportsDataReturn => {
     selectedStudentCalendarReport,
     calendarStudentLoading,
     fetchStudentCalendar,
-    reportCard,
+    reportCard: reportCardQuery.data ?? null,
     reportCardStudentId,
     setReportCardStudentId,
     reportCardTermId,
     setReportCardTermId,
-    reportCardLoading,
+    reportCardLoading: reportCardQuery.isFetching,
+    reportCardError: reportCardQuery.isError
+      ? getErrorMessage(reportCardQuery.error, 'Could not generate the report card.') : null,
     availableStudentsForReportCard,
     availableTermsForReportCard,
     generateReportCard,

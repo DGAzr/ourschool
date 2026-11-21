@@ -93,7 +93,7 @@ const Assignments: React.FC = () => {
   const [bulkLoading, setBulkLoading] = useState(false)
 
   // ── Modals ──
-  const [composer, setComposer] = useState<ComposerMode | null>(null)
+  const [composer, setComposer] = useState<Exclude<ComposerMode, { kind: 'lesson' }> | null>(null)
   const [unassigningAssignment, setUnassigningAssignment] = useState<StudentAssignment | null>(null)
   const [unassignLoading, setUnassignLoading] = useState(false)
   const [showBulkUnassignConfirm, setShowBulkUnassignConfirm] = useState(false)

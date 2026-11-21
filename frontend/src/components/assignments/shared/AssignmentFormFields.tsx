@@ -37,6 +37,7 @@ interface AssignmentFormFieldsProps {
   subjects: Subject[]
   onUpdate: (field: string, value: string | number | boolean | null | undefined) => void
   showAllFields?: boolean
+  nameLabel?: string
   disabled?: boolean
 }
 
@@ -45,6 +46,7 @@ const AssignmentFormFields: React.FC<AssignmentFormFieldsProps> = ({
   subjects,
   onUpdate,
   showAllFields = true,
+  nameLabel = 'Template Name',
   disabled = false
 }) => {
   const { types, getTypeLabel, getTypeIcon } = useAssignmentTypes()
@@ -75,7 +77,7 @@ const AssignmentFormFields: React.FC<AssignmentFormFieldsProps> = ({
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <div className="lg:col-span-2">
           <Input
-            label="Template Name"
+            label={nameLabel}
             value={formData.name || ''}
             onChange={(e) => onUpdate('name', e.target.value)}
             placeholder="e.g., Multiplication Practice Worksheet"

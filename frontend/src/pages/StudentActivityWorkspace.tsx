@@ -8,7 +8,7 @@ import { StudentAssignment } from '../types'
 import { useSchoolToday, useStudentDay, useStudentLesson } from '../hooks/useStudentPlan'
 import { useStudentNotes } from '../hooks/useStudentNotes'
 import { assignmentProgress, effectiveDueDate, isOverdue } from '../utils/studentAssignments'
-import { activityOpen, dayProgress, orderedActivities, workStateLabel } from '../utils/studentPlan'
+import { activityOpen, dayProgress, nextAvailableActivity, orderedActivities, workStateLabel } from '../utils/studentPlan'
 import { safeReturnPath } from '../utils/returnPath'
 import { isValidISODate } from '../utils/dates'
 import { formatDateOnly } from '../utils/formatters'
@@ -93,8 +93,14 @@ function ActivityContent({ assignment }: { assignment: StudentAssignment }) {
     ...(template.paperless_materials ?? []), ...(assignment.paperless_materials ?? []), ...(lesson.data?.paperless_materials ?? []),
   ].map(material => [material.document_id, material])).values()]
   const planProgress = plan.data ? dayProgress(plan.data) : null
-  const next = planProgress?.activities.find(a => a.id !== assignment.id && activityOpen(a))
-    ?? (lesson.data ? orderedActivities(lesson.data).find(a => a.id !== assignment.id && activityOpen(a)) : undefined)
+  const canDoNext = (activity: NonNullable<typeof planProgress>['activities'][number]) =>
+    activity.id !== assignment.id && activityOpen(activity) && !activity.help_requested
+  const next = planProgress?.activities.find(canDoNext)
+    ?? (lesson.data ? orderedActivities(lesson.data).find(canDoNext) : undefined)
+  const awaitingHelp = assignment.help_requests?.some(request => !request.resolved_at)
+  const alternative = awaitingHelp
+    ? nextAvailableActivity(planProgress?.activities ?? [], assignment.id) ?? next
+    : undefined
   const due = effectiveDueDate(assignment)
   const spoken = [template.name, template.instructions, assignment.custom_instructions, template.description, template.prerequisites, template.materials_needed].filter(Boolean).join('. ')
   const blocked = notes.blocker.state === 'blocked'
@@ -134,6 +140,12 @@ function ActivityContent({ assignment }: { assignment: StudentAssignment }) {
         {notes.error && <div role="alert"><p className="text-neg-fg">{notes.error}</p><Button variant="secondary" onClick={() => void notes.flush().catch(() => {})}>Retry saving notes</Button></div>}
       </details>
       <TaskHelp assignmentId={assignment.id} requests={assignment.help_requests ?? []} onRequested={request => { update({...assignment, help_requests: [...(assignment.help_requests ?? []), request]}); refresh() }} />
+      {awaitingHelp && !plan.isError && (alternative
+        ? <section className="rounded-card border border-line bg-panel p-4" aria-label="Work on something else">
+            <h2 className="font-semibold">Work on something else while you wait</h2>
+            <StudentActivityRow activity={alternative} from={from} day={day} />
+          </section>
+        : plan.isSuccess && <p className="text-sm text-muted">You can return to your plan while your teacher helps with this activity.</p>)}
       <div className="flex flex-wrap gap-3 rounded-card border border-line bg-panel p-4">{progress === 'not_started' ? <Button loading={busy} onClick={() => void start()}>Start activity</Button> : <Button loading={busy} onClick={() => void finish()}>I’m finished</Button>}<Link to={from} className="inline-flex min-h-11 items-center px-3 font-semibold text-accent">Back to your plan</Link></div>
     </>}
     <details className="rounded-card border border-line bg-panel p-4"><summary className="min-h-11 cursor-pointer font-semibold">{simple ? 'More details' : 'Work sessions, grade, and history'}</summary><div className="space-y-4 pt-3">

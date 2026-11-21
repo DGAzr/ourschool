@@ -21,6 +21,8 @@ from typing import List
 from fastapi import HTTPException
 from sqlalchemy.orm import Session
 
+from app.crud import assignment_types as crud_types
+from app.models.paperless import PaperlessConnection, PaperlessDocument
 from app.models.user import User, UserRole
 
 
@@ -48,3 +50,35 @@ def validate_students(db: Session, student_ids: List[int]) -> List[User]:
             detail=f"Students with IDs {sorted(missing)} not found or access denied",
         )
     return students
+
+
+def validate_assignment_type(db: Session, key: str) -> None:
+    """Reject template writes that reference an unknown/inactive type key."""
+    type_row = crud_types.get_by_key(db, key)
+    if type_row is None or not type_row.is_active:
+        raise HTTPException(status_code=400, detail=f"Unknown assignment type '{key}'")
+
+
+def validate_paperless_documents(
+    db: Session, document_ids: List[int]
+) -> List[PaperlessDocument]:
+    """Resolve selectable Paperless documents for an attachment transaction."""
+    if not document_ids:
+        return []
+    doc_ids = list(dict.fromkeys(document_ids))
+    conn = db.query(PaperlessConnection).filter_by(id=1).with_for_update().first()
+    docs = db.query(PaperlessDocument).filter(PaperlessDocument.id.in_(doc_ids)).all()
+    missing_doc_ids = set(doc_ids) - {doc.id for doc in docs}
+    if missing_doc_ids:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Paperless documents with IDs "
+            f"{sorted(missing_doc_ids)} not found",
+        )
+    if any(
+        not doc.present or (conn and doc.library_id != conn.library_id) for doc in docs
+    ):
+        raise HTTPException(
+            status_code=409, detail="A Paperless document is no longer selectable"
+        )
+    return docs
