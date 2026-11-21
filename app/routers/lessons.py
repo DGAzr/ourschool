@@ -23,11 +23,11 @@ StudentAssignments in step with the lesson.
 """
 
 import logging
-from datetime import date
+from datetime import date, timedelta
 from typing import Annotated, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
-from sqlalchemy import func
+from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 
 from app.core.api_auth import APIKeyUser
@@ -38,6 +38,7 @@ from app.core.dual_auth import (
     require_admin_or_permission,
     require_student_session,
 )
+from app.crud.settings import get_setting_value, upsert_setting
 from app.enums import LessonStatus
 from app.models.assignment import AssignmentTemplate, StudentAssignment
 from app.models.lesson import Lesson, LessonMaterial, LessonResource, LessonTemplate
@@ -58,6 +59,10 @@ from app.schemas.lesson import (
     LessonReorderInput,
     LessonReorderResponse,
     LessonResponse,
+    LessonRecoverySettings,
+    LessonRescheduleInput,
+    LessonRescheduleMove,
+    LessonReschedulePreview,
     LessonRolloverInput,
     LessonRolloverResponse,
     LessonStatusUpdate,
@@ -480,6 +485,44 @@ def list_drawer_lessons(
     )
 
 
+RECOVERY_SETTING = "lessons.recovery"
+
+
+def _recovery_settings(db: Session) -> tuple[LessonRecoverySettings, bool]:
+    stored = get_setting_value(db, RECOVERY_SETTING, default_value="{}")
+    try:
+        settings = LessonRecoverySettings.model_validate_json(stored)
+    except ValueError:
+        settings = LessonRecoverySettings()
+    skip_weekends = get_setting_value(db, "attendance.skip_weekends", True, bool)
+    return settings, skip_weekends
+
+
+def _school_day(day: date, breaks: set[date], skip_weekends: bool) -> date:
+    while day in breaks or (skip_weekends and day.weekday() >= 5):
+        day += timedelta(days=1)
+    return day
+
+
+def _student_ids(lesson: Lesson) -> set[int]:
+    return {student.id for student in lesson.students}
+
+
+def _shares_students(first: set[int], second: set[int]) -> bool:
+    # An unspecified roster cannot safely be assumed to be independent.
+    return not first or not second or bool(first & second)
+
+
+@router.put("/recovery-settings", response_model=LessonRecoverySettings)
+def update_recovery_settings(
+    payload: LessonRecoverySettings,
+    db: Annotated[Session, Depends(get_db)],
+    _auth: Annotated[AuthUser, Depends(require_admin_or_permission("settings:write"))],
+):
+    upsert_setting(db, RECOVERY_SETTING, payload.model_dump_json(), "json")
+    return payload
+
+
 @router.post("/rollover", response_model=LessonRolloverResponse)
 def rollover_lessons(
     payload: LessonRolloverInput,
@@ -488,28 +531,44 @@ def rollover_lessons(
         AuthUser, Depends(require_admin_or_permission("lessons:write"))
     ],
 ):
-    """Move overdue untaught lessons into the drawer.
-
-    ``current_date`` is supplied by the browser so a school's calendar day is
-    not accidentally derived from the container's UTC timezone.
-    """
-    overdue = (
-        db.query(Lesson)
-        .filter(
-            Lesson.date.is_not(None),
-            Lesson.date < payload.current_date,
-            Lesson.status != LessonStatus.TAUGHT,
-        )
-        .order_by(Lesson.date, Lesson.position, Lesson.id)
-        .with_for_update()
-        .all()
+    """Reconcile past untaught lessons and return the remaining review queue."""
+    settings, skip_weekends = _recovery_settings(db)
+    today = payload.current_date
+    applying = payload.apply and settings.mode != "review"
+    target = (
+        _school_day(today, settings.break_dates, skip_weekends)
+        if applying and settings.mode == "carry"
+        else None
     )
-
-    next_position = _next_position(db, None)
+    scheduled = db.query(Lesson).filter(Lesson.date.is_not(None))
+    if target is None:
+        scheduled = scheduled.filter(Lesson.date < today, Lesson.status != LessonStatus.TAUGHT)
+    else:
+        scheduled = scheduled.filter(Lesson.date <= target)
+    scheduled = scheduled.order_by(Lesson.id)
+    if applying:
+        scheduled = scheduled.with_for_update()
+    rows = scheduled.all()
+    overdue = sorted(
+        (lesson for lesson in rows if lesson.date < today and lesson.status != LessonStatus.TAUGHT),
+        key=lambda lesson: (lesson.date, lesson.position, lesson.id),
+    )
+    pending = []
     warnings: list[str] = []
+    moved_count = 0
+    occupied = [lesson for lesson in rows if lesson.date >= today] if target else []
     for lesson in overdue:
-        _move_lesson(lesson, None, next_position)
-        next_position += 1
+        if not applying or (target and any(
+            other.subject_id == lesson.subject_id
+            and _shares_students(_student_ids(lesson), _student_ids(other))
+            for other in occupied
+        )):
+            pending.append(lesson)
+            occupied.append(lesson)
+            continue
+        _move_lesson(lesson, target, _next_position(db, target))
+        occupied.append(lesson)
+        moved_count += 1
         db.flush()
         warnings.extend(
             sync_lesson_assignments(
@@ -517,20 +576,123 @@ def rollover_lessons(
             )
         )
 
-    db.commit()
-    drawer = (
-        db.query(Lesson)
-        .filter(Lesson.date.is_(None))
-        .order_by(Lesson.position, Lesson.id)
-        .all()
-    )
+    if applying:
+        db.commit()
     return LessonRolloverResponse(
-        moved_count=len(overdue), lessons=drawer, warnings=warnings
+        moved_count=moved_count,
+        lessons=list_drawer_lessons(db, auth_user),
+        warnings=warnings,
+        settings=settings,
+        skip_weekends=skip_weekends,
+        pending=pending,
     )
 
 
-# NOTE: must be registered before GET /{lesson_id} or "my-lessons" would be
-# parsed as a lesson id.
+@router.post("/{lesson_id}/reschedule", response_model=LessonReschedulePreview)
+def reschedule_lesson(
+    lesson_id: int,
+    payload: LessonRescheduleInput,
+    db: Annotated[Session, Depends(get_db)],
+    auth_user: Annotated[AuthUser, Depends(require_admin_or_permission("lessons:write"))],
+):
+    """Preview, then atomically apply a move or a shift of the subject sequence."""
+    lesson = db.get(Lesson, lesson_id)
+    if lesson is None:
+        raise HTTPException(status_code=404, detail="Lesson not found")
+
+    settings, skip_weekends = _recovery_settings(db)
+    destination = payload.destination
+    if destination < payload.current_date:
+        raise HTTPException(status_code=400, detail="Choose today or a future date.")
+    if payload.shift_upcoming and _school_day(destination, settings.break_dates, skip_weekends) != destination:
+        raise HTTPException(status_code=400, detail="Choose a school day to start the shift.")
+
+    origin = lesson.date or lesson.last_scheduled_date
+    if origin is None or lesson.status == LessonStatus.TAUGHT:
+        raise HTTPException(status_code=409, detail="The lesson is no longer available to reschedule.")
+    query = db.query(Lesson).filter(
+        Lesson.subject_id == lesson.subject_id,
+        or_(Lesson.id == lesson_id, Lesson.date >= min(origin, destination)),
+    ).order_by(Lesson.id)
+    if payload.expected is not None:
+        query = query.populate_existing().with_for_update()
+    rows = query.all()
+    anchor = next((row for row in rows if row.id == lesson_id), None)
+    if anchor is None or (anchor.date or anchor.last_scheduled_date) != origin or anchor.status == LessonStatus.TAUGHT:
+        raise HTTPException(status_code=409, detail="The lesson changed. Review the schedule again.")
+
+    roster = _student_ids(anchor)
+    related = [
+        row for row in rows if row.id != lesson_id
+        and _shares_students(roster, _student_ids(row))
+    ]
+    scheduled = [(anchor, destination)]
+    if payload.shift_upcoming:
+        if anchor.subject_id is None or not roster:
+            raise HTTPException(status_code=400, detail="Set a subject and students before shifting upcoming lessons.")
+        following = sorted(
+            (row for row in related if row.status != LessonStatus.TAUGHT and (
+                row.date > origin or (
+                    row.date == origin and (
+                        anchor.date is None or (row.position, row.id) > (anchor.position, anchor.id)
+                    )
+                )
+            )),
+            key=lambda row: (row.date, row.position, row.id),
+        )
+        following_ids = {row.id for row in following}
+        occupied = {row.date for row in related if row.id not in following_ids}
+        for row in following:
+            if row.date > scheduled[-1][1]:
+                break
+            if _student_ids(row) != roster:
+                raise HTTPException(
+                    status_code=409,
+                    detail="Upcoming lessons in this subject have a different student group. Reschedule them individually.",
+                )
+            next_date = scheduled[-1][1] + timedelta(days=1)
+            next_date = _school_day(next_date, settings.break_dates, skip_weekends)
+            while next_date in occupied:
+                next_date = _school_day(next_date + timedelta(days=1), settings.break_dates, skip_weekends)
+            scheduled.append((row, next_date))
+        moving_ids = {row.id for row, _ in scheduled}
+        related = [row for row in related if row.id not in moving_ids]
+
+    moves = []
+    for row, target in scheduled:
+        if row.date == target:
+            continue
+        students = sorted(row.students, key=lambda student: student.id)
+        links = sorted((link for link in row.templates if link.template is not None), key=lambda link: link.id)
+        existing = db.query(StudentAssignment).filter(
+            StudentAssignment.lesson_id == row.id
+        ).order_by(StudentAssignment.id).all()
+        moves.append(LessonRescheduleMove(
+            lesson_id=row.id,
+            title=row.title,
+            from_date=row.date or origin,
+            to_date=target,
+            students=[f"{student.first_name} {student.last_name}".strip() for student in students],
+            impacts=assignment_impact(target, students, links, existing, [link.template for link in links]),
+        ))
+    preview = LessonReschedulePreview(
+        moves=moves,
+        conflicts=[row.title for row in related if row.date == destination],
+    )
+    if payload.expected is not None:
+        if preview != payload.expected:
+            raise HTTPException(status_code=409, detail="The schedule changed. Review the move again.")
+        for row, target in scheduled:
+            if row.date != target:
+                _move_lesson(row, target, _next_position(db, target))
+                db.flush()
+                preview.warnings.extend(
+                    sync_lesson_assignments(db, row, assigned_by=get_user_id_from_auth(auth_user))
+                )
+        db.commit()
+    return preview
+
+
 @router.get("/my-lessons", response_model=List[StudentLessonResponse])
 def get_my_lessons(
     db: Annotated[Session, Depends(get_db)],

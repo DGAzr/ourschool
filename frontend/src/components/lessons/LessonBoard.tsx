@@ -34,6 +34,7 @@ import { DayInfo } from '../../utils/lessonPlanning'
 import { Lesson } from '../../types/lesson'
 import DayColumn from './DayColumn'
 import LessonCard from './LessonCard'
+import { todayISO } from '../../utils/dates'
 import LessonDrawer from './LessonDrawer'
 
 interface LessonBoardProps {
@@ -243,7 +244,7 @@ const LessonBoard: React.FC<LessonBoardProps> = ({
           columnId={DRAWER_COLUMN_ID}
           lessons={drawer}
           visibleLessons={lessons}
-          defaultDate={days[0]?.iso ?? ''}
+          defaultDate={days.find(day => day.iso >= todayISO())?.iso ?? todayISO()}
           collapsed={drawerCollapsed}
           onCollapsedChange={setDrawerCollapsed}
           onAdd={onAddToDrawer}

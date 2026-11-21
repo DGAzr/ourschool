@@ -8,7 +8,7 @@
  * (at your option) any later version.
  */
 
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 
 import { useAuth } from '../contexts/AuthContext'
@@ -25,7 +25,8 @@ import {
   calendarDateHref,
   useCalendarDateParam,
 } from '../hooks/useCalendarDateParam'
-import { todayISO } from '../utils/dates'
+import { useLessonRecovery } from '../hooks/useLessonRecovery'
+import LessonRecovery from '../components/lessons/LessonRecovery'
 
 const TeachRunSheet: React.FC = () => {
   const navigate = useNavigate()
@@ -41,29 +42,13 @@ const TeachRunSheet: React.FC = () => {
   const [editingLesson, setEditingLesson] = useState<Lesson | null>(null)
   const { lessons, loading, error, refetch, markTaught, toggleMaterial } =
     useLessons({ startDate: selectedDate, endDate: selectedDate })
-  const latestRefetch = useRef(refetch)
-  const rolloverStarted = useRef(false)
-
-  useEffect(() => {
-    latestRefetch.current = refetch
-  }, [refetch])
+  const { data: recoveryData, error: recoveryError, load: loadRecovery } =
+    useLessonRecovery(true, () => void refetch())
 
   useEffect(() => {
     subjectsApi.getAll().then(setSubjects).catch(() => setSubjects([]))
     assignmentsApi.getStudents().then(setStudents).catch(() => setStudents([]))
   }, [])
-
-  useEffect(() => {
-    if (rolloverStarted.current) return
-    rolloverStarted.current = true
-    lessonsApi
-      .rollover(todayISO())
-      .then((result) => {
-        result.warnings.forEach((warning) => toast(warning, 'danger'))
-        if (result.moved_count > 0) void latestRefetch.current()
-      })
-      .catch(() => undefined)
-  }, [toast])
 
   useEffect(() => {
     let cancelled = false
@@ -92,8 +77,9 @@ const TeachRunSheet: React.FC = () => {
     async (lesson: Lesson) => {
       const ok = await markTaught(lesson)
       if (!ok) toast('Could not update the lesson.', 'danger')
+      else if (recoveryData?.settings) void loadRecovery(false)
     },
-    [markTaught, toast],
+    [markTaught, toast, recoveryData?.settings, loadRecovery],
   )
 
   const handleToggleMaterial = useCallback(
@@ -109,8 +95,9 @@ const TeachRunSheet: React.FC = () => {
       setEditingLesson(null)
       warnings.forEach((warning) => toast(warning, 'danger'))
       void refetch()
+      if (recoveryData?.settings) void loadRecovery(false)
     },
-    [refetch, toast],
+    [refetch, toast, recoveryData?.settings, loadRecovery],
   )
 
   return (
@@ -120,6 +107,12 @@ const TeachRunSheet: React.FC = () => {
           {workError}
         </p>
       )}
+      <LessonRecovery
+        data={recoveryData}
+        error={recoveryError}
+        onRefresh={() => loadRecovery(!recoveryData)}
+        onChanged={() => Promise.all([refetch(), loadRecovery(false)])}
+      />
       <TeachView
         initialStudentId={Number(teachParams.get('student_id')) || null}
         initialRemaining={teachParams.get('remaining') === 'true'}

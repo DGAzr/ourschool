@@ -185,7 +185,28 @@ export interface LessonReorderResponse {
   warnings: string[]
 }
 
+export interface LessonRecoverySettings {
+  mode: 'drawer' | 'review' | 'carry'
+  break_dates: string[]
+}
+
+export interface LessonReschedulePreview {
+  moves: {
+    lesson_id: number
+    title: string
+    from_date: string
+    to_date: string
+    students: string[]
+    impacts: AssignmentImpact[]
+  }[]
+  conflicts: string[]
+  warnings: string[]
+}
+
 export interface LessonRolloverResponse {
+  settings?: LessonRecoverySettings
+  skip_weekends?: boolean
+  pending?: Lesson[]
   moved_count: number
   lessons: Lesson[]
   warnings: string[]

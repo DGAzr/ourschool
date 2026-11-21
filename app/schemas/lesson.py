@@ -223,6 +223,7 @@ class LessonRolloverInput(BaseModel):
     """Browser-local school date used as the overdue cutoff."""
 
     current_date: date_type
+    apply: bool = True
 
 
 # --- Lesson response ---
@@ -339,10 +340,18 @@ class LessonReorderResponse(BaseModel):
     warnings: List[str] = []
 
 
+class LessonRecoverySettings(BaseModel):
+    mode: Literal["drawer", "review", "carry"] = "drawer"
+    break_dates: set[date_type] = Field(default_factory=set, max_length=366)
+
+
 class LessonRolloverResponse(BaseModel):
     """Overdue reconciliation result and canonical drawer contents."""
 
     moved_count: int = 0
+    settings: LessonRecoverySettings = Field(default_factory=LessonRecoverySettings)
+    skip_weekends: bool = True
+    pending: List[LessonResponse] = []
     lessons: List[LessonResponse] = []
     warnings: List[str] = []
 
@@ -377,3 +386,25 @@ class LessonBatchInput(BaseModel):
     action: Literal["schedule", "restore_taught", "copy"]
     date: Optional[date_type] = None
     source_start_date: Optional[date_type] = None
+
+
+class LessonRescheduleMove(BaseModel):
+    lesson_id: int
+    title: str
+    from_date: date_type
+    to_date: date_type
+    students: List[str]
+    impacts: List[AssignmentImpact]
+
+
+class LessonReschedulePreview(BaseModel):
+    moves: List[LessonRescheduleMove]
+    conflicts: List[str]
+    warnings: List[str] = []
+
+
+class LessonRescheduleInput(BaseModel):
+    current_date: date_type
+    destination: date_type
+    shift_upcoming: bool = False
+    expected: Optional[LessonReschedulePreview] = None

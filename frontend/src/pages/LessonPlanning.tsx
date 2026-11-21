@@ -29,6 +29,8 @@ import { api } from '../services/api'
 import { Subject, User } from '../types'
 import { AssignmentImpact, Lesson } from '../types/lesson'
 import { useLessons } from '../hooks/useLessons'
+import { useLessonRecovery } from '../hooks/useLessonRecovery'
+import LessonRecovery from '../components/lessons/LessonRecovery'
 import { lessonsApi } from '../services/lessons'
 import { getErrorMessage } from '../services/api'
 import {
@@ -99,7 +101,7 @@ const LessonPlanningContent: React.FC = () => {
       navigate({ pathname: location.pathname, search: location.search }, { replace: true, state: null })
     }
   }, [location.pathname, location.search, location.state, navigate])
-  const [drawerLessons, setDrawerLessons] = useState<Lesson[]>([])
+  const [drawerFallback, setDrawerFallback] = useState<Lesson[]>()
 
   const [plannerParams]=useSearchParams()
   const filterKey = `lessonPlanning.filters.${user?.id}`
@@ -152,27 +154,24 @@ const LessonPlanningContent: React.FC = () => {
     endDate,
   })
 
-  const refreshDrawer = useCallback(async () => {
-    const data = await lessonsApi.drawer()
-    setDrawerLessons(data || [])
-  }, [])
+  const recovery = useLessonRecovery(isAdmin, () => void refetch())
+  const { data: recoveryData, load: loadRecovery, error: recoveryError } = recovery
 
-  // Reconcile overdue lessons using the browser's school date, then load the
-  // canonical drawer. The operation is idempotent, including StrictMode runs.
+  const drawerLessons = drawerFallback ?? recoveryData?.lessons ?? []
+
+  const refreshDrawer = useCallback(async () => {
+    if (recoveryData?.settings && await loadRecovery(false)) {
+      setDrawerFallback(undefined)
+    } else {
+      setDrawerFallback(await lessonsApi.drawer())
+    }
+  }, [loadRecovery, recoveryData?.settings])
+
   useEffect(() => {
-    if (!isAdmin) return
-    lessonsApi
-      .rollover(todayISO())
-      .then((result) => {
-        setDrawerLessons(result.lessons || [])
-        result.warnings.forEach((warning) => toast(warning, 'danger'))
-        if (result.moved_count > 0) {
-          toast(`${result.moved_count} lesson${result.moved_count === 1 ? '' : 's'} moved to the drawer. Assigned work was kept.`)
-          void refetch()
-        }
-      })
-      .catch(() => refreshDrawer().catch(() => setDrawerLessons([])))
-  }, [isAdmin, refetch, refreshDrawer, toast])
+    if (recoveryError && !recoveryData) {
+      void lessonsApi.drawer().then(setDrawerFallback).catch(() => undefined)
+    }
+  }, [recoveryData, recoveryError])
 
   const matches = (lesson:Lesson) => (!filters.subject || String(lesson.subject_id) === filters.subject) && (!filters.student || lesson.students.some(s=>String(s.id) === filters.student))
   const scopedLessons = lessons.filter(matches)
@@ -389,6 +388,16 @@ const LessonPlanningContent: React.FC = () => {
         onStepDays={handleStepDays}
         onPlanLesson={() => handleAdd(rangeStart)}
         onOpenTeach={() => navigate(calendarDateHref('/teach', rangeStart))}
+      />
+      <LessonRecovery
+        data={recoveryData}
+        drawerLessons={drawerLessons}
+        error={recoveryError}
+        showSettings
+        onRefresh={async () => {
+          if (await loadRecovery(!recoveryData)) setDrawerFallback(undefined)
+        }}
+        onChanged={() => Promise.all([refetch(), refreshDrawer()])}
       />
       <div className="flex flex-wrap items-end gap-3 my-4">
         <div className="flex max-w-full flex-wrap items-end gap-3">

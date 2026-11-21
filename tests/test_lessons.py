@@ -1534,3 +1534,113 @@ def test_copy_uses_source_week_start_even_when_monday_is_empty(client, admin_hea
     )
     assert copied.status_code == 200, copied.text
     assert copied.json()[0]["lesson"]["date"] == "2026-02-18"
+
+
+@pytest.fixture
+def lesson_recovery_settings(client, admin_headers):
+    def save(mode, break_dates=()):
+        response = client.put(
+            "/api/lessons/recovery-settings",
+            headers=admin_headers,
+            json={"mode": mode, "break_dates": list(break_dates)},
+        )
+        assert response.status_code == 200, response.text
+
+    yield save
+    save("drawer")
+
+
+def test_recovery_reviews_or_carries_the_same_missed_lessons(
+    client, admin_headers, classroom, student_factory, lesson_recovery_settings
+):
+    student, _ = student_factory()
+    other_student, _ = student_factory()
+    subject_id = classroom["subject"]["id"]
+
+    def create(title, day, student_id):
+        response = _create_lesson(
+            client, admin_headers, title=title, date=day,
+            subject_id=subject_id, student_ids=[student_id],
+        )
+        assert response.status_code == 200, response.text
+        return response.json()["lesson"]["id"]
+
+    conflicting = create("Missed lesson with a conflict", "2002-01-04", student["id"])
+    carry = create("Missed lesson with room", "2002-01-04", other_student["id"])
+    create("Already scheduled", "2002-01-08", student["id"])
+
+    def reconcile(**options):
+        response = client.post(
+            "/api/lessons/rollover", headers=admin_headers,
+            json={"current_date": "2002-01-05", **options},
+        )
+        assert response.status_code == 200, response.text
+        return response.json()
+
+    lesson_recovery_settings("review")
+    result = reconcile()
+    assert result["moved_count"] == 0
+    assert {conflicting, carry} <= {row["id"] for row in result["pending"]}
+    assert all(row["date"] is not None for row in result["pending"])
+
+    lesson_recovery_settings("carry", ["2002-01-07"])
+    assert {conflicting, carry} <= {row["id"] for row in reconcile(apply=False)["pending"]}
+    result = reconcile()
+    pending = {row["id"] for row in result["pending"]}
+    assert conflicting in pending
+    assert carry not in pending
+    carried = client.get(f"/api/lessons/{carry}", headers=admin_headers).json()
+    assert carried["date"] == "2002-01-08"
+    assert reconcile()["moved_count"] == 0
+
+
+def test_shift_preview_applies_atomically_and_rejects_stale_dates(
+    client, admin_headers, classroom, student_factory, lesson_recovery_settings
+):
+    student, _ = student_factory()
+    lesson_recovery_settings("review", ["2030-01-08"])
+
+    def create(title, day):
+        response = _create_lesson(
+            client, admin_headers, title=title, date=day,
+            subject_id=classroom["subject"]["id"], student_ids=[student["id"]],
+            templates=[_link(classroom["template"]["id"], due_offset_days=1)],
+        )
+        assert response.status_code == 200, response.text
+        return response.json()["lesson"]["id"]
+
+    missed = create("Lesson 5", "2030-01-04")
+    next_lesson = create("Lesson 6", "2030-01-07")
+    later = create("Lesson 7", "2030-01-10")
+    endpoint = f"/api/lessons/{missed}/reschedule"
+    body = {"current_date": "2030-01-07", "destination": "2030-01-07", "shift_upcoming": True}
+
+    response = client.post(endpoint, json=body, headers=admin_headers)
+    assert response.status_code == 200, response.text
+    preview = response.json()
+    assert [(move["lesson_id"], move["to_date"]) for move in preview["moves"]] == [
+        (missed, "2030-01-07"), (next_lesson, "2030-01-09")
+    ]
+    assert preview["moves"][1]["impacts"][0]["due_date"] == "2030-01-10"
+
+    def lesson_date(lesson_id):
+        return client.get(f"/api/lessons/{lesson_id}", headers=admin_headers).json()["date"]
+
+    assert lesson_date(missed) == "2030-01-04"
+    changed = client.put(
+        f"/api/lessons/{next_lesson}", json={"date": "2030-01-09"}, headers=admin_headers
+    )
+    assert changed.status_code == 200, changed.text
+    response = client.post(endpoint, json={**body, "expected": preview}, headers=admin_headers)
+    assert response.status_code == 409
+    assert lesson_date(missed) == "2030-01-04"
+
+    changed = client.put(
+        f"/api/lessons/{next_lesson}", json={"date": "2030-01-07"}, headers=admin_headers
+    )
+    assert changed.status_code == 200, changed.text
+    response = client.post(endpoint, json={**body, "expected": preview}, headers=admin_headers)
+    assert response.status_code == 200, response.text
+    assert lesson_date(missed) == "2030-01-07"
+    assert lesson_date(next_lesson) == "2030-01-09"
+    assert lesson_date(later) == "2030-01-10"

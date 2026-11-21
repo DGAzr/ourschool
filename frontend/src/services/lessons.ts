@@ -25,6 +25,8 @@ import {
   LessonDeleteResponse,
   LessonReorderResponse,
   LessonRolloverResponse,
+  LessonRecoverySettings,
+  LessonReschedulePreview,
   LessonStatus,
   LessonUpdate,
   LessonWriteResponse,
@@ -59,8 +61,19 @@ export const lessonsApi = {
 
   drawer: (): Promise<Lesson[]> => api.get('/lessons/drawer'),
 
-  rollover: (currentDate: string): Promise<LessonRolloverResponse> =>
-    api.post('/lessons/rollover', { current_date: currentDate }),
+  rollover: (currentDate: string, apply = true): Promise<LessonRolloverResponse> =>
+    api.post('/lessons/rollover', { current_date: currentDate, apply }),
+
+  saveRecoverySettings: (settings: LessonRecoverySettings): Promise<LessonRecoverySettings> =>
+    api.put('/lessons/recovery-settings', settings),
+
+  reschedule: (
+    id: number, currentDate: string, destination: string, shiftUpcoming: boolean,
+    expected?: LessonReschedulePreview,
+  ): Promise<LessonReschedulePreview> =>
+    api.post(`/lessons/${id}/reschedule`, {
+      current_date: currentDate, destination, shift_upcoming: shiftUpcoming, expected,
+    }),
 
   get: (id: number): Promise<Lesson> => api.get(`/lessons/${id}`),
 

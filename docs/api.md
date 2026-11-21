@@ -286,7 +286,9 @@ Lesson writes synchronize assignments generated from the lesson's linked templat
 |----------|-------------|
 | `GET /api/lessons/` | List scheduled lessons, optionally filtered by an inclusive date range (`lessons:read`) |
 | `GET /api/lessons/drawer` | List unscheduled lessons in drawer order (`lessons:read`) |
-| `POST /api/lessons/rollover` | Move lessons before the supplied browser-local date into the drawer unless taught (`lessons:write`) |
+| `POST /api/lessons/rollover` | Apply the school’s untaught lesson policy and return the drawer and pending review queue. Send `apply: false` to read without moving lessons (`lessons:write`) |
+| `PUT /api/lessons/recovery-settings` | Save the school-wide `mode` (`drawer`, `review`, or `carry`) and optional `break_dates` (`settings:write`) |
+| `POST /api/lessons/{lesson_id}/reschedule` | Preview a single move or shift upcoming lessons. Send the preview as `expected` to apply it atomically (`lessons:write`) |
 | `POST /api/lessons/` | Create a scheduled or drawer lesson with students, templates, materials, and resources (`lessons:write`) |
 | `GET /api/lessons/my-lessons` | Current student's upcoming lessons with links/progress for only their own assignments; supports date filters (student session only) |
 | `GET /api/lessons/assignment-progress?date=YYYY-MM-DD` | Minimal student assignment progress/IDs for the selected school date (`assignments:read`, separate from lesson permissions) |
