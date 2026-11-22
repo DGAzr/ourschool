@@ -157,7 +157,10 @@ const LessonPlanningContent: React.FC = () => {
   const recovery = useLessonRecovery(isAdmin, () => void refetch())
   const { data: recoveryData, load: loadRecovery, error: recoveryError } = recovery
 
-  const drawerLessons = drawerFallback ?? recoveryData?.lessons ?? []
+  const drawerLessons = useMemo(
+    () => drawerFallback ?? recoveryData?.lessons ?? [],
+    [drawerFallback, recoveryData?.lessons]
+  )
 
   const refreshDrawer = useCallback(async () => {
     if (recoveryData?.settings && await loadRecovery(false)) {
